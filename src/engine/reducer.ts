@@ -611,11 +611,12 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         // 2. If valid resource target, go gather
         else {
             if (!harvester.resourceTargetId) {
-                // Find nearest ore
+                // Find nearest ore (excluding any blocked ore)
+                const blockedOreId = (harvester as any).blockedOreId;
                 let bestOre: Entity | null = null;
                 let minDst = Infinity;
                 for (const other of entityList) {
-                    if (other.type === 'RESOURCE' && !other.dead) {
+                    if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
                         const d = harvester.pos.dist(other.pos);
                         if (d < minDst) {
                             minDst = d;
@@ -629,21 +630,90 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             if (harvester.resourceTargetId) {
                 const ore = allEntities[harvester.resourceTargetId];
                 if (ore && !ore.dead) {
-                    if (harvester.pos.dist(ore.pos) < 40) {
+                    const distToOre = harvester.pos.dist(ore.pos);
+
+                    // Track how long we've been trying to reach this ore
+                    const harvestAttemptTicks = (harvester as any).harvestAttemptTicks || 0;
+
+                    // Decay blocked ore timer
+                    const blockedOreTimer = ((harvester as any).blockedOreTimer || 0);
+                    if (blockedOreTimer > 0) {
+                        nextEntity = { ...harvester, blockedOreTimer: blockedOreTimer - 1 } as any;
+                        if (blockedOreTimer <= 1) {
+                            // Clear blocked ore after timer expires (allow retry)
+                            nextEntity = { ...nextEntity, blockedOreId: null } as any;
+                        }
+                    }
+
+                    if (distToOre < 40) {
                         // Harvest
                         if (harvester.cooldown <= 0) {
                             const harvestAmount = 25;
                             // Check if ore has enough
                             const actualHarvest = Math.min(harvestAmount, ore.hp);
 
-                            nextEntity = { ...harvester, cargo: harvester.cargo + actualHarvest, cooldown: 30 };
+                            nextEntity = {
+                                ...harvester,
+                                cargo: harvester.cargo + actualHarvest,
+                                cooldown: 30,
+                                harvestAttemptTicks: 0 // Reset on successful harvest
+                            } as any;
                             resourceDamage = { id: ore.id, amount: actualHarvest };
                         }
                     } else {
-                        nextEntity = moveToward(harvester, ore.pos, entityList);
+                        // Still far from ore - track progress toward it
+                        const prevLastDist = (harvester as any).lastDistToOre;
+                        const lastDistToOre = prevLastDist ?? distToOre;
+                        const prevBestDist = (harvester as any).bestDistToOre;
+                        const bestDistToOre = prevBestDist ?? distToOre;
+
+                        // First tick = initialize, else check for 10px progress from LAST tracking point
+                        const madeProgress = (prevLastDist === undefined) || (distToOre < lastDistToOre - 10);
+                        // Track minimum distance ever achieved
+                        const newBestDist = Math.min(bestDistToOre, distToOre);
+
+                        if (harvestAttemptTicks > 30 && distToOre > 43) {
+                            // Give up on this ore after being stuck
+                            // Blocked (by building): best distance is far (> 55px, can't get close)
+                            // Congested (by units): best distance is close (< 55px, ore is reachable)
+                            const isBlocked = newBestDist > 55;
+                            nextEntity = {
+                                ...harvester,
+                                resourceTargetId: null,
+                                stuckTimer: 0,
+                                path: null,
+                                pathIdx: 0,
+                                harvestAttemptTicks: 0,
+                                lastDistToOre: null,
+                                bestDistToOre: null,
+                                blockedOreId: isBlocked ? ore.id : (harvester as any).blockedOreId,
+                                blockedOreTimer: isBlocked ? 500 : (harvester as any).blockedOreTimer
+                            } as any;
+                        } else {
+                            // Keep trying - move toward ore
+                            nextEntity = moveToward(harvester, ore.pos, entityList);
+
+                            if (madeProgress) {
+                                // Making progress - reset counter, update tracking points
+                                nextEntity = {
+                                    ...nextEntity,
+                                    harvestAttemptTicks: 0,
+                                    lastDistToOre: distToOre,
+                                    bestDistToOre: newBestDist
+                                } as any;
+                            } else {
+                                // Not making progress - increment counter, preserve lastDistToOre
+                                nextEntity = {
+                                    ...nextEntity,
+                                    harvestAttemptTicks: harvestAttemptTicks + 1,
+                                    lastDistToOre: lastDistToOre,  // Preserve the last tracking point
+                                    bestDistToOre: newBestDist
+                                } as any;
+                            }
+                        }
                     }
                 } else {
-                    nextEntity = { ...harvester, resourceTargetId: null };
+                    nextEntity = { ...harvester, resourceTargetId: null, harvestAttemptTicks: 0 } as any;
                 }
             }
         }
