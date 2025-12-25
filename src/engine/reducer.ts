@@ -364,7 +364,7 @@ function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetI
     let nextEntities = { ...state.entities };
     for (const id of unitIds) {
         const entity = nextEntities[id];
-        if (entity && entity.owner === 0 && entity.type === 'UNIT') {
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
             nextEntities[id] = {
                 ...entity,
                 targetId: targetId,
@@ -498,12 +498,14 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                             a.pos = a.pos.sub(push.scale(ratioA));
                             b.pos = b.pos.add(push.scale(ratioB));
                         } else if (aMoving && bMoving) {
-                            // BOTH moving - use perpendicular push to slide past each other
-                            // This implements "keep right" - both slide to their right side
-                            const perpA = new Vector(-dir.y, dir.x); // Perpendicular (consistent for relative positions)
-                            const perpB = new Vector(dir.y, -dir.x); // Opposite perpendicular
+                            // BOTH moving - use both radial push and perpendicular slide
+                            const push = dir.scale(pushScale * 0.5);
+                            a.pos = a.pos.sub(push);
+                            b.pos = b.pos.add(push);
 
-                            // Push each unit to their "right" (perpendicular to collision axis)
+                            // Also use perpendicular push to slide past each other (keep right)
+                            const perpA = new Vector(-dir.y, dir.x);
+                            const perpB = new Vector(dir.y, -dir.x);
                             a.pos = a.pos.add(perpA.scale(pushScale * 0.5));
                             b.pos = b.pos.add(perpB.scale(pushScale * 0.5));
                         } else {

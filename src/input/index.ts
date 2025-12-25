@@ -27,6 +27,10 @@ export interface InputState {
     keys: Keys;
     dragStart: DragStart | null;
     touchDist: number;
+    wheelDeltaX: number;
+    wheelDeltaY: number;
+    wheelZoom: number;
+    pinchRatio: number;
 }
 
 let inputState: InputState = {
@@ -34,7 +38,11 @@ let inputState: InputState = {
     rawMouse: { x: 0, y: 0 },
     keys: {},
     dragStart: null,
-    touchDist: 0
+    touchDist: 0,
+    wheelDeltaX: 0,
+    wheelDeltaY: 0,
+    wheelZoom: 0,
+    pinchRatio: 1
 };
 
 let canvas: HTMLCanvasElement;
@@ -149,6 +157,14 @@ function setupEventListeners() {
     // Zoom & Scroll
     window.addEventListener('wheel', e => {
         e.preventDefault();
+        if (e.ctrlKey) {
+            // Pinch to zoom (Mac touchpad)
+            inputState.wheelZoom += e.deltaY;
+        } else {
+            // Two finger scroll
+            inputState.wheelDeltaX += e.deltaX;
+            inputState.wheelDeltaY += e.deltaY;
+        }
     }, { passive: false });
 
     // Touch zoom
@@ -168,9 +184,20 @@ function setupEventListeners() {
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
+            if (inputState.touchDist > 0) {
+                const ratio = newDist / inputState.touchDist;
+                inputState.pinchRatio *= ratio;
+            }
             inputState.touchDist = newDist;
         }
     }, { passive: false });
+
+    window.addEventListener('touchend', e => {
+        if (e.touches.length < 2) {
+            inputState.touchDist = 0;
+            inputState.pinchRatio = 1;
+        }
+    });
 
     // Minimap click
     const minimap = document.getElementById('minimapCanvas');
@@ -202,10 +229,10 @@ export function getDragSelection(): DragStart | null {
 }
 
 export function handleCameraInput(camera: { x: number; y: number }, zoom: number, canvasWidth: number, canvasHeight: number): { x: number; y: number } {
-    const speed = 15 / zoom;
     let dx = 0, dy = 0;
 
     const keys = inputState.keys;
+    const speed = 15 / zoom;
     if (keys.ArrowUp || keys.w || keys.W) dy -= speed;
     if (keys.ArrowDown || keys.s || keys.S) dy += speed;
     if (keys.ArrowLeft || keys.a || keys.A) dx -= speed;
@@ -217,6 +244,12 @@ export function handleCameraInput(camera: { x: number; y: number }, zoom: number
     if (inputState.rawMouse.y < 10) dy -= speed;
     if (inputState.rawMouse.y > window.innerHeight - 10) dy += speed;
 
+    // Wheel/Touchpad scrolling
+    dx += inputState.wheelDeltaX / zoom;
+    dy += inputState.wheelDeltaY / zoom;
+    inputState.wheelDeltaX = 0;
+    inputState.wheelDeltaY = 0;
+
     return {
         x: Math.max(0, Math.min(MAP_WIDTH - canvasWidth / zoom, camera.x + dx)),
         y: Math.max(0, Math.min(MAP_HEIGHT - canvasHeight / zoom, camera.y + dy))
@@ -224,7 +257,19 @@ export function handleCameraInput(camera: { x: number; y: number }, zoom: number
 }
 
 export function handleZoomInput(currentZoom: number): number {
-    // Wheel zoom is handled in the event listener
-    // Return current zoom for now
-    return currentZoom;
+    let newZoom = currentZoom;
+
+    // Mouse wheel zoom
+    if (inputState.wheelZoom !== 0) {
+        newZoom = currentZoom * Math.pow(0.999, inputState.wheelZoom);
+        inputState.wheelZoom = 0;
+    }
+
+    // Touch pinch zoom
+    if (inputState.pinchRatio !== 1) {
+        newZoom *= inputState.pinchRatio;
+        inputState.pinchRatio = 1;
+    }
+
+    return Math.max(0.5, Math.min(2.0, newZoom));
 }

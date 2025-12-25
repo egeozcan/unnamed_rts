@@ -3,6 +3,9 @@
         "rusher": {
             "aggression_bias": 1.5,
             "retreat_threshold": 0.1,
+            "attack_threshold": 4,
+            "harass_threshold": 3,
+            "rally_offset": 200,
             "build_order_priority": [
                 "power",
                 "barracks",
@@ -13,6 +16,9 @@
         "turtle": {
             "aggression_bias": 0.5,
             "retreat_threshold": 0.5,
+            "attack_threshold": 8,
+            "harass_threshold": 5,
+            "rally_offset": 150,
             "build_order_priority": [
                 "power",
                 "refinery",
@@ -26,6 +32,9 @@
         "balanced": {
             "aggression_bias": 1.0,
             "retreat_threshold": 0.3,
+            "attack_threshold": 5,
+            "harass_threshold": 3,
+            "rally_offset": 180,
             "build_order_priority": [
                 "power",
                 "refinery",
@@ -34,6 +43,39 @@
                 "turret",
                 "tech"
             ]
+        }
+    },
+    "strategies": {
+        "buildup": {
+            "description": "Focus on economy and building army",
+            "production_focus": "economy"
+        },
+        "attack": {
+            "description": "Full assault on enemy base",
+            "production_focus": "military",
+            "group_behavior": "coordinate",
+            "target_priority": [
+                "conyard",
+                "factory",
+                "barracks",
+                "refinery",
+                "power"
+            ]
+        },
+        "harass": {
+            "description": "Small squad attacks enemy economy",
+            "production_focus": "balanced",
+            "group_behavior": "hit_and_run",
+            "target_priority": [
+                "harvester",
+                "refinery",
+                "power"
+            ]
+        },
+        "defend": {
+            "description": "Protect base from attack",
+            "production_focus": "military",
+            "group_behavior": "intercept"
         }
     }
 }

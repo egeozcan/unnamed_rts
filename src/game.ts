@@ -4,7 +4,7 @@ import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu } from './ui/index.js';
 import { initMinimap, renderMinimap } from './ui/minimap.js';
-import { initInput, getInputState, getDragSelection, handleCameraInput } from './input/index.js';
+import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
 import rules from './data/rules.json';
 
@@ -255,8 +255,33 @@ function gameLoop() {
         checkWinCondition();
     }
 
-    // Camera Input
+    // Camera & Zoom Input
     const input = getInputState();
+
+    const oldZoom = currentState.zoom;
+    const newZoom = handleZoomInput(oldZoom);
+
+    if (newZoom !== oldZoom) {
+        // Zoom towards mouse
+        const mouseX = input.mouse.x;
+        const mouseY = input.mouse.y;
+
+        const worldX = currentState.camera.x + mouseX / oldZoom;
+        const worldY = currentState.camera.y + mouseY / oldZoom;
+
+        const newCameraX = worldX - mouseX / newZoom;
+        const newCameraY = worldY - mouseY / newZoom;
+
+        currentState = {
+            ...currentState,
+            zoom: newZoom,
+            camera: {
+                x: Math.max(0, Math.min(MAP_WIDTH - canvas.width / newZoom, newCameraX)),
+                y: Math.max(0, Math.min(MAP_HEIGHT - canvas.height / newZoom, newCameraY))
+            }
+        };
+    }
+
     const newCamera = handleCameraInput(currentState.camera, currentState.zoom, canvas.width, canvas.height);
     currentState = { ...currentState, camera: newCamera };
 
