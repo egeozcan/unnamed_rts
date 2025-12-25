@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Command: Red Browser Alert</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        #game-container { display: flex; height: 100vh; width: 100vw; }
+        canvas { background: #354a2e; cursor: crosshair; touch-action: none; display:block; }
+        
+        #sidebar { 
+            width: 300px; min-width: 300px; 
+            background: #1a1a1a; color: #0f0; 
+            border-left: 3px solid #555; 
+            display: flex; flex-direction: column; 
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            z-index: 10;
+            height: 100vh;
+        }
+
+        .sidebar-header { padding: 10px; background: #1a1a1a; z-index: 2; border-bottom: 1px solid #333; }
+        #minimap-container { position: relative; width: 250px; height: 200px; margin: 0 auto 5px auto; border: 1px solid #0f0; background: #000; }
+        #minimapCanvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+        #low-power-warning { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; justify-content: center; align-items: center; 
+            color: #f00; font-weight: bold; font-size: 20px; text-shadow: 0 0 5px #f00;
+            background: rgba(0,0,0,0.5); pointer-events: none; display: none;
+            animation: flash 1s infinite;
+        }
+        
+        .tabs { display: flex; border-bottom: 1px solid #444; background: #222; }
+        .tab { 
+            flex: 1; text-align: center; padding: 10px 0; cursor: pointer; 
+            border-right: 1px solid #444; fill: #666; transition: 0.2s; 
+        }
+        .tab:last-child { border-right: none; }
+        .tab:hover { background: #333; fill: #aaa; }
+        .tab.active { background: #444; fill: #0f0; border-bottom: 2px solid #0f0; }
+        .tab svg { width: 24px; height: 24px; }
+
+        .sidebar-content { flex-grow: 1; overflow-y: auto; background: #111; position: relative; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 5px; display: none; }
+        .btn-grid.active { display: grid; }
+
+        .build-btn { 
+            background: #2a2a2a; color: #aaa; border: 1px solid #444; 
+            height: 60px; position: relative; cursor: pointer;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            font-size: 10px; overflow: hidden;
+        }
+        .build-btn:hover { border-color: #888; }
+        .build-btn.disabled { opacity: 0.3; pointer-events: none; filter: grayscale(100%); }
+        .build-btn.building { background: #222; color: #fff; }
+        .build-btn.ready { background: #004400; color: #fff; border-color: #0f0; animation: pulse 1s infinite; }
+        .build-btn.placing { background: #006600; border: 2px dashed #fff; }
+        
+        .progress-overlay {
+            position: absolute; bottom: 0; left: 0; height: 100%; width: 0%;
+            background: rgba(255, 255, 255, 0.1);
+            border-top: 2px solid #fa0;
+            transition: width 0.1s linear;
+            pointer-events: none;
+        }
+        .build-btn.building .progress-overlay { background: rgba(200, 150, 0, 0.2); }
+
+        .btn-name { z-index: 2; font-weight: bold; margin-bottom: 2px; text-align: center;}
+        .btn-cost { z-index: 2; color: #ffd700; }
+        .btn-status { z-index: 2; color: #fff; font-weight: bold; margin-top:2px; font-size: 11px; text-shadow: 1px 1px 0 #000; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 5px #0f0 inset; } 50% { box-shadow: 0 0 15px #0f0 inset; } 100% { box-shadow: 0 0 5px #0f0 inset; } }
+        @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+
+        #money-display { font-size: 24px; color: #ffd700; text-align: right; margin-bottom: 5px; text-shadow: 0 0 5px #fa0; font-weight: bold; }
+        #power-display { font-size: 12px; color: #0ff; text-align: right; font-weight: bold; }
+        #status-msg { padding: 5px; background: #222; color: #fff; font-size: 11px; white-space: nowrap; overflow: hidden; border-top: 1px solid #444;}
+
+        #menu, #end-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(5px); }
+        #end-screen { display: none; }
+        .logo { color:#f00; font-family: Impact, sans-serif; font-size: 70px; text-shadow: 3px 3px 0 #fff, 0 0 20px #f00; margin-bottom: 40px; }
+        .menu-btn { padding: 15px 50px; font-size: 20px; margin: 10px; background: #800; color: #fff; border: 2px solid #f00; cursor: pointer; font-family: Impact, sans-serif; letter-spacing: 2px; text-transform: uppercase; transition: 0.2s; }
+        .menu-btn:hover { background: #f00; box-shadow: 0 0 20px #f00; transform: scale(1.05); }
+        .end-title { font-size: 60px; font-family: Impact, sans-serif; margin-bottom: 20px; letter-spacing: 5px; }
+        .blue-btn { background: #004488; border-color: #4488ff; }
+        .blue-btn:hover { background: #0066cc; box-shadow: 0 0 20px #00f; }
+    </style>
+</head>
+<body>
+
+<div id="menu">
+    <div class="logo">JS COMMAND</div>
+    <button class="menu-btn" onclick="startGame('easy')">Easy Skirmish</button>
+    <button class="menu-btn" onclick="startGame('hard')">Hard Skirmish</button>
+    <button class="menu-btn blue-btn" onclick="startGame('demo')">Watch Demo</button>
+</div>
+
+<div id="end-screen">
+    <div id="end-title" class="end-title">GAME OVER</div>
+    <button class="menu-btn" onclick="location.reload()">Main Menu</button>
+</div>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <div id="money-display">$ 0</div>
+            <div id="power-display">Power: 0/0</div>
+            <div id="minimap-container">
+                <canvas id="minimapCanvas" width="250" height="200"></canvas>
+                <div id="low-power-warning">LOW POWER</div>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="setTab('buildings')"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
+            <div class="tab" onclick="setTab('infantry')"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+            <div class="tab" onclick="setTab('vehicles')"><svg viewBox="0 0 24 24"><path d="M20 12V8h-2V6h-2v2H8V6H6v2H4v4c-1.1 0-2 .9-2 2v4h2v2h16v-2h2v-4c0-1.1-.9-2-2-2zm-6-4h2v4h-2V8zm-6 0h2v4H8V8zm-5 8h18v4H3v-4z"/></svg></div>
+        </div>
+
+        <div class="sidebar-content">
+            <div id="tab-buildings" class="btn-grid active"></div>
+            <div id="tab-infantry" class="btn-grid"></div>
+            <div id="tab-vehicles" class="btn-grid"></div>
+        </div>
+        <div id="status-msg">Commander, base established.</div>
+    </div>
+</div>
+
+<script>
+/** 
+ * JS COMMAND RTS ENGINE - v5.2 (Critical Pathfinding Fix)
+ */
+
+const CANVAS = document.getElementById('gameCanvas');
+const CTX = CANVAS.getContext('2d');
+const MAP_WIDTH = 3000;
+const MAP_HEIGHT = 3000;
+const TILE_SIZE = 40; 
+const GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
+const GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
+const PLAYER_COLOR = '#4488ff';
+const ENEMY_COLOR = '#ff4444';
+const BUILD_RADIUS = 350; 
+
+const TYPE_UNIT = 'unit';
+const TYPE_BUILDING = 'building';
+const TYPE_RESOURCE = 'resource';
+
+// --- PATHFINDING & GRID ---
+let collisionGrid = new Uint8Array(GRID_W * GRID_H);
+
+function markGrid(x, y, w, h, blocked) {
+    let gx = Math.floor(x / TILE_SIZE);
+    let gy = Math.floor(y / TILE_SIZE);
+    let gw = Math.ceil(w / TILE_SIZE);
+    let gh = Math.ceil(h / TILE_SIZE);
+    
+    for(let j=gy; j<gy+gh; j++) {
+        for(let i=gx; i<gx+gw; i++) {
+            if(i>=0 && i<GRID_W && j>=0 && j<GRID_H) {
+                collisionGrid[j * GRID_W + i] = blocked ? 1 : 0;
+            }
+        }
+    }
+}
+
+// A* Pathfinding
+function findPath(start, end) {
+    let sx = Math.floor(start.x / TILE_SIZE);
+    let sy = Math.floor(start.y / TILE_SIZE);
+    let ex = Math.floor(end.x / TILE_SIZE);
+    let ey = Math.floor(end.y / TILE_SIZE);
+
+    // Basic bounds check, fallback to direct line if invalid
+    if (sx < 0 || sx >= GRID_W || sy < 0 || sy >= GRID_H) return [end];
+    if (ex < 0 || ex >= GRID_W || ey < 0 || ey >= GRID_H) return [end]; 
+    if (sx === ex && sy === ey) return [end]; 
+
+    // Target blockage check
+    if (collisionGrid[ey * GRID_W + ex] === 1) {
+        let bestDist = 9999;
+        let nx = ex, ny = ey;
+        // Search 3x3 for open spot
+        for(let y=-2; y<=2; y++) {
+            for(let x=-2; x<=2; x++) {
+                let tx = ex+x, ty = ey+y;
+                if(tx>=0 && tx<GRID_W && ty>=0 && ty<GRID_H && collisionGrid[ty*GRID_W+tx]===0) {
+                    let d = Math.abs(tx-sx) + Math.abs(ty-sy);
+                    if(d < bestDist) { bestDist = d; nx=tx; ny=ty; }
+                }
+            }
+        }
+        ex = nx; ey = ny;
+    }
+
+    let open = [];
+    let closed = new Uint8Array(GRID_W * GRID_H); 
+    let cameFrom = new Int32Array(GRID_W * GRID_H).fill(-1);
+    let gScore = new Float32Array(GRID_W * GRID_H).fill(Infinity);
+    let fScore = new Float32Array(GRID_W * GRID_H).fill(Infinity);
+
+    let startIdx = sy * GRID_W + sx;
+    gScore[startIdx] = 0;
+    fScore[startIdx] = Math.abs(sx - ex) + Math.abs(sy - ey);
+    open.push(startIdx);
+
+    let iterations = 0;
+    
+    while (open.length > 0) {
+        if(iterations++ > 1500) break; 
+
+        // Sort by fScore (simple version)
+        let currentIdx = open[0];
+        let lowestF = fScore[currentIdx];
+        let lowestI = 0;
+        for(let i=1; i<open.length; i++) {
+            if(fScore[open[i]] < lowestF) { lowestF = fScore[open[i]]; currentIdx = open[i]; lowestI = i; }
+        }
+
+        if (currentIdx === ey * GRID_W + ex) {
+            let path = [];
+            let curr = currentIdx;
+            while (curr !== -1) {
+                let cx = curr % GRID_W;
+                let cy = Math.floor(curr / GRID_W);
+                path.push(new Vector(cx * TILE_SIZE + TILE_SIZE/2, cy * TILE_SIZE + TILE_SIZE/2));
+                curr = cameFrom[curr];
+            }
+            path.reverse();
+            path.shift(); 
+            path.push(end); 
+            return path;
+        }
+
+        open.splice(lowestI, 1);
+        closed[currentIdx] = 1;
+
+        let cx = currentIdx % GRID_W;
+        let cy = Math.floor(currentIdx / GRID_W);
+
+        const dirs = [[0,1], [0,-1], [1,0], [-1,0]]; // 4-way
+        for (let d of dirs) {
+            let nx = cx + d[0];
+            let ny = cy + d[1];
+            
+            if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
+                let nIdx = ny * GRID_W + nx;
+                if (closed[nIdx] === 1) continue;
+                if (collisionGrid[nIdx] === 1) continue;
+
+                let tentativeG = gScore[currentIdx] + 1;
+                if (tentativeG < gScore[nIdx]) {
+                    cameFrom[nIdx] = currentIdx;
+                    gScore[nIdx] = tentativeG;
+                    fScore[nIdx] = tentativeG + (Math.abs(nx - ex) + Math.abs(ny - ey));
+                    if (!open.includes(nIdx)) open.push(nIdx);
+                }
+            }
+        }
+    }
+    return [end]; 
+}
+
+// --- GRAPHICS ---
+const IMG_CACHE = {}; 
+function createGameImage(key, color, svgContent) {
+    const finalSVG = svgContent.replace(/COL_PRIMARY/g, color);
+    const blob = new Blob([finalSVG], {type: 'image/svg+xml'});
+    const img = new Image();
+    img.src = URL.createObjectURL(blob);
+    return img;
+}
+
+function initGraphics() {
+    const RECT_BASE = `<rect x="5" y="5" width="90" height="90" fill="COL_PRIMARY" stroke="#000" stroke-width="2"/>`;
+    const TANK_TREADS = `<rect x="5" y="5" width="90" height="20" fill="#222"/><rect x="5" y="75" width="90" height="20" fill="#222"/>`;
+    
+    const svgs = {
+        'conyard': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${RECT_BASE}<rect x="25" y="25" width="50" height="50" fill="#333" stroke="#fff" stroke-width="2"/><path d="M50 50 L90 10" stroke="#fff" stroke-width="4"/><circle cx="50" cy="50" r="10" fill="#fff"/></svg>`,
+        'power': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${RECT_BASE}<path d="M40 10 L60 10 L60 90 L40 90 Z" fill="#222"/><path d="M50 20 L30 50 L50 50 L40 80 L70 40 L50 40 L60 20 Z" fill="#0ff" stroke="#fff"/></svg>`,
+        'refinery': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="5" y="15" width="90" height="70" fill="COL_PRIMARY" stroke="#000" stroke-width="2"/><rect x="10" y="20" width="30" height="60" fill="#222"/><rect x="50" y="20" width="40" height="40" fill="#555"/><path d="M60 40 L80 40 L70 30 Z" fill="#fa0"/></svg>`,
+        'barracks': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${RECT_BASE}<rect x="20" y="20" width="60" height="60" fill="#444"/><rect x="35" y="35" width="30" height="30" fill="#111"/><path d="M10 10 L50 40 L90 10" stroke="#000" stroke-width="2" fill="none"/></svg>`,
+        'factory': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="5" y="5" width="90" height="90" fill="COL_PRIMARY" stroke="#000"/><rect x="20" y="10" width="60" height="80" fill="#333"/><line x1="20" y1="20" x2="80" y2="20" stroke="#555" stroke-width="2"/><line x1="20" y1="40" x2="80" y2="40" stroke="#555" stroke-width="2"/><line x1="20" y1="60" x2="80" y2="60" stroke="#555" stroke-width="2"/><line x1="20" y1="80" x2="80" y2="80" stroke="#555" stroke-width="2"/></svg>`,
+        'turret': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#333" stroke="#000"/><rect x="30" y="30" width="40" height="40" fill="COL_PRIMARY"/><rect x="40" y="0" width="20" height="50" fill="#888" stroke="#000"/></svg>`,
+        'tech': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${RECT_BASE}<circle cx="50" cy="50" r="30" fill="#444" stroke="#fff"/><circle cx="50" cy="50" r="10" fill="#0ff"/><line x1="50" y1="50" x2="90" y2="20" stroke="#fff" stroke-width="2"/></svg>`,
+        'rifle': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="COL_PRIMARY" stroke="#000" stroke-width="4"/><line x1="50" y1="50" x2="90" y2="50" stroke="#000" stroke-width="8"/></svg>`,
+        'rocket': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="COL_PRIMARY" stroke="#000" stroke-width="4"/><rect x="50" y="40" width="40" height="20" fill="#555"/><rect x="80" y="35" width="10" height="30" fill="#f00"/></svg>`,
+        'engineer': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#fff" stroke="COL_PRIMARY" stroke-width="4"/><rect x="40" y="20" width="20" height="60" fill="#f00"/><rect x="20" y="40" width="60" height="20" fill="#f00"/></svg>`,
+        'jeep': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="10" y="20" width="80" height="60" rx="10" fill="COL_PRIMARY" stroke="#000"/><rect x="50" y="25" width="30" height="50" fill="#222" opacity="0.5"/><line x1="60" y1="50" x2="90" y2="50" stroke="#fff" stroke-width="4"/></svg>`,
+        'light': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${TANK_TREADS}<rect x="15" y="20" width="70" height="60" fill="COL_PRIMARY" stroke="#000"/><rect x="40" y="35" width="30" height="30" fill="#333"/><rect x="60" y="45" width="35" height="10" fill="#888"/></svg>`,
+        'heavy': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${TANK_TREADS}<rect x="10" y="15" width="80" height="70" fill="COL_PRIMARY" stroke="#000" stroke-width="2"/><rect x="35" y="30" width="40" height="40" fill="#222"/><rect x="65" y="42" width="35" height="16" fill="#888"/><rect x="65" y="42" width="10" height="16" fill="#f00"/></svg>`,
+        'artillery': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${TANK_TREADS}<rect x="20" y="25" width="50" height="50" fill="COL_PRIMARY" stroke="#000"/><rect x="40" y="40" width="55" height="20" fill="#111"/></svg>`,
+        'harvester': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="5" y="20" width="90" height="60" rx="5" fill="COL_PRIMARY" stroke="#000"/><rect x="10" y="25" width="30" height="50" fill="#da0"/><path d="M95 20 L95 80 L80 50 Z" fill="#222"/></svg>`,
+        'heli': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="20" y="45" width="60" height="10" fill="#555"/><circle cx="50" cy="50" r="25" fill="COL_PRIMARY" stroke="#000"/><rect x="10" y="10" width="80" height="5" fill="#111" opacity="0.8"/><rect x="10" y="85" width="80" height="5" fill="#111" opacity="0.8"/><line x1="50" y1="20" x2="50" y2="80" stroke="#111" stroke-width="2"/></svg>`,
+        'mcv': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${TANK_TREADS}<rect x="10" y="10" width="80" height="80" fill="COL_PRIMARY" stroke="#fff" stroke-width="2"/><rect x="30" y="30" width="40" height="40" fill="#222"/><text x="50" y="60" font-size="20" text-anchor="middle" fill="#fff">MCV</text></svg>`,
+    };
+
+    for(let key in svgs) {
+        IMG_CACHE[key + '_0'] = createGameImage(key, PLAYER_COLOR, svgs[key]);
+        IMG_CACHE[key + '_1'] = createGameImage(key, ENEMY_COLOR, svgs[key]);
+    }
+}
+
+// --- DATABASE ---
+const DB = {
+    buildings: {
+        'conyard': { name: 'Con. Yard', hp: 3000, cost: 3000, w: 90, h: 90, req: [], hidden: true, power: 10, drain: 0 },
+        'power':   { name: 'Power Plant', hp: 800, cost: 300, w: 60, h: 60, power: 200, drain: 0, req: ['conyard'] },
+        'refinery':{ name: 'Refinery', hp: 1200, cost: 2000, w: 100, h: 80, provides: 'harvester', drain: 30, req: ['power'] },
+        'barracks':{ name: 'Barracks', hp: 1000, cost: 500, w: 60, h: 80, provides: 'infantry', drain: 10, req: ['power'] },
+        'factory': { name: 'War Factory', hp: 2000, cost: 2000, w: 100, h: 100, provides: 'vehicles', drain: 20, req: ['refinery', 'barracks'] },
+        'turret':  { name: 'Gun Turret', hp: 1000, cost: 800, w: 40, h: 40, range: 250, damage: 25, rate: 20, isDefense: true, drain: 40, req: ['barracks'] },
+        'tech':    { name: 'Tech Center', hp: 1000, cost: 1500, w: 80, h: 80, drain: 50, req: ['factory'] }
+    },
+    units: {
+        'rifle':    { name: 'Rifleman', type: 'infantry', hp: 60, cost: 100, speed: 2, range: 130, damage: 6, rate: 30, w: 15, req: ['barracks'] },
+        'rocket':   { name: 'Rocket',   type: 'infantry', hp: 70, cost: 300, speed: 1.5, range: 220, damage: 35, rate: 65, w: 15, splash: 25, req: ['barracks'] },
+        'engineer': { name: 'Medic',    type: 'infantry', hp: 50, cost: 500, speed: 2, range: 60, damage: -15, rate: 60, w: 15, req: ['barracks'] }, 
+        'harvester':{ name: 'Harvester',type: 'vehicle', hp: 1000, cost: 1400, speed: 1.5, range: 0, damage: 0, w: 35, capacity: 500, req: ['refinery', 'factory'] },
+        'jeep':     { name: 'Ranger',   type: 'vehicle', hp: 180, cost: 500, speed: 4.5, range: 160, damage: 18, rate: 15, w: 22, req: ['factory'] },
+        'light':    { name: 'Light Tank',type: 'vehicle', hp: 400, cost: 800, speed: 2.8, range: 210, damage: 45, rate: 55, w: 28, req: ['factory'] },
+        'heavy':    { name: 'Heavy Tank',type: 'vehicle', hp: 700, cost: 1600, speed: 2.0, range: 230, damage: 90, rate: 75, w: 34, req: ['factory'] },
+        'artillery':{ name: 'Artillery',type: 'vehicle', hp: 200, cost: 1200, speed: 1.2, range: 550, damage: 130, rate: 200, w: 30, splash: 60, req: ['factory', 'tech'] },
+        'heli':     { name: 'Helicopter',type: 'air',    hp: 250, cost: 1500, speed: 6, range: 300, damage: 45, rate: 25, w: 20, fly: true, req: ['tech'] },
+        'mcv':      { name: 'MCV',      type: 'vehicle', hp: 2000, cost: 3000, speed: 1.0, range: 0, damage: 0, w: 45, req: ['factory'] },
+    }
+};
+
+class Vector {
+    constructor(x, y) { this.x = x; this.y = y; }
+    add(v) { return new Vector(this.x + v.x, this.y + v.y); }
+    sub(v) { return new Vector(this.x - v.x, this.y - v.y); }
+    mag() { return Math.sqrt(this.x*this.x + this.y*this.y); }
+    norm() { let m = this.mag(); return m === 0 ? new Vector(0,0) : new Vector(this.x/m, this.y/m); }
+    scale(s) { return new Vector(this.x * s, this.y * s); }
+    dist(v) { return Math.sqrt(Math.pow(this.x - v.x, 2) + Math.pow(this.y - v.y, 2)); }
+}
+
+class Entity {
+    constructor(x, y, owner, type, statsKey) {
+        this.pos = new Vector(x, y);
+        this.prevPos = new Vector(x, y); 
+        this.owner = owner; 
+        this.type = type;
+        this.key = statsKey;
+        this.id = Math.random().toString(36).substr(2, 9);
+        
+        let data = type === TYPE_BUILDING ? DB.buildings[statsKey] : DB.units[statsKey];
+        if (type === TYPE_RESOURCE) data = { hp: 1000, w: 25, h:25 }; 
+
+        this.hp = data.hp;
+        this.maxHp = data.hp;
+        this.w = data.w || 20;
+        this.h = data.h || data.w || 20;
+        this.radius = Math.max(this.w, this.h) / 2;
+        this.dead = false;
+        
+        this.stats = data;
+        this.vel = new Vector(0, 0);
+        this.target = null; 
+        this.lastAttacker = null; 
+        this.moveTarget = null;
+        this.cooldown = 0;
+        
+        this.path = null;
+        this.pathIdx = 0;
+        this.finalDest = null; // Store final dest to prevent recalc if same object
+
+        this.cargo = 0;
+        this.resourceTarget = null;
+        this.baseTarget = null;
+        this.rotation = 0;
+        this.flash = 0;
+        this.stuckTimer = 0; 
+        this.unstuckDir = null;
+        this.unstuckTimer = 0;
+    }
+    takeDamage(amount, source) {
+        this.hp -= amount;
+        this.flash = 3;
+        if (source && source !== this) this.lastAttacker = source;
+        if (this.hp <= 0) {
+            this.dead = true;
+            if(this.type === TYPE_BUILDING) {
+                markGrid(this.pos.x - this.w/2, this.pos.y - this.h/2, this.w, this.h, false);
+            }
+            for(let i=0; i<8; i++) spawnParticle(this.pos.x, this.pos.y, '#f50', 2);
+        }
+    }
+    update() {
+        if (this.dead) return;
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.flash > 0) this.flash--;
+        if (this.type === TYPE_UNIT) this.updateUnit();
+        if (this.type === TYPE_BUILDING) this.updateBuilding();
+        if (this.target && (this.target.dead || this.pos.dist(this.target.pos) > (this.stats.vision || 400) + 100)) this.target = null;
+    }
+    updateUnit() {
+        if (!this.target && this.stats.damage !== 0) {
+            let range = (this.stats.range || 100) + 50; 
+            if (this.lastAttacker && !this.lastAttacker.dead && this.pos.dist(this.lastAttacker.pos) < range * 1.5) this.target = this.lastAttacker;
+            else {
+                let enemies = gameState.entities.filter(e => e.owner !== this.owner && e.owner !== -1 && !e.dead && this.pos.dist(e.pos) < range);
+                if (enemies.length > 0) {
+                    enemies.sort((a,b) => this.pos.dist(a.pos) - this.pos.dist(b.pos));
+                    this.target = enemies[0];
+                }
+            }
+        }
+        if (this.key === 'harvester') this.handleHarvester();
+        else {
+            if (this.target && !this.target.dead) {
+                let dist = this.pos.dist(this.target.pos);
+                if (dist <= this.stats.range) {
+                    this.moveTarget = null; this.path = null; this.attack(this.target);
+                } else this.moveTo(this.target.pos);
+            } else if (this.moveTarget) {
+                this.moveTo(this.moveTarget);
+                if (this.pos.dist(this.moveTarget) < 10) { this.moveTarget = null; this.path = null; }
+            }
+        }
+        if (this.vel.mag() > 0) {
+            this.pos = this.pos.add(this.vel);
+            if(!this.stats.fly) this.rotation = Math.atan2(this.vel.y, this.vel.x);
+            this.vel = new Vector(0,0); 
+        }
+    }
+    handleHarvester() {
+        if (this.cargo >= this.stats.capacity) {
+            // Find refinery
+            if(!this.baseTarget || this.baseTarget.dead) {
+                let refineries = gameState.entities.filter(e => e.owner === this.owner && e.key === 'refinery' && !e.dead);
+                if(refineries.length > 0) {
+                    refineries.sort((a,b) => this.pos.dist(a.pos) - this.pos.dist(b.pos));
+                    this.baseTarget = refineries[0];
+                }
+            }
+            if (this.baseTarget) {
+                if (this.pos.dist(this.baseTarget.pos) < 90) {
+                    // Deposit
+                    if (this.owner === 0) { gameState.money += this.cargo; spawnFloater(this.pos.x, this.pos.y, `+$${this.cargo}`, '#ff0'); } 
+                    else gameState.aiMoney += this.cargo;
+                    this.cargo = 0; this.resourceTarget = null;
+                } else {
+                    // Optimized: Use fixed docking pos to allow stable pathfinding
+                    if(!this.dockPos || this.finalDest !== this.dockPos) {
+                        this.dockPos = this.baseTarget.pos.add(new Vector(0, 50));
+                    }
+                    this.moveTo(this.dockPos);
+                }
+            }
+        } else {
+            // Harvest
+            if (!this.resourceTarget || this.resourceTarget.dead) {
+                let ores = gameState.entities.filter(e => e.type === TYPE_RESOURCE && !e.dead);
+                if (ores.length > 0) { ores.sort((a,b) => this.pos.dist(a.pos) - this.pos.dist(b.pos)); this.resourceTarget = ores[0]; }
+            }
+            if (this.resourceTarget) {
+                if (this.pos.dist(this.resourceTarget.pos) < 40) {
+                    if (gameState.tick % 10 === 0) {
+                        this.cargo += 15; this.resourceTarget.hp -= 20;
+                        if(this.resourceTarget.hp <= 0) this.resourceTarget.dead = true;
+                    }
+                } else this.moveTo(this.resourceTarget.pos);
+            }
+        }
+    }
+    moveTo(targetPos) {
+        // Path calculation only if target changed distinctly
+        let distToTarget = this.pos.dist(targetPos);
+        
+        if (!this.path || (this.finalDest && this.finalDest.dist(targetPos) > 10)) {
+            // Recalculate
+            this.finalDest = targetPos;
+            if(distToTarget < 100) this.path = [targetPos]; // Short trip
+            else this.path = findPath(this.pos, targetPos);
+            this.pathIdx = 0;
+        }
+
+        let nextWaypoint;
+        // FIX: Ensure pathIdx is valid
+        if (this.pathIdx >= this.path.length) {
+            nextWaypoint = targetPos;
+        } else {
+            nextWaypoint = this.path[this.pathIdx];
+        }
+
+        // Advance
+        if (this.pos.dist(nextWaypoint) < 20) {
+            this.pathIdx++;
+            // Check again immediately
+            if (this.pathIdx >= this.path.length) nextWaypoint = targetPos;
+            else nextWaypoint = this.path[this.pathIdx];
+        }
+
+        // Stuck Logic
+        if (gameState.tick % 10 === 0) {
+            if (this.pos.dist(this.prevPos) < 2) this.stuckTimer += 10; else { this.stuckTimer = 0; this.unstuckTimer = 0; }
+            this.prevPos = new Vector(this.pos.x, this.pos.y);
+        }
+        if (this.stuckTimer > 60 && this.unstuckTimer === 0) {
+            this.unstuckDir = new Vector(Math.random()-0.5, Math.random()-0.5).norm();
+            this.unstuckTimer = 40; this.stuckTimer = 0;
+        }
+
+        let dir = (this.unstuckTimer > 0) ? this.unstuckDir : nextWaypoint.sub(this.pos).norm();
+        
+        let separation = new Vector(0,0); let count = 0;
+        for (let other of gameState.entities) {
+            if (other === this || other.dead || other.type === TYPE_RESOURCE) continue;
+            let d = this.pos.dist(other.pos);
+            if (d < (this.radius + other.radius + 5)) { separation = separation.add(this.pos.sub(other.pos).norm()); count++; }
+        }
+        if (count > 0) dir = dir.add(separation.scale(2)).norm();
+        
+        let desiredVel = dir.scale(this.stats.speed);
+        let nextPos = this.pos.add(desiredVel);
+        
+        // Building Collision
+        for(let e of gameState.entities) {
+            if(e.type === TYPE_BUILDING && !e.dead && e !== this) {
+                let minDist = e.radius + this.radius;
+                if(nextPos.dist(e.pos) < minDist) {
+                    let collisionNormal = nextPos.sub(e.pos).norm();
+                    let dot = desiredVel.x * collisionNormal.x + desiredVel.y * collisionNormal.y;
+                    desiredVel = desiredVel.sub(collisionNormal.scale(dot));
+                }
+            }
+        }
+        this.vel = desiredVel;
+    }
+    attack(target) {
+        if (this.cooldown > 0) return;
+        if (this.stats.damage < 0) {
+            if (target.owner === this.owner && target.hp < target.maxHp) {
+                gameState.projectiles.push(new Projectile(this, target, 'heal')); this.cooldown = this.stats.rate;
+            }
+            return;
+        }
+        let pType = (this.key === 'rocket' || this.key === 'artillery') ? 'rocket' : 'bullet';
+        gameState.projectiles.push(new Projectile(this, target, pType, this.stats.damage, this.stats.splash));
+        this.cooldown = this.stats.rate;
+        spawnParticle(this.pos.x + Math.cos(this.rotation)*20, this.pos.y + Math.sin(this.rotation)*20, '#ff0', 0.5);
+    }
+    updateBuilding() {
+        if (this.stats.isDefense) {
+             let p = gameState.power[this.owner];
+             if (p.out < p.in) return; 
+             let range = this.stats.range;
+             if (!this.target || this.target.dead || this.pos.dist(this.target.pos) > range) {
+                 this.target = null;
+                 let enemies = gameState.entities.filter(e => e.owner !== this.owner && e.owner !== -1 && !e.dead && this.pos.dist(e.pos) < range);
+                 if (enemies.length > 0) this.target = enemies[0];
+             }
+             if (this.target) this.attack(this.target);
+        }
+    }
+    draw() {
+        if (this.dead) return;
+        let sc = worldToScreen(this.pos);
+        if (sc.x < -100 || sc.x > CANVAS.width + 100 || sc.y < -100 || sc.y > CANVAS.height + 100) return;
+        CTX.save(); CTX.translate(sc.x, sc.y);
+        let scale = gameState.zoom;
+        CTX.scale(scale, scale);
+
+        if (gameState.selection.includes(this) || this.hp < this.maxHp) {
+            if (gameState.selection.includes(this)) {
+                CTX.strokeStyle = '#0f0'; CTX.lineWidth = 2; CTX.beginPath(); CTX.arc(0, 0, this.radius + 8, 0, Math.PI * 2); CTX.stroke();
+                if(this.key === 'mcv' && this.owner === 0 && gameState.mode !== 'demo') { CTX.fillStyle = '#fff'; CTX.font="10px Arial"; CTX.fillText("Deploy (D)", -25, this.radius + 20); }
+            }
+            CTX.fillStyle = 'red'; CTX.fillRect(-15, -this.radius - 12, 30, 4);
+            CTX.fillStyle = '#0f0'; CTX.fillRect(-15, -this.radius - 12, 30 * Math.max(0, this.hp / this.maxHp), 4);
+        }
+
+        if (this.type === TYPE_RESOURCE) { CTX.fillStyle = '#d4af37'; CTX.beginPath(); CTX.arc(0,0,10,0,Math.PI*2); CTX.fill(); } 
+        else {
+            CTX.rotate(this.rotation);
+            const imgKey = this.key + '_' + (this.owner === 0 || this.owner === 1 ? this.owner : 0);
+            const img = IMG_CACHE[imgKey];
+            if (this.flash > 0) { CTX.fillStyle = '#fff'; CTX.fillRect(-this.w/2, -this.h/2, this.w, this.h); } 
+            else if (img && img.complete) { CTX.drawImage(img, -this.w/2, -this.h/2, this.w, this.h); } 
+            else { CTX.fillStyle = this.owner === 0 ? PLAYER_COLOR : '#f00'; CTX.fillRect(-this.w/2, -this.h/2, this.w, this.h); }
+        }
+        CTX.restore();
+    }
+}
+
+class Projectile {
+    constructor(ownerEntity, target, type, damage, splash) {
+        this.ownerEntity = ownerEntity; this.pos = new Vector(ownerEntity.pos.x, ownerEntity.pos.y);
+        this.target = target; this.speed = type === 'rocket' ? 9 : 18;
+        this.damage = damage || 0; this.splash = splash || 0; this.type = type; this.dead = false;
+        this.vel = target.pos.sub(this.pos).norm().scale(this.speed);
+    }
+    update() {
+        this.pos = this.pos.add(this.vel);
+        if (this.type === 'rocket' && gameState.tick % 3 === 0) spawnParticle(this.pos.x, this.pos.y, '#ccc', 0.5);
+        if (this.pos.dist(this.target.pos) < this.target.radius + 15 || (this.target.dead && this.pos.dist(this.target.pos) < 20)) this.explode();
+    }
+    explode() {
+        this.dead = true;
+        if (this.type === 'heal') { this.target.hp = Math.min(this.target.maxHp, this.target.hp + 20); spawnFloater(this.pos.x, this.pos.y, "+", "#0f0"); return; }
+        if (this.splash > 0) {
+            gameState.entities.forEach(e => { if (this.pos.dist(e.pos) < this.splash * 2.5) e.takeDamage(this.damage, this.ownerEntity); });
+            for(let i=0; i<6; i++) spawnParticle(this.pos.x, this.pos.y, '#fa0', 2);
+        } else { this.target.takeDamage(this.damage, this.ownerEntity); spawnParticle(this.pos.x, this.pos.y, '#ff0', 1); }
+    }
+    draw() {
+        let sc = worldToScreen(this.pos);
+        CTX.fillStyle = this.type === 'heal' ? '#0f0' : (this.type === 'rocket' ? '#f55' : '#ff0');
+        CTX.beginPath(); CTX.arc(sc.x, sc.y, 3 * gameState.zoom, 0, Math.PI*2); CTX.fill();
+    }
+}
+
+// --- PRODUCTION MANAGER ---
+class ProductionManager {
+    constructor(owner) {
+        this.owner = owner;
+        this.queues = { 'building': { current: null, progress: 0 }, 'infantry': { current: null, progress: 0 }, 'vehicle': { current: null, progress: 0 } };
+        this.readyToPlace = null; 
+    }
+    start(category, key) {
+        if (this.queues[category].current) { 
+            if (this.owner === 0 && this.queues[category].current === key) this.cancel(category); 
+            return; 
+        }
+        if (this.readyToPlace && category === 'building') return;
+        this.queues[category].current = key; this.queues[category].progress = 0; 
+        if(this.owner === 0) updateButtons();
+    }
+    cancel(category) {
+        if(category === 'building' && this.readyToPlace) { 
+            if(this.owner===0) gameState.money += DB.buildings[this.readyToPlace].cost; 
+            else gameState.aiMoney += DB.buildings[this.readyToPlace].cost;
+            this.readyToPlace = null; 
+            if(this.owner===0) gameState.placingBuilding = null; 
+        } 
+        else if (this.queues[category].current) {
+            let item = this.queues[category].current; let cost = category==='building' ? DB.buildings[item].cost : DB.units[item].cost;
+            let paid = cost * (this.queues[category].progress / 100); 
+            if(this.owner===0) gameState.money += paid; else gameState.aiMoney += paid;
+            this.queues[category].current = null; this.queues[category].progress = 0;
+        }
+        if(this.owner===0) updateButtons();
+    }
+    update() {
+        let money = this.owner === 0 ? gameState.money : gameState.aiMoney;
+        let p = gameState.power[this.owner];
+        let speedFactor = (p.out < p.in) ? 0.25 : 1.0; 
+
+        for(let cat in this.queues) {
+            let q = this.queues[cat]; if (!q.current) continue;
+            let data = cat === 'building' ? DB.buildings[q.current] : DB.units[q.current];
+            let totalCost = data.cost;
+            let speedMult = 1;
+            let factories = [];
+            if (cat === 'infantry') factories = gameState.entities.filter(e=>e.owner===this.owner && e.key==='barracks' && !e.dead);
+            if (cat === 'vehicle') factories = gameState.entities.filter(e=>e.owner===this.owner && e.key==='factory' && !e.dead);
+            if (cat === 'building') factories = gameState.entities.filter(e=>e.owner===this.owner && e.key==='conyard' && !e.dead);
+            if (factories.length > 0) speedMult += (factories.length - 1) * 0.5;
+            
+            let costPerTick = (totalCost / 600) * speedMult * speedFactor; 
+            
+            if (money >= costPerTick) {
+                money -= costPerTick;
+                q.progress += (costPerTick / totalCost) * 100;
+                if (q.progress >= 100) { this.complete(cat, q.current); q.current = null; q.progress = 0; }
+            }
+        }
+        if(this.owner === 0) gameState.money = money; else gameState.aiMoney = money;
+        if (this.owner === 0 && gameState.tick % 5 === 0) updateButtons();
+    }
+    complete(cat, key) {
+        if (cat === 'building') {
+            this.readyToPlace = key; 
+            if(this.owner === 0) {
+                document.getElementById('status-msg').innerText = "Construction Complete.";
+                spawnFloater(gameState.camera.x + 100, gameState.camera.y + 100, "Ready", "#fff");
+            }
+        } else {
+            let provider = cat==='infantry' ? 'barracks' : 'factory';
+            if (DB.units[key].type === 'air') provider = 'tech';
+            let facts = gameState.entities.filter(e=>e.owner===this.owner && e.key===provider && !e.dead);
+            if (facts.length > 0) {
+                let f = facts[0]; let spawnPos = findOpenSpot(f.pos.x, f.pos.y, 60);
+                let u = new Entity(spawnPos.x, spawnPos.y, this.owner, TYPE_UNIT, key);
+                u.moveTarget = findOpenSpot(f.pos.x, f.pos.y, 120);
+                gameState.entities.push(u); 
+                if(this.owner===0) document.getElementById('status-msg').innerText = "Unit Ready.";
+            } else {
+                if(this.owner===0) document.getElementById('status-msg').innerText = "Production Halted: No Factory.";
+                if(this.owner===0) gameState.money += DB.units[key].cost; else gameState.aiMoney += DB.units[key].cost;
+            }
+        }
+        if(this.owner===0) updateButtons();
+    }
+}
+
+// --- GAME STATE ---
+let gameState = {
+    running: false, mode: 'game', difficulty: 'easy', camera: { x: 0, y: 0 }, zoom: 1.0,
+    entities: [], projectiles: [], particles: [], selection: [], placingBuilding: null,
+    money: 3000, aiMoney: 0, tick: 0, 
+    production: new ProductionManager(0), 
+    aiPlayers: [],
+    power: { 0: {in:0, out:0}, 1: {in:0, out:0} }
+};
+
+function calculatePower() {
+    let p = { 0: {in:0, out:0}, 1: {in:0, out:0} };
+    for(let e of gameState.entities) {
+        if(e.type === TYPE_BUILDING && !e.dead && e.owner >= 0) {
+            let data = DB.buildings[e.key];
+            if(data.power) p[e.owner].out += data.power;
+            if(data.drain) p[e.owner].in += data.drain;
+        }
+    }
+    gameState.power = p;
+    let pp = p[0];
+    let el = document.getElementById('power-display');
+    el.innerText = `Power: ${pp.out} / ${pp.in}`;
+    el.style.color = pp.out < pp.in ? '#f00' : '#0f0';
+    document.getElementById('low-power-warning').style.display = pp.out < pp.in ? 'flex' : 'none';
+}
+
+function checkWinCondition() {
+    if(gameState.tick % 60 !== 0) return; 
+    let p0Buildings = gameState.entities.filter(e => e.owner === 0 && (e.type === TYPE_BUILDING || e.key === 'mcv')).length;
+    let p1Buildings = gameState.entities.filter(e => e.owner === 1 && (e.type === TYPE_BUILDING || e.key === 'mcv')).length;
+
+    if (p0Buildings === 0) gameOver("MISSION FAILED");
+    else if (p1Buildings === 0) gameOver("MISSION ACCOMPLISHED");
+}
+
+function gameOver(msg) {
+    gameState.running = false;
+    document.getElementById('end-screen').style.display = 'flex';
+    document.getElementById('end-title').innerText = msg;
+    document.getElementById('end-title').style.color = msg.includes("FAILED") ? '#f00' : '#0f0';
+}
+
+function spawnParticle(x, y, color, speed) { gameState.particles.push({ pos: new Vector(x, y), vel: new Vector((Math.random()-0.5)*speed, (Math.random()-0.5)*speed), life: 15+Math.random()*15, color: color }); }
+function spawnFloater(x, y, text, color) { gameState.particles.push({ pos: new Vector(x, y), vel: new Vector(0, -1), life: 40, text: text, color: color }); }
+function worldToScreen(v) { 
+    return new Vector((v.x - gameState.camera.x) * gameState.zoom, (v.y - gameState.camera.y) * gameState.zoom); 
+}
+function screenToWorld(v) { 
+    return new Vector((v.x / gameState.zoom) + gameState.camera.x, (v.y / gameState.zoom) + gameState.camera.y); 
+}
+
+function hasBuilding(key, owner) { return gameState.entities.some(e => e.owner === owner && e.key === key && !e.dead); }
+function findOpenSpot(x, y, radius) {
+    for (let r = radius; r < radius + 200; r += 20) {
+        for (let a = 0; a < Math.PI * 2; a += 0.5) {
+            let cx = x + Math.cos(a) * r; let cy = y + Math.sin(a) * r;
+            let gx = Math.floor(cx/TILE_SIZE), gy = Math.floor(cy/TILE_SIZE);
+            if(gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && collisionGrid[gy*GRID_W+gx]===0) {
+                let clear = true;
+                for(let e of gameState.entities) { if(e.pos.dist(new Vector(cx, cy)) < e.radius + 15) { clear = false; break; } }
+                if(clear) return new Vector(cx, cy);
+            }
+        }
+    }
+    return new Vector(x, y + radius); 
+}
+function isValidMCVSpot(x, y, selfId) {
+    let gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
+    if(gx>=0 && gx+2<GRID_W && gy>=0 && gy+2<GRID_H) {
+        if(collisionGrid[gy*GRID_W+gx]===1) return false;
+    }
+    for (let e of gameState.entities) { 
+        if (!e.dead && e.id !== selfId && e.pos.dist(new Vector(x, y)) < (e.radius + 45)) return false;
+    }
+    return true;
+}
+function isValidBuildLocation(x, y, owner) {
+    let near = false;
+    for (let e of gameState.entities) {
+        if (e.owner === owner && e.type === TYPE_BUILDING && !e.dead) {
+            if (e.pos.dist(new Vector(x, y)) < BUILD_RADIUS) { near = true; break; }
+        }
+    }
+    return near && isValidMCVSpot(x, y, null); 
+}
+
+// --- AI PLAYER CLASS ---
+class AIPlayer {
+    constructor(diff, owner) {
+        this.diff = diff;
+        this.owner = owner;
+        this.buildOrder = ['power', 'refinery', 'barracks', 'refinery', 'factory', 'turret', 'turret', 'tech'];
+        this.buildIndex = 0;
+        this.base = owner === 0 ? new Vector(300, 300) : new Vector(2500, 2500);
+        this.production = new ProductionManager(owner);
+        this.attackSquad = [];
+        
+        if(owner === 1) gameState.aiMoney = diff === 'hard' ? 10000 : 4000;
+        
+        let cy = new Entity(this.base.x, this.base.y, owner, TYPE_BUILDING, 'conyard');
+        gameState.entities.push(cy);
+        markGrid(cy.pos.x - cy.w/2, cy.pos.y - cy.h/2, cy.w, cy.h, true);
+        
+        let hPos = findOpenSpot(this.base.x+100, this.base.y, 50);
+        gameState.entities.push(new Entity(hPos.x, hPos.y, owner, TYPE_UNIT, 'harvester')); 
+    }
+
+    update() {
+        this.production.update();
+        let money = this.owner === 0 ? gameState.money : gameState.aiMoney;
+
+        // 1. Building Logic
+        if (this.production.readyToPlace) {
+            let key = this.production.readyToPlace;
+            let range = 200 + (this.buildIndex * 80);
+            let pos = findOpenSpot(this.base.x, this.base.y, range);
+            let b = new Entity(pos.x, pos.y, this.owner, TYPE_BUILDING, key);
+            gameState.entities.push(b);
+            markGrid(b.pos.x - b.w/2, b.pos.y - b.h/2, b.w, b.h, true);
+            
+            if (key === 'refinery') { 
+                let hPos = findOpenSpot(pos.x, pos.y, 60); 
+                let harv = new Entity(hPos.x, hPos.y, this.owner, TYPE_UNIT, 'harvester');
+                harv.moveTarget = findOpenSpot(hPos.x, hPos.y, 100);
+                gameState.entities.push(harv); 
+            }
+            this.production.readyToPlace = null;
+            if (key === this.buildOrder[this.buildIndex]) this.buildIndex++; 
+
+        } else if (!this.production.queues['building'].current) {
+            let p = gameState.power[this.owner];
+            if (p.out < p.in && money > 300) {
+                 this.production.start('building', 'power');
+            }
+            else if (this.buildIndex < this.buildOrder.length) {
+                let nextKey = this.buildOrder[this.buildIndex];
+                let data = DB.buildings[nextKey];
+                let reqMet = true;
+                if(data.req) { for(let r of data.req) { if(!hasBuilding(r, this.owner)) reqMet = false; } }
+                if(reqMet && money > data.cost * 0.2) {
+                    this.production.start('building', nextKey);
+                }
+            }
+        }
+
+        // 2. Unit Logic
+        if (!this.production.queues['vehicle'].current) {
+            if (hasBuilding('factory', this.owner) && money > 1000) {
+                let u = Math.random() > 0.5 ? 'light' : 'heavy';
+                this.production.start('vehicle', u);
+            }
+        }
+
+        // 3. Attack Logic
+        let units = gameState.entities.filter(e => e.owner === this.owner && e.type === TYPE_UNIT && e.key !== 'harvester' && !e.dead && !this.attackSquad.includes(e));
+        units.forEach(u => this.attackSquad.push(u));
+        this.attackSquad = this.attackSquad.filter(u => !u.dead);
+
+        if (this.attackSquad.length > 8) {
+            let enemyOwner = this.owner === 0 ? 1 : 0;
+            let targets = gameState.entities.filter(e=>e.owner === enemyOwner);
+            if (targets.length > 0) {
+                let t = targets[Math.floor(Math.random()*targets.length)];
+                this.attackSquad.forEach(u => { u.moveTarget = t.pos; u.path = null; }); 
+                this.attackSquad = []; 
+            }
+        }
+    }
+}
+
+// --- INPUT ---
+let mouse = { x: 0, y: 0, wx: 0, wy: 0 };
+let rawMouse = { x: 0, y: 0 };
+let keys = { ArrowUp:false, ArrowDown:false, ArrowLeft:false, ArrowRight:false, w:false, a:false, s:false, d:false };
+let dragStart = null;
+let touchDist = 0;
+
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key === 'd' || e.key === 'D') attemptMCVDeploy(); });
+window.addEventListener('keyup', e => keys[e.key] = false);
+window.addEventListener('mousemove', e => {
+    rawMouse.x = e.clientX; rawMouse.y = e.clientY;
+    let rect = CANVAS.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
+});
+
+// ZOOM & SCROLL
+window.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (e.ctrlKey) {
+        let s = Math.exp(-e.deltaY * 0.001);
+        gameState.zoom = Math.max(0.5, Math.min(2.5, gameState.zoom * s));
+    } else {
+        gameState.camera.x += e.deltaX / gameState.zoom;
+        gameState.camera.y += e.deltaY / gameState.zoom;
+        gameState.camera.x = Math.max(0, Math.min(MAP_WIDTH - CANVAS.width/gameState.zoom, gameState.camera.x));
+        gameState.camera.y = Math.max(0, Math.min(MAP_HEIGHT - CANVAS.height/gameState.zoom, gameState.camera.y));
+    }
+}, { passive: false });
+
+window.addEventListener('touchstart', e => {
+    if(e.touches.length === 2) {
+        touchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+});
+window.addEventListener('touchmove', e => {
+    if(e.touches.length === 2) {
+        e.preventDefault();
+        let newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        let ratio = newDist / touchDist;
+        gameState.zoom = Math.max(0.5, Math.min(2.5, gameState.zoom * ratio));
+        touchDist = newDist;
+    }
+}, {passive: false});
+
+document.getElementById('minimapCanvas').addEventListener('mousedown', e => {
+    moveCameraToMinimap(e);
+    const moveHandler = (ev) => moveCameraToMinimap(ev);
+    const upHandler = () => { document.removeEventListener('mousemove', moveHandler); document.removeEventListener('mouseup', upHandler); };
+    document.addEventListener('mousemove', moveHandler); document.addEventListener('mouseup', upHandler);
+});
+
+function moveCameraToMinimap(e) {
+    const mini = document.getElementById('minimapCanvas'); const rect = mini.getBoundingClientRect();
+    const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+    const scaleX = MAP_WIDTH / mini.width; const scaleY = MAP_HEIGHT / mini.height;
+    gameState.camera.x = Math.max(0, Math.min(MAP_WIDTH - CANVAS.width, (x * scaleX) - (CANVAS.width / 2)));
+    gameState.camera.y = Math.max(0, Math.min(MAP_HEIGHT - CANVAS.height, (y * scaleY) - (CANVAS.height / 2)));
+}
+
+function attemptMCVDeploy() {
+    let mcvs = gameState.selection.filter(u => u.key === 'mcv' && u.owner === 0);
+    if(mcvs.length > 0) {
+        let mcv = mcvs[0];
+        if(isValidMCVSpot(mcv.pos.x, mcv.pos.y, mcv.id)) {
+            mcv.dead = true;
+            let bx = Math.round(mcv.pos.x / 10) * 10; let by = Math.round(mcv.pos.y / 10) * 10;
+            let cy = new Entity(bx, by, 0, TYPE_BUILDING, 'conyard');
+            gameState.entities.push(cy);
+            markGrid(cy.pos.x - cy.w/2, cy.pos.y - cy.h/2, cy.w, cy.h, true);
+            gameState.selection = []; spawnFloater(bx, by, "Base Established", "#0f0");
+            document.getElementById('status-msg').innerText = "Construction Yard Deployed."; updateButtons();
+        } else spawnFloater(mcv.pos.x, mcv.pos.y, "Cannot Deploy Here", "#f00");
+    }
+}
+
+window.addEventListener('mousedown', e => {
+    if(gameState.mode === 'demo') return; 
+    let worldMouse = screenToWorld({x: mouse.x, y: mouse.y});
+    mouse.wx = worldMouse.x; mouse.wy = worldMouse.y;
+
+    if (rawMouse.x > CANVAS.width) return;
+
+    if (e.button === 0) { // Left
+        if (gameState.placingBuilding) {
+            if (isValidBuildLocation(mouse.wx, mouse.wy, 0)) {
+                let bKey = gameState.placingBuilding;
+                let b = new Entity(mouse.wx, mouse.wy, 0, TYPE_BUILDING, bKey);
+                gameState.entities.push(b);
+                markGrid(b.pos.x - b.w/2, b.pos.y - b.h/2, b.w, b.h, true);
+                
+                gameState.production.readyToPlace = null; gameState.placingBuilding = null;
+                if (bKey === 'refinery') {
+                    let hPos = findOpenSpot(mouse.wx, mouse.wy, 60);
+                    let harv = new Entity(hPos.x, hPos.y, 0, TYPE_UNIT, 'harvester');
+                    harv.moveTarget = findOpenSpot(hPos.x, hPos.y, 100);
+                    gameState.entities.push(harv); spawnFloater(mouse.wx, mouse.wy, "+Harvester", "#fff");
+                }
+                updateButtons();
+            } else spawnFloater(mouse.wx, mouse.wy, "Invalid Location", "#f00");
+        } else dragStart = { x: mouse.x, y: mouse.y };
+    } 
+    else if (e.button === 2) { // Right
+        if (gameState.placingBuilding) { gameState.placingBuilding = null; gameState.production.cancel('building'); updateButtons(); return; }
+        let target = null;
+        for(let ent of gameState.entities) { if(!ent.dead && ent.pos.dist(new Vector(mouse.wx, mouse.wy)) < ent.radius+5) target = ent; }
+        gameState.selection.forEach(u => {
+            if (u.owner === 0 && u.type === TYPE_UNIT) {
+                if (target && target !== u) { u.target = target; u.moveTarget = null; u.path = null; spawnFloater(u.pos.x, u.pos.y, "Attacking", "#f00"); }
+                else { u.target = null; u.moveTarget = new Vector(mouse.wx, mouse.wy); u.path = null; spawnFloater(u.pos.x, u.pos.y, "Moving", "#0f0"); }
+            }
+        });
+    }
+});
+window.addEventListener('dblclick', e => { if(gameState.mode !== 'demo' && e.button === 0 && rawMouse.x < CANVAS.width) attemptMCVDeploy(); });
+window.addEventListener('mouseup', e => {
+    if (gameState.mode !== 'demo' && e.button === 0 && dragStart) {
+        let p1 = screenToWorld({x: Math.min(dragStart.x, mouse.x), y: Math.min(dragStart.y, mouse.y)});
+        let p2 = screenToWorld({x: Math.max(dragStart.x, mouse.x), y: Math.max(dragStart.y, mouse.y)});
+        gameState.selection = [];
+        if (p2.x - p1.x < 10/gameState.zoom && p2.y - p1.y < 10/gameState.zoom) {
+             let clicked = gameState.entities.find(u => !u.dead && u.owner === 0 && u.pos.dist(p1) < u.radius + 15);
+             if (clicked) gameState.selection.push(clicked);
+        } else {
+            gameState.entities.forEach(u => { if (u.owner === 0 && u.type === TYPE_UNIT && !u.dead && u.pos.x > p1.x && u.pos.x < p2.x && u.pos.y > p1.y && u.pos.y < p2.y) gameState.selection.push(u); });
+        }
+        dragStart = null;
+    }
+});
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+function startGame(mode) {
+    document.getElementById('menu').style.display = 'none';
+    initGraphics();
+    collisionGrid.fill(0);
+    gameState.mode = mode;
+    gameState.running = true;
+    gameState.entities = [];
+    gameState.projectiles = [];
+    gameState.aiPlayers = [];
+    gameState.money = 3000;
+    
+    // Map Gen (150 Resources)
+    for(let i=0; i<150; i++) {
+        let x = Math.random() * MAP_WIDTH, y = Math.random() * MAP_HEIGHT;
+        if (x > 500 && x < 2500) gameState.entities.push(new Entity(x, y, -1, TYPE_RESOURCE, 'ore'));
+    }
+
+    if (mode === 'demo') {
+        gameState.aiPlayers.push(new AIPlayer('hard', 0));
+        gameState.aiPlayers.push(new AIPlayer('hard', 1));
+        gameState.production = gameState.aiPlayers[0].production;
+    } else {
+        let cy = new Entity(300, 300, 0, TYPE_BUILDING, 'conyard');
+        gameState.entities.push(cy);
+        markGrid(cy.pos.x - cy.w/2, cy.pos.y - cy.h/2, cy.w, cy.h, true);
+        gameState.production = new ProductionManager(0);
+        gameState.aiPlayers.push(new AIPlayer(mode, 1));
+    }
+    setupUI();
+    resize();
+    loop();
+}
+
+function loop() {
+    if (!gameState.running) return;
+    gameState.tick++;
+    calculatePower();
+    checkWinCondition();
+    
+    gameState.aiPlayers.forEach(ai => ai.update());
+    if(gameState.mode !== 'demo') gameState.production.update();
+
+    let speed = 15 / gameState.zoom; let dx = 0, dy = 0;
+    if (keys.ArrowUp || keys.w) dy -= speed; if (keys.ArrowDown || keys.s) dy += speed;
+    if (keys.ArrowLeft || keys.a) dx -= speed; if (keys.ArrowRight || keys.d) dx += speed;
+    if (rawMouse.x < 10) dx -= speed; if (rawMouse.x > window.innerWidth - 10) dx += speed; 
+    if (rawMouse.y < 10) dy -= speed; if (rawMouse.y > window.innerHeight - 10) dy += speed;
+
+    gameState.camera.x = Math.max(0, Math.min(MAP_WIDTH - CANVAS.width/gameState.zoom, gameState.camera.x + dx));
+    gameState.camera.y = Math.max(0, Math.min(MAP_HEIGHT - CANVAS.height/gameState.zoom, gameState.camera.y + dy));
+
+    gameState.entities.forEach(e => e.update());
+    gameState.entities = gameState.entities.filter(e => !e.dead);
+    gameState.projectiles.forEach(p => p.update());
+    gameState.projectiles = gameState.projectiles.filter(p => !p.dead);
+    gameState.particles.forEach(p => { p.pos = p.pos.add(p.vel); p.life--; });
+    gameState.particles = gameState.particles.filter(p => p.life > 0);
+
+    let displayMoney = gameState.mode === 'demo' ? gameState.money : gameState.money; 
+    document.getElementById('money-display').innerText = `$ ${Math.floor(displayMoney)}`;
+    if(gameState.mode === 'demo' && gameState.tick % 5 === 0) updateButtons();
+
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function draw() {
+    CTX.fillStyle = '#2d3322'; CTX.fillRect(0,0,CANVAS.width,CANVAS.height);
+    CTX.strokeStyle = '#354a2e'; CTX.lineWidth = 1; CTX.beginPath();
+    let z = gameState.zoom;
+    
+    gameState.entities.sort((a,b) => a.pos.y - b.pos.y);
+    gameState.entities.forEach(e => e.draw());
+    gameState.projectiles.forEach(p => p.draw());
+    gameState.particles.forEach(p => {
+        let sc = worldToScreen(p.pos);
+        if(p.text) { CTX.fillStyle = p.color; CTX.font="bold 12px Arial"; CTX.fillText(p.text, sc.x, sc.y); }
+        else { CTX.fillStyle=p.color; CTX.fillRect(sc.x, sc.y, 2*z, 2*z); }
+    });
+
+    if (gameState.mode !== 'demo' && gameState.placingBuilding && rawMouse.x < CANVAS.width) {
+        let mx = (mouse.x/z) + gameState.camera.x; let my = (mouse.y/z) + gameState.camera.y;
+        let valid = isValidBuildLocation(mx, my, 0);
+        let b = DB.buildings[gameState.placingBuilding];
+        let sc = worldToScreen(new Vector(mx, my));
+        
+        CTX.save(); 
+        gameState.entities.forEach(e => {
+            if (e.owner===0 && e.type===TYPE_BUILDING) {
+                let s = worldToScreen(e.pos);
+                CTX.strokeStyle = 'rgba(255,255,255,0.2)';
+                CTX.beginPath(); CTX.arc(s.x, s.y, BUILD_RADIUS * z, 0, Math.PI*2); CTX.stroke();
+            }
+        });
+        CTX.fillStyle = valid ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.5)';
+        CTX.fillRect(sc.x - (b.w/2)*z, sc.y - (b.h/2)*z, b.w*z, b.h*z);
+        CTX.restore();
+    }
+    
+    if (dragStart) {
+        CTX.strokeStyle = '#0f0'; CTX.strokeRect(dragStart.x, dragStart.y, mouse.x - dragStart.x, mouse.y - dragStart.y);
+    }
+
+    const mini = document.getElementById('minimapCanvas').getContext('2d');
+    let p = gameState.power[0];
+    if (p.out < p.in && Math.random() > 0.7) {
+        mini.fillStyle = Math.random() > 0.5 ? '#111' : '#222'; mini.fillRect(0,0,250,200);
+    } else {
+        mini.fillStyle='#000'; mini.fillRect(0,0,250,200);
+        let sx = 250/MAP_WIDTH, sy = 200/MAP_HEIGHT;
+        gameState.entities.forEach(e => {
+            mini.fillStyle = e.owner===0 ? '#0f0' : (e.owner===1 ? '#f00' : '#aa0');
+            mini.fillRect(e.pos.x*sx, e.pos.y*sy, 3, 3);
+        });
+        mini.strokeStyle='#fff'; mini.strokeRect(gameState.camera.x*sx, gameState.camera.y*sy, (CANVAS.width/z)*sx, (CANVAS.height/z)*sy);
+    }
+}
+
+// ... UI Logic ...
+let activeTab = 'buildings';
+function setTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab')[['buildings','infantry','vehicles'].indexOf(tab)].classList.add('active');
+    document.querySelectorAll('.btn-grid').forEach(g => g.classList.remove('active'));
+    document.getElementById('tab-'+tab).classList.add('active');
+}
+
+function setupUI() {
+    const bb = document.getElementById('tab-buildings');
+    const bi = document.getElementById('tab-infantry');
+    const bv = document.getElementById('tab-vehicles');
+    bb.innerHTML = ''; bi.innerHTML = ''; bv.innerHTML = '';
+    
+    for (let k in DB.buildings) if(!DB.buildings[k].hidden) createBtn(bb, k, DB.buildings[k], 'building');
+    for (let k in DB.units) {
+        let u = DB.units[k];
+        if (u.type === 'infantry') createBtn(bi, k, u, 'infantry');
+        else createBtn(bv, k, u, 'vehicle');
+    }
+}
+
+function createBtn(parent, key, data, cat) {
+    let btn = document.createElement('div');
+    btn.className = 'build-btn';
+    btn.id = 'btn-'+key;
+    btn.innerHTML = `<div class="progress-overlay"></div><div class="btn-name">${data.name}</div><div class="btn-cost">$${data.cost}</div><div class="btn-status"></div>`;
+    btn.onclick = () => {
+        if(gameState.mode === 'demo') return; 
+        if(btn.classList.contains('disabled')) return;
+        if(cat === 'building') {
+            if (gameState.production.readyToPlace === key) { gameState.placingBuilding = key; btn.classList.add('placing'); } 
+            else { gameState.production.start('building', key); }
+        } else { gameState.production.start(cat, key); }
+    };
+    parent.appendChild(btn);
+}
+
+function updateButtons() {
+    let owner = 0;
+    const check = (list) => {
+        for(let k of list) {
+            let el = document.getElementById('btn-'+k);
+            if(!el) continue;
+            let data = DB.buildings[k] || DB.units[k];
+            let met = true;
+            if(data.req) { for(let r of data.req) { if(!hasBuilding(r, owner)) met = false; } } 
+            if(met) el.classList.remove('disabled'); else el.classList.add('disabled');
+        }
+    }
+    check(Object.keys(DB.buildings)); check(Object.keys(DB.units));
+
+    ['building', 'infantry', 'vehicle'].forEach(cat => {
+        let q = gameState.production.queues[cat];
+        let container = document.getElementById(cat === 'building' ? 'tab-buildings' : (cat==='infantry'?'tab-infantry':'tab-vehicles'));
+        Array.from(container.children).forEach(btn => {
+            btn.classList.remove('building', 'ready', 'placing');
+            btn.querySelector('.progress-overlay').style.width = '0%';
+            btn.querySelector('.btn-status').innerText = '';
+        });
+
+        if (q.current) {
+            let btn = document.getElementById('btn-' + q.current);
+            if(btn) {
+                btn.classList.add('building');
+                btn.querySelector('.progress-overlay').style.width = q.progress + '%';
+                btn.querySelector('.btn-status').innerText = 'BUILDING';
+            }
+        }
+        if (cat === 'building' && gameState.production.readyToPlace) {
+            let btn = document.getElementById('btn-' + gameState.production.readyToPlace);
+            if(btn) {
+                btn.classList.add('ready'); btn.querySelector('.progress-overlay').style.width = '100%'; btn.querySelector('.btn-status').innerText = 'READY';
+                if(gameState.placingBuilding === gameState.production.readyToPlace) { btn.classList.add('placing'); btn.classList.remove('ready'); btn.querySelector('.btn-status').innerText = 'PLACING'; }
+            }
+        }
+    });
+}
+
+function resize() { CANVAS.width = document.getElementById('game-container').clientWidth - 300; CANVAS.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+window.startGame = startGame;
+</script>
+</body>
+</html>

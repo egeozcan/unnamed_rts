@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JS Command: Red Browser Alert</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+
+<body>
+
+  <div id="menu">
+    <div class="logo">JS COMMAND</div>
+    <button class="menu-btn" data-mode="easy">Easy Skirmish</button>
+    <button class="menu-btn" data-mode="hard">Hard Skirmish</button>
+    <button class="menu-btn blue-btn" data-mode="demo">Watch Demo</button>
+  </div>
+
+  <div id="end-screen">
+    <div id="end-title" class="end-title">GAME OVER</div>
+    <button class="menu-btn" id="restart-btn">Main Menu</button>
+  </div>
+
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="sidebar">
+      <div class="sidebar-header">
+        <div id="money-display">$ 0</div>
+        <div id="power-display">Power: 0/0</div>
+        <div id="minimap-container">
+          <canvas id="minimapCanvas" width="250" height="200"></canvas>
+          <div id="low-power-warning">LOW POWER</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="buildings">
+          <svg viewBox="0 0 24 24">
+            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+          </svg>
+        </div>
+        <div class="tab" data-tab="infantry">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          </svg>
+        </div>
+        <div class="tab" data-tab="vehicles">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M20 12V8h-2V6h-2v2H8V6H6v2H4v4c-1.1 0-2 .9-2 2v4h2v2h16v-2h2v-4c0-1.1-.9-2-2-2zm-6-4h2v4h-2V8zm-6 0h2v4H8V8zm-5 8h18v4H3v-4z" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <div id="tab-buildings" class="btn-grid active"></div>
+        <div id="tab-infantry" class="btn-grid"></div>
+        <div id="tab-vehicles" class="btn-grid"></div>
+      </div>
+      <div id="status-msg">Commander, base established.</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/game.ts"></script>
+</body>
+
+</html>

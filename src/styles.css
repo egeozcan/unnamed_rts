@@ -1,0 +1,332 @@
+/* JS Command RTS - Styles */
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Courier New', Courier, monospace;
+    user-select: none;
+}
+
+#game-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+canvas#gameCanvas {
+    background: #354a2e;
+    cursor: crosshair;
+    touch-action: none;
+    display: block;
+    flex: 1;
+}
+
+/* Sidebar */
+#sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: #1a1a1a;
+    color: #0f0;
+    border-left: 3px solid #555;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
+    z-index: 10;
+    height: 100vh;
+}
+
+.sidebar-header {
+    padding: 10px;
+    background: #1a1a1a;
+    z-index: 2;
+    border-bottom: 1px solid #333;
+}
+
+#minimap-container {
+    position: relative;
+    width: 250px;
+    height: 200px;
+    margin: 0 auto 5px auto;
+    border: 1px solid #0f0;
+    background: #000;
+}
+
+#minimapCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: pointer;
+}
+
+#low-power-warning {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    color: #f00;
+    font-weight: bold;
+    font-size: 20px;
+    text-shadow: 0 0 5px #f00;
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    animation: flash 1s infinite;
+}
+
+#low-power-warning.visible {
+    display: flex;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #444;
+    background: #222;
+}
+
+.tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0;
+    cursor: pointer;
+    border-right: 1px solid #444;
+    fill: #666;
+    transition: 0.2s;
+}
+
+.tab:last-child {
+    border-right: none;
+}
+
+.tab:hover {
+    background: #333;
+    fill: #aaa;
+}
+
+.tab.active {
+    background: #444;
+    fill: #0f0;
+    border-bottom: 2px solid #0f0;
+}
+
+.tab svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Sidebar content */
+.sidebar-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    background: #111;
+    position: relative;
+}
+
+.btn-grid {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 5px;
+}
+
+.btn-grid.active {
+    display: grid;
+}
+
+/* Build buttons */
+.build-btn {
+    background: #2a2a2a;
+    color: #aaa;
+    border: 1px solid #444;
+    height: 60px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+    overflow: hidden;
+}
+
+.build-btn:hover {
+    border-color: #888;
+}
+
+.build-btn.disabled {
+    opacity: 0.3;
+    pointer-events: none;
+    filter: grayscale(100%);
+}
+
+.build-btn.building {
+    background: #222;
+    color: #fff;
+}
+
+.build-btn.ready {
+    background: #004400;
+    color: #fff;
+    border-color: #0f0;
+    animation: pulse 1s infinite;
+}
+
+.build-btn.placing {
+    background: #006600;
+    border: 2px dashed #fff;
+}
+
+.progress-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background: rgba(255, 255, 255, 0.1);
+    border-top: 2px solid #fa0;
+    transition: width 0.1s linear;
+    pointer-events: none;
+}
+
+.build-btn.building .progress-overlay {
+    background: rgba(200, 150, 0, 0.2);
+}
+
+.btn-name {
+    z-index: 2;
+    font-weight: bold;
+    margin-bottom: 2px;
+    text-align: center;
+}
+
+.btn-cost {
+    z-index: 2;
+    color: #ffd700;
+}
+
+.btn-status {
+    z-index: 2;
+    color: #fff;
+    font-weight: bold;
+    margin-top: 2px;
+    font-size: 11px;
+    text-shadow: 1px 1px 0 #000;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% { box-shadow: 0 0 5px #0f0 inset; }
+    50% { box-shadow: 0 0 15px #0f0 inset; }
+    100% { box-shadow: 0 0 5px #0f0 inset; }
+}
+
+@keyframes flash {
+    0% { opacity: 1; }
+    50% { opacity: 0.2; }
+    100% { opacity: 1; }
+}
+
+/* Money and Power */
+#money-display {
+    font-size: 24px;
+    color: #ffd700;
+    text-align: right;
+    margin-bottom: 5px;
+    text-shadow: 0 0 5px #fa0;
+    font-weight: bold;
+}
+
+#power-display {
+    font-size: 12px;
+    color: #0ff;
+    text-align: right;
+    font-weight: bold;
+}
+
+#power-display.low-power {
+    color: #f00;
+}
+
+#status-msg {
+    padding: 5px;
+    background: #222;
+    color: #fff;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    border-top: 1px solid #444;
+}
+
+/* Menu and End Screen */
+#menu,
+#end-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    backdrop-filter: blur(5px);
+}
+
+#end-screen {
+    display: none;
+}
+
+#end-screen.visible {
+    display: flex;
+}
+
+.logo {
+    color: #f00;
+    font-family: Impact, sans-serif;
+    font-size: 70px;
+    text-shadow: 3px 3px 0 #fff, 0 0 20px #f00;
+    margin-bottom: 40px;
+}
+
+.menu-btn {
+    padding: 15px 50px;
+    font-size: 20px;
+    margin: 10px;
+    background: #800;
+    color: #fff;
+    border: 2px solid #f00;
+    cursor: pointer;
+    font-family: Impact, sans-serif;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    transition: 0.2s;
+}
+
+.menu-btn:hover {
+    background: #f00;
+    box-shadow: 0 0 20px #f00;
+    transform: scale(1.05);
+}
+
+.end-title {
+    font-size: 60px;
+    font-family: Impact, sans-serif;
+    margin-bottom: 20px;
+    letter-spacing: 5px;
+}
+
+.blue-btn {
+    background: #004488;
+    border-color: #4488ff;
+}
+
+.blue-btn:hover {
+    background: #0066cc;
+    box-shadow: 0 0 20px #00f;
+}

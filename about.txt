@@ -1,0 +1,310 @@
+# Game Design & Technical Specification: "Unnamed RTS"
+
+## 1. Executive Summary
+
+**Unnamed RTS** is a top-down, browser-based Real-Time Strategy game paying homage to *Command & Conquer: Red Alert 1*. It is built using a modern, functional programming architecture where the entire game state is immutable and decoupled from the rendering engine.
+
+* **Platform:** Web Browser (HTML5 Canvas).
+* **Stack:** TypeScript, **Vite** (Build Tool), **Vitest** (Test Runner).
+* **Architecture:** Functional Programming (Immutable State), Headless Simulation.
+* **Distribution:** Single HTML/JS bundle.
+* **Game Mode:** Single Player Skirmish vs AI (support for Observer mode AI vs AI).
+
+---
+
+## 2. Game Mechanics
+
+### 2.1 Economy & Resources
+
+* **Credits:** The primary currency, gathered by **Harvesters** collecting ore/gems (different types of resources can be defined in rules.json).
+* **Storage:** Credits are stored in Refineries and Silos.
+* **Deduction Model:** Credits are not deducted instantly. They are drained incrementally per tick during production.
+* *Insufficient Funds:* Production pauses automatically and resumes when funds are available.
+
+
+* **Power Management:**
+* Buildings consume power; Power Plants produce it.
+* **Low Power:** If consumption > production, construction speed slows significantly, and defensive structures (Tesla coils, turrets) go offline.
+
+
+
+### 2.2 Building & Production
+
+* **Placement:** Buildings must be placed within a specific radius of existing friendly non-defensive structures.
+* **Prerequisites:** A strict dependency tree (defined in `rules.json`) dictates availability (e.g., Barracks  War Factory).
+* **Production Speed:**
+* Base build time is defined by cost.
+* Having multiple production facilities (e.g., 2 Barracks for infantry) speeds up production.
+
+
+* **Selling:** Buildings can be sold for X% (determined in rules.json) of their cost.
+
+### 2.3 Units & Combat
+
+* **Factions:** Single faction for Iteration 1.
+* **Start Condition:** Player begins with a pre-deployed **Construction Yard** and starting credits.
+* **The MCV:**
+* Produced at War Factory ($2000).
+* Moves to location and deploys into a new Construction Yard.
+
+
+* **Harvesters:**
+* Spawn automatically when a Refinery is built (free).
+* Can also be built at the War Factory.
+* **AI:** Automatically search for nearest resources and nearest Refinery to return to.
+
+
+* **Combat Logic:**
+* **Aggro:** Units automatically return fire if attacked.
+* **Damage:** Health bars appear on damaged units/buildings.
+* **Projectiles:** Defined in rules (instant hit vs. ballistic projectiles).
+
+
+
+### 2.4 Victory Conditions
+
+* **Win:** Destroy all enemy buildings.
+* **Lose:** All player buildings are destroyed.
+
+---
+
+## 3. Artificial Intelligence (AI)
+
+The AI is designed to simulate a human player and **does not cheat**. It is subject to the same cost, placement and build time constraints. The AI logic is driven by `ai.json`.
+
+### 3.1 AI Architecture
+
+The AI operates on a **Goal-Oriented Action Planning (GOAP)** or **Finite State Machine (FSM)** system.
+
+Essentially:
+
+* **Input:** Game State.
+* **Process:** Evaluate Threats  Check Economy  Select Tactic  Issue Commands.
+* **Output:** Actions (Build, Move, Attack, Repair, Sell).
+
+### 3.2 Personalities
+
+The AI chooses (or is assigned) a personality at the start of the match.
+
+1. **The Rusher (Aggressive):**
+* **Tactics:** Early game infantry rushes. Prioritizes killing enemy Harvesters.
+* **Reaction:** If the rush fails, attempts to transition but is vulnerable.
+
+
+2. **The Turtle (Defensive):**
+* **Tactics:** "Wall up." Prioritizes defensive structures (Turrets). Only attacks when the army is maxed out.
+* **Reaction:** Over-reacts to scouting units by building more defenses.
+
+
+3. **The Steamroller (Balanced):**
+* **Tactics:** Balanced composition. Expands methodically.
+* **Reaction:** Probes enemy defenses before committing the main force.
+
+These are defined in the ai.json
+
+### 3.3 Tactical Behaviors
+
+* **Harassing:** Sending fast units to attack Harvesters, retreating before the main enemy army arrives.
+* **Hit & Run:** Attacking a structure to draw out defenders, retreating into an ambush.
+* **Scouting:** Sending cheap units to map the enemy base.
+* **Kiting:** Using range/speed advantage to shoot while retreating.
+
+AI can choose a tactic depending on the game status and its personality.
+
+---
+
+## 4. Technical Architecture
+
+### 4.1 Core Philosophy
+
+The game is written in **TypeScript** using a **Functional Programming** style.
+
+* **Immutability:** State is never mutated. A new state tree is generated every tick.
+* **Pure Functions:** Logic is determined solely by inputs. `(State, Action) => State`.
+* **Decoupling:** The "Sim" runs in memory. The "Renderer" simply draws the current state. This allows for instant simulation (fast-forwarding) and easy testing.
+
+### 4.2 Build Pipeline (Vite)
+
+* **Tooling:** Vite is used for lightning-fast HMR (Hot Module Replacement) during development.
+* **Bundling:** Produces a highly optimized, minified JS bundle.
+* **Assets:** SVG assets and JSON rules are imported as raw modules or static assets.
+
+### 4.3 The Rules Engine (`rules.json` & `ai.json`)
+
+All game constants are decoupled from the code.
+
+* **`rules.json`:** Entities, Stats, Tech Tree, Weapons...
+* **`ai.json`:** Build weights, Retreat thresholds, Repair logic, Personalities, Difficulty levels...
+
+---
+
+## 5. Quality Assurance & Testing Strategy
+
+Because the game engine is **functional and deterministic**, it is exceptionally testable. We use **Vitest** for its speed and native TypeScript support.
+
+### 5.1 Testing Philosophy
+
+* **Zero-Mock Logic:** Since the game logic is pure (no DOM, no Global state), we do not need to mock the browser environment for engine tests.
+* **Property-Based Testing:** We verify that invariants hold true (e.g., "Money never goes below zero") regardless of the sequence of actions.
+
+### 5.2 Unit Testing (The Reducer)
+
+The core of the game is the `update(state, action)` function.
+
+* **Goal:** Verify that specific actions result in the correct state change.
+* **Example Scenarios:**
+* *Production:* Dispatch `ACTION_START_BUILDING`. Tick 100 times. Verify `state.players.p1.credits` decreased by correct amount.
+* *Combat:* Dispatch `ACTION_ATTACK`. Verify target HP decreases by `WeaponDamage`.
+* *Pathfinding:* Input a map with a wall. Verify A* returns a path around the wall, not through it.
+
+
+
+```typescript
+// Example Vitest Spec
+import { describe, it, expect } from 'vitest';
+import { update } from './engine';
+import { createInitialState } from './utils';
+
+describe('Production Logic', () => {
+  it('pauses production when credits run out', () => {
+    let state = createInitialState({ credits: 50 }); // Low money
+    // Start building something that costs 500
+    state = update(state, { type: 'START_BUILD', itemId: 'tank' });
+    
+    // Simulate 100 ticks
+    for(let i=0; i<100; i++) state = update(state, { type: 'TICK' });
+    
+    expect(state.production.status).toBe('PAUSED');
+    expect(state.credits).toBe(0); // Should stop exactly at 0
+  });
+});
+
+```
+
+### 5.3 Integration Testing (Headless Simulation)
+
+We can run entire games in memory without rendering a single pixel.
+
+* **Goal:** Detect complex emergent bugs (e.g., AI getting stuck, economy stalling).
+* **Method:**
+1. Initialize a game with AI vs AI.
+2. Run a loop for 5,000 ticks (fast-forward).
+3. **Assertions:**
+* Did the game crash?
+* Are there any `NaN` values in positions?
+* Did the Harvesters successfully deliver resources (Credits > Starting Credits)?
+
+### 5.4 Data Integrity Tests
+
+We must ensure `rules.json` and `ai.json` are valid before the game starts.
+
+* **Schema Validation:** Write tests that load the JSON files and validate them against strict TypeScript interfaces or Zod schemas.
+* **Dependency Checks:**
+* *Test:* "Every unit in `ai.json` build priority list exists in `rules.json`."
+* *Test:* "Every weapon assigned to a unit exists in the `weapons` list."
+* *Test:* "No circular dependencies in prerequisites."
+
+### 5.5 Determinism Tests
+
+To ensure the "Replay" feature works, the game must be deterministic.
+
+* **Test:**
+1. Record a sequence of 100 random actions.
+2. Run the simulation with these actions starting from Seed A. Capture final state hash.
+3. Reset. Run simulation again with same actions and Seed A.
+4. **Expect:** Final state hash must be identical.
+
+
+
+### 5.6 AI Behavior Tests
+
+* **Scenario Injection:** Create a specific save state (e.g., "Player army is right next to AI base").
+* **Expectation:** Run the AI logic function for one tick. Expect the output action to be `Retreat` or `Repair` (based on personality), not `Idle`.
+
+---
+
+## 6. User Interface (UI)
+
+### 6.1 Controls
+
+* **Selection:** Left-click/Box-select.
+* **Commands:** Right-click context (Move/Attack/Harvest).
+* **Navigation:** Edge Scrolling, Arrow keys, Pinch-to-zoom.
+
+### 6.2 HUD Layout
+
+* **Sidebar:** Minimap, Money Counter, Build Tabs (Infantry/Vehicles/Buildings).
+* **Progress:** Radial overlays on icons showing build progress.
+
+---
+
+## 7. Data Structures & Schema
+
+### 7.1 `rules.json` Schema
+
+The source of truth for game balance.
+
+```json
+{
+  "meta": { "version": "1.0", "factions": ["faction_allied"] },
+  "prerequisites": {
+    "structure_barracks": ["structure_construction_yard", "structure_power_plant"]
+  },
+  "units": {
+    "tank_light": {
+      "name": "Light Tank",
+      "cost": 800,
+      "hp": 300,
+      "speed": 4,
+      "weapons": ["105mm_cannon"]
+    }
+  }
+}
+
+```
+
+### 7.2 `ai.json` Schema
+
+The source of truth for AI behavior.
+
+```json
+{
+  "personalities": {
+    "rusher": {
+      "aggression_bias": 1.5,
+      "retreat_threshold": 0.1,
+      "build_order_priority": ["unit_infantry", "unit_tank_light"]
+    }
+  }
+}
+
+```
+
+### 7.3 TypeScript State Definitions
+
+The immutable state tree used by the engine.
+
+```typescript
+interface GameState {
+  tick: number;
+  config: MapConfig;
+  players: Record<PlayerId, PlayerState>;
+  entities: Record<EntityId, Entity>;
+  grid: Tile[][];
+}
+
+interface PlayerState {
+  id: PlayerId;
+  isAi: boolean;
+  aiPersonality?: 'RUSHER' | 'TURTLE' | 'BALANCED';
+  credits: number;
+  buildQueue: ProductionQueue;
+}
+
+```
+
+---
+
+An quick prototype of the game that doesn't follow the above rules can be found as a single html file here: unnamed_rts_old.html
+
+You can use that as an inspiration but it's clear that we must start from scratch.

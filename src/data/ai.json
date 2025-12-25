@@ -1,0 +1,39 @@
+{
+    "personalities": {
+        "rusher": {
+            "aggression_bias": 1.5,
+            "retreat_threshold": 0.1,
+            "build_order_priority": [
+                "power",
+                "barracks",
+                "refinery",
+                "factory"
+            ]
+        },
+        "turtle": {
+            "aggression_bias": 0.5,
+            "retreat_threshold": 0.5,
+            "build_order_priority": [
+                "power",
+                "refinery",
+                "barracks",
+                "turret",
+                "factory",
+                "turret",
+                "tech"
+            ]
+        },
+        "balanced": {
+            "aggression_bias": 1.0,
+            "retreat_threshold": 0.3,
+            "build_order_priority": [
+                "power",
+                "refinery",
+                "barracks",
+                "factory",
+                "turret",
+                "tech"
+            ]
+        }
+    }
+}

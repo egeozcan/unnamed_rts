@@ -1,0 +1,243 @@
+{
+    "meta": {
+        "version": "1.0",
+        "factions": [
+            "default"
+        ]
+    },
+    "prerequisites": {
+        "power": [
+            "conyard"
+        ],
+        "refinery": [
+            "power"
+        ],
+        "barracks": [
+            "power"
+        ],
+        "factory": [
+            "refinery",
+            "barracks"
+        ],
+        "turret": [
+            "barracks"
+        ],
+        "tech": [
+            "factory"
+        ],
+        "rifle": [
+            "barracks"
+        ],
+        "rocket": [
+            "barracks"
+        ],
+        "engineer": [
+            "barracks"
+        ],
+        "harvester": [
+            "refinery",
+            "factory"
+        ],
+        "jeep": [
+            "factory"
+        ],
+        "light": [
+            "factory"
+        ],
+        "heavy": [
+            "factory"
+        ],
+        "artillery": [
+            "factory",
+            "tech"
+        ],
+        "heli": [
+            "tech"
+        ],
+        "mcv": [
+            "factory"
+        ]
+    },
+    "buildings": {
+        "conyard": {
+            "name": "Con. Yard",
+            "hp": 3000,
+            "cost": 3000,
+            "w": 90,
+            "h": 90,
+            "power": 10,
+            "drain": 0,
+            "hidden": true
+        },
+        "power": {
+            "name": "Power Plant",
+            "hp": 800,
+            "cost": 300,
+            "w": 60,
+            "h": 60,
+            "power": 200,
+            "drain": 0
+        },
+        "refinery": {
+            "name": "Refinery",
+            "hp": 1200,
+            "cost": 2000,
+            "w": 100,
+            "h": 80,
+            "drain": 30,
+            "provides": "harvester"
+        },
+        "barracks": {
+            "name": "Barracks",
+            "hp": 1000,
+            "cost": 500,
+            "w": 60,
+            "h": 80,
+            "drain": 10,
+            "provides": "infantry"
+        },
+        "factory": {
+            "name": "War Factory",
+            "hp": 2000,
+            "cost": 2000,
+            "w": 100,
+            "h": 100,
+            "drain": 20,
+            "provides": "vehicles"
+        },
+        "turret": {
+            "name": "Gun Turret",
+            "hp": 1000,
+            "cost": 800,
+            "w": 40,
+            "h": 40,
+            "drain": 40,
+            "range": 250,
+            "damage": 25,
+            "rate": 20,
+            "isDefense": true
+        },
+        "tech": {
+            "name": "Tech Center",
+            "hp": 1000,
+            "cost": 1500,
+            "w": 80,
+            "h": 80,
+            "drain": 50
+        }
+    },
+    "units": {
+        "rifle": {
+            "name": "Rifleman",
+            "type": "infantry",
+            "hp": 60,
+            "cost": 100,
+            "speed": 2,
+            "range": 130,
+            "damage": 6,
+            "rate": 30,
+            "w": 15
+        },
+        "rocket": {
+            "name": "Rocket",
+            "type": "infantry",
+            "hp": 70,
+            "cost": 300,
+            "speed": 1.5,
+            "range": 220,
+            "damage": 35,
+            "rate": 65,
+            "w": 15,
+            "splash": 25
+        },
+        "engineer": {
+            "name": "Medic",
+            "type": "infantry",
+            "hp": 50,
+            "cost": 500,
+            "speed": 2,
+            "range": 60,
+            "damage": -15,
+            "rate": 60,
+            "w": 15
+        },
+        "harvester": {
+            "name": "Harvester",
+            "type": "vehicle",
+            "hp": 1000,
+            "cost": 1400,
+            "speed": 1.5,
+            "range": 0,
+            "damage": 0,
+            "w": 35,
+            "capacity": 500
+        },
+        "jeep": {
+            "name": "Ranger",
+            "type": "vehicle",
+            "hp": 180,
+            "cost": 500,
+            "speed": 4.5,
+            "range": 160,
+            "damage": 18,
+            "rate": 15,
+            "w": 22
+        },
+        "light": {
+            "name": "Light Tank",
+            "type": "vehicle",
+            "hp": 400,
+            "cost": 800,
+            "speed": 2.8,
+            "range": 210,
+            "damage": 45,
+            "rate": 55,
+            "w": 28
+        },
+        "heavy": {
+            "name": "Heavy Tank",
+            "type": "vehicle",
+            "hp": 700,
+            "cost": 1600,
+            "speed": 2.0,
+            "range": 230,
+            "damage": 90,
+            "rate": 75,
+            "w": 34
+        },
+        "artillery": {
+            "name": "Artillery",
+            "type": "vehicle",
+            "hp": 200,
+            "cost": 1200,
+            "speed": 1.2,
+            "range": 550,
+            "damage": 130,
+            "rate": 200,
+            "w": 30,
+            "splash": 60
+        },
+        "heli": {
+            "name": "Helicopter",
+            "type": "air",
+            "hp": 250,
+            "cost": 1500,
+            "speed": 6,
+            "range": 300,
+            "damage": 45,
+            "rate": 25,
+            "w": 20,
+            "fly": true
+        },
+        "mcv": {
+            "name": "MCV",
+            "type": "vehicle",
+            "hp": 2000,
+            "cost": 3000,
+            "speed": 1.0,
+            "range": 0,
+            "damage": 0,
+            "w": 45
+        }
+    }
+}
