@@ -167,3 +167,273 @@ export function isValidMCVSpot(x: number, y: number, selfId: string | null, enti
     }
     return true;
 }
+
+// A* Pathfinding
+interface PathNode {
+    x: number;
+    y: number;
+    g: number; // cost from start
+    h: number; // heuristic to goal
+    f: number; // g + h
+    parent: PathNode | null;
+}
+
+class MinHeap {
+    private heap: PathNode[] = [];
+
+    push(node: PathNode): void {
+        this.heap.push(node);
+        this.bubbleUp(this.heap.length - 1);
+    }
+
+    pop(): PathNode | null {
+        if (this.heap.length === 0) return null;
+        const min = this.heap[0];
+        const last = this.heap.pop()!;
+        if (this.heap.length > 0) {
+            this.heap[0] = last;
+            this.bubbleDown(0);
+        }
+        return min;
+    }
+
+    isEmpty(): boolean {
+        return this.heap.length === 0;
+    }
+
+    private bubbleUp(i: number): void {
+        while (i > 0) {
+            const parent = Math.floor((i - 1) / 2);
+            if (this.heap[parent].f <= this.heap[i].f) break;
+            [this.heap[parent], this.heap[i]] = [this.heap[i], this.heap[parent]];
+            i = parent;
+        }
+    }
+
+    private bubbleDown(i: number): void {
+        while (true) {
+            const left = 2 * i + 1;
+            const right = 2 * i + 2;
+            let smallest = i;
+
+            if (left < this.heap.length && this.heap[left].f < this.heap[smallest].f) {
+                smallest = left;
+            }
+            if (right < this.heap.length && this.heap[right].f < this.heap[smallest].f) {
+                smallest = right;
+            }
+            if (smallest === i) break;
+            [this.heap[smallest], this.heap[i]] = [this.heap[i], this.heap[smallest]];
+            i = smallest;
+        }
+    }
+}
+
+export function findPath(start: Vector, goal: Vector, entityRadius: number = 10): Vector[] | null {
+    // Convert world coordinates to grid coordinates
+    const startGx = Math.floor(start.x / TILE_SIZE);
+    const startGy = Math.floor(start.y / TILE_SIZE);
+    const goalGx = Math.floor(goal.x / TILE_SIZE);
+    const goalGy = Math.floor(goal.y / TILE_SIZE);
+
+    // Check if goal is blocked - if so, find nearest unblocked tile
+    let actualGoalGx = goalGx;
+    let actualGoalGy = goalGy;
+
+    if (goalGx >= 0 && goalGx < GRID_W && goalGy >= 0 && goalGy < GRID_H) {
+        if (collisionGrid[goalGy * GRID_W + goalGx] === 1) {
+            // Find nearest unblocked tile
+            let found = false;
+            for (let r = 1; r <= 5 && !found; r++) {
+                for (let dy = -r; dy <= r && !found; dy++) {
+                    for (let dx = -r; dx <= r && !found; dx++) {
+                        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+                        const nx = goalGx + dx;
+                        const ny = goalGy + dy;
+                        if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
+                            if (collisionGrid[ny * GRID_W + nx] === 0) {
+                                actualGoalGx = nx;
+                                actualGoalGy = ny;
+                                found = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If start is blocked, return null
+    if (startGx >= 0 && startGx < GRID_W && startGy >= 0 && startGy < GRID_H) {
+        if (collisionGrid[startGy * GRID_W + startGx] === 1) {
+            // We're on a blocked tile - return direct movement to let steering handle it
+            return null;
+        }
+    }
+
+    // A* algorithm
+    const openSet = new MinHeap();
+    const closedSet = new Set<string>();
+    const openMap = new Map<string, PathNode>();
+
+    const startNode: PathNode = {
+        x: startGx,
+        y: startGy,
+        g: 0,
+        h: Math.abs(actualGoalGx - startGx) + Math.abs(actualGoalGy - startGy),
+        f: 0,
+        parent: null
+    };
+    startNode.f = startNode.g + startNode.h;
+
+    openSet.push(startNode);
+    openMap.set(`${startGx},${startGy}`, startNode);
+
+    // 8-directional movement
+    const directions = [
+        { dx: 0, dy: -1, cost: 1 },    // N
+        { dx: 1, dy: -1, cost: 1.41 }, // NE
+        { dx: 1, dy: 0, cost: 1 },     // E
+        { dx: 1, dy: 1, cost: 1.41 },  // SE
+        { dx: 0, dy: 1, cost: 1 },     // S
+        { dx: -1, dy: 1, cost: 1.41 }, // SW
+        { dx: -1, dy: 0, cost: 1 },    // W
+        { dx: -1, dy: -1, cost: 1.41 } // NW
+    ];
+
+    let iterations = 0;
+    const maxIterations = 1000; // Prevent infinite loops
+
+    while (!openSet.isEmpty() && iterations < maxIterations) {
+        iterations++;
+        const current = openSet.pop()!;
+        const currentKey = `${current.x},${current.y}`;
+
+        if (current.x === actualGoalGx && current.y === actualGoalGy) {
+            // Reconstruct path
+            const gridPath: { x: number, y: number }[] = [];
+            let node: PathNode | null = current;
+            while (node) {
+                gridPath.unshift({ x: node.x, y: node.y });
+                node = node.parent;
+            }
+
+            // Convert grid path to world coordinates and smooth
+            const path: Vector[] = [];
+            for (const p of gridPath) {
+                path.push(new Vector(
+                    p.x * TILE_SIZE + TILE_SIZE / 2,
+                    p.y * TILE_SIZE + TILE_SIZE / 2
+                ));
+            }
+
+            // Add actual goal position
+            path.push(goal);
+
+            // Smooth path - remove intermediate waypoints that are in direct line of sight
+            return smoothPath(path, entityRadius);
+        }
+
+        closedSet.add(currentKey);
+        openMap.delete(currentKey);
+
+        for (const dir of directions) {
+            const nx = current.x + dir.dx;
+            const ny = current.y + dir.dy;
+            const neighborKey = `${nx},${ny}`;
+
+            if (nx < 0 || nx >= GRID_W || ny < 0 || ny >= GRID_H) continue;
+            if (closedSet.has(neighborKey)) continue;
+            if (collisionGrid[ny * GRID_W + nx] === 1) continue;
+
+            // Check diagonal corner cutting
+            if (dir.dx !== 0 && dir.dy !== 0) {
+                const corner1 = collisionGrid[current.y * GRID_W + nx];
+                const corner2 = collisionGrid[ny * GRID_W + current.x];
+                if (corner1 === 1 || corner2 === 1) continue; // Don't cut corners
+            }
+
+            const g = current.g + dir.cost;
+            const existingNode = openMap.get(neighborKey);
+
+            if (!existingNode || g < existingNode.g) {
+                const h = Math.abs(actualGoalGx - nx) + Math.abs(actualGoalGy - ny);
+                const newNode: PathNode = {
+                    x: nx,
+                    y: ny,
+                    g,
+                    h,
+                    f: g + h,
+                    parent: current
+                };
+
+                if (!existingNode) {
+                    openSet.push(newNode);
+                    openMap.set(neighborKey, newNode);
+                } else {
+                    // Update existing node (heap doesn't reorder, but this is acceptable for game pathfinding)
+                    existingNode.g = g;
+                    existingNode.f = g + h;
+                    existingNode.parent = current;
+                }
+            }
+        }
+    }
+
+    // No path found
+    return null;
+}
+
+function smoothPath(path: Vector[], entityRadius: number): Vector[] {
+    if (path.length <= 2) return path;
+
+    const smoothed: Vector[] = [path[0]];
+    let current = 0;
+
+    while (current < path.length - 1) {
+        // Find the furthest visible waypoint
+        let furthest = current + 1;
+        for (let i = current + 2; i < path.length; i++) {
+            if (hasLineOfSight(path[current], path[i], entityRadius)) {
+                furthest = i;
+            }
+        }
+        smoothed.push(path[furthest]);
+        current = furthest;
+    }
+
+    return smoothed;
+}
+
+function hasLineOfSight(from: Vector, to: Vector, entityRadius: number): boolean {
+    const dist = from.dist(to);
+    const steps = Math.ceil(dist / (TILE_SIZE / 2));
+
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = from.x + (to.x - from.x) * t;
+        const y = from.y + (to.y - from.y) * t;
+
+        // Check a few points around the line to account for entity radius
+        const checkOffsets = [
+            { dx: 0, dy: 0 },
+            { dx: entityRadius, dy: 0 },
+            { dx: -entityRadius, dy: 0 },
+            { dx: 0, dy: entityRadius },
+            { dx: 0, dy: -entityRadius }
+        ];
+
+        for (const offset of checkOffsets) {
+            const gx = Math.floor((x + offset.dx) / TILE_SIZE);
+            const gy = Math.floor((y + offset.dy) / TILE_SIZE);
+
+            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
+                if (collisionGrid[gy * GRID_W + gx] === 1) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+

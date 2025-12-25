@@ -1,6 +1,6 @@
 import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, GRID_W, GRID_H } from './types.js';
 import rules from '../data/rules.json';
-import { collisionGrid, refreshCollisionGrid } from './utils.js';
+import { collisionGrid, refreshCollisionGrid, findPath } from './utils.js';
 
 // Type assertions for JSON data
 const RULES = rules as any;
@@ -458,45 +458,69 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 const b = workingEntities[j];
                 if (b.dead) continue;
 
-                // Only resolve Unit-Unit collisions dynamically here. 
-                // Unit-Building collision is handled by pathfinding/whiskers usually, 
-                // but we could add simple circle-circle push for buildings too if they have radius.
-                // Our buildings are rects usually, but have radius approx.
-                // Let's stick to Unit-Unit for congestion fix.
                 const isUnitA = a.type === 'UNIT';
                 const isUnitB = b.type === 'UNIT';
 
                 if (!isUnitA && !isUnitB) continue; // Static vs Static
 
                 const dist = a.pos.dist(b.pos);
-                // Reduce radius slightly for "soft" overlap allowed? 
-                // or Strict. Strict is better for "pushed out".
-                const minDist = a.radius + b.radius;
+                // Allow slight soft overlap to reduce jittering
+                const softOverlap = 2;
+                const minDist = a.radius + b.radius - softOverlap;
 
                 if (dist < minDist && dist > 0.001) {
                     const overlap = minDist - dist;
                     const dir = b.pos.sub(a.pos).norm();
 
-                    // Mass-based push
-                    // Heavier (larger radius) pushes lighter.
-                    // Total mass = ra + rb.
-                    // A moves proportional to B's influence? No, Conservation of Momentum roughly.
-                    // If A is heavy, A moves less.
-                    // ratioA = rb / (ra + rb)
-                    const totalR = a.radius + b.radius;
-                    const ratioA = b.radius / totalR;
-                    const ratioB = a.radius / totalR;
-
-                    const push = dir.scale(overlap);
-
                     if (isUnitA && isUnitB) {
-                        a.pos = a.pos.sub(push.scale(ratioA));
-                        b.pos = b.pos.add(push.scale(ratioB));
+                        // Determine which unit is moving vs stationary
+                        const aMoving = a.moveTarget !== null || a.targetId !== null || (a.vel && a.vel.mag() > 0.5);
+                        const bMoving = b.moveTarget !== null || b.targetId !== null || (b.vel && b.vel.mag() > 0.5);
+
+                        let ratioA = 0.5;
+                        let ratioB = 0.5;
+
+                        // Use smaller push to reduce backslide
+                        const pushScale = Math.min(overlap, 0.8);
+
+                        if (aMoving && !bMoving) {
+                            // A is moving, B is stationary - A yields more
+                            ratioA = 0.8;
+                            ratioB = 0.2;
+                            const push = dir.scale(pushScale);
+                            a.pos = a.pos.sub(push.scale(ratioA));
+                            b.pos = b.pos.add(push.scale(ratioB));
+                        } else if (bMoving && !aMoving) {
+                            // B is moving, A is stationary - B yields more
+                            ratioA = 0.2;
+                            ratioB = 0.8;
+                            const push = dir.scale(pushScale);
+                            a.pos = a.pos.sub(push.scale(ratioA));
+                            b.pos = b.pos.add(push.scale(ratioB));
+                        } else if (aMoving && bMoving) {
+                            // BOTH moving - use perpendicular push to slide past each other
+                            // This implements "keep right" - both slide to their right side
+                            const perpA = new Vector(-dir.y, dir.x); // Perpendicular (consistent for relative positions)
+                            const perpB = new Vector(dir.y, -dir.x); // Opposite perpendicular
+
+                            // Push each unit to their "right" (perpendicular to collision axis)
+                            a.pos = a.pos.add(perpA.scale(pushScale * 0.5));
+                            b.pos = b.pos.add(perpB.scale(pushScale * 0.5));
+                        } else {
+                            // Both stationary - minimal push
+                            const totalR = a.radius + b.radius;
+                            ratioA = b.radius / totalR;
+                            ratioB = a.radius / totalR;
+                            const push = dir.scale(pushScale * 0.5); // Half strength for stationary
+                            a.pos = a.pos.sub(push.scale(ratioA));
+                            b.pos = b.pos.add(push.scale(ratioB));
+                        }
                     } else if (isUnitA) {
-                        // A is unit, B is building/resource
-                        a.pos = a.pos.sub(push.scale(2)); // Move A full distance
+                        // A is unit, B is building/resource - A yields completely
+                        a.pos = a.pos.sub(dir.scale(overlap));
                     } else if (isUnitB) {
-                        b.pos = b.pos.add(push.scale(2)); // Move B full distance
+                        // B is unit, A is building/resource - B yields completely
+                        b.pos = b.pos.add(dir.scale(overlap));
                     }
                 }
             }
@@ -510,6 +534,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     });
     return result;
 }
+
 
 function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: any, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
     let nextEntity = { ...entity };
@@ -547,15 +572,35 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                 const ref = allEntities[harvester.baseTargetId];
                 if (ref && !ref.dead) {
                     // Target "Docking Point" (bottom of refinery)
-                    // Refinery is ~90x90. Center is pos.
-                    // We want to go to pos.y + 60?
                     const dockPos = ref.pos.add(new Vector(0, 60));
+                    const ourDist = harvester.pos.dist(dockPos);
 
-                    if (harvester.pos.dist(dockPos) < 20) {
-                        // Dock / Unload
+                    // Check if another harvester is ahead of us in the queue
+                    let positionInQueue = 0; // 0 = first in line
+                    for (const other of entityList) {
+                        if (other.id !== harvester.id &&
+                            other.key === 'harvester' &&
+                            other.owner === harvester.owner &&
+                            !other.dead &&
+                            (other as any).cargo > 0) { // Only count harvesters with cargo (wanting to dock)
+                            const otherDist = other.pos.dist(dockPos);
+                            // If another harvester is closer to the dock
+                            if (otherDist < ourDist) {
+                                positionInQueue++;
+                            }
+                        }
+                    }
+
+                    if (ourDist < 20 && positionInQueue === 0) {
+                        // We're at dock and first in line - Unload
                         nextEntity = { ...harvester, cargo: 0, baseTargetId: null };
-                        creditsEarned = 500; // Flat 500 for now, or based on cargo
+                        creditsEarned = 500;
+                    } else if (positionInQueue > 0 && ourDist < 80) {
+                        // Someone is ahead of us and we're near dock - wait stationary
+                        // Explicitly set velocity to zero
+                        nextEntity = { ...harvester, vel: new Vector(0, 0) };
                     } else {
+                        // Move toward dock
                         nextEntity = moveToward(harvester, dockPos, entityList);
                     }
                 } else {
@@ -732,115 +777,150 @@ function updateProjectile(proj: any, entities: Record<EntityId, Entity>): { proj
 
 function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Entity {
     const distToTarget = entity.pos.dist(target);
-    if (distToTarget < 2) return { ...entity, vel: new Vector(0, 0) };
+    if (distToTarget < 2) return { ...entity, vel: new Vector(0, 0), path: null, pathIdx: 0 };
 
     const speed = getRuleData(entity.key)?.speed || 1;
 
-    // Stuck Detection
-    // Increase stuck timer if we have a move target but velocity is low or effective movement is low?
-    // In this functional pattern, we don't have "effective movement" easily unless we store prevPos more robustly.
-    // We do have prevPos.
-    // stuckTimer logic (Moved to AFTER finalDir calculation to use expected movement)
-    // Actually we can do it here if we use previous tick's movement.
-    // Let's use avgVel logic instead of simple distance logic for robustness against vibration.
-
+    // Average velocity tracking for stuck detection
     let avgVel = entity.avgVel || new Vector(0, 0);
-    // Update avgVel
-    // Conceptually: We want to track the *effective* displacement direction over time.
-    // Since prevPos represents actual movement in last tick.
     const effectiveVel = entity.pos.sub(entity.prevPos);
     avgVel = avgVel.scale(0.9).add(effectiveVel.scale(0.1));
 
     let stuckTimer = entity.stuckTimer || 0;
     let unstuckDir = entity.unstuckDir;
     let unstuckTimer = entity.unstuckTimer || 0;
+    let path = entity.path;
+    let pathIdx = entity.pathIdx || 0;
+    let finalDest = entity.finalDest;
 
-    // Stuck Condition:
-    // If we have a target (distToTarget > 10)
-    // AND our average velocity is small (< speed * 0.2)
-    // THEN we are stuck (either pinned or vibrating).
-    if (distToTarget > 10 && avgVel.mag() < speed * 0.2) {
-        stuckTimer++;
-    } else {
-        stuckTimer = Math.max(0, stuckTimer - 1);
+    // Check if we need a new path
+    const needNewPath = !path || path.length === 0 ||
+        (finalDest && finalDest.dist(target) > 20) ||
+        (stuckTimer > 30); // Recalculate path if stuck
+
+    if (needNewPath) {
+        // Try A* pathfinding
+        const newPath = findPath(entity.pos, target, entity.radius);
+        if (newPath && newPath.length > 1) {
+            path = newPath;
+            pathIdx = 1; // Skip first waypoint (our current position)
+            finalDest = target;
+            stuckTimer = 0; // Reset stuck timer on new path
+        } else {
+            // If A* fails, clear path and use direct movement
+            path = null;
+            pathIdx = 0;
+            finalDest = target;
+        }
     }
 
-    // Trigger unstuck logic
-    if (stuckTimer > 20) {
-        unstuckTimer = 30; // Commit for 30 ticks
+    // Determine immediate movement target
+    let immediateTarget = target;
+    if (path && pathIdx < path.length) {
+        immediateTarget = path[pathIdx];
+        // Check if close enough to advance to next waypoint
+        const waypointDist = entity.pos.dist(immediateTarget);
+        if (waypointDist < 25) {
+            pathIdx++;
+            if (pathIdx < path.length) {
+                immediateTarget = path[pathIdx];
+            } else {
+                immediateTarget = target;
+            }
+        }
+    }
+
+    // Stuck Condition
+    if (distToTarget > 10 && avgVel.mag() < speed * 0.15) {
+        stuckTimer++;
+    } else {
+        stuckTimer = Math.max(0, stuckTimer - 2); // Decay faster when moving
+    }
+
+    // Trigger unstuck logic - use smarter unstuck direction
+    if (stuckTimer > 40) {
+        unstuckTimer = 25;
         stuckTimer = 0;
-        const angle = Math.random() * Math.PI * 2;
-        unstuckDir = new Vector(Math.cos(angle), Math.sin(angle));
+        // Choose perpendicular direction to current heading for better unsticking
+        const toTarget = target.sub(entity.pos).norm();
+        const perpendicular = Math.random() > 0.5
+            ? new Vector(-toTarget.y, toTarget.x)
+            : new Vector(toTarget.y, -toTarget.x);
+        unstuckDir = perpendicular;
+        // Force path recalculation after unstuck
+        path = null;
+        pathIdx = 0;
     }
 
     if (unstuckTimer > 0 && unstuckDir) {
         return {
             ...entity,
-            vel: unstuckDir.scale(speed),
+            vel: unstuckDir.scale(speed * 0.8),
             stuckTimer: 0,
             unstuckTimer: unstuckTimer - 1,
             unstuckDir: unstuckDir,
-            avgVel: avgVel // Persist avgVel
+            avgVel: avgVel,
+            path: null, // Clear path during unstuck
+            pathIdx: 0,
+            finalDest
         };
     }
 
-
     // Normal Movement with Steering
-    const dir = target.sub(entity.pos).norm();
+    const dir = immediateTarget.sub(entity.pos).norm();
     let separation = new Vector(0, 0);
-    let count = 0;
+    let entityCount = 0;
 
-    // Entity Separation
+    // Entity Separation - reduced force, only from very close entities
     for (const other of allEntities) {
         if (other.id === entity.id || other.dead || other.type === 'RESOURCE') continue;
         const d = entity.pos.dist(other.pos);
-        if (d < (entity.radius + other.radius + 5)) {
-            separation = separation.add(entity.pos.sub(other.pos).norm());
-            count++;
+        const minDist = entity.radius + other.radius;
+
+        if (d < minDist + 3 && d > 0.001) {
+            // Weight separation by how close the entities are
+            const weight = (minDist + 3 - d) / (minDist + 3);
+            separation = separation.add(entity.pos.sub(other.pos).norm().scale(weight));
+            entityCount++;
         }
     }
 
-    // Static Collision Avoidance (Whiskers)
-    // Cast a few "whiskers" ahead
-    const angles = [0, 0.5, -0.5]; // radians offset
+    // Static Collision Avoidance (Whiskers) - weaker when we have a valid A* path
+    const hasValidPath = path && path.length > 0;
+    const angles = hasValidPath ? [0, 0.3, -0.3] : [0, 0.4, -0.4, 0.8, -0.8];
     let avoidance = new Vector(0, 0);
 
     for (const a of angles) {
-        // Rotate dir by a
         const cos = Math.cos(a);
         const sin = Math.sin(a);
         const wx = dir.x * cos - dir.y * sin;
         const wy = dir.x * sin + dir.y * cos;
         const whisker = new Vector(wx, wy).norm();
 
-        const checkDist = entity.radius + 20;
+        const checkDist = entity.radius + (hasValidPath ? 10 : 15);
         const checkPos = entity.pos.add(whisker.scale(checkDist));
 
-        // Check grid
         const gx = Math.floor(checkPos.x / TILE_SIZE);
         const gy = Math.floor(checkPos.y / TILE_SIZE);
 
         if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
             if (collisionGrid[gy * GRID_W + gx] === 1) {
-                // Blocked! Add avoidance force opposite to whisker
-                avoidance = avoidance.sub(whisker.scale(2));
-                count++;
+                // Reduced avoidance when we have a path (path already handles navigation)
+                const baseWeight = hasValidPath ? 1.0 : 2.5;
+                const weight = a === 0 ? baseWeight : baseWeight * 0.6;
+                avoidance = avoidance.sub(whisker.scale(weight));
             }
         }
     }
 
     let finalDir = dir;
-    if (count > 0) {
-        // Separation pushes away
-        // Avoidance pushes away from walls
-        // Add a "keep right" bias to avoid head-on deadlocks
+    if (entityCount > 0 || avoidance.mag() > 0.001) {
+        // Keep-right bias for head-on situations, but reduce it
         const right = new Vector(-dir.y, dir.x);
+        const rightBias = entityCount > 0 ? 0.3 : 0;
 
-        // Add small random noise to break symmetry/oscillations
-        const noise = new Vector(Math.random() - 0.5, Math.random() - 0.5).scale(0.5);
-
-        // Reduce separation force (allow hard collision to resolve overlaps)
-        finalDir = dir.add(separation.scale(1.2)).add(avoidance).add(right.scale(1.0)).add(noise).norm();
+        // Reduce separation force significantly - let collision resolution handle overlap
+        finalDir = dir.add(separation.scale(0.5)).add(avoidance).add(right.scale(rightBias)).norm();
     }
 
     return {
@@ -849,9 +929,13 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
         stuckTimer,
         unstuckTimer: 0,
         unstuckDir: null,
-        avgVel: avgVel // Persist avgVel
+        avgVel,
+        path,
+        pathIdx,
+        finalDest
     };
 }
+
 
 function createProjectile(source: Entity, target: Entity) {
     const data = getRuleData(source.key);
