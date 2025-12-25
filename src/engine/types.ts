@@ -27,6 +27,10 @@ export class Vector {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
+    dot(other: Vector): number {
+        return this.x * other.x + this.y * other.y;
+    }
+
     norm(): Vector {
         const m = this.mag();
         return m === 0 ? new Vector(0, 0) : new Vector(this.x / m, this.y / m);
@@ -79,6 +83,7 @@ export interface Entity {
     readonly resourceTargetId: EntityId | null; // Changed to ID
     readonly baseTargetId: EntityId | null; // Changed to ID
     readonly dockPos?: Vector;
+    readonly avgVel?: Vector;
 }
 
 export interface Projectile {

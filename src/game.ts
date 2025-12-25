@@ -248,6 +248,9 @@ function gameLoop() {
         updateButtonsUI();
     }
 
+    // Expose state for debugging
+    (window as any).GAME_STATE = currentState;
+
     if (currentState.tick % 60 === 0) {
         checkWinCondition();
     }

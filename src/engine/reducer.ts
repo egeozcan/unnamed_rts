@@ -417,10 +417,17 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
 
         let ent = nextEntities[id];
         if (ent.vel.mag() > 0) {
-            ent = { ...ent, pos: ent.pos.add(ent.vel) };
+            ent = { ...ent, prevPos: ent.pos, pos: ent.pos.add(ent.vel) };
             const data = getRuleData(ent.key);
             if (data && !data.fly) {
-                ent = { ...ent, rotation: Math.atan2(ent.vel.y, ent.vel.x) };
+                // Smooth rotation
+                const targetRot = Math.atan2(ent.vel.y, ent.vel.x);
+                let diff = targetRot - ent.rotation;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                // Faster turn if moving fast? Or constant turn rate?
+                // 0.2 is good for responsiveness without jitter
+                ent = { ...ent, rotation: ent.rotation + diff * 0.2 };
             }
             ent = { ...ent, vel: new Vector(0, 0) };
             nextEntities[id] = ent;
@@ -430,7 +437,78 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
         if (ent.flash > 0) nextEntities[id] = { ...ent, flash: ent.flash - 1 };
     }
 
+    // Resolve Hard Collisions
+    nextEntities = resolveCollisions(nextEntities);
+
     return { entities: nextEntities, projectiles: newProjectiles, particles: newParticles, creditsEarned };
+}
+
+function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId, Entity> {
+    const ids = Object.keys(entities);
+    // Create a mutable list of working copies
+    const workingEntities = ids.map(id => ({ ...entities[id] }));
+    const iterations = 2; // Run a few passes for stability
+
+    for (let k = 0; k < iterations; k++) {
+        for (let i = 0; i < workingEntities.length; i++) {
+            const a = workingEntities[i];
+            if (a.dead) continue;
+
+            for (let j = i + 1; j < workingEntities.length; j++) {
+                const b = workingEntities[j];
+                if (b.dead) continue;
+
+                // Only resolve Unit-Unit collisions dynamically here. 
+                // Unit-Building collision is handled by pathfinding/whiskers usually, 
+                // but we could add simple circle-circle push for buildings too if they have radius.
+                // Our buildings are rects usually, but have radius approx.
+                // Let's stick to Unit-Unit for congestion fix.
+                const isUnitA = a.type === 'UNIT';
+                const isUnitB = b.type === 'UNIT';
+
+                if (!isUnitA && !isUnitB) continue; // Static vs Static
+
+                const dist = a.pos.dist(b.pos);
+                // Reduce radius slightly for "soft" overlap allowed? 
+                // or Strict. Strict is better for "pushed out".
+                const minDist = a.radius + b.radius;
+
+                if (dist < minDist && dist > 0.001) {
+                    const overlap = minDist - dist;
+                    const dir = b.pos.sub(a.pos).norm();
+
+                    // Mass-based push
+                    // Heavier (larger radius) pushes lighter.
+                    // Total mass = ra + rb.
+                    // A moves proportional to B's influence? No, Conservation of Momentum roughly.
+                    // If A is heavy, A moves less.
+                    // ratioA = rb / (ra + rb)
+                    const totalR = a.radius + b.radius;
+                    const ratioA = b.radius / totalR;
+                    const ratioB = a.radius / totalR;
+
+                    const push = dir.scale(overlap);
+
+                    if (isUnitA && isUnitB) {
+                        a.pos = a.pos.sub(push.scale(ratioA));
+                        b.pos = b.pos.add(push.scale(ratioB));
+                    } else if (isUnitA) {
+                        // A is unit, B is building/resource
+                        a.pos = a.pos.sub(push.scale(2)); // Move A full distance
+                    } else if (isUnitB) {
+                        b.pos = b.pos.add(push.scale(2)); // Move B full distance
+                    }
+                }
+            }
+        }
+    }
+
+    // Reconstruct lookup
+    const result: Record<EntityId, Entity> = {};
+    workingEntities.forEach(e => {
+        result[e.id] = e;
+    });
+    return result;
 }
 
 function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: any, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
@@ -662,38 +740,47 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
     // Increase stuck timer if we have a move target but velocity is low or effective movement is low?
     // In this functional pattern, we don't have "effective movement" easily unless we store prevPos more robustly.
     // We do have prevPos.
-    const movedDist = entity.pos.dist(entity.prevPos);
-    let stuckTimer = entity.stuckTimer;
-    let unstuckDir = entity.unstuckDir;
-    let unstuckTimer = entity.unstuckTimer;
+    // stuckTimer logic (Moved to AFTER finalDir calculation to use expected movement)
+    // Actually we can do it here if we use previous tick's movement.
+    // Let's use avgVel logic instead of simple distance logic for robustness against vibration.
 
-    // Determine if we are technically moving (velocity > 0). 
-    // If we *think* we are moving but haven't changed position, increment stuck timer.
-    // Note: this function calculates VELOCITY for next tick. The *actual* movement happened in previous tick.
-    // So we check if dist(pos, prevPos) is small relative to expected speed.
-    if (distToTarget > 10 && movedDist < speed * 0.2) {
+    let avgVel = entity.avgVel || new Vector(0, 0);
+    // Update avgVel
+    // Conceptually: We want to track the *effective* displacement direction over time.
+    // Since prevPos represents actual movement in last tick.
+    const effectiveVel = entity.pos.sub(entity.prevPos);
+    avgVel = avgVel.scale(0.9).add(effectiveVel.scale(0.1));
+
+    let stuckTimer = entity.stuckTimer || 0;
+    let unstuckDir = entity.unstuckDir;
+    let unstuckTimer = entity.unstuckTimer || 0;
+
+    // Stuck Condition:
+    // If we have a target (distToTarget > 10)
+    // AND our average velocity is small (< speed * 0.2)
+    // THEN we are stuck (either pinned or vibrating).
+    if (distToTarget > 10 && avgVel.mag() < speed * 0.2) {
         stuckTimer++;
     } else {
         stuckTimer = Math.max(0, stuckTimer - 1);
     }
 
-    // Trigger unstuck
+    // Trigger unstuck logic
     if (stuckTimer > 20) {
-        unstuckTimer = 20;
+        unstuckTimer = 30; // Commit for 30 ticks
         stuckTimer = 0;
-        // Pick random direction
         const angle = Math.random() * Math.PI * 2;
         unstuckDir = new Vector(Math.cos(angle), Math.sin(angle));
     }
 
-    // Unstuck Routine
-    if (unstuckTimer > 0) {
+    if (unstuckTimer > 0 && unstuckDir) {
         return {
             ...entity,
-            vel: (unstuckDir || new Vector(1, 0)).scale(speed),
-            stuckTimer,
+            vel: unstuckDir.scale(speed),
+            stuckTimer: 0,
             unstuckTimer: unstuckTimer - 1,
-            unstuckDir
+            unstuckDir: unstuckDir,
+            avgVel: avgVel // Persist avgVel
         };
     }
 
@@ -748,7 +835,12 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
         // Avoidance pushes away from walls
         // Add a "keep right" bias to avoid head-on deadlocks
         const right = new Vector(-dir.y, dir.x);
-        finalDir = dir.add(separation.scale(1.5)).add(avoidance).add(right.scale(1.0)).norm();
+
+        // Add small random noise to break symmetry/oscillations
+        const noise = new Vector(Math.random() - 0.5, Math.random() - 0.5).scale(0.5);
+
+        // Reduce separation force (allow hard collision to resolve overlaps)
+        finalDir = dir.add(separation.scale(1.2)).add(avoidance).add(right.scale(1.0)).add(noise).norm();
     }
 
     return {
@@ -756,7 +848,8 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
         vel: finalDir.scale(speed),
         stuckTimer,
         unstuckTimer: 0,
-        unstuckDir: null
+        unstuckDir: null,
+        avgVel: avgVel // Persist avgVel
     };
 }
 
