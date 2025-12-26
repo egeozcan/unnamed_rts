@@ -70,11 +70,15 @@ export class Renderer {
             this.drawPlacementPreview(placingBuilding, mousePos, camera, zoom, Object.values(entities));
         }
 
+
         // Drag selection box
         if (dragStart) {
             ctx.strokeStyle = '#0f0';
             ctx.strokeRect(dragStart.x, dragStart.y, mousePos.x - dragStart.x, mousePos.y - dragStart.y);
         }
+
+        // Draw tooltips
+        this.drawTooltip(mousePos, sortedEntities, camera, zoom);
 
         ctx.restore();
     }
@@ -128,10 +132,15 @@ export class Renderer {
 
         // Draw entity
         if (entity.type === 'RESOURCE') {
-            ctx.fillStyle = '#d4af37';
-            ctx.beginPath();
-            ctx.arc(0, 0, 10, 0, Math.PI * 2);
-            ctx.fill();
+            const img = getAsset(entity.key, entity.owner);
+            if (img && img.complete) {
+                ctx.drawImage(img, -entity.w / 2, -entity.h / 2, entity.w, entity.h);
+            } else {
+                ctx.fillStyle = '#d4af37';
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             // Resource amount bar
             if (entity.hp < entity.maxHp) {
@@ -271,5 +280,73 @@ export class Renderer {
         }
 
         return near;
+    }
+
+    private drawTooltip(
+        mousePos: { x: number; y: number },
+        entities: Entity[],
+        camera: { x: number; y: number },
+        zoom: number
+    ) {
+        const ctx = this.ctx;
+
+        // Iterate backwards to find the top-most entity
+        for (let i = entities.length - 1; i >= 0; i--) {
+            const entity = entities[i];
+
+            // Only show tooltips for units and buildings
+            if (entity.dead) continue;
+            if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+
+            // Check collision
+            const s = this.worldToScreen(entity.pos, camera, zoom);
+            const dist = Math.sqrt(Math.pow(s.x - mousePos.x, 2) + Math.pow(s.y - mousePos.y, 2));
+
+            // Adjusted radius for simpler hit detection
+            // Use slightly larger radius to make hovering easier
+            if (dist < (entity.radius + 5) * zoom) {
+                let name = '';
+                if (entity.type === 'BUILDING' && RULES.buildings[entity.key]) {
+                    name = RULES.buildings[entity.key].name;
+                } else if (entity.type === 'UNIT' && RULES.units[entity.key]) {
+                    name = RULES.units[entity.key].name;
+                }
+
+                if (name) {
+                    ctx.save();
+                    ctx.font = '12px "Segoe UI", Arial, sans-serif';
+                    const metrics = ctx.measureText(name);
+                    const padding = 6;
+                    const w = metrics.width + (padding * 2);
+                    const h = 24;
+                    const x = mousePos.x + 16;
+                    const y = mousePos.y + 16;
+
+                    // Keep tooltip on screen
+                    const finalX = Math.min(x, this.canvas.width - w - 10);
+                    const finalY = Math.min(y, this.canvas.height - h - 10);
+
+                    // Background
+                    const isEnemy = entity.owner !== 0; // Assuming 0 is local player
+                    ctx.fillStyle = 'rgba(20, 30, 40, 0.9)';
+                    ctx.strokeStyle = isEnemy ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 200, 255, 0.5)';
+                    ctx.lineWidth = 1;
+
+                    ctx.beginPath();
+                    ctx.roundRect(finalX, finalY, w, h, 4);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Text
+                    ctx.fillStyle = isEnemy ? '#ffaaaa' : '#ffffff';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(name, finalX + padding, finalY + (h / 2));
+                    ctx.restore();
+
+                    // Only show one tooltip
+                    return;
+                }
+            }
+        }
     }
 }

@@ -283,6 +283,7 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     // Set observer mode if all players are AI
     setObserverMode(isObserverMode);
+    renderer.resize();
 
     // Initialize input
     initInput(canvas, {

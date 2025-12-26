@@ -408,7 +408,7 @@ function sellBuilding(state: GameState, payload: { buildingId: EntityId; playerI
     // Also clear from selection if it was selected
     const nextSelection = state.selection.filter(id => id !== buildingId);
 
-    return {
+    const newState = {
         ...state,
         entities: nextEntities,
         selection: nextSelection,
@@ -420,6 +420,44 @@ function sellBuilding(state: GameState, payload: { buildingId: EntityId; playerI
             }
         }
     };
+
+    // Check for win/loss immediately
+    if (newState.mode === 'game' || newState.mode === 'demo') {
+        const buildingCounts: Record<number, number> = {};
+        const mcvCounts: Record<number, number> = {};
+
+        // Count just for this check
+        for (const id in newState.entities) {
+            const ent = newState.entities[id];
+            if (!ent.dead) {
+                if (ent.type === 'BUILDING') {
+                    buildingCounts[ent.owner] = (buildingCounts[ent.owner] || 0) + 1;
+                } else if (ent.type === 'UNIT' && ent.key === 'mcv') {
+                    mcvCounts[ent.owner] = (mcvCounts[ent.owner] || 0) + 1;
+                }
+            }
+        }
+
+        const alivePlayers = Object.keys(newState.players)
+            .map(Number)
+            .filter(pid => (buildingCounts[pid] || 0) > 0 || (mcvCounts[pid] || 0) > 0);
+
+        if (alivePlayers.length === 1) {
+            return {
+                ...newState,
+                winner: alivePlayers[0],
+                running: false
+            };
+        } else if (alivePlayers.length === 0 && Object.keys(newState.players).length > 0) {
+            return {
+                ...newState,
+                winner: -1,
+                running: false
+            };
+        }
+    }
+
+    return newState;
 }
 
 
