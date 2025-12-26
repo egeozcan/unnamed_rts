@@ -10,8 +10,21 @@
                 "power",
                 "barracks",
                 "refinery",
-                "factory"
-            ]
+                "factory",
+                "pillbox"
+            ],
+            "unit_preferences": {
+                "infantry": [
+                    "rifle",
+                    "flamer",
+                    "grenadier"
+                ],
+                "vehicle": [
+                    "light",
+                    "flame_tank",
+                    "heavy"
+                ]
+            }
         },
         "turtle": {
             "aggression_bias": 0.5,
@@ -24,10 +37,24 @@
                 "refinery",
                 "barracks",
                 "turret",
+                "sam_site",
                 "factory",
                 "turret",
+                "obelisk",
                 "tech"
-            ]
+            ],
+            "unit_preferences": {
+                "infantry": [
+                    "rifle",
+                    "rocket",
+                    "sniper"
+                ],
+                "vehicle": [
+                    "heavy",
+                    "mlrs",
+                    "mammoth"
+                ]
+            }
         },
         "balanced": {
             "aggression_bias": 1.0,
@@ -41,8 +68,21 @@
                 "barracks",
                 "factory",
                 "turret",
+                "pillbox",
                 "tech"
-            ]
+            ],
+            "unit_preferences": {
+                "infantry": [
+                    "rifle",
+                    "rocket",
+                    "grenadier"
+                ],
+                "vehicle": [
+                    "light",
+                    "heavy",
+                    "artillery"
+                ]
+            }
         }
     },
     "strategies": {

@@ -84,6 +84,10 @@ export interface Entity {
     readonly baseTargetId: EntityId | null; // Changed to ID
     readonly dockPos?: Vector;
     readonly avgVel?: Vector;
+
+    // Specialized unit flags
+    readonly captureTargetId?: EntityId | null;
+    readonly repairTargetId?: EntityId | null;
 }
 
 export interface Projectile {
@@ -94,7 +98,8 @@ export interface Projectile {
     readonly speed: number;
     readonly damage: number;
     readonly splash: number;
-    readonly type: 'bullet' | 'rocket' | 'heal';
+    readonly type: string;
+    readonly weaponType?: string;
     readonly dead: boolean;
 }
 

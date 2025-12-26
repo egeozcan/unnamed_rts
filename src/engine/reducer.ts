@@ -491,6 +491,29 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
                     };
                 }
             }
+
+            // Handle Engineer Capture/Repair
+            const ent = nextEntities[id];
+            if ((ent as any).captureTargetId) {
+                const targetId = (ent as any).captureTargetId;
+                const target = nextEntities[targetId];
+                if (target && target.type === 'BUILDING') {
+                    nextEntities[targetId] = { ...target, owner: ent.owner, flash: 30 };
+                    nextEntities[id] = { ...ent, dead: true, captureTargetId: null };
+                }
+            } else if ((ent as any).repairTargetId) {
+                const targetId = (ent as any).repairTargetId;
+                const target = nextEntities[targetId];
+                if (target && target.type === 'BUILDING' && target.hp < target.maxHp) {
+                    const repairAmount = 20; // Repair strength
+                    nextEntities[targetId] = {
+                        ...target,
+                        hp: Math.min(target.maxHp, target.hp + repairAmount),
+                        flash: 5
+                    };
+                    nextEntities[id] = { ...ent, repairTargetId: null };
+                }
+            }
         } else if (entity.type === 'BUILDING') {
             const res = updateBuilding(entity, state.entities, entityList);
             nextEntities[id] = res.entity;
@@ -822,17 +845,42 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
     // Original generic logic follows...
     // Generic logic calling block
     if (nextEntity.key !== 'harvester') {
-        if (!nextEntity.targetId && data.damage) {
-            const range = (data.range || 100) + 50;
-            let bestTargetId: string | null = null;
+        const isHealer = data.damage < 0;
+        const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
+
+        if (!nextEntity.targetId && (data.damage || isEngineer)) {
+            const range = (data.range || 100) + (isHealer ? 100 : 50);
+            let bestTargetId: EntityId | null = null;
             let bestDist = range;
 
             for (const other of entityList) {
-                if (other.owner !== nextEntity.owner && other.owner !== -1 && !other.dead) {
-                    const d = nextEntity.pos.dist(other.pos);
-                    if (d < bestDist) {
-                        bestDist = d;
-                        bestTargetId = other.id;
+                if (other.dead || other.owner === -1) continue;
+
+                const d = nextEntity.pos.dist(other.pos);
+                if (d < bestDist) {
+                    if (isHealer) {
+                        // Medic/Healer targets friendlies that need help
+                        if (other.owner === nextEntity.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== nextEntity.id) {
+                            bestDist = d;
+                            bestTargetId = other.id;
+                        }
+                    } else if (isEngineer) {
+                        // Engineer targets buildings
+                        if (other.type === 'BUILDING') {
+                            if (other.owner !== nextEntity.owner && data.canCaptureEnemyBuildings) {
+                                bestDist = d;
+                                bestTargetId = other.id;
+                            } else if (other.owner === nextEntity.owner && other.hp < other.maxHp && data.canRepairFriendlyBuildings) {
+                                bestDist = d;
+                                bestTargetId = other.id;
+                            }
+                        }
+                    } else {
+                        // Normal combat targets enemies
+                        if (other.owner !== nextEntity.owner) {
+                            bestDist = d;
+                            bestTargetId = other.id;
+                        }
                     }
                 }
             }
@@ -844,7 +892,25 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             if (target && !target.dead) {
                 const dist = nextEntity.pos.dist(target.pos);
                 const range = data.range || 100;
-                if (dist <= range) {
+
+                if (isEngineer && target.type === 'BUILDING') {
+                    if (dist < 40) {
+                        nextEntity = { ...nextEntity, moveTarget: null };
+                        if (target.owner !== nextEntity.owner && data.canCaptureEnemyBuildings) {
+                            // CAPTURE: Engineer consumed, building ownership transfers
+                            (nextEntity as any).dead = true;
+                            (nextEntity as any).captureTargetId = target.id;
+                        } else if (target.owner === nextEntity.owner && data.canRepairFriendlyBuildings) {
+                            // REPAIR: Engineer heals building over time
+                            if (nextEntity.cooldown <= 0) {
+                                (nextEntity as any).repairTargetId = target.id;
+                                nextEntity = { ...nextEntity, cooldown: data.rate || 30 };
+                            }
+                        }
+                    } else {
+                        nextEntity = moveToward(nextEntity, target.pos, entityList);
+                    }
+                } else if (dist <= range) {
                     nextEntity = { ...nextEntity, moveTarget: null };
                     if (nextEntity.cooldown <= 0) {
                         projectile = createProjectile(nextEntity, target);
@@ -881,13 +947,32 @@ function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, e
     if (data.isDefense) {
         if (!nextEntity.targetId) {
             const range = data.range || 200;
+            let bestTargetId: EntityId | null = null;
+            let targetIsAir = false;
+
             for (const other of entityList) {
                 if (other.owner !== entity.owner && other.owner !== -1 && !other.dead) {
                     if (entity.pos.dist(other.pos) < range) {
-                        nextEntity = { ...nextEntity, targetId: other.id };
-                        break;
+                        const otherData = getRuleData(other.key);
+                        const isAir = otherData?.fly === true;
+
+                        if (nextEntity.key === 'sam_site') {
+                            if (isAir && !targetIsAir) {
+                                bestTargetId = other.id;
+                                targetIsAir = true;
+                            } else if (!bestTargetId) {
+                                bestTargetId = other.id;
+                            }
+                        } else {
+                            // Default: take first target in range
+                            bestTargetId = other.id;
+                            break;
+                        }
                     }
                 }
+            }
+            if (bestTargetId) {
+                nextEntity = { ...nextEntity, targetId: bestTargetId };
             }
         }
 
@@ -916,9 +1001,17 @@ function updateProjectile(proj: any, entities: Record<EntityId, Entity>): { proj
     if (target && !target.dead) {
         if (nextPos.dist(target.pos) < target.radius + 15) {
             nextProj.dead = true;
+
+            // Apply damage modifiers
+            const targetData = getRuleData(target.key);
+            const armorType = targetData?.armor || 'none';
+            const weaponType = proj.weaponType || 'bullet';
+            const modifiers = RULES.damageModifiers?.[weaponType];
+            const modifier = modifiers?.[armorType] ?? 1.0;
+
             damageEvent = {
                 targetId: target.id,
-                amount: proj.damage,
+                amount: Math.round(proj.damage * modifier),
                 attackerId: proj.ownerId
             };
         }
@@ -1093,16 +1186,20 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
 
 function createProjectile(source: Entity, target: Entity) {
     const data = getRuleData(source.key);
-    const isRocket = (source.key === 'rocket' || source.key === 'artillery');
+    const weaponType = data?.weaponType || 'bullet';
+    const isRocket = weaponType === 'rocket' || weaponType === 'missile' || weaponType === 'heavy_cannon';
+    const speed = isRocket ? 9 : 18;
+
     return {
         ownerId: source.id,
         pos: source.pos,
-        vel: target.pos.sub(source.pos).norm().scale(isRocket ? 9 : 18),
+        vel: target.pos.sub(source.pos).norm().scale(speed),
         targetId: target.id,
-        speed: isRocket ? 9 : 18,
-        damage: data.damage,
-        splash: data.splash || 0,
-        type: isRocket ? 'rocket' : 'bullet',
+        speed: speed,
+        damage: data?.damage || 10,
+        splash: data?.splash || 0,
+        type: weaponType,
+        weaponType: weaponType,
         dead: false
     };
 }

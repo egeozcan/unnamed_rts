@@ -312,12 +312,37 @@ function handleEconomy(
     }
 
     // Unit production
-    if (player.credits > 800) {
+    const prefs = personality.unit_preferences;
+    if (player.credits > 800 && prefs) {
+        if (buildings.some(b => b.key === 'barracks') && !player.queues.infantry.current) {
+            const list = prefs.infantry || ['rifle'];
+            // Simple: pick first available or cycle? Let's pick first available req-met
+            for (const key of list) {
+                const data = RULES.units[key];
+                const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
+                if (reqsMet && player.credits >= (data?.cost || 0)) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key, playerId } });
+                    break;
+                }
+            }
+        }
+        if (buildings.some(b => b.key === 'factory') && !player.queues.vehicle.current) {
+            const list = prefs.vehicle || ['light'];
+            for (const key of list) {
+                const data = RULES.units[key];
+                const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
+                if (reqsMet && player.credits >= (data?.cost || 0)) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key, playerId } });
+                    break;
+                }
+            }
+        }
+    } else if (player.credits > 800) {
+        // Fallback for safety
         if (buildings.some(b => b.key === 'barracks') && !player.queues.infantry.current) {
             actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId } });
         }
         if (buildings.some(b => b.key === 'factory') && !player.queues.vehicle.current) {
-            // Prioritize tanks for army
             actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId } });
         }
     }

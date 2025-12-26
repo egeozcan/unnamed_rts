@@ -37,7 +37,7 @@ export function setTab(tab: string) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.btn-grid').forEach(g => g.classList.remove('active'));
 
-    const tabIndex = ['buildings', 'infantry', 'vehicles'].indexOf(tab);
+    const tabIndex = ['buildings', 'defense', 'infantry', 'vehicles'].indexOf(tab);
     if (tabIndex >= 0) {
         document.querySelectorAll('.tab')[tabIndex]?.classList.add('active');
     }
@@ -46,10 +46,12 @@ export function setTab(tab: string) {
 
 function setupButtons() {
     const bb = document.getElementById('tab-buildings')!;
+    const bd = document.getElementById('tab-defense')!;
     const bi = document.getElementById('tab-infantry')!;
     const bv = document.getElementById('tab-vehicles')!;
 
     bb.innerHTML = '';
+    bd.innerHTML = '';
     bi.innerHTML = '';
     bv.innerHTML = '';
 
@@ -57,7 +59,11 @@ function setupButtons() {
         const data = RULES.buildings[k];
         // Check hidden using 'in' operator to avoid type issues
         if (!('hidden' in data && data.hidden)) {
-            createBtn(bb, k, data.name, data.cost, 'building');
+            if (data.isDefense) {
+                createBtn(bd, k, data.name, data.cost, 'building');
+            } else {
+                createBtn(bb, k, data.name, data.cost, 'building');
+            }
         }
     }
 
@@ -136,19 +142,22 @@ export function updateButtons(
 
     for (const cat of categories) {
         const q = queues[cat];
-        const containerId = cat === 'building' ? 'tab-buildings' :
-            cat === 'infantry' ? 'tab-infantry' : 'tab-vehicles';
-        const container = document.getElementById(containerId);
-        if (!container) continue;
+        const containerIds = cat === 'building' ? ['tab-buildings', 'tab-defense'] :
+            cat === 'infantry' ? ['tab-infantry'] : ['tab-vehicles'];
 
-        // Reset all buttons in this category
-        Array.from(container.children).forEach(btn => {
-            btn.classList.remove('building', 'ready', 'placing');
-            const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
-            const status = btn.querySelector('.btn-status') as HTMLElement;
-            if (overlay) overlay.style.width = '0%';
-            if (status) status.innerText = '';
-        });
+        for (const containerId of containerIds) {
+            const container = document.getElementById(containerId);
+            if (!container) continue;
+
+            // Reset all buttons in this category
+            Array.from(container.children).forEach(btn => {
+                btn.classList.remove('building', 'ready', 'placing');
+                const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
+                const status = btn.querySelector('.btn-status') as HTMLElement;
+                if (overlay) overlay.style.width = '0%';
+                if (status) status.innerText = '';
+            });
+        }
 
         // Mark currently building
         if (q?.current) {

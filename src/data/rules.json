@@ -6,26 +6,47 @@
         "version": "1.0",
         "factions": [
             "default"
-        ]
+        ],
+        "buildingCategories": {
+            "base": [
+                "conyard",
+                "power",
+                "refinery",
+                "barracks",
+                "factory",
+                "tech"
+            ],
+            "defense": [
+                "turret",
+                "sam_site",
+                "pillbox",
+                "obelisk"
+            ]
+        }
     },
     "prerequisites": {
         "power": [
             "conyard"
         ],
         "refinery": [
+            "conyard",
             "power"
         ],
         "barracks": [
+            "conyard",
             "power"
         ],
         "factory": [
+            "conyard",
             "refinery",
             "barracks"
         ],
         "turret": [
+            "conyard",
             "barracks"
         ],
         "tech": [
+            "conyard",
             "factory"
         ],
         "rifle": [
@@ -37,11 +58,31 @@
         "engineer": [
             "barracks"
         ],
+        "medic": [
+            "barracks"
+        ],
+        "sniper": [
+            "barracks",
+            "tech"
+        ],
+        "flamer": [
+            "barracks"
+        ],
+        "grenadier": [
+            "barracks"
+        ],
+        "commando": [
+            "barracks",
+            "tech"
+        ],
         "harvester": [
             "refinery",
             "factory"
         ],
         "jeep": [
+            "factory"
+        ],
+        "apc": [
             "factory"
         ],
         "light": [
@@ -50,7 +91,22 @@
         "heavy": [
             "factory"
         ],
+        "flame_tank": [
+            "factory"
+        ],
+        "stealth": [
+            "factory",
+            "tech"
+        ],
         "artillery": [
+            "factory",
+            "tech"
+        ],
+        "mlrs": [
+            "factory",
+            "tech"
+        ],
+        "mammoth": [
             "factory",
             "tech"
         ],
@@ -59,6 +115,18 @@
         ],
         "mcv": [
             "factory"
+        ],
+        "sam_site": [
+            "conyard",
+            "barracks"
+        ],
+        "pillbox": [
+            "conyard",
+            "barracks"
+        ],
+        "obelisk": [
+            "conyard",
+            "tech"
         ]
     },
     "buildings": {
@@ -70,7 +138,9 @@
             "h": 90,
             "power": 10,
             "drain": 0,
-            "hidden": true
+            "hidden": true,
+            "marker": "conyard",
+            "armor": "building"
         },
         "power": {
             "name": "Power Plant",
@@ -79,7 +149,8 @@
             "w": 60,
             "h": 60,
             "power": 200,
-            "drain": 0
+            "drain": 0,
+            "armor": "building"
         },
         "refinery": {
             "name": "Refinery",
@@ -88,7 +159,8 @@
             "w": 100,
             "h": 80,
             "drain": 30,
-            "provides": "harvester"
+            "provides": "harvester",
+            "armor": "building"
         },
         "barracks": {
             "name": "Barracks",
@@ -97,7 +169,8 @@
             "w": 60,
             "h": 80,
             "drain": 10,
-            "provides": "infantry"
+            "provides": "infantry",
+            "armor": "building"
         },
         "factory": {
             "name": "War Factory",
@@ -106,7 +179,8 @@
             "w": 100,
             "h": 100,
             "drain": 20,
-            "provides": "vehicles"
+            "provides": "vehicles",
+            "armor": "building"
         },
         "turret": {
             "name": "Gun Turret",
@@ -118,7 +192,51 @@
             "range": 250,
             "damage": 25,
             "rate": 20,
-            "isDefense": true
+            "isDefense": true,
+            "armor": "building",
+            "weaponType": "cannon"
+        },
+        "sam_site": {
+            "name": "SAM Site",
+            "hp": 800,
+            "cost": 1200,
+            "w": 40,
+            "h": 40,
+            "drain": 30,
+            "range": 400,
+            "damage": 80,
+            "rate": 60,
+            "isDefense": true,
+            "armor": "building",
+            "weaponType": "missile"
+        },
+        "pillbox": {
+            "name": "Pillbox",
+            "hp": 600,
+            "cost": 400,
+            "w": 40,
+            "h": 40,
+            "drain": 10,
+            "range": 150,
+            "damage": 15,
+            "rate": 8,
+            "isDefense": true,
+            "armor": "building",
+            "weaponType": "bullet"
+        },
+        "obelisk": {
+            "name": "Obelisk",
+            "hp": 1500,
+            "cost": 2800,
+            "w": 40,
+            "h": 60,
+            "drain": 100,
+            "range": 350,
+            "damage": 200,
+            "rate": 120,
+            "isDefense": true,
+            "armor": "building",
+            "weaponType": "laser"
         },
         "tech": {
             "name": "Tech Center",
@@ -126,7 +244,8 @@
             "cost": 1500,
             "w": 80,
             "h": 80,
-            "drain": 50
+            "drain": 50,
+            "armor": "building"
         }
     },
     "units": {
@@ -139,7 +258,9 @@
             "range": 130,
             "damage": 6,
             "rate": 30,
-            "w": 15
+            "w": 15,
+            "armor": "infantry",
+            "weaponType": "bullet"
         },
         "rocket": {
             "name": "Rocket",
@@ -151,18 +272,90 @@
             "damage": 35,
             "rate": 65,
             "w": 15,
-            "splash": 25
+            "splash": 25,
+            "armor": "infantry",
+            "weaponType": "rocket"
         },
         "engineer": {
-            "name": "Medic",
+            "name": "Engineer",
             "type": "infantry",
             "hp": 50,
             "cost": 500,
             "speed": 2,
-            "range": 60,
-            "damage": -15,
+            "range": 30,
+            "damage": 0,
             "rate": 60,
-            "w": 15
+            "w": 15,
+            "armor": "infantry",
+            "canCaptureEnemyBuildings": true,
+            "canRepairFriendlyBuildings": true
+        },
+        "medic": {
+            "name": "Medic",
+            "type": "infantry",
+            "hp": 45,
+            "cost": 350,
+            "speed": 2.2,
+            "range": 80,
+            "damage": -15,
+            "rate": 50,
+            "w": 15,
+            "armor": "infantry",
+            "weaponType": "heal"
+        },
+        "sniper": {
+            "name": "Sniper",
+            "type": "infantry",
+            "hp": 45,
+            "cost": 800,
+            "speed": 1.5,
+            "range": 450,
+            "damage": 90,
+            "rate": 150,
+            "w": 15,
+            "armor": "infantry",
+            "weaponType": "sniper"
+        },
+        "flamer": {
+            "name": "Flamethrower",
+            "type": "infantry",
+            "hp": 80,
+            "cost": 400,
+            "speed": 1.8,
+            "range": 80,
+            "damage": 20,
+            "rate": 10,
+            "w": 15,
+            "splash": 30,
+            "armor": "infantry",
+            "weaponType": "flame"
+        },
+        "grenadier": {
+            "name": "Grenadier",
+            "type": "infantry",
+            "hp": 65,
+            "cost": 250,
+            "speed": 1.7,
+            "range": 180,
+            "damage": 40,
+            "rate": 70,
+            "w": 15,
+            "splash": 35,
+            "armor": "infantry",
+            "weaponType": "grenade"
+        },
+        "commando": {
+            "name": "Commando",
+            "type": "infantry",
+            "hp": 120,
+            "cost": 1500,
+            "speed": 2.5,
+            "range": 200,
+            "damage": 60,
+            "rate": 25,
+            "w": 15,
+            "armor": "infantry",
+            "weaponType": "ap_bullet"
         },
         "harvester": {
             "name": "Harvester",
@@ -173,7 +366,8 @@
             "range": 0,
             "damage": 0,
             "w": 35,
-            "capacity": 500
+            "capacity": 500,
+            "armor": "heavy"
         },
         "jeep": {
             "name": "Ranger",
@@ -184,7 +378,22 @@
             "range": 160,
             "damage": 18,
             "rate": 15,
-            "w": 22
+            "w": 22,
+            "armor": "light",
+            "weaponType": "bullet"
+        },
+        "apc": {
+            "name": "APC",
+            "type": "vehicle",
+            "hp": 300,
+            "cost": 700,
+            "speed": 3.5,
+            "range": 120,
+            "damage": 12,
+            "rate": 12,
+            "w": 25,
+            "armor": "light",
+            "weaponType": "ap_bullet"
         },
         "light": {
             "name": "Light Tank",
@@ -195,7 +404,9 @@
             "range": 210,
             "damage": 45,
             "rate": 55,
-            "w": 28
+            "w": 28,
+            "armor": "medium",
+            "weaponType": "cannon"
         },
         "heavy": {
             "name": "Heavy Tank",
@@ -206,7 +417,36 @@
             "range": 230,
             "damage": 90,
             "rate": 75,
-            "w": 34
+            "w": 34,
+            "armor": "heavy",
+            "weaponType": "cannon"
+        },
+        "flame_tank": {
+            "name": "Flame Tank",
+            "type": "vehicle",
+            "hp": 450,
+            "cost": 1100,
+            "speed": 2.2,
+            "range": 100,
+            "damage": 35,
+            "rate": 15,
+            "w": 30,
+            "splash": 50,
+            "armor": "medium",
+            "weaponType": "flame"
+        },
+        "stealth": {
+            "name": "Stealth Tank",
+            "type": "vehicle",
+            "hp": 350,
+            "cost": 1400,
+            "speed": 3.2,
+            "range": 180,
+            "damage": 55,
+            "rate": 50,
+            "w": 28,
+            "armor": "medium",
+            "weaponType": "missile"
         },
         "artillery": {
             "name": "Artillery",
@@ -218,7 +458,36 @@
             "damage": 130,
             "rate": 200,
             "w": 30,
-            "splash": 60
+            "splash": 60,
+            "armor": "light",
+            "weaponType": "heavy_cannon"
+        },
+        "mlrs": {
+            "name": "MLRS",
+            "type": "vehicle",
+            "hp": 250,
+            "cost": 1800,
+            "speed": 1.5,
+            "range": 500,
+            "damage": 100,
+            "rate": 180,
+            "w": 30,
+            "splash": 80,
+            "armor": "light",
+            "weaponType": "missile"
+        },
+        "mammoth": {
+            "name": "Mammoth Tank",
+            "type": "vehicle",
+            "hp": 1200,
+            "cost": 2500,
+            "speed": 1.4,
+            "range": 250,
+            "damage": 120,
+            "rate": 90,
+            "w": 40,
+            "armor": "heavy",
+            "weaponType": "heavy_cannon"
         },
         "heli": {
             "name": "Helicopter",
@@ -230,7 +499,9 @@
             "damage": 45,
             "rate": 25,
             "w": 20,
-            "fly": true
+            "fly": true,
+            "armor": "light",
+            "weaponType": "rocket"
         },
         "mcv": {
             "name": "MCV",
@@ -240,7 +511,106 @@
             "speed": 1.0,
             "range": 0,
             "damage": 0,
-            "w": 45
+            "w": 45,
+            "armor": "heavy"
+        }
+    },
+    "armorTypes": {
+        "none": {},
+        "infantry": {},
+        "light": {},
+        "medium": {},
+        "heavy": {},
+        "building": {}
+    },
+    "damageModifiers": {
+        "bullet": {
+            "none": 1.0,
+            "infantry": 1.0,
+            "light": 0.5,
+            "medium": 0.25,
+            "heavy": 0.1,
+            "building": 0.25
+        },
+        "ap_bullet": {
+            "none": 1.0,
+            "infantry": 0.75,
+            "light": 1.0,
+            "medium": 0.75,
+            "heavy": 0.5,
+            "building": 0.5
+        },
+        "cannon": {
+            "none": 1.0,
+            "infantry": 0.5,
+            "light": 1.0,
+            "medium": 1.0,
+            "heavy": 0.75,
+            "building": 1.0
+        },
+        "heavy_cannon": {
+            "none": 1.0,
+            "infantry": 0.25,
+            "light": 0.75,
+            "medium": 1.0,
+            "heavy": 1.0,
+            "building": 1.25
+        },
+        "rocket": {
+            "none": 1.0,
+            "infantry": 0.5,
+            "light": 1.0,
+            "medium": 1.0,
+            "heavy": 1.0,
+            "building": 1.0
+        },
+        "missile": {
+            "none": 1.0,
+            "infantry": 0.25,
+            "light": 0.75,
+            "medium": 1.0,
+            "heavy": 1.25,
+            "building": 1.0
+        },
+        "flame": {
+            "none": 1.0,
+            "infantry": 1.5,
+            "light": 1.25,
+            "medium": 0.75,
+            "heavy": 0.5,
+            "building": 0.75
+        },
+        "sniper": {
+            "none": 1.0,
+            "infantry": 3.0,
+            "light": 0.5,
+            "medium": 0.25,
+            "heavy": 0.1,
+            "building": 0.1
+        },
+        "laser": {
+            "none": 1.0,
+            "infantry": 1.0,
+            "light": 1.0,
+            "medium": 1.0,
+            "heavy": 1.0,
+            "building": 1.0
+        },
+        "grenade": {
+            "none": 1.0,
+            "infantry": 1.25,
+            "light": 1.0,
+            "medium": 0.75,
+            "heavy": 0.5,
+            "building": 1.0
+        },
+        "heal": {
+            "none": 1.0,
+            "infantry": 1.0,
+            "light": 1.0,
+            "medium": 1.0,
+            "heavy": 1.0,
+            "building": 1.0
         }
     }
 }
