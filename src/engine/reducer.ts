@@ -21,6 +21,7 @@ export const INITIAL_STATE: GameState = {
         0: createPlayerState(0, false),
         1: createPlayerState(1, true)
     },
+    winner: null,
     config: { width: 3000, height: 3000 }
 };
 
@@ -124,9 +125,46 @@ function tick(state: GameState): GameState {
 
     // Filter dead entities
     const finalEntities: Record<EntityId, Entity> = {};
+    const buildingCounts: Record<number, number> = {};
+    const mcvCounts: Record<number, number> = {};
+
+    // Initialize counts for active players
+    for (const pid in nextPlayers) {
+        buildingCounts[pid] = 0;
+        mcvCounts[pid] = 0;
+    }
+
     for (const id in updatedEntities) {
-        if (!updatedEntities[id].dead) {
-            finalEntities[id] = updatedEntities[id];
+        const ent = updatedEntities[id];
+        if (!ent.dead) {
+            finalEntities[id] = ent;
+            if (ent.type === 'BUILDING') {
+                buildingCounts[ent.owner] = (buildingCounts[ent.owner] || 0) + 1;
+            } else if (ent.type === 'UNIT' && ent.key === 'mcv') {
+                mcvCounts[ent.owner] = (mcvCounts[ent.owner] || 0) + 1;
+            }
+        }
+    }
+
+    // Check for win/loss
+    // A player is defeated if they have 0 buildings AND 0 MCVs.
+    // The game ends if only one player remains with assets.
+    // We only check this in game or demo mode to avoid breaking tests.
+    let nextWinner = state.winner;
+    let nextRunning: boolean = state.running;
+
+    if (nextWinner === null && (state.mode === 'game' || state.mode === 'demo')) {
+        const alivePlayers = Object.keys(nextPlayers)
+            .map(Number)
+            .filter(pid => buildingCounts[pid] > 0 || mcvCounts[pid] > 0);
+
+        if (alivePlayers.length === 1) {
+            nextWinner = alivePlayers[0];
+            nextRunning = false; // Stop game on win
+        } else if (alivePlayers.length === 0 && Object.keys(nextPlayers).length > 0) {
+            // Draw or everyone destroyed?
+            nextWinner = -1; // -1 for draw
+            nextRunning = false;
         }
     }
 
@@ -135,7 +173,9 @@ function tick(state: GameState): GameState {
         tick: nextTick,
         entities: finalEntities,
         players: nextPlayers,
-        projectiles: nextProjectiles
+        projectiles: nextProjectiles,
+        winner: nextWinner,
+        running: nextRunning
     };
 }
 
@@ -447,7 +487,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     const ids = Object.keys(entities);
     // Create a mutable list of working copies
     const workingEntities = ids.map(id => ({ ...entities[id] }));
-    const iterations = 2; // Run a few passes for stability
+    const iterations = 4; // Run a few passes for stability
 
     for (let k = 0; k < iterations; k++) {
         for (let i = 0; i < workingEntities.length; i++) {
@@ -480,8 +520,8 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                         let ratioA = 0.5;
                         let ratioB = 0.5;
 
-                        // Use smaller push to reduce backslide
-                        const pushScale = Math.min(overlap, 0.8);
+                        // Use stronger push to counteract movement speed
+                        const pushScale = Math.min(overlap, 2.5);
 
                         if (aMoving && !bMoving) {
                             // A is moving, B is stationary - A yields more
@@ -872,7 +912,7 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
 
     if (needNewPath) {
         // Try A* pathfinding
-        const newPath = findPath(entity.pos, target, entity.radius);
+        const newPath = findPath(entity.pos, target, entity.radius, entity.owner);
         if (newPath && newPath.length > 1) {
             path = newPath;
             pathIdx = 1; // Skip first waypoint (our current position)
@@ -987,12 +1027,12 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
 
     let finalDir = dir;
     if (entityCount > 0 || avoidance.mag() > 0.001) {
-        // Keep-right bias for head-on situations, but reduce it
+        // Keep-right bias for head-on situations
         const right = new Vector(-dir.y, dir.x);
-        const rightBias = entityCount > 0 ? 0.3 : 0;
+        const rightBias = entityCount > 0 ? 0.4 : 0;
 
-        // Reduce separation force significantly - let collision resolution handle overlap
-        finalDir = dir.add(separation.scale(0.5)).add(avoidance).add(right.scale(rightBias)).norm();
+        // Increase separation weight to be more effective
+        finalDir = dir.add(separation.scale(0.8)).add(avoidance).add(right.scale(rightBias)).norm();
     }
 
     return {

@@ -161,6 +161,7 @@ export interface GameState {
 
     readonly players: Record<number, PlayerState>; // Replaces money/power/production
 
+    readonly winner: number | null;
     readonly config: MapConfig;
 }
 

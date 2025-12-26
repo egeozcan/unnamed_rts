@@ -5,6 +5,11 @@ const RULES = rules as any;
 
 // Collision grid
 export const collisionGrid = new Uint8Array(GRID_W * GRID_H);
+// Danger grids for Player 0 and Player 1
+export const dangerGrids: Record<number, Uint8Array> = {
+    0: new Uint8Array(GRID_W * GRID_H), // Danger FOR Player 0 (contains P1 stuff)
+    1: new Uint8Array(GRID_W * GRID_H)  // Danger FOR Player 1 (contains P0 stuff)
+};
 
 export function markGrid(x: number, y: number, w: number, h: number, blocked: boolean): void {
     const gx = Math.floor(x / TILE_SIZE);
@@ -21,12 +26,50 @@ export function markGrid(x: number, y: number, w: number, h: number, blocked: bo
     }
 }
 
+export function markDanger(playerId: number, x: number, y: number, radius: number): void {
+    const gx = Math.floor(x / TILE_SIZE);
+    const gy = Math.floor(y / TILE_SIZE);
+    const gr = Math.ceil(radius / TILE_SIZE);
+
+    // This grid represents danger FOR the given playerId.
+    // So if P1 building, we mark on dangerGrids[0].
+    const grid = dangerGrids[playerId];
+
+    for (let j = gy - gr; j <= gy + gr; j++) {
+        for (let i = gx - gr; i <= gx + gr; i++) {
+            if (i >= 0 && i < GRID_W && j >= 0 && j < GRID_H) {
+                // Circle check
+                const dx = i - gx;
+                const dy = j - gy;
+                if (dx * dx + dy * dy <= gr * gr) {
+                    // Mark as dangerous (e.g. 10 cost)
+                    grid[j * GRID_W + i] = 10;
+                }
+            }
+        }
+    }
+}
+
 export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]): void {
     collisionGrid.fill(0);
+    dangerGrids[0].fill(0);
+    dangerGrids[1].fill(0);
+
     const list = Array.isArray(entities) ? entities : Object.values(entities);
     for (const e of list) {
         if (e.type === 'BUILDING' && !e.dead) {
             markGrid(e.pos.x - e.w / 2, e.pos.y - e.h / 2, e.w, e.h, true);
+
+            // Mark danger if it's a defensive building
+            const data = RULES.buildings[e.key];
+            if (data && data.isDefense && e.owner !== -1) {
+                // Mark danger on the ENEMY's danger map
+                const range = (data.range || 200);
+                // If I am P0, I create danger for P1.
+                // If I am P1, I create danger for P0.
+                if (e.owner === 0) markDanger(1, e.pos.x, e.pos.y, range);
+                if (e.owner === 1) markDanger(0, e.pos.x, e.pos.y, range);
+            }
         }
         // Optional: Mark resources as blocked? 
         // Ore is small, maybe walkable? 
@@ -229,7 +272,7 @@ class MinHeap {
     }
 }
 
-export function findPath(start: Vector, goal: Vector, entityRadius: number = 10): Vector[] | null {
+export function findPath(start: Vector, goal: Vector, entityRadius: number = 10, ownerId?: number): Vector[] | null {
     // Convert world coordinates to grid coordinates
     const startGx = Math.floor(start.x / TILE_SIZE);
     const startGy = Math.floor(start.y / TILE_SIZE);
@@ -275,6 +318,7 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10)
     const openSet = new MinHeap();
     const closedSet = new Set<string>();
     const openMap = new Map<string, PathNode>();
+    const dangerGrid = ownerId !== undefined ? dangerGrids[ownerId] : null;
 
     const startNode: PathNode = {
         x: startGx,
@@ -302,7 +346,7 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10)
     ];
 
     let iterations = 0;
-    const maxIterations = 1000; // Prevent infinite loops
+    const maxIterations = 2000; // Increased because danger might force longer paths
 
     while (!openSet.isEmpty() && iterations < maxIterations) {
         iterations++;
@@ -331,7 +375,10 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10)
             path.push(goal);
 
             // Smooth path - remove intermediate waypoints that are in direct line of sight
-            return smoothPath(path, entityRadius);
+            // NOTE: Smoothing might cut through danger zones if not careful.
+            // For now, keep smoothing but maybe basic hasLineOfSight should check danger?
+            // If I omit danger check in LoS, units might smooth "across" a danger zone.
+            return smoothPath(path, entityRadius, ownerId);
         }
 
         closedSet.add(currentKey);
@@ -353,7 +400,13 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10)
                 if (corner1 === 1 || corner2 === 1) continue; // Don't cut corners
             }
 
-            const g = current.g + dir.cost;
+            // Calculate heuristic cost modifier for danger
+            let dangerCost = 0;
+            if (dangerGrid) {
+                dangerCost = dangerGrid[ny * GRID_W + nx];
+            }
+
+            const g = current.g + dir.cost + dangerCost;
             const existingNode = openMap.get(neighborKey);
 
             if (!existingNode || g < existingNode.g) {
@@ -384,7 +437,7 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10)
     return null;
 }
 
-function smoothPath(path: Vector[], entityRadius: number): Vector[] {
+function smoothPath(path: Vector[], entityRadius: number, ownerId?: number): Vector[] {
     if (path.length <= 2) return path;
 
     const smoothed: Vector[] = [path[0]];
@@ -394,7 +447,7 @@ function smoothPath(path: Vector[], entityRadius: number): Vector[] {
         // Find the furthest visible waypoint
         let furthest = current + 1;
         for (let i = current + 2; i < path.length; i++) {
-            if (hasLineOfSight(path[current], path[i], entityRadius)) {
+            if (hasLineOfSight(path[current], path[i], entityRadius, ownerId)) {
                 furthest = i;
             }
         }
@@ -405,9 +458,10 @@ function smoothPath(path: Vector[], entityRadius: number): Vector[] {
     return smoothed;
 }
 
-function hasLineOfSight(from: Vector, to: Vector, entityRadius: number): boolean {
+function hasLineOfSight(from: Vector, to: Vector, entityRadius: number, ownerId?: number): boolean {
     const dist = from.dist(to);
     const steps = Math.ceil(dist / (TILE_SIZE / 2));
+    const dangerGrid = ownerId !== undefined ? dangerGrids[ownerId] : null;
 
     for (let i = 0; i <= steps; i++) {
         const t = i / steps;
@@ -428,7 +482,12 @@ function hasLineOfSight(from: Vector, to: Vector, entityRadius: number): boolean
             const gy = Math.floor((y + offset.dy) / TILE_SIZE);
 
             if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
-                if (collisionGrid[gy * GRID_W + gx] === 1) {
+                const idx = gy * GRID_W + gx;
+                if (collisionGrid[idx] === 1) {
+                    return false;
+                }
+                // Check danger
+                if (dangerGrid && dangerGrid[idx] > 0) {
                     return false;
                 }
             }

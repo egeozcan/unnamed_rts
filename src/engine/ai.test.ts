@@ -846,4 +846,125 @@ describe('AI System', () => {
             expect(attackAction?.payload.unitIds.length).toBeGreaterThanOrEqual(ATTACK_GROUP_MIN_SIZE);
         });
     });
+
+    describe('Building Placement', () => {
+        it('should place buildings without overlapping existing ones', () => {
+            const entities: Record<EntityId, Entity> = {};
+            // Conyard (90x90) at 500, 500
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500, { w: 90, h: 90 });
+            // Power plant (60x60) very close to the right
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 500 + 80, 500, { w: 60, h: 60 });
+
+            let state = createTestState(entities);
+            // AI wants to place another power plant
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: {
+                        ...state.players[1],
+                        readyToPlace: 'power'
+                    }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                const w = 60; // Power plant size
+                const h = 60;
+
+                // Check overlap with conyard
+                const cy = entities['conyard'];
+                const overlapConyard = Math.abs(x - cy.pos.x) < (w / 2 + cy.w / 2) &&
+                    Math.abs(y - cy.pos.y) < (h / 2 + cy.h / 2);
+                expect(overlapConyard).toBe(false);
+
+                // Check overlap with existing power plant
+                const p = entities['power'];
+                const overlapPower = Math.abs(x - p.pos.x) < (w / 2 + p.w / 2) &&
+                    Math.abs(y - p.pos.y) < (h / 2 + p.h / 2);
+                expect(overlapPower).toBe(false);
+            }
+        });
+
+        it('should place refinery near resources', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Resource far away
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 1000, 1000);
+
+            let state = createTestState(entities);
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: { ...state.players[1], readyToPlace: 'refinery' }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                // Should be much closer to ore (1000,1000) than conyard (500,500)
+                const distToOre = new Vector(x, y).dist(new Vector(1000, 1000));
+                const distToBase = new Vector(x, y).dist(new Vector(500, 500));
+
+                expect(distToOre).toBeLessThan(250); // Within reasonable range of ore
+                expect(distToOre).toBeLessThan(distToBase); // Closer to ore than base
+            }
+        });
+
+        it('should avoid placing buildings in refinery docking zones', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            // Refinery at 600, 600
+            entities['refinery'] = createEntity('refinery', 1, 'BUILDING', 'refinery', 600, 600, { w: 100, h: 80 });
+
+            // Dock zone is roughly at (600, 600 + 40..100) -> (600, 640..700)
+
+            let state = createTestState(entities);
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: { ...state.players[1], readyToPlace: 'power' } // Try to place power plant
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                const w = 60;
+                const h = 60;
+
+                const myRect = {
+                    l: x - w / 2,
+                    r: x + w / 2,
+                    t: y - h / 2,
+                    b: y + h / 2
+                };
+
+                const dockRect = {
+                    l: 600 - 30,
+                    r: 600 + 30,
+                    t: 600 + 40,
+                    b: 600 + 100
+                };
+
+                const overlap = !(dockRect.l > myRect.r || dockRect.r < myRect.l || dockRect.t > myRect.b || dockRect.b < myRect.t);
+                expect(overlap).toBe(false);
+            }
+        });
+    });
 });

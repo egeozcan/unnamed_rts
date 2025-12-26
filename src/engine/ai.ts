@@ -116,7 +116,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleEconomy(state, playerId, myBuildings, player, personality));
 
     // 2. Handle harvester defense/fleeing
-    actions.push(...handleHarvesterSafety(state, playerId, myHarvesters, baseCenter, enemies));
+    actions.push(...handleHarvesterSafety(state, playerId, myHarvesters, myCombatUnits, baseCenter, enemies, aiState));
 
     // 3. Handle base defense (always check, strategy just goes into full defense mode)
     if (aiState.strategy === 'defend' || threatsNearBase.length > 0) {
@@ -326,46 +326,178 @@ function handleHarvesterSafety(
     state: GameState,
     _playerId: number,
     harvesters: Entity[],
+    combatUnits: Entity[],
     baseCenter: Vector,
-    enemies: Entity[]
+    enemies: Entity[],
+    aiState: AIPlayerState
 ): Action[] {
     const actions: Action[] = [];
+
+    // Tracks which enemies are already being targeted by a defender in this tick
+    const enemiesTargeted = new Set<EntityId>();
 
     for (const harv of harvesters) {
         // Check if harvester is under threat
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
 
-        for (const enemy of enemies) {
-            if (enemy.type !== 'UNIT') continue;
-            const dist = enemy.pos.dist(harv.pos);
-            if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
-                nearestDist = dist;
-                nearestThreat = enemy;
+        // Prioritize the last attacker
+        if (harv.lastAttackerId) {
+            const attacker = state.entities[harv.lastAttackerId];
+            if (attacker && !attacker.dead) {
+                // Verify distance - if they ran away, maybe stop worrying
+                if (attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
+                    nearestThreat = attacker;
+                    nearestDist = attacker.pos.dist(harv.pos);
+                }
             }
         }
 
-        // Also check if recently attacked
-        if (harv.lastAttackerId && !nearestThreat) {
-            const attacker = state.entities[harv.lastAttackerId];
-            if (attacker && !attacker.dead) {
-                nearestThreat = attacker;
+        // Scan for nearby unit threats if no direct attacker yet
+        if (!nearestThreat) {
+            for (const enemy of enemies) {
+                if (enemy.type !== 'UNIT') continue;
+                const dist = enemy.pos.dist(harv.pos);
+                if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestThreat = enemy;
+                }
             }
         }
 
         if (nearestThreat) {
-            // Flee toward base
-            const fleeDir = harv.pos.sub(nearestThreat.pos).norm();
-            const fleeTarget = baseCenter.add(fleeDir.scale(100));
+            // Smart Flee: Try to find a safe resource area
+            // 1. Identify all friendly refineries
+            const refineries = state.entities ? Object.values(state.entities).filter(e => e.owner === harv.owner && e.key === 'refinery' && !e.dead) : [];
+
+            let bestSafeSpot: Vector | null = null;
+            let bestSafeScore = -Infinity;
+
+            for (const ref of refineries) {
+                // Check safety of this refinery area
+                // Distance to nearest threat
+                let threatDist = Infinity;
+                for (const enemy of enemies) {
+                    // Check main enemies list
+                    const d = enemy.pos.dist(ref.pos);
+                    if (d < threatDist) threatDist = d;
+                }
+
+                // Also check if this refinery is close to the CURRENT threat
+                const distToCurrentThreat = ref.pos.dist(nearestThreat.pos);
+                if (distToCurrentThreat < threatDist) threatDist = distToCurrentThreat;
+
+                // If refinery is under threat, skip it
+                if (threatDist < 500) continue;
+
+                // Score this spot
+                // Prefer closer spots (travel time) but MUST be safe
+                // Score = ThreatDist - TravelDist
+                const travelDist = harv.pos.dist(ref.pos);
+                const score = threatDist * 2 - travelDist;
+
+                if (score > bestSafeScore) {
+                    bestSafeScore = score;
+                    // Target a resource near this refinery if possible
+                    // Or just the refinery dock area
+                    // Find resource near ref
+                    const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+                    let closestRes: Entity | null = null;
+                    let minResDist = Infinity;
+                    for (const res of resources) {
+                        const rd = res.pos.dist(ref.pos);
+                        if (rd < 300 && rd < minResDist) {
+                            minResDist = rd;
+                            closestRes = res;
+                        }
+                    }
+
+                    if (closestRes) {
+                        bestSafeSpot = closestRes.pos;
+                    } else {
+                        bestSafeSpot = ref.pos.add(new Vector(0, 60)); // Dock pos
+                    }
+                }
+            }
+
+            let moveTarget: Vector;
+
+            if (bestSafeSpot) {
+                moveTarget = bestSafeSpot;
+            } else {
+                // Fallback: Run Home / Away
+                // 1. Flee toward base
+                const runAwayPos = harv.pos.add(harv.pos.sub(nearestThreat.pos).norm().scale(150));
+                // Bias towards base to avoid running into map corners forever
+                const distToBase = harv.pos.dist(baseCenter);
+                moveTarget = runAwayPos;
+
+                if (distToBase > 300) {
+                    // Vector to base
+                    const toBase = baseCenter.sub(harv.pos).norm();
+                    // Vector away from threat
+                    const awayThreat = harv.pos.sub(nearestThreat.pos).norm();
+                    // Average them
+                    const safeDir = toBase.add(awayThreat).norm();
+                    moveTarget = harv.pos.add(safeDir.scale(150));
+                }
+            }
 
             actions.push({
                 type: 'COMMAND_MOVE',
                 payload: {
                     unitIds: [harv.id],
-                    x: fleeTarget.x,
-                    y: fleeTarget.y
+                    x: moveTarget.x,
+                    y: moveTarget.y
                 }
             });
+
+            // 2. Dispatch Defenders
+            if (!enemiesTargeted.has(nearestThreat.id)) {
+                // Find nearest idle combat unit
+                // Filter units that are NOT in a critical group or are idle
+                // We can pull from the attack group if it's not attacking yet?
+                // Simplest: Find nearest combat unit that isn't already doing something critical.
+                // Or just grab ANY nearest combat unit.
+
+                let potentialDefenders = combatUnits.filter(u =>
+                    !u.targetId && // Not currently attacking
+                    u.key !== 'harvester' // Should be filtered by combatUnits arg but double check
+                );
+
+                if (potentialDefenders.length === 0) {
+                    // Steal from attack group if desperate?
+                    if (aiState.attackGroup.length > 0) {
+                        potentialDefenders = combatUnits.filter(u => aiState.attackGroup.includes(u.id));
+                    }
+                }
+
+                let bestDefender: EntityId | null = null;
+                let bestDefDist = Infinity;
+
+                for (const defender of potentialDefenders) {
+                    const d = defender.pos.dist(nearestThreat.pos);
+                    if (d < bestDefDist) {
+                        bestDefDist = d;
+                        bestDefender = defender.id;
+                    }
+                }
+
+                if (bestDefender) {
+                    // Limit distance? If defender is across the map, maybe not.
+                    // But if it's the only one, might as well come.
+                    if (bestDefDist < 2000) {
+                        actions.push({
+                            type: 'COMMAND_ATTACK',
+                            payload: {
+                                unitIds: [bestDefender],
+                                targetId: nearestThreat.id
+                            }
+                        });
+                        enemiesTargeted.add(nearestThreat.id);
+                    }
+                }
+            }
         }
     }
 
@@ -384,10 +516,21 @@ function handleDefense(
     if (threats.length === 0) return actions;
 
     // Get idle units near base or all units if base under heavy attack
+    // Get idle units near base or all units if base under heavy attack
     const heavyAttack = threats.length >= 3;
     const defenders = heavyAttack
         ? combatUnits.filter(u => !u.targetId || threats.includes(u.targetId))
-        : combatUnits.filter(u => !u.targetId && u.pos.dist(baseCenter) < BASE_DEFENSE_RADIUS * 1.5);
+        : combatUnits.filter(u => {
+            if (u.targetId) return false;
+            // Local defense: Is this unit near ANY threat?
+            // Or near base center?
+            if (u.pos.dist(baseCenter) < BASE_DEFENSE_RADIUS * 1.5) return true;
+            // Check proximity to threats
+            return threats.some(tid => {
+                const t = state.entities[tid];
+                return t && !t.dead && u.pos.dist(t.pos) < 1000;
+            });
+        });
 
     if (defenders.length === 0) return actions;
 
@@ -707,28 +850,182 @@ function handleBuildingPlacement(
     player: any
 ): Action[] {
     const actions: Action[] = [];
+    const key = player.readyToPlace;
+    if (!key) return actions;
+
+    const buildingData = RULES.buildings[key];
+    if (!buildingData) {
+        actions.push({ type: 'CANCEL_BUILD', payload: { category: 'building', playerId } });
+        return actions;
+    }
 
     const conyard = buildings.find(b => b.key === 'conyard') || buildings[0];
-    if (!conyard) return actions;
+    const center = conyard ? conyard.pos : new Vector(300, 300);
 
-    // Try multiple spots with better placement logic
-    for (let i = 0; i < 15; i++) {
+    // Candidates for placement
+    let bestSpot: { x: number, y: number } | null = null;
+    let bestScore = -Infinity;
+
+    // Strategies based on building type
+    let searchCenter = center;
+    let searchRadiusMin = 100;
+    let searchRadiusMax = 300;
+
+    if (key === 'refinery') {
+        const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+        let bestOre: Entity | null = null;
+        let minDist = Infinity;
+
+        for (const ore of resources) {
+            const dist = ore.pos.dist(center);
+            // Check GLOBAL refineries (including enemy)
+            const allEntities = Object.values(state.entities);
+            const hasRefinery = allEntities.some(b =>
+                b.type === 'BUILDING' &&
+                b.key === 'refinery' &&
+                !b.dead &&
+                b.pos.dist(ore.pos) < 200
+            );
+
+            // Prefer nearest ore that doesn't already have a refinery
+            let effectiveDist = dist;
+            if (hasRefinery) effectiveDist += 5000;
+
+            if (effectiveDist < minDist) {
+                minDist = effectiveDist;
+                bestOre = ore;
+            }
+        }
+
+        if (bestOre) {
+            searchCenter = bestOre.pos;
+            searchRadiusMin = 80;
+            searchRadiusMax = 180;
+        }
+    } else if (key === 'barracks' || key === 'factory') {
+        searchRadiusMin = 120;
+        searchRadiusMax = 350;
+    }
+
+    // Try multiple spots
+    const attempts = 50;
+    for (let i = 0; i < attempts; i++) {
         const ang = Math.random() * Math.PI * 2;
-        const dist = 100 + Math.random() * 150;
-        const x = conyard.pos.x + Math.cos(ang) * dist;
-        const y = conyard.pos.y + Math.sin(ang) * dist;
+        const dist = searchRadiusMin + Math.random() * (searchRadiusMax - searchRadiusMin);
+        const x = searchCenter.x + Math.cos(ang) * dist;
+        const y = searchCenter.y + Math.sin(ang) * dist;
 
-        // Basic bounds check
-        if (x > 50 && x < state.config.width - 50 && y > 50 && y < state.config.height - 50) {
-            actions.push({
-                type: 'PLACE_BUILDING',
-                payload: { key: player.readyToPlace, x, y, playerId }
-            });
-            break;
+        if (isValidPlacement(x, y, buildingData.w, buildingData.h, state, buildings, key)) {
+            let score = 0;
+
+            const distToCenter = new Vector(x, y).dist(searchCenter);
+            if (key === 'refinery') {
+                score -= distToCenter;
+            } else {
+                score -= new Vector(x, y).dist(center) * 0.5;
+            }
+
+            // Margin/Spacing preference
+            let nearestBldgDist = Infinity;
+            for (const b of buildings) {
+                const d = b.pos.dist(new Vector(x, y));
+                if (d < nearestBldgDist) nearestBldgDist = d;
+            }
+            if (nearestBldgDist < 80) score -= (80 - nearestBldgDist) * 2;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestSpot = { x, y };
+            }
         }
     }
 
+    if (bestSpot) {
+        actions.push({
+            type: 'PLACE_BUILDING',
+            payload: { key: key, x: bestSpot.x, y: bestSpot.y, playerId }
+        });
+    }
+
     return actions;
+}
+
+function isValidPlacement(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    state: GameState,
+    _myBuildings: Entity[],
+    buildingKey: string
+): boolean {
+    const margin = 25;
+    const mapMargin = 50;
+
+    if (x < mapMargin || x > state.config.width - mapMargin ||
+        y < mapMargin || y > state.config.height - mapMargin) {
+        return false;
+    }
+
+    const myRect = {
+        l: x - w / 2 - margin,
+        r: x + w / 2 + margin,
+        t: y - h / 2 - margin,
+        b: y + h / 2 + margin
+    };
+
+    const entities = Object.values(state.entities);
+    for (const e of entities) {
+        if (e.dead) continue;
+        if (e.type === 'BUILDING' || e.type === 'RESOURCE') {
+            const eRect = {
+                l: e.pos.x - e.w / 2,
+                r: e.pos.x + e.w / 2,
+                t: e.pos.y - e.h / 2,
+                b: e.pos.y + e.h / 2
+            };
+
+            if (rectOverlap(myRect, eRect)) return false;
+        }
+
+        if (e.key === 'refinery' && e.type === 'BUILDING') {
+            const dockRect = {
+                l: e.pos.x - 30,
+                r: e.pos.x + 30,
+                t: e.pos.y + 40,
+                b: e.pos.y + 100
+            };
+            if (rectOverlap(myRect, dockRect)) return false;
+        }
+    }
+
+    if (buildingKey === 'refinery') {
+        const myDockRect = {
+            l: x - 30,
+            r: x + 30,
+            t: y + 40,
+            b: y + 100
+        };
+
+        for (const e of entities) {
+            if (e.dead) continue;
+            if (e.type === 'BUILDING' || e.type === 'RESOURCE') {
+                const eRect = {
+                    l: e.pos.x - e.w / 2,
+                    r: e.pos.x + e.w / 2,
+                    t: e.pos.y - e.h / 2,
+                    b: e.pos.y + e.h / 2
+                };
+                if (rectOverlap(myDockRect, eRect)) return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function rectOverlap(r1: { l: number, r: number, t: number, b: number }, r2: { l: number, r: number, t: number, b: number }): boolean {
+    return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
 }
 
 // Export internal functions for testing

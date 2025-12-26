@@ -223,7 +223,10 @@ function updateButtonsUI() {
 }
 
 function gameLoop() {
-    if (!currentState.running) return;
+    if (!currentState.running) {
+        checkWinCondition();
+        return;
+    }
 
     // AI Logic
     const aiActions = computeAiActions(currentState, 1);
@@ -251,9 +254,6 @@ function gameLoop() {
     // Expose state for debugging
     (window as any).GAME_STATE = currentState;
 
-    if (currentState.tick % 60 === 0) {
-        checkWinCondition();
-    }
 
     // Camera & Zoom Input
     const input = getInputState();
@@ -312,7 +312,23 @@ function calculatePower(pid: number, entities: Record<EntityId, any>) {
 }
 
 function checkWinCondition() {
-    // Check if player has no buildings/units left?
+    if (currentState.winner !== null) {
+        const endScreen = document.getElementById('end-screen');
+        const endTitle = document.getElementById('end-title');
+        if (endScreen && endTitle) {
+            endScreen.classList.add('visible');
+            if (currentState.winner === 0) {
+                endTitle.textContent = 'MISSION ACCOMPLISHED';
+                endTitle.style.color = '#44ff88';
+            } else if (currentState.winner === 1) {
+                endTitle.textContent = 'MISSION FAILED';
+                endTitle.style.color = '#ff4444';
+            } else {
+                endTitle.textContent = 'DRAW';
+                endTitle.style.color = '#ffffff';
+            }
+        }
+    }
 }
 
 (window as any).startGame = startGame;
