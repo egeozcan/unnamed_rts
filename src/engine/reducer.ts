@@ -17,6 +17,7 @@ export const INITIAL_STATE: GameState = {
     particles: [],
     selection: [],
     placingBuilding: null,
+    sellMode: false,
     players: {
         0: createPlayerState(0, false),
         1: createPlayerState(1, true)
@@ -58,6 +59,10 @@ export function update(state: GameState, action: Action): GameState {
             return commandAttack(state, action.payload);
         case 'SELECT_UNITS':
             return { ...state, selection: action.payload };
+        case 'SELL_BUILDING':
+            return sellBuilding(state, action.payload);
+        case 'TOGGLE_SELL_MODE':
+            return { ...state, sellMode: !state.sellMode };
         default:
             return state;
     }
@@ -378,6 +383,43 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
         placingBuilding: null
     };
 }
+
+function sellBuilding(state: GameState, payload: { buildingId: EntityId; playerId: number }): GameState {
+    const { buildingId, playerId } = payload;
+    const building = state.entities[buildingId];
+    if (!building || building.owner !== playerId || building.type !== 'BUILDING' || building.dead) {
+        return state;
+    }
+
+    const player = state.players[playerId];
+    if (!player) return state;
+
+    const buildingData = RULES.buildings[building.key];
+    if (!buildingData) return state;
+
+    const sellPercentage = RULES.economy?.sellBuildingReturnPercentage || 0.5;
+    const refund = Math.floor(buildingData.cost * sellPercentage * (building.hp / building.maxHp));
+
+    const nextEntities = { ...state.entities };
+    delete nextEntities[buildingId];
+
+    // Also clear from selection if it was selected
+    const nextSelection = state.selection.filter(id => id !== buildingId);
+
+    return {
+        ...state,
+        entities: nextEntities,
+        selection: nextSelection,
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                credits: player.credits + refund
+            }
+        }
+    };
+}
+
 
 function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number; y: number }): GameState {
     const { unitIds, x, y } = payload;

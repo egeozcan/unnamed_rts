@@ -29,8 +29,11 @@
         <div id="money-display">$ 0</div>
         <div id="power-display">Power: 0/0</div>
         <div id="minimap-container">
-          <canvas id="minimapCanvas" width="250" height="200"></canvas>
+          <canvas id="minimapCanvas"></canvas>
           <div id="low-power-warning">LOW POWER</div>
+        </div>
+        <div id="sell-container" class="sell-container">
+          <button id="sell-btn" class="sell-btn">SELL MODE</button>
         </div>
       </div>
 
@@ -54,7 +57,7 @@
         </div>
       </div>
 
-      <div class="sidebar-content">
+      <div id="sidebar-tabs" class="sidebar-content">
         <div id="tab-buildings" class="btn-grid active"></div>
         <div id="tab-infantry" class="btn-grid"></div>
         <div id="tab-vehicles" class="btn-grid"></div>

@@ -112,7 +112,10 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Execute strategy-specific actions
 
-    // 1. Always handle economy first
+    // 1. Always check for emergency selling if cash is low
+    actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
+
+    // 2. Always handle economy
     actions.push(...handleEconomy(state, playerId, myBuildings, player, personality));
 
     // 2. Handle harvester defense/fleeing
@@ -1028,6 +1031,95 @@ function rectOverlap(r1: { l: number, r: number, t: number, b: number }, r2: { l
     return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
 }
 
+function handleEmergencySell(
+    _state: GameState,
+    playerId: number,
+    buildings: Entity[],
+    player: any,
+    aiState: AIPlayerState
+): Action[] {
+    const actions: Action[] = [];
+    const REFINERY_COST = RULES.buildings.refinery.cost;
+
+    // 1. Identify Critical Needs
+    const hasRefinery = buildings.some(b => b.key === 'refinery');
+    const hasConyard = buildings.some(b => b.key === 'conyard');
+
+    // If we have no refinery and exist logic didn't build one (likely due to funds), consider selling
+    const needsRefinery = hasConyard && !hasRefinery && player.credits < REFINERY_COST;
+
+    // 2. Define Sell Candidates with Priority
+    // Lower index = Higher priority to sell
+    const sellPriority = ['turret', 'tech', 'barracks', 'factory', 'power'];
+
+    let shouldSell = false;
+    let candidates: Entity[] = [];
+
+    // Condition A: Critical Low Funds (Classic Emergency)
+    const criticalLow = player.credits <= 200;
+    const underAttack = aiState.threatsNearBase.length > 0 || aiState.harvestersUnderAttack.length > 0;
+
+    if (criticalLow && (underAttack || player.credits <= 50)) {
+        shouldSell = true;
+        // Sell anything except critical
+        const critical = ['conyard', 'refinery'];
+        candidates = buildings.filter(b => !critical.includes(b.key));
+        // Sort by HP (damage)
+        candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp));
+    }
+
+    // Condition B: Need Refinery (Strategic Sell)
+    if (!shouldSell && needsRefinery) {
+        // Only sell if existing funds + potential sell gives us enough?
+        // Actually, just sell one by one until we have enough.
+        // But don't sell if we have NO chance of affording it (e.g. need 2000, have 0, only have 1 turret worth 400).
+        // For now, let's just be aggressive: if we need a refinery, sell non-essential stuff.
+
+        shouldSell = true;
+
+        // Filter candidates based on priority
+        // We keep Conyard and at least one Power Plant (unless valid fallback)
+        const powerPlants = buildings.filter(b => b.key === 'power');
+
+        candidates = buildings.filter(b => {
+            if (b.key === 'conyard') return false;
+            if (b.key === 'refinery') return false; // Should be none, but for safety
+            if (b.key === 'power' && powerPlants.length <= 1) return false; // Keep last power
+            return true;
+        });
+
+        // Sort candidates by priority
+        candidates.sort((a, b) => {
+            const pA = sellPriority.indexOf(a.key);
+            const pB = sellPriority.indexOf(b.key);
+            // If both not in priority list (unknown), treat as low priority (high index)
+            const idxA = pA === -1 ? 99 : pA;
+            const idxB = pB === -1 ? 99 : pB;
+
+            if (idxA !== idxB) return idxA - idxB;
+
+            // Tie-break: Sell most expensive (to get money faster)? Or least expensive?
+            // Creating a refinery is vital. Sell high value stuff.
+            const costA = RULES.buildings[a.key]?.cost || 0;
+            const costB = RULES.buildings[b.key]?.cost || 0;
+            return costB - costA;
+        });
+    }
+
+    if (shouldSell && candidates.length > 0) {
+        const toSell = candidates[0];
+        actions.push({
+            type: 'SELL_BUILDING',
+            payload: {
+                buildingId: toSell.id,
+                playerId
+            }
+        });
+    }
+
+    return actions;
+}
+
 // Export internal functions for testing
 export const _testUtils = {
     findBaseCenter,
@@ -1038,6 +1130,7 @@ export const _testUtils = {
     handleHarass,
     handleRally,
     handleHarvesterSafety,
+    handleEmergencySell,
     getAIState,
     getGroupCenter,
     updateEnemyBaseLocation,

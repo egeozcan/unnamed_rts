@@ -219,15 +219,31 @@ canvas#gameCanvas {
 
 /* Animations */
 @keyframes pulse {
-    0% { box-shadow: 0 0 5px #0f0 inset; }
-    50% { box-shadow: 0 0 15px #0f0 inset; }
-    100% { box-shadow: 0 0 5px #0f0 inset; }
+    0% {
+        box-shadow: 0 0 5px #0f0 inset;
+    }
+
+    50% {
+        box-shadow: 0 0 15px #0f0 inset;
+    }
+
+    100% {
+        box-shadow: 0 0 5px #0f0 inset;
+    }
 }
 
 @keyframes flash {
-    0% { opacity: 1; }
-    50% { opacity: 0.2; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.2;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 /* Money and Power */
@@ -259,6 +275,56 @@ canvas#gameCanvas {
     white-space: nowrap;
     overflow: hidden;
     border-top: 1px solid #444;
+}
+
+/* Sell Button */
+.sell-container {
+    padding: 10px 0;
+    margin-top: 10px;
+    border-top: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+}
+
+.sell-container.visible {
+    display: flex;
+}
+
+.sell-btn {
+    background: #400;
+    color: #f66;
+    border: 1px solid #800;
+    padding: 10px;
+    cursor: pointer;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    transition: 0.2s;
+    width: 100%;
+}
+
+.sell-btn:hover {
+    background: #800;
+    color: #fff;
+    box-shadow: 0 0 10px #f00;
+}
+
+.sell-btn.active {
+    background: #f00;
+    color: #fff;
+    box-shadow: 0 0 20px #f00, 0 0 5px #fff;
+    animation: flash 1s infinite;
+}
+
+.sell-info {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+}
+
+/* Sell Mode Cursor on Game Canvas */
+#gameCanvas.sell-mode {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="red" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>') 16 16, crosshair;
 }
 
 /* Menu and End Screen */

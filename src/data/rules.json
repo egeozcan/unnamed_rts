@@ -1,4 +1,7 @@
 {
+    "economy": {
+        "sellBuildingReturnPercentage": 0.5
+    },
     "meta": {
         "version": "1.0",
         "factions": [

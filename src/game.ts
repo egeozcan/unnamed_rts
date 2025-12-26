@@ -2,7 +2,7 @@ import { INITIAL_STATE, update } from './engine/reducer.js';
 import { GameState, Vector, EntityId, MAP_WIDTH, MAP_HEIGHT } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI } from './ui/index.js';
 import { initMinimap, renderMinimap } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
@@ -99,7 +99,7 @@ function startGame(mode: string) {
     currentState = state;
 
     // Initialize UI
-    initUI(currentState, handleBuildClick);
+    initUI(currentState, handleBuildClick, handleToggleSellMode);
     initMinimap();
 
     // Initialize input
@@ -131,8 +131,30 @@ function handleBuildClick(category: string, key: string) {
     updateButtonsUI();
 }
 
+function handleToggleSellMode() {
+    if (currentState.mode === 'demo') return;
+    currentState = update(currentState, { type: 'TOGGLE_SELL_MODE' });
+    updateButtonsUI();
+}
+
 function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x1: number; y1: number; x2: number; y2: number }) {
     if (currentState.mode === 'demo') return;
+
+    // Sell Mode
+    if (currentState.sellMode) {
+        const entityList = Object.values(currentState.entities);
+        const clicked = entityList.find(e =>
+            !e.dead && e.owner === 0 && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+        );
+        if (clicked) {
+            currentState = update(currentState, {
+                type: 'SELL_BUILDING',
+                payload: { buildingId: clicked.id, playerId: 0 }
+            });
+            updateButtonsUI();
+        }
+        return;
+    }
 
     // Building placement
     if (currentState.placingBuilding) {
@@ -167,10 +189,18 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     }
 
     currentState = update(currentState, { type: 'SELECT_UNITS', payload: newSelection });
+    updateButtonsUI();
 }
 
 function handleRightClick(wx: number, wy: number) {
     if (currentState.mode === 'demo') return;
+
+    // Cancel sell mode
+    if (currentState.sellMode) {
+        currentState = update(currentState, { type: 'TOGGLE_SELL_MODE' });
+        updateButtonsUI();
+        return;
+    }
 
     // Cancel placement
     if (currentState.placingBuilding) {
@@ -220,6 +250,7 @@ function updateButtonsUI() {
         currentState.players[0].readyToPlace,
         currentState.placingBuilding
     );
+    updateSellModeUI(currentState);
 }
 
 function gameLoop() {

@@ -146,6 +146,7 @@ export interface Power {
 export interface GameState {
     readonly running: boolean;
     readonly mode: GameMode;
+    readonly sellMode: boolean;
     readonly difficulty: 'easy' | 'hard';
     readonly tick: number;
 
@@ -172,7 +173,9 @@ export type ActionType =
     | 'START_BUILD'
     | 'PLACE_BUILDING'
     | 'CANCEL_BUILD'
-    | 'SELECT_UNITS';
+    | 'SELECT_UNITS'
+    | 'SELL_BUILDING'
+    | 'TOGGLE_SELL_MODE';
 
 export interface Action {
     type: ActionType;

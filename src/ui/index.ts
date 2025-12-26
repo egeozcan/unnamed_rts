@@ -5,13 +5,22 @@ const RULES = rules as any;
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string) => void) | null = null;
+let onToggleSellMode: (() => void) | null = null;
 
 
-export function initUI(state: GameState, buildCallback: (category: string, key: string) => void) {
+export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void) {
     gameState = state;
-    onBuildClick = buildCallback;
+    onBuildClick = buildBy;
+    onToggleSellMode = toggleSell;
     setupTabs();
     setupButtons();
+
+    const sellBtn = document.getElementById('sell-btn');
+    if (sellBtn) {
+        sellBtn.onclick = () => {
+            if (onToggleSellMode) onToggleSellMode();
+        };
+    }
 }
 
 function setupTabs() {
@@ -169,6 +178,28 @@ export function updateButtons(
                     if (status) status.innerText = 'PLACING';
                 }
             }
+        }
+    }
+}
+
+export function updateSellModeUI(state: GameState) {
+    gameState = state;
+    const btn = document.getElementById('sell-btn');
+    const canvas = document.getElementById('gameCanvas');
+
+    if (btn) {
+        if (state.sellMode) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    }
+
+    if (canvas) {
+        if (state.sellMode) {
+            canvas.classList.add('sell-mode');
+        } else {
+            canvas.classList.remove('sell-mode');
         }
     }
 }

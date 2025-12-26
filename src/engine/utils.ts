@@ -38,12 +38,17 @@ export function markDanger(playerId: number, x: number, y: number, radius: numbe
     for (let j = gy - gr; j <= gy + gr; j++) {
         for (let i = gx - gr; i <= gx + gr; i++) {
             if (i >= 0 && i < GRID_W && j >= 0 && j < GRID_H) {
-                // Circle check
+                // Circle check with distance
                 const dx = i - gx;
                 const dy = j - gy;
-                if (dx * dx + dy * dy <= gr * gr) {
-                    // Mark as dangerous (e.g. 10 cost)
-                    grid[j * GRID_W + i] = 10;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= gr * gr) {
+                    // Gradient danger cost: higher closer to the center
+                    // Center of danger = 100 cost, edge = 50 cost
+                    const distRatio = Math.sqrt(distSq) / gr; // 0 at center, 1 at edge
+                    const dangerCost = Math.floor(100 - 50 * distRatio);
+                    // Use max in case of overlapping danger zones
+                    grid[j * GRID_W + i] = Math.max(grid[j * GRID_W + i], dangerCost);
                 }
             }
         }
