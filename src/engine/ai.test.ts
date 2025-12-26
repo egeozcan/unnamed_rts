@@ -895,8 +895,8 @@ describe('AI System', () => {
             const entities: Record<EntityId, Entity> = {};
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
 
-            // Resource far away
-            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 1000, 1000);
+            // Resource within build range of base (MAX_ORE_DISTANCE is 600)
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 800, 800);
 
             let state = createTestState(entities);
             state = {
@@ -913,8 +913,8 @@ describe('AI System', () => {
             expect(placeAction).toBeDefined();
             if (placeAction) {
                 const { x, y } = placeAction.payload;
-                // Should be much closer to ore (1000,1000) than conyard (500,500)
-                const distToOre = new Vector(x, y).dist(new Vector(1000, 1000));
+                // Should be near ore (800,800)
+                const distToOre = new Vector(x, y).dist(new Vector(800, 800));
                 const distToBase = new Vector(x, y).dist(new Vector(500, 500));
 
                 expect(distToOre).toBeLessThan(250); // Within reasonable range of ore

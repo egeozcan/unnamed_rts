@@ -1,4 +1,8 @@
-import { PLAYER_COLOR, ENEMY_COLOR } from '../engine/types.js';
+import { PLAYER_COLORS } from '../engine/types.js';
+
+// Legacy exports for backward compatibility
+export const PLAYER_COLOR = PLAYER_COLORS[0];
+export const ENEMY_COLOR = PLAYER_COLORS[1];
 
 const RECT_BASE = `<rect x="5" y="5" width="90" height="90" fill="COL_PRIMARY" stroke="#000" stroke-width="2"/>`;
 const TANK_TREADS = `<rect x="5" y="5" width="90" height="20" fill="#222"/><rect x="5" y="75" width="90" height="20" fill="#222"/>`;
@@ -36,8 +40,10 @@ function createGameImage(color: string, svgContent: string): HTMLImageElement {
 
 export function initGraphics(): void {
     for (const key in svgs) {
-        IMG_CACHE[key + '_0'] = createGameImage(PLAYER_COLOR, svgs[key]);
-        IMG_CACHE[key + '_1'] = createGameImage(ENEMY_COLOR, svgs[key]);
+        // Create assets for all 4 players
+        for (let i = 0; i < PLAYER_COLORS.length; i++) {
+            IMG_CACHE[key + '_' + i] = createGameImage(PLAYER_COLORS[i], svgs[key]);
+        }
         IMG_CACHE[key + '_-1'] = createGameImage('#d4af37', svgs[key]); // Neutral/resources
     }
 }
@@ -46,5 +52,3 @@ export function getAsset(key: string, owner: number): HTMLImageElement | null {
     const cacheKey = `${key}_${owner}`;
     return IMG_CACHE[cacheKey] || null;
 }
-
-export { PLAYER_COLOR, ENEMY_COLOR };

@@ -396,3 +396,233 @@ canvas#gameCanvas {
     background: #0066cc;
     box-shadow: 0 0 20px #00f;
 }
+
+/* Skirmish Screen Styles */
+.skirmish-container {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 30px;
+    max-width: 900px;
+}
+
+.skirmish-section {
+    background: rgba(30, 30, 30, 0.9);
+    border: 2px solid rgba(255, 68, 68, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5),
+        inset 0 0 30px rgba(255, 68, 68, 0.05);
+}
+
+.section-title {
+    color: #f00;
+    font-family: Impact, sans-serif;
+    font-size: 24px;
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 68, 68, 0.3);
+    padding-bottom: 10px;
+}
+
+.player-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 320px;
+}
+
+.player-slot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.player-slot:hover {
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.player-slot.disabled {
+    opacity: 0.4;
+}
+
+.player-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+    flex-shrink: 0;
+}
+
+.player-label {
+    flex: 1;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.player-type {
+    background: rgba(40, 40, 40, 0.9);
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 130px;
+}
+
+.player-type:hover {
+    background: rgba(60, 60, 60, 0.9);
+    border-color: #888;
+}
+
+.player-type:focus {
+    outline: none;
+    border-color: #f00;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+}
+
+.observer-indicator {
+    display: none;
+    color: #4af;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    text-align: center;
+    padding: 15px;
+    margin-top: 15px;
+    background: rgba(68, 170, 255, 0.1);
+    border: 1px solid rgba(68, 170, 255, 0.3);
+    border-radius: 8px;
+    animation: pulse-observer 2s infinite;
+}
+
+.observer-indicator.visible {
+    display: block;
+}
+
+@keyframes pulse-observer {
+
+    0%,
+    100% {
+        opacity: 1;
+        box-shadow: 0 0 10px rgba(68, 170, 255, 0.3);
+    }
+
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 0 20px rgba(68, 170, 255, 0.5);
+    }
+}
+
+.map-params {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 250px;
+}
+
+.param-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.param-row label {
+    color: #ccc;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.param-row select {
+    background: rgba(40, 40, 40, 0.9);
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    min-width: 150px;
+    transition: all 0.2s;
+}
+
+.param-row select:hover {
+    background: rgba(60, 60, 60, 0.9);
+    border-color: #888;
+}
+
+.param-row select:focus {
+    outline: none;
+    border-color: #f00;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+}
+
+.start-btn {
+    padding: 20px 80px;
+    font-size: 28px;
+    background: linear-gradient(180deg, #c00 0%, #800 100%);
+    border: 3px solid #f44;
+    box-shadow: 0 5px 20px rgba(255, 68, 68, 0.4),
+        inset 0 2px 0 rgba(255, 255, 255, 0.2);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.start-btn:hover {
+    background: linear-gradient(180deg, #f00 0%, #a00 100%);
+    box-shadow: 0 5px 40px rgba(255, 68, 68, 0.6),
+        inset 0 2px 0 rgba(255, 255, 255, 0.3);
+    transform: scale(1.08);
+}
+
+/* Observer Mode */
+#sidebar.observer-hidden {
+    display: none;
+}
+
+#game-container.observer-mode {
+    flex-direction: row;
+}
+
+#game-container.observer-mode canvas#gameCanvas {
+    width: 100%;
+}
+
+/* Observer floating minimap - hidden by default, shown in observer mode */
+.observer-minimap-container {
+    display: none;
+}
+
+#game-container.observer-mode .observer-minimap-container {
+    display: block;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 280px;
+    height: 220px;
+    border: 2px solid rgba(0, 255, 0, 0.6);
+    border-radius: 8px;
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 100;
+}
+
+.observer-minimap-container canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: pointer;
+}

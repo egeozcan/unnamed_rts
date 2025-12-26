@@ -1,5 +1,5 @@
-import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS } from '../engine/types.js';
-import { getAsset, initGraphics, PLAYER_COLOR, ENEMY_COLOR } from './assets.js';
+import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS } from '../engine/types.js';
+import { getAsset, initGraphics } from './assets.js';
 import rules from '../data/rules.json';
 
 const RULES = rules as any;
@@ -18,8 +18,13 @@ export class Renderer {
 
     resize() {
         const container = document.getElementById('game-container');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarHidden = sidebar?.classList.contains('observer-hidden');
+
         if (container) {
-            this.canvas.width = container.clientWidth - 300; // Sidebar width
+            // In observer mode, canvas takes full width
+            const sidebarWidth = sidebarHidden ? 0 : 300;
+            this.canvas.width = container.clientWidth - sidebarWidth;
         } else {
             this.canvas.width = window.innerWidth - 300;
         }
@@ -136,10 +141,35 @@ export class Renderer {
                 ctx.fillStyle = '#ffdf00';
                 ctx.fillRect(-12, -15, 24 * ratio, 4);
             }
+        } else if (entity.type === 'ROCK') {
+            // Rocks are impassable obstacles - draw as brown/gray shapes
+            ctx.fillStyle = '#665544';
+            ctx.strokeStyle = '#443322';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Draw irregular rock shape
+            const r = entity.radius;
+            ctx.moveTo(-r * 0.8, -r * 0.5);
+            ctx.lineTo(-r * 0.3, -r * 0.9);
+            ctx.lineTo(r * 0.4, -r * 0.7);
+            ctx.lineTo(r * 0.9, -r * 0.2);
+            ctx.lineTo(r * 0.6, r * 0.6);
+            ctx.lineTo(-r * 0.2, r * 0.8);
+            ctx.lineTo(-r * 0.8, r * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Add some detail
+            ctx.fillStyle = '#554433';
+            ctx.beginPath();
+            ctx.arc(-r * 0.3, -r * 0.2, r * 0.15, 0, Math.PI * 2);
+            ctx.fill();
         } else {
             ctx.rotate(entity.rotation);
 
             const img = getAsset(entity.key, entity.owner);
+            const playerColor = PLAYER_COLORS[entity.owner] || '#888888';
 
             if (entity.flash > 0) {
                 ctx.fillStyle = '#fff';
@@ -147,7 +177,7 @@ export class Renderer {
             } else if (img && img.complete) {
                 ctx.drawImage(img, -entity.w / 2, -entity.h / 2, entity.w, entity.h);
             } else {
-                ctx.fillStyle = entity.owner === 0 ? PLAYER_COLOR : ENEMY_COLOR;
+                ctx.fillStyle = playerColor;
                 ctx.fillRect(-entity.w / 2, -entity.h / 2, entity.w, entity.h);
             }
 

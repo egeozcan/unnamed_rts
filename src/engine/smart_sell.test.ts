@@ -14,6 +14,8 @@ describe('AI Smart Selling', () => {
                 0: {
                     id: 0,
                     isAi: false,
+                    difficulty: 'medium',
+                    color: '#4488ff',
                     credits: 10000,
                     maxPower: 1000,
                     usedPower: 0,
@@ -23,6 +25,8 @@ describe('AI Smart Selling', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    difficulty: 'medium',
+                    color: '#ff4444',
                     credits: 500,
                     maxPower: 1000,
                     usedPower: 0,
@@ -73,7 +77,7 @@ describe('AI Smart Selling', () => {
             camera: { x: 0, y: 0 },
             zoom: 1,
             winner: null,
-            config: { width: 1000, height: 1000 }
+            config: { width: 1000, height: 1000, resourceDensity: 'medium', rockDensity: 'medium' }
         };
 
         // Run AI multiple times to simulate decision process

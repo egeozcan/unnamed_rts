@@ -1,4 +1,4 @@
-import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, GRID_W, GRID_H } from './types.js';
+import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, GRID_W, GRID_H, PLAYER_COLORS } from './types.js';
 import rules from '../data/rules.json';
 import { collisionGrid, refreshCollisionGrid, findPath } from './utils.js';
 
@@ -19,17 +19,19 @@ export const INITIAL_STATE: GameState = {
     placingBuilding: null,
     sellMode: false,
     players: {
-        0: createPlayerState(0, false),
-        1: createPlayerState(1, true)
+        0: createPlayerState(0, false, 'medium', PLAYER_COLORS[0]),
+        1: createPlayerState(1, true, 'medium', PLAYER_COLORS[1])
     },
     winner: null,
-    config: { width: 3000, height: 3000 }
+    config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' }
 };
 
-function createPlayerState(id: number, isAi: boolean): PlayerState {
+export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
     return {
         id,
         isAi,
+        difficulty,
+        color,
         credits: isAi ? 10000 : 3000,
         maxPower: 0,
         usedPower: 0,

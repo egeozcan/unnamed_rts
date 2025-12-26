@@ -45,7 +45,7 @@ export class Vector {
     }
 }
 
-export type EntityType = 'UNIT' | 'BUILDING' | 'RESOURCE';
+export type EntityType = 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK';
 
 export interface Entity {
     readonly id: EntityId;
@@ -123,9 +123,26 @@ export interface Camera {
 
 export type GameMode = 'menu' | 'game' | 'demo';
 
+// Player type for skirmish configuration
+export type PlayerType = 'human' | 'easy' | 'medium' | 'hard' | 'none';
+
+// Skirmish configuration for game setup
+export interface SkirmishConfig {
+    readonly players: Array<{
+        slot: number;
+        type: PlayerType;
+        color: string;
+    }>;
+    readonly mapSize: 'small' | 'medium' | 'large';
+    readonly resourceDensity: 'low' | 'medium' | 'high';
+    readonly rockDensity: 'low' | 'medium' | 'high';
+}
+
 export interface PlayerState {
     readonly id: number; // Changed to number to match owner
     readonly isAi: boolean;
+    readonly difficulty: 'easy' | 'medium' | 'hard';
+    readonly color: string;
     readonly credits: number;
     readonly maxPower: number;
     readonly usedPower: number;
@@ -141,6 +158,8 @@ export interface PlayerState {
 export interface MapConfig {
     readonly width: number;
     readonly height: number;
+    readonly resourceDensity: 'low' | 'medium' | 'high';
+    readonly rockDensity: 'low' | 'medium' | 'high';
 }
 
 export interface Power {
@@ -194,6 +213,25 @@ export const TILE_SIZE = 40;
 export const GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
 export const GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
 export const BUILD_RADIUS = 350;
-export const PLAYER_COLOR = '#4488ff';
-export const ENEMY_COLOR = '#ff4444';
+
+// Player colors for up to 4 players
+export const PLAYER_COLORS = ['#4488ff', '#ff4444', '#44ff88', '#ffcc44'];
+
+// Map size presets
+export const MAP_SIZES = {
+    small: { width: 2000, height: 2000 },
+    medium: { width: 3000, height: 3000 },
+    large: { width: 4000, height: 4000 }
+};
+
+// Density settings
+export const DENSITY_SETTINGS = {
+    low: { resources: 80, rocks: 15 },
+    medium: { resources: 150, rocks: 30 },
+    high: { resources: 250, rocks: 50 }
+};
+
+// Legacy colors for backwards compatibility
+export const PLAYER_COLOR = PLAYER_COLORS[0];
+export const ENEMY_COLOR = PLAYER_COLORS[1];
 

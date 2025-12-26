@@ -347,6 +347,48 @@ function handleEconomy(
         }
     }
 
+    // MCV production for expansion when wealthy
+    const mcvCost = RULES.units.mcv?.cost || 3000;
+    const hasFactory = buildings.some(b => b.key === 'factory');
+    const alreadyBuildingMcv = player.queues.vehicle.current === 'mcv';
+    const existingMcvs = Object.values(_state.entities).filter((e: any) =>
+        e.owner === playerId && e.key === 'mcv' && !e.dead
+    );
+
+    if (hasFactory && !alreadyBuildingMcv && existingMcvs.length === 0 && player.credits > mcvCost + 2000) {
+        // Check if there's distant ore worth expanding towards
+        const baseCenter = buildings.find(b => b.key === 'conyard')?.pos || buildings[0]?.pos;
+        if (baseCenter) {
+            const BUILD_RADIUS = 400;
+            let hasDistantOre = false;
+
+            for (const e of Object.values(_state.entities)) {
+                const entity = e as Entity;
+                if (entity.type !== 'RESOURCE' || entity.dead) continue;
+
+                // Check if ore is beyond current build range
+                let inRange = false;
+                for (const b of buildings) {
+                    const bData = RULES.buildings[b.key];
+                    if (bData?.isDefense) continue;
+                    if (entity.pos.dist(b.pos) < BUILD_RADIUS + 200) {
+                        inRange = true;
+                        break;
+                    }
+                }
+
+                if (!inRange && entity.pos.dist(baseCenter) < 1500) {
+                    hasDistantOre = true;
+                    break;
+                }
+            }
+
+            if (hasDistantOre) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
+            }
+        }
+    }
+
     return actions;
 }
 
@@ -890,6 +932,46 @@ function handleBuildingPlacement(
     const conyard = buildings.find(b => b.key === 'conyard') || buildings[0];
     const center = conyard ? conyard.pos : new Vector(300, 300);
 
+    // Find the building that extends furthest from base (for expansion)
+    let expansionFront: Vector = center;
+    for (const b of buildings) {
+        const bData = RULES.buildings[b.key];
+        if (bData?.isDefense) continue;
+        const dist = b.pos.dist(center);
+        if (dist > expansionFront.dist(center)) {
+            expansionFront = b.pos;
+        }
+    }
+
+    // Check if there's distant ore worth expanding towards
+    const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+    let distantOreTarget: Vector | null = null;
+    const BUILD_RADIUS = 400;
+
+    for (const ore of resources) {
+        // Check if ore is beyond current build range but within 1500 units
+        let inRange = false;
+        for (const b of buildings) {
+            const bData = RULES.buildings[b.key];
+            if (bData?.isDefense) continue;
+            if (ore.pos.dist(b.pos) < BUILD_RADIUS + 200) {
+                inRange = true;
+                break;
+            }
+        }
+
+        // Check if any refinery already claims this ore
+        const hasNearbyRefinery = Object.values(state.entities).some(e =>
+            e.type === 'BUILDING' && e.key === 'refinery' && !e.dead && e.pos.dist(ore.pos) < 200
+        );
+
+        if (!inRange && !hasNearbyRefinery && ore.pos.dist(center) < 1500) {
+            if (!distantOreTarget || ore.pos.dist(center) < distantOreTarget.dist(center)) {
+                distantOreTarget = ore.pos;
+            }
+        }
+    }
+
     // Candidates for placement
     let bestSpot: { x: number, y: number } | null = null;
     let bestScore = -Infinity;
@@ -898,15 +980,17 @@ function handleBuildingPlacement(
     let searchCenter = center;
     let searchRadiusMin = 100;
     let searchRadiusMax = 300;
+    let expandingTowardsOre = false;
 
     if (key === 'refinery') {
-        const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
         let bestOre: Entity | null = null;
         let minDist = Infinity;
+        const MAX_ORE_DISTANCE = 600;
 
         for (const ore of resources) {
             const dist = ore.pos.dist(center);
-            // Check GLOBAL refineries (including enemy)
+            if (dist > MAX_ORE_DISTANCE) continue;
+
             const allEntities = Object.values(state.entities);
             const hasRefinery = allEntities.some(b =>
                 b.type === 'BUILDING' &&
@@ -915,7 +999,6 @@ function handleBuildingPlacement(
                 b.pos.dist(ore.pos) < 200
             );
 
-            // Prefer nearest ore that doesn't already have a refinery
             let effectiveDist = dist;
             if (hasRefinery) effectiveDist += 5000;
 
@@ -933,6 +1016,13 @@ function handleBuildingPlacement(
     } else if (key === 'barracks' || key === 'factory') {
         searchRadiusMin = 120;
         searchRadiusMax = 350;
+    } else if (key === 'power' && distantOreTarget) {
+        // Power plants can be used for "building walk" expansion towards distant ore
+        const dirToOre = distantOreTarget.sub(expansionFront).norm();
+        searchCenter = expansionFront.add(dirToOre.scale(150));
+        searchRadiusMin = 80;
+        searchRadiusMax = 250;
+        expandingTowardsOre = true;
     }
 
     // Try multiple spots
@@ -943,12 +1033,31 @@ function handleBuildingPlacement(
         const x = searchCenter.x + Math.cos(ang) * dist;
         const y = searchCenter.y + Math.sin(ang) * dist;
 
+        // Check if within BUILD_RADIUS of any existing non-defense building
+        // Defense buildings (turrets, pillboxes) should not extend build range
+        let nearExistingBuilding = false;
+        for (const b of buildings) {
+            const bData = RULES.buildings[b.key];
+            // Skip defense buildings - they shouldn't extend build range
+            if (bData?.isDefense) continue;
+
+            if (new Vector(x, y).dist(b.pos) < BUILD_RADIUS) {
+                nearExistingBuilding = true;
+                break;
+            }
+        }
+        if (!nearExistingBuilding) continue;
+
         if (isValidPlacement(x, y, buildingData.w, buildingData.h, state, buildings, key)) {
             let score = 0;
 
             const distToCenter = new Vector(x, y).dist(searchCenter);
             if (key === 'refinery') {
                 score -= distToCenter;
+            } else if (expandingTowardsOre && distantOreTarget) {
+                // Prefer spots closer to distant ore (expansion)
+                score -= new Vector(x, y).dist(distantOreTarget) * 0.8;
+                score += new Vector(x, y).dist(center) * 0.2;
             } else {
                 score -= new Vector(x, y).dist(center) * 0.5;
             }
@@ -1005,7 +1114,8 @@ function isValidPlacement(
     const entities = Object.values(state.entities);
     for (const e of entities) {
         if (e.dead) continue;
-        if (e.type === 'BUILDING' || e.type === 'RESOURCE') {
+        // Check buildings, resources, and rocks
+        if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK') {
             const eRect = {
                 l: e.pos.x - e.w / 2,
                 r: e.pos.x + e.w / 2,

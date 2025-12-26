@@ -256,3 +256,22 @@ export function showEndScreen(message: string, isVictory: boolean) {
         endScreen.classList.add('visible');
     }
 }
+
+export function setObserverMode(isObserver: boolean) {
+    const sidebar = document.getElementById('sidebar');
+    const gameContainer = document.getElementById('game-container');
+    const minimapContainer = document.getElementById('minimap-container');
+
+    if (isObserver) {
+        // Hide sidebar, show floating minimap
+        if (sidebar) sidebar.classList.add('observer-hidden');
+        if (gameContainer) gameContainer.classList.add('observer-mode');
+        if (minimapContainer) minimapContainer.classList.add('floating');
+    } else {
+        // Show normal sidebar
+        if (sidebar) sidebar.classList.remove('observer-hidden');
+        if (gameContainer) gameContainer.classList.remove('observer-mode');
+        if (minimapContainer) minimapContainer.classList.remove('floating');
+    }
+}
+

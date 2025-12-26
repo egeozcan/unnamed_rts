@@ -1,9 +1,9 @@
-import { INITIAL_STATE, update } from './engine/reducer.js';
-import { GameState, Vector, EntityId, MAP_WIDTH, MAP_HEIGHT } from './engine/types.js';
+import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI } from './ui/index.js';
-import { initMinimap, renderMinimap } from './ui/minimap.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, setObserverMode } from './ui/index.js';
+import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
 import rules from './data/rules.json';
@@ -16,37 +16,143 @@ const renderer = new Renderer(canvas);
 
 // Game state
 let currentState: GameState = INITIAL_STATE;
+let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
 
-// Menu button handlers
-document.querySelectorAll('.menu-btn[data-mode]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const mode = (btn as HTMLElement).dataset.mode as 'easy' | 'hard' | 'demo';
-        startGame(mode);
+// Setup Skirmish UI logic
+function setupSkirmishUI() {
+    const playerSlots = document.querySelectorAll('.player-slot');
+    const observerIndicator = document.getElementById('observer-mode');
+
+    function updateObserverMode() {
+        const hasHuman = Array.from(playerSlots).some(slot => {
+            const select = slot.querySelector('.player-type') as HTMLSelectElement;
+            return select.value === 'human';
+        });
+
+        if (observerIndicator) {
+            observerIndicator.classList.toggle('visible', !hasHuman);
+        }
+    }
+
+    playerSlots.forEach(slot => {
+        const select = slot.querySelector('.player-type') as HTMLSelectElement;
+        select.addEventListener('change', () => {
+            // If this slot became human, set all other human slots to AI-Medium
+            if (select.value === 'human') {
+                playerSlots.forEach(otherSlot => {
+                    if (otherSlot !== slot) {
+                        const otherSelect = otherSlot.querySelector('.player-type') as HTMLSelectElement;
+                        if (otherSelect.value === 'human') {
+                            otherSelect.value = 'medium';
+                        }
+                    }
+                });
+            }
+
+            // Update disabled state based on closed
+            const slotDiv = slot as HTMLElement;
+            slotDiv.classList.toggle('disabled', select.value === 'none');
+
+            updateObserverMode();
+        });
     });
-});
 
-// Restart button
-document.getElementById('restart-btn')?.addEventListener('click', () => {
-    location.reload();
-});
+    updateObserverMode();
+}
 
-function startGame(mode: string) {
-    hideMenu();
+// Get skirmish configuration from UI
+function getSkirmishConfig(): SkirmishConfig {
+    const players: SkirmishConfig['players'] = [];
 
-    // Reset state
-    let state = { ...INITIAL_STATE };
-    state.mode = mode === 'demo' ? 'demo' : 'game';
-    state.difficulty = mode === 'hard' ? 'hard' : 'easy';
-    state.running = true;
-    state.entities = {};
+    document.querySelectorAll('.player-slot').forEach((slot, index) => {
+        const select = slot.querySelector('.player-type') as HTMLSelectElement;
+        const type = select.value as PlayerType;
 
-    // Resources
-    for (let i = 0; i < 150; i++) {
-        const x = Math.random() * MAP_WIDTH;
-        const y = Math.random() * MAP_HEIGHT;
-        if (x > 500 && x < 2500) {
-            const id = 'res_' + i;
-            state.entities[id] = {
+        if (type !== 'none') {
+            players.push({
+                slot: index,
+                type,
+                color: PLAYER_COLORS[index]
+            });
+        }
+    });
+
+    const mapSize = (document.getElementById('map-size') as HTMLSelectElement).value as 'small' | 'medium' | 'large';
+    const resourceDensity = (document.getElementById('resource-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
+    const rockDensity = (document.getElementById('rock-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
+
+    return { players, mapSize, resourceDensity, rockDensity };
+}
+
+// Get starting positions for players based on map size
+function getStartingPositions(mapWidth: number, mapHeight: number, numPlayers: number): Vector[] {
+    const margin = 350; // Distance from edge
+    const positions = [
+        new Vector(margin, margin),                          // Top-left
+        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right
+        new Vector(mapWidth - margin, margin),               // Top-right
+        new Vector(margin, mapHeight - margin)               // Bottom-left
+    ];
+    return positions.slice(0, numPlayers);
+}
+
+// Generate map entities
+function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number } {
+    const entities: Record<EntityId, Entity> = {};
+    const mapDims = MAP_SIZES[config.mapSize];
+    const { width: mapWidth, height: mapHeight } = mapDims;
+    const density = DENSITY_SETTINGS[config.resourceDensity];
+    const rockSettings = DENSITY_SETTINGS[config.rockDensity];
+
+    // Calculate spawn zones to avoid for rocks
+    const margin = 350;
+    const spawnRadius = 200; // Keep rocks away from spawn areas
+    const spawnZones = [
+        new Vector(margin, margin),                          // Top-left
+        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right
+        new Vector(mapWidth - margin, margin),               // Top-right
+        new Vector(margin, mapHeight - margin)               // Bottom-left
+    ];
+
+    // Helper to check if position is near any spawn zone
+    function isNearSpawnZone(x: number, y: number): boolean {
+        for (const zone of spawnZones) {
+            if (new Vector(x, y).dist(zone) < spawnRadius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Generate resources in clusters
+    const resourceCount = density.resources;
+    const numClusters = Math.floor(resourceCount / 8) + 3; // More resources = more clusters
+    const resourcesPerCluster = Math.ceil(resourceCount / numClusters);
+
+    // Generate cluster centers in the middle area of the map
+    const clusterCenters: Vector[] = [];
+    for (let c = 0; c < numClusters; c++) {
+        const cx = 500 + Math.random() * (mapWidth - 1000);
+        const cy = 500 + Math.random() * (mapHeight - 1000);
+        clusterCenters.push(new Vector(cx, cy));
+    }
+
+    // Generate resources around cluster centers
+    let resourceId = 0;
+    for (const center of clusterCenters) {
+        const clusterSize = resourcesPerCluster + Math.floor(Math.random() * 5) - 2;
+        for (let i = 0; i < clusterSize && resourceId < resourceCount; i++) {
+            // Random position within cluster radius (50-150 from center)
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 20 + Math.random() * 100;
+            const x = center.x + Math.cos(angle) * dist;
+            const y = center.y + Math.sin(angle) * dist;
+
+            // Skip if out of bounds
+            if (x < 100 || x > mapWidth - 100 || y < 100 || y > mapHeight - 100) continue;
+
+            const id = 'res_' + resourceId++;
+            entities[id] = {
                 id, owner: -1, type: 'RESOURCE', key: 'ore',
                 pos: new Vector(x, y), prevPos: new Vector(x, y),
                 hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false,
@@ -56,51 +162,127 @@ function startGame(mode: string) {
         }
     }
 
-    // Bases
-    // In demo mode, we still want P0 base, but controlled by AI
-    {
-        const id = 'cy_p0';
-        state.entities[id] = {
-            id, owner: 0, type: 'BUILDING', key: 'conyard',
-            pos: new Vector(300, 300), prevPos: new Vector(300, 300),
+    // Generate rocks (impassable obstacles) - avoid spawn zones
+    const rockCount = rockSettings.rocks;
+    let rocksPlaced = 0;
+    let attempts = 0;
+    const maxAttempts = rockCount * 10;
+
+    while (rocksPlaced < rockCount && attempts < maxAttempts) {
+        attempts++;
+        const x = 300 + Math.random() * (mapWidth - 600);
+        const y = 300 + Math.random() * (mapHeight - 600);
+
+        // Skip if too close to a spawn zone
+        if (isNearSpawnZone(x, y)) {
+            continue;
+        }
+
+        const size = 30 + Math.random() * 40;
+        const id = 'rock_' + rocksPlaced;
+        entities[id] = {
+            id, owner: -1, type: 'ROCK', key: 'rock',
+            pos: new Vector(x, y), prevPos: new Vector(x, y),
+            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false,
+            vel: new Vector(0, 0), rotation: Math.random() * Math.PI * 2, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
+            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+        };
+        rocksPlaced++;
+    }
+
+    return { entities, mapWidth, mapHeight };
+}
+
+// Start button handler
+document.getElementById('start-skirmish-btn')?.addEventListener('click', () => {
+    const config = getSkirmishConfig();
+    if (config.players.length < 2) {
+        alert('You need at least 2 players to start a game!');
+        return;
+    }
+    startGameWithConfig(config);
+});
+
+// Restart button
+document.getElementById('restart-btn')?.addEventListener('click', () => {
+    location.reload();
+});
+
+// Initialize skirmish UI
+setupSkirmishUI();
+
+function startGameWithConfig(config: SkirmishConfig) {
+    hideMenu();
+
+    // Generate map
+    const { entities, mapWidth, mapHeight } = generateMap(config);
+
+    // Determine human player
+    const humanPlayer = config.players.find(p => p.type === 'human');
+    humanPlayerId = humanPlayer ? humanPlayer.slot : null;
+
+    // Create player states
+    const players: Record<number, any> = {};
+    config.players.forEach(p => {
+        const isAi = p.type !== 'human';
+        const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'easy' | 'medium' | 'hard';
+        players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color);
+    });
+
+    // Get starting positions
+    const positions = getStartingPositions(mapWidth, mapHeight, config.players.length);
+
+    // Create base entities for each player
+    config.players.forEach((p, idx) => {
+        const pos = positions[idx];
+
+        // Construction Yard
+        const cyId = `cy_p${p.slot}`;
+        entities[cyId] = {
+            id: cyId, owner: p.slot, type: 'BUILDING', key: 'conyard',
+            pos: pos, prevPos: pos,
             hp: 3000, maxHp: 3000, w: 90, h: 90, radius: 45, dead: false,
             vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
             targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
         };
+
         // Harvester
-        const hid = 'harv_p0';
-        state.entities[hid] = {
-            id: hid, owner: 0, type: 'UNIT', key: 'harvester',
-            pos: new Vector(400, 350), prevPos: new Vector(400, 350),
+        const harvId = `harv_p${p.slot}`;
+        const harvPos = pos.add(new Vector(80, 50));
+        entities[harvId] = {
+            id: harvId, owner: p.slot, type: 'UNIT', key: 'harvester',
+            pos: harvPos, prevPos: harvPos,
             hp: 1000, maxHp: 1000, w: 35, h: 35, radius: 17, dead: false,
             vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
             targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
         };
-    }
+    });
 
-    // AI Base
-    const aiId = 'cy_p1';
-    state.entities[aiId] = {
-        id: aiId, owner: 1, type: 'BUILDING', key: 'conyard',
-        pos: new Vector(2500, 2500), prevPos: new Vector(2500, 2500),
-        hp: 3000, maxHp: 3000, w: 90, h: 90, radius: 45, dead: false,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-    };
-    const aghid = 'harv_p1';
-    state.entities[aghid] = {
-        id: aghid, owner: 1, type: 'UNIT', key: 'harvester',
-        pos: new Vector(2400, 2400), prevPos: new Vector(2400, 2400),
-        hp: 1000, maxHp: 1000, w: 35, h: 35, radius: 17, dead: false,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+    // Build game state
+    const isObserverMode = humanPlayerId === null;
+    let state: GameState = {
+        ...INITIAL_STATE,
+        running: true,
+        mode: isObserverMode ? 'demo' : 'game',
+        difficulty: 'easy', // Legacy field
+        entities: entities,
+        players: players,
+        config: {
+            width: mapWidth,
+            height: mapHeight,
+            resourceDensity: config.resourceDensity,
+            rockDensity: config.rockDensity
+        }
     };
 
     currentState = state;
 
-    // Initialize UI
+    // Initialize UI  
     initUI(currentState, handleBuildClick, handleToggleSellMode);
     initMinimap();
+
+    // Set observer mode if all players are AI
+    setObserverMode(isObserverMode);
 
     // Initialize input
     initInput(canvas, {
@@ -109,6 +291,23 @@ function startGame(mode: string) {
         onDeployMCV: attemptMCVDeploy,
         getZoom: () => currentState.zoom,
         getCamera: () => currentState.camera
+    });
+
+    // Set up minimap click handler to pan camera
+    setMinimapClickHandler((worldX, worldY) => {
+        const size = renderer.getSize();
+        const mapWidth = currentState.config.width;
+        const mapHeight = currentState.config.height;
+        const zoom = currentState.zoom;
+
+        // Center camera on clicked point
+        const newX = Math.max(0, Math.min(mapWidth - size.width / zoom, worldX - size.width / zoom / 2));
+        const newY = Math.max(0, Math.min(mapHeight - size.height / zoom, worldY - size.height / zoom / 2));
+
+        currentState = {
+            ...currentState,
+            camera: { x: newX, y: newY }
+        };
     });
 
     // Start game loop
@@ -244,10 +443,15 @@ function attemptMCVDeploy() {
 }
 
 function updateButtonsUI() {
+    // Use human player's UI, or first player if observer
+    const pid = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
+    const player = currentState.players[pid];
+    if (!player) return;
+
     updateButtons(
         Object.values(currentState.entities),
-        currentState.players[0].queues,
-        currentState.players[0].readyToPlace,
+        player.queues,
+        player.readyToPlace,
         currentState.placingBuilding
     );
     updateSellModeUI(currentState);
@@ -259,11 +463,15 @@ function gameLoop() {
         return;
     }
 
-    // AI Logic
-    const aiActions = computeAiActions(currentState, 1);
-    if (currentState.mode === 'demo') {
-        const p0Actions = computeAiActions(currentState, 0);
-        aiActions.push(...p0Actions);
+    // AI Logic - iterate over ALL AI players
+    let aiActions: any[] = [];
+    for (const pidStr in currentState.players) {
+        const pid = parseInt(pidStr);
+        const player = currentState.players[pid];
+        if (player.isAi) {
+            const actions = computeAiActions(currentState, pid);
+            aiActions.push(...actions);
+        }
     }
 
     for (const action of aiActions) {
@@ -272,11 +480,14 @@ function gameLoop() {
 
     currentState = update(currentState, { type: 'TICK' });
 
-    // Update UI
-    const p0 = currentState.players[0];
-    const power = calculatePower(0, currentState.entities);
-    updateMoney(p0.credits);
-    updatePower(power.out, power.in);
+    // Update UI - use human player's data, or first player if observer
+    const displayPlayerId = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
+    const displayPlayer = currentState.players[displayPlayerId];
+    const power = calculatePower(displayPlayerId, currentState.entities);
+    if (displayPlayer) {
+        updateMoney(displayPlayer.credits);
+        updatePower(power.out, power.in);
+    }
 
     if (currentState.tick % 5 === 0) {
         updateButtonsUI();
@@ -303,17 +514,27 @@ function gameLoop() {
         const newCameraX = worldX - mouseX / newZoom;
         const newCameraY = worldY - mouseY / newZoom;
 
+        const mapWidth = currentState.config.width;
+        const mapHeight = currentState.config.height;
+
         currentState = {
             ...currentState,
             zoom: newZoom,
             camera: {
-                x: Math.max(0, Math.min(MAP_WIDTH - canvas.width / newZoom, newCameraX)),
-                y: Math.max(0, Math.min(MAP_HEIGHT - canvas.height / newZoom, newCameraY))
+                x: Math.max(0, Math.min(mapWidth - canvas.width / newZoom, newCameraX)),
+                y: Math.max(0, Math.min(mapHeight - canvas.height / newZoom, newCameraY))
             }
         };
     }
 
-    const newCamera = handleCameraInput(currentState.camera, currentState.zoom, canvas.width, canvas.height);
+    const newCamera = handleCameraInput(
+        currentState.camera,
+        currentState.zoom,
+        canvas.width,
+        canvas.height,
+        currentState.config.width,
+        currentState.config.height
+    );
     currentState = { ...currentState, camera: newCamera };
 
     // Render
@@ -322,7 +543,16 @@ function gameLoop() {
     // Minimap
     const size = renderer.getSize();
     const lowPower = power.out < power.in;
-    renderMinimap(Object.values(currentState.entities), currentState.camera, currentState.zoom, size.width, size.height, lowPower);
+    renderMinimap(
+        Object.values(currentState.entities),
+        currentState.camera,
+        currentState.zoom,
+        size.width,
+        size.height,
+        lowPower,
+        currentState.config.width,
+        currentState.config.height
+    );
 
     requestAnimationFrame(gameLoop);
 }
@@ -362,4 +592,5 @@ function checkWinCondition() {
     }
 }
 
-(window as any).startGame = startGame;
+(window as any).startGame = startGameWithConfig;
+

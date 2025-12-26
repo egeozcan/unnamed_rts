@@ -1,4 +1,4 @@
-import { Vector, MAP_WIDTH, MAP_HEIGHT } from '../engine/types.js';
+import { Vector } from '../engine/types.js';
 
 interface Mouse {
     x: number;
@@ -228,7 +228,14 @@ export function getDragSelection(): DragStart | null {
     return inputState.dragStart;
 }
 
-export function handleCameraInput(camera: { x: number; y: number }, zoom: number, canvasWidth: number, canvasHeight: number): { x: number; y: number } {
+export function handleCameraInput(
+    camera: { x: number; y: number },
+    zoom: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    mapWidth: number = 3000,
+    mapHeight: number = 3000
+): { x: number; y: number } {
     let dx = 0, dy = 0;
 
     const keys = inputState.keys;
@@ -251,8 +258,8 @@ export function handleCameraInput(camera: { x: number; y: number }, zoom: number
     inputState.wheelDeltaY = 0;
 
     return {
-        x: Math.max(0, Math.min(MAP_WIDTH - canvasWidth / zoom, camera.x + dx)),
-        y: Math.max(0, Math.min(MAP_HEIGHT - canvasHeight / zoom, camera.y + dy))
+        x: Math.max(0, Math.min(mapWidth - canvasWidth / zoom, camera.x + dx)),
+        y: Math.max(0, Math.min(mapHeight - canvasHeight / zoom, camera.y + dy))
     };
 }
 
