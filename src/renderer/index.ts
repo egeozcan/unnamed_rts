@@ -198,6 +198,83 @@ export class Renderer {
                 ctx.fillStyle = '#0ff';
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20 * ratio, 3);
             }
+
+            // Draw turret barrel overlay for units/buildings with turrets
+            const turretEntities = ['light', 'heavy', 'mammoth', 'artillery', 'flame_tank', 'turret', 'sam_site', 'pillbox', 'jeep'];
+            if (turretEntities.includes(entity.key)) {
+                ctx.save();
+                // Undo body rotation first, then apply turret angle
+                ctx.rotate(-entity.rotation);
+                ctx.rotate(entity.turretAngle);
+
+                // Draw turret barrel based on entity type
+                if (entity.key === 'turret') {
+                    // Gun turret - single barrel
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -4, entity.w * 0.6, 8);
+                    ctx.strokeStyle = '#000';
+                    ctx.strokeRect(0, -4, entity.w * 0.6, 8);
+                } else if (entity.key === 'sam_site') {
+                    // SAM site - two missile tubes
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(5, -12, 8, 35);
+                    ctx.fillRect(5, 4, 8, 35);
+                    ctx.fillStyle = '#f00';
+                    // Missile tips
+                    ctx.beginPath();
+                    ctx.moveTo(5, -12);
+                    ctx.lineTo(9, -18);
+                    ctx.lineTo(13, -12);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(5, 4);
+                    ctx.lineTo(9, -2);
+                    ctx.lineTo(13, 4);
+                    ctx.fill();
+                } else if (entity.key === 'pillbox') {
+                    // Pillbox - gun slit
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(10, -5, entity.w * 0.4, 10);
+                } else if (entity.key === 'heavy' || entity.key === 'mammoth') {
+                    // Heavy tanks - thick barrel
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -5, entity.w * 0.55, 10);
+                    ctx.strokeStyle = '#000';
+                    ctx.strokeRect(0, -5, entity.w * 0.55, 10);
+                    // Muzzle
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(entity.w * 0.55 - 2, -6, 6, 12);
+                } else if (entity.key === 'mammoth') {
+                    // Mammoth - twin barrels
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -9, entity.w * 0.5, 6);
+                    ctx.fillRect(0, 3, entity.w * 0.5, 6);
+                } else if (entity.key === 'artillery') {
+                    // Artillery - long thin barrel
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -4, entity.w * 0.7, 8);
+                    ctx.strokeStyle = '#333';
+                    ctx.strokeRect(0, -4, entity.w * 0.7, 8);
+                } else if (entity.key === 'flame_tank') {
+                    // Flame tank - nozzle
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -4, entity.w * 0.4, 8);
+                    ctx.fillStyle = '#f60';
+                    ctx.beginPath();
+                    ctx.arc(entity.w * 0.4, 0, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (entity.key === 'jeep') {
+                    // Jeep - mounted gun
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(0, -2, entity.w * 0.4, 4);
+                } else {
+                    // Default light tank style
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -3, entity.w * 0.5, 6);
+                }
+
+                ctx.restore();
+            }
         }
 
         ctx.restore();

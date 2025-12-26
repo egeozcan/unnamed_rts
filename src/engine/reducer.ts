@@ -580,6 +580,26 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
 
         if (ent.cooldown > 0) nextEntities[id] = { ...ent, cooldown: ent.cooldown - 1 };
         if (ent.flash > 0) nextEntities[id] = { ...ent, flash: ent.flash - 1 };
+
+        // Update turret angle to track target
+        ent = nextEntities[id];
+        if (ent.targetId) {
+            const target = nextEntities[ent.targetId];
+            if (target && !target.dead) {
+                const deltaX = target.pos.x - ent.pos.x;
+                const deltaY = target.pos.y - ent.pos.y;
+                const targetTurretAngle = Math.atan2(deltaY, deltaX);
+
+                // Smooth turret rotation (faster than body rotation for responsive aiming)
+                let angleDiff = targetTurretAngle - ent.turretAngle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                // Turret turn speed (0.25 = responsive but smooth)
+                const newTurretAngle = ent.turretAngle + angleDiff * 0.25;
+                nextEntities[id] = { ...ent, turretAngle: newTurretAngle };
+            }
+        }
     }
 
     // Resolve Hard Collisions
@@ -1276,6 +1296,7 @@ function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILD
         lastAttackerId: null,
         cooldown: 0,
         flash: 0,
+        turretAngle: 0,
         cargo: 0,
         resourceTargetId: null,
         baseTargetId: null,

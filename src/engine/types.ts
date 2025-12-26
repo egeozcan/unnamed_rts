@@ -77,6 +77,7 @@ export interface Entity {
     readonly lastAttackerId: EntityId | null; // Changed to ID
     readonly cooldown: number;
     readonly flash: number;
+    readonly turretAngle: number; // Angle the turret is facing (for tanks/defensive buildings)
 
     // Harvester specific
     readonly cargo: number;

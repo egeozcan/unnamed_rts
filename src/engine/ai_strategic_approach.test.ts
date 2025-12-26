@@ -51,6 +51,7 @@ function createEntity(
         lastAttackerId: null,
         cooldown: 0,
         flash: 0,
+        turretAngle: 0,
         cargo: 0,
         resourceTargetId: null,
         baseTargetId: null,
