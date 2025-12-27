@@ -30,6 +30,7 @@ export interface AIPlayerState {
     offensiveGroups: OffensiveGroup[];
     enemyBaseLocation: Vector | null;
     lastScoutTick: number;
+    lastProductionType: 'infantry' | 'vehicle' | null;  // For staggered production
 }
 
 // Store AI states (keyed by playerId)
@@ -47,7 +48,8 @@ function getAIState(playerId: number): AIPlayerState {
             harvestersUnderAttack: [],
             offensiveGroups: [],
             enemyBaseLocation: null,
-            lastScoutTick: 0
+            lastScoutTick: 0,
+            lastProductionType: null
         };
     }
     return aiStates[playerId];
@@ -72,6 +74,8 @@ const HARVESTER_FLEE_DISTANCE = 300;
 const THREAT_DETECTION_RADIUS = 400;
 const STRATEGY_COOLDOWN = 300; // 5 seconds at 60 ticks/sec
 const RALLY_DISTANCE = 150; // Distance from target to rally before attack
+const RALLY_TIMEOUT = 300; // 5 seconds to wait for stragglers
+const SCOUT_INTERVAL = 600; // 10 seconds between scout attempts
 
 
 export function computeAiActions(state: GameState, playerId: number): Action[] {
@@ -141,6 +145,16 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     // 5. Place buildings
     if (player.readyToPlace) {
         actions.push(...handleBuildingPlacement(state, playerId, myBuildings, player));
+    }
+
+    // 6. Scouting (when idle and enemy location unknown)
+    if (aiState.strategy === 'buildup' && !aiState.enemyBaseLocation) {
+        actions.push(...handleScouting(state, playerId, myCombatUnits, aiState, baseCenter));
+    }
+
+    // 7. Micro-management for combat units
+    if (aiState.strategy === 'attack' || aiState.strategy === 'harass') {
+        actions.push(...handleMicro(state, myCombatUnits, enemies, baseCenter));
     }
 
     return actions;
@@ -311,45 +325,103 @@ function handleEconomy(
         }
     }
 
-    // Unit production
+    // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
-    if (player.credits > 800 && prefs) {
-        if (buildings.some(b => b.key === 'barracks') && !player.queues.infantry.current) {
+    const aiState = getAIState(playerId);
+
+    // Strategy-based credit thresholds
+    // - Attack mode: lower threshold (500) to maximize army size
+    // - Buildup mode: higher threshold (800) to save for buildings
+    // - Defense mode: medium threshold (600) for quick response
+    const creditThreshold = aiState.strategy === 'attack' ? 500 :
+        aiState.strategy === 'defend' ? 600 : 800;
+
+    // Reserve buffer - never drop below this
+    const creditBuffer = aiState.strategy === 'attack' ? 300 : 500;
+
+    const hasBarracks = buildings.some(b => b.key === 'barracks');
+    const hasFactory = buildings.some(b => b.key === 'factory');
+    const infantryQueueEmpty = !player.queues.infantry.current;
+    const vehicleQueueEmpty = !player.queues.vehicle.current;
+
+    if (player.credits > creditThreshold) {
+        // STAGGERED PRODUCTION: Alternate between infantry and vehicles
+        // This prevents resource spikes and creates more varied attacks
+
+        // Decide what to build this tick
+        let buildInfantry = false;
+        let buildVehicle = false;
+
+        if (hasBarracks && infantryQueueEmpty && hasFactory && vehicleQueueEmpty) {
+            // Both available - alternate based on last production
+            if (aiState.lastProductionType === 'infantry') {
+                buildVehicle = true;
+            } else if (aiState.lastProductionType === 'vehicle') {
+                buildInfantry = true;
+            } else {
+                // First production - prefer vehicles (stronger)
+                buildVehicle = true;
+            }
+        } else if (hasBarracks && infantryQueueEmpty) {
+            buildInfantry = true;
+        } else if (hasFactory && vehicleQueueEmpty) {
+            buildVehicle = true;
+        }
+
+        // Execute infantry production
+        if (buildInfantry && prefs) {
             const list = prefs.infantry || ['rifle'];
-            // Simple: pick first available or cycle? Let's pick first available req-met
             for (const key of list) {
                 const data = RULES.units[key];
                 const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
-                if (reqsMet && player.credits >= (data?.cost || 0)) {
+                const cost = data?.cost || 0;
+                // Check against buffer
+                if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key, playerId } });
+                    aiState.lastProductionType = 'infantry';
                     break;
                 }
             }
         }
-        if (buildings.some(b => b.key === 'factory') && !player.queues.vehicle.current) {
+
+        // Execute vehicle production
+        if (buildVehicle && prefs) {
             const list = prefs.vehicle || ['light'];
             for (const key of list) {
                 const data = RULES.units[key];
                 const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
-                if (reqsMet && player.credits >= (data?.cost || 0)) {
+                const cost = data?.cost || 0;
+                // Check against buffer
+                if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key, playerId } });
+                    aiState.lastProductionType = 'vehicle';
                     break;
                 }
             }
         }
-    } else if (player.credits > 800) {
-        // Fallback for safety
-        if (buildings.some(b => b.key === 'barracks') && !player.queues.infantry.current) {
-            actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId } });
-        }
-        if (buildings.some(b => b.key === 'factory') && !player.queues.vehicle.current) {
-            actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId } });
+
+        // Fallback if no preferences defined
+        if (!prefs) {
+            if (buildInfantry) {
+                const cost = RULES.units.rifle?.cost || 100;
+                if ((player.credits - cost) >= creditBuffer) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId } });
+                    aiState.lastProductionType = 'infantry';
+                }
+            }
+            if (buildVehicle) {
+                const cost = RULES.units.light?.cost || 500;
+                if ((player.credits - cost) >= creditBuffer) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId } });
+                    aiState.lastProductionType = 'vehicle';
+                }
+            }
         }
     }
 
     // MCV production for expansion when wealthy
     const mcvCost = RULES.units.mcv?.cost || 3000;
-    const hasFactory = buildings.some(b => b.key === 'factory');
+    // hasFactory already defined above in unit production section
     const alreadyBuildingMcv = player.queues.vehicle.current === 'mcv';
     const existingMcvs = Object.values(_state.entities).filter((e: any) =>
         e.owner === playerId && e.key === 'mcv' && !e.dead
@@ -787,7 +859,7 @@ function handleAttack(
     aiState: AIPlayerState,
     combatUnits: Entity[],
     enemies: Entity[],
-    _baseCenter: Vector,
+    baseCenter: Vector,
     _personality: any
 ): Action[] {
     const actions: Action[] = [];
@@ -814,7 +886,147 @@ function handleAttack(
     const groupCenter = getGroupCenter(aiState.attackGroup, state.entities);
     if (!groupCenter) return actions;
 
-    // Find best target - prioritize high-value targets
+    // --- Group Cohesion Logic ---
+    // Manage offensive group (create if doesn't exist or was cleared)
+    let mainGroup = aiState.offensiveGroups.find(g => g.id === 'main_attack');
+
+    // If we switched strategy and came back, need a fresh group
+    if (mainGroup && mainGroup.status === 'attacking') {
+        // Check if we should reset for a new attack wave
+        // Reset if group is too small (lost units) or all units are at/near target
+        const aliveUnits = mainGroup.unitIds.filter(id => {
+            const u = state.entities[id];
+            return u && !u.dead;
+        });
+        if (aliveUnits.length < ATTACK_GROUP_MIN_SIZE) {
+            // Reset the group for a new wave
+            aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
+            mainGroup = undefined;
+        }
+    }
+
+    if (!mainGroup) {
+        mainGroup = {
+            id: 'main_attack',
+            unitIds: [...aiState.attackGroup],
+            target: null,
+            rallyPoint: null,
+            status: 'forming',
+            lastOrderTick: state.tick
+        };
+        aiState.offensiveGroups.push(mainGroup);
+    }
+
+    // Update group members
+    mainGroup.unitIds = [...aiState.attackGroup];
+
+    // Calculate rally point if not set
+    if (!mainGroup.rallyPoint && aiState.enemyBaseLocation) {
+        const toEnemy = aiState.enemyBaseLocation.sub(baseCenter).norm();
+        const dist = baseCenter.dist(aiState.enemyBaseLocation);
+        // Rally at 50% of distance, at least 400 units from base
+        const rallyDist = Math.max(Math.min(dist * 0.5, 1000), 400);
+        mainGroup.rallyPoint = baseCenter.add(toEnemy.scale(rallyDist));
+    } else if (!mainGroup.rallyPoint) {
+        mainGroup.rallyPoint = baseCenter.add(new Vector(300, 0));
+    }
+
+    // Check group cohesion: how spread out are units?
+    let maxSpread = 0;
+    let atRallyCount = 0;
+    for (const id of mainGroup.unitIds) {
+        const unit = state.entities[id];
+        if (unit && !unit.dead) {
+            const d = unit.pos.dist(groupCenter);
+            if (d > maxSpread) maxSpread = d;
+            // Count units near rally point
+            if (mainGroup.rallyPoint && unit.pos.dist(mainGroup.rallyPoint) < 200) {
+                atRallyCount++;
+            }
+        }
+    }
+
+    const aliveCount = mainGroup.unitIds.filter(id => {
+        const u = state.entities[id];
+        return u && !u.dead;
+    }).length;
+
+    // Cohesive if most units are near rally point
+    const isCohesive = atRallyCount >= aliveCount * 0.7; // 70% at rally
+    const timedOut = (state.tick - mainGroup.lastOrderTick) > RALLY_TIMEOUT;
+
+    // State machine
+    if (mainGroup.status === 'forming') {
+        mainGroup.status = 'rallying';
+        mainGroup.lastOrderTick = state.tick; // Start rally timer NOW
+    }
+
+    if (mainGroup.status === 'rallying') {
+        if (isCohesive || timedOut) {
+            mainGroup.status = 'attacking';
+        } else {
+            // Move ALL units to rally point (not just idle ones)
+            const unitsToRally = mainGroup.unitIds.filter(id => {
+                const unit = state.entities[id];
+                if (!unit || unit.dead) return false;
+                // Force rally unless already there
+                if (mainGroup.rallyPoint && unit.pos.dist(mainGroup.rallyPoint) < 100) return false;
+                return true;
+            });
+
+            if (unitsToRally.length > 0 && mainGroup.rallyPoint) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: unitsToRally,
+                        x: mainGroup.rallyPoint.x,
+                        y: mainGroup.rallyPoint.y
+                    }
+                });
+            }
+            return actions; // Don't attack yet - wait for group
+        }
+    }
+
+    // --- During attack: Check if group needs to regroup ---
+    if (mainGroup.status === 'attacking') {
+        // Calculate current spread from group center
+        let maxSpreadFromCenter = 0;
+        for (const id of mainGroup.unitIds) {
+            const unit = state.entities[id];
+            if (unit && !unit.dead) {
+                const d = unit.pos.dist(groupCenter);
+                if (d > maxSpreadFromCenter) maxSpreadFromCenter = d;
+            }
+        }
+
+        // If group is too spread out (units > 500 apart), force a regroup
+        const MAX_ATTACK_SPREAD = 500;
+        if (maxSpreadFromCenter > MAX_ATTACK_SPREAD) {
+            // Units have scattered - move them toward group center instead of attacking
+            const unitsToRegroup = mainGroup.unitIds.filter(id => {
+                const unit = state.entities[id];
+                if (!unit || unit.dead) return false;
+                // Only regroup units that are far from center
+                if (unit.pos.dist(groupCenter) > 200) return true;
+                return false;
+            });
+
+            if (unitsToRegroup.length > 0) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: unitsToRegroup,
+                        x: groupCenter.x,
+                        y: groupCenter.y
+                    }
+                });
+                return actions; // Don't issue attack commands - regrouping
+            }
+        }
+    }
+
+    // Find best target - prioritize threats and high-value targets
     let bestTarget: Entity | null = null;
     let bestScore = -Infinity;
 
@@ -822,29 +1034,78 @@ function handleAttack(
     const targetPriority = AI_CONFIG.strategies?.attack?.target_priority ||
         ['conyard', 'factory', 'barracks', 'refinery', 'power'];
 
+    // First, identify which enemies are actively threatening us
+    const activeThreats = new Set<EntityId>();
+    for (const id of aiState.attackGroup) {
+        const unit = state.entities[id];
+        if (unit && !unit.dead && unit.lastAttackerId) {
+            activeThreats.add(unit.lastAttackerId);
+        }
+    }
+
+    // Also consider nearby enemy units/defenses as threats
+    for (const enemy of enemies) {
+        if (enemy.targetId && aiState.attackGroup.includes(enemy.targetId)) {
+            activeThreats.add(enemy.id);
+        }
+    }
+
     for (const enemy of enemies) {
         let score = 0;
 
-        // Prioritize buildings based on config
-        if (enemy.type === 'BUILDING') {
-            const priorityIndex = targetPriority.indexOf(enemy.key);
-            if (priorityIndex >= 0) {
-                score += 200 - priorityIndex * 30;
-            } else {
-                score += 50; // Generic building
+        // --- THREAT SCORING (highest priority) ---
+        const isThreat = activeThreats.has(enemy.id);
+        if (isThreat) {
+            // This enemy is actively attacking our units - big priority boost
+            score += 150;
+
+            // If threat is LOW HP, we can quickly eliminate it - even higher priority
+            const hpRatio = enemy.hp / enemy.maxHp;
+            if (hpRatio < 0.3) {
+                score += 100; // Quick kill opportunity
+            } else if (hpRatio < 0.6) {
+                score += 50;
             }
         }
 
+        // Defensive buildings that are threats get extra priority
+        if (enemy.type === 'BUILDING' && ['turret', 'pillbox', 'obelisk', 'sam'].includes(enemy.key)) {
+            if (isThreat) {
+                score += 100; // Active defensive building = top priority
+            } else {
+                // Even non-attacking defenses near our units are dangerous
+                const distFromGroup = enemy.pos.dist(groupCenter);
+                if (distFromGroup < 300) {
+                    score += 75; // Nearby turret - clear it
+                }
+            }
+        }
+
+        // --- STRATEGIC VALUE SCORING ---
+        if (enemy.type === 'BUILDING') {
+            const priorityIndex = targetPriority.indexOf(enemy.key);
+            if (priorityIndex >= 0) {
+                score += 80 - priorityIndex * 15; // Reduced from 200, threats take priority
+            } else {
+                score += 30; // Generic building
+            }
+        }
+
+        // Enemy units that can attack
+        if (enemy.type === 'UNIT' && enemy.key !== 'harvester') {
+            score += 40; // Combat units are moderate priority
+        }
+
         // Prioritize low HP targets (easier to kill)
-        score += (1 - enemy.hp / enemy.maxHp) * 40;
+        score += (1 - enemy.hp / enemy.maxHp) * 50;
 
         // Distance penalty - closer is better for group coherence
         const dist = enemy.pos.dist(groupCenter);
-        score -= dist / 30;
+        score -= dist / 25;
 
         // Bonus for attacking what allies are attacking (focus fire)
         const alliesAttacking = combatUnits.filter(u => u.targetId === enemy.id).length;
-        score += alliesAttacking * 15;
+        score += alliesAttacking * 20;
 
         if (score > bestScore) {
             bestScore = score;
@@ -893,6 +1154,160 @@ function handleAttack(
                     targetId: bestTarget.id
                 }
             });
+        }
+    }
+
+    return actions;
+}
+
+function handleScouting(
+    state: GameState,
+    _playerId: number,
+    combatUnits: Entity[],
+    aiState: AIPlayerState,
+    baseCenter: Vector
+): Action[] {
+    const actions: Action[] = [];
+
+    // Only scout periodically
+    if (state.tick - aiState.lastScoutTick < SCOUT_INTERVAL) return actions;
+
+    // Find a fast, idle unit to scout
+    const availableScouts = combatUnits.filter(u =>
+        !u.targetId && !u.moveTarget &&
+        (u.key === 'light' || u.key === 'rifle')
+    );
+
+    if (availableScouts.length === 0) return actions;
+
+    const scout = availableScouts[0];
+    aiState.lastScoutTick = state.tick;
+
+    // Pick a corner to scout (cycle through quadrants)
+    const quadrant = Math.floor(state.tick / SCOUT_INTERVAL) % 4;
+    const MAP_SIZE = 3000;
+    const corners = [
+        new Vector(MAP_SIZE - 200, 200),           // Top-right
+        new Vector(MAP_SIZE - 200, MAP_SIZE - 200), // Bottom-right
+        new Vector(200, MAP_SIZE - 200),           // Bottom-left
+        new Vector(200, 200)                        // Top-left
+    ];
+
+    // Pick the corner furthest from base
+    let targetCorner = corners[quadrant];
+    let maxDist = 0;
+    for (const corner of corners) {
+        const dist = corner.dist(baseCenter);
+        if (dist > maxDist) {
+            maxDist = dist;
+            targetCorner = corner;
+        }
+    }
+
+    actions.push({
+        type: 'COMMAND_MOVE',
+        payload: {
+            unitIds: [scout.id],
+            x: targetCorner.x,
+            y: targetCorner.y
+        }
+    });
+
+    return actions;
+}
+
+function handleMicro(
+    _state: GameState,
+    combatUnits: Entity[],
+    enemies: Entity[],
+    baseCenter: Vector
+): Action[] {
+    const actions: Action[] = [];
+    const RETREAT_THRESHOLD = 0.25; // 25% HP
+    const KITE_RANGE_MINIMUM = 200; // Only kite if our range >= this
+    const KITE_DISTANCE_RATIO = 0.6; // Kite when enemy within 60% of our range
+
+    for (const unit of combatUnits) {
+        const unitData = RULES.units?.[unit.key] || {};
+        const unitRange = unitData.range || 100;
+
+        // Skip if no enemies nearby
+        const nearbyEnemies = enemies.filter(e =>
+            e.type === 'UNIT' && e.pos.dist(unit.pos) < unitRange * 1.5
+        );
+        if (nearbyEnemies.length === 0) continue;
+
+        const hpRatio = unit.hp / unit.maxHp;
+        const closestEnemy = nearbyEnemies.reduce((closest, e) => {
+            const d = e.pos.dist(unit.pos);
+            return d < e.pos.dist(closest.pos) ? e : closest;
+        }, nearbyEnemies[0]);
+        const distToClosest = closestEnemy.pos.dist(unit.pos);
+
+        // --- LOW HP RETREAT (Priority 1) ---
+        if (hpRatio < RETREAT_THRESHOLD) {
+            // Find retreat direction (toward base, away from enemies)
+            const toBase = baseCenter.sub(unit.pos).norm();
+
+            // Find average enemy direction
+            let enemyDir = new Vector(0, 0);
+            for (const enemy of nearbyEnemies) {
+                enemyDir = enemyDir.add(enemy.pos.sub(unit.pos));
+            }
+            const awayFromEnemy = enemyDir.scale(-1).norm();
+
+            // Blend: 70% toward base, 30% away from enemies
+            const retreatDir = toBase.scale(0.7).add(awayFromEnemy.scale(0.3)).norm();
+            const retreatPos = unit.pos.add(retreatDir.scale(200));
+
+            actions.push({
+                type: 'COMMAND_MOVE',
+                payload: {
+                    unitIds: [unit.id],
+                    x: retreatPos.x,
+                    y: retreatPos.y
+                }
+            });
+            continue; // Don't also kite - retreat takes priority
+        }
+
+        // --- RANGED KITING (Priority 2) ---
+        // Only apply to ranged units (range >= 200)
+        if (unitRange >= KITE_RANGE_MINIMUM) {
+            // Get closest enemy's range
+            const enemyData = RULES.units?.[closestEnemy.key] || {};
+            const enemyRange = enemyData.range || 100;
+
+            // Kite if:
+            // 1. Enemy has significantly shorter range (we can outrange them)
+            // 2. Enemy is getting too close (within kite threshold)
+            const hasRangeAdvantage = unitRange > enemyRange + 50;
+            const kiteThreshold = unitRange * KITE_DISTANCE_RATIO;
+            const enemyTooClose = distToClosest < kiteThreshold;
+
+            if (hasRangeAdvantage && enemyTooClose) {
+                // Calculate kite direction: away from enemy but at optimal range
+                const awayFromEnemy = unit.pos.sub(closestEnemy.pos).norm();
+
+                // Move to optimal range (80% of our range - safe buffer)
+                const optimalRange = unitRange * 0.8;
+                const currentDir = unit.pos.sub(closestEnemy.pos);
+                const currentDist = currentDir.mag();
+
+                // Only kite if we'd actually improve our position
+                if (currentDist < optimalRange - 30) {
+                    const kitePos = closestEnemy.pos.add(awayFromEnemy.scale(optimalRange));
+
+                    actions.push({
+                        type: 'COMMAND_MOVE',
+                        payload: {
+                            unitIds: [unit.id],
+                            x: kitePos.x,
+                            y: kitePos.y
+                        }
+                    });
+                }
+            }
         }
     }
 

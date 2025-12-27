@@ -468,7 +468,7 @@ function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number
     let nextEntities = { ...state.entities };
     for (const id of unitIds) {
         const entity = nextEntities[id];
-        if (entity && entity.owner === 0 && entity.type === 'UNIT') {
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
             nextEntities[id] = {
                 ...entity,
                 moveTarget: target,

@@ -245,6 +245,15 @@ describe('AI Strategic Approach', () => {
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0;
             aiState.attackGroup = ['ai_tank0', 'ai_tank1', 'ai_tank2', 'ai_tank3', 'ai_tank4'];
+            // Pre-set group to attacking state (bypass rally)
+            aiState.offensiveGroups = [{
+                id: 'main_attack',
+                unitIds: aiState.attackGroup,
+                target: null,
+                rallyPoint: new Vector(2450, 2450),
+                status: 'attacking',
+                lastOrderTick: 0
+            }];
 
             const actions = computeAiActions(state, 1);
 
@@ -284,6 +293,15 @@ describe('AI Strategic Approach', () => {
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
+            // Pre-set group to attacking state (bypass rally)
+            aiState.offensiveGroups = [{
+                id: 'main_attack',
+                unitIds: aiState.attackGroup,
+                target: null,
+                rallyPoint: new Vector(800, 500),
+                status: 'attacking',
+                lastOrderTick: 0
+            }];
 
             const actions = computeAiActions(state, 1);
             const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
