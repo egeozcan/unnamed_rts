@@ -2,7 +2,7 @@ import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, setObserverMode } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
@@ -278,7 +278,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     currentState = state;
 
     // Initialize UI  
-    initUI(currentState, handleBuildClick, handleToggleSellMode);
+    initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode);
     initMinimap();
 
     // Set observer mode if all players are AI
@@ -290,6 +290,15 @@ function startGameWithConfig(config: SkirmishConfig) {
         onLeftClick: handleLeftClick,
         onRightClick: handleRightClick,
         onDeployMCV: attemptMCVDeploy,
+        onToggleDebug: () => {
+            currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
+            updateButtonsUI();
+        },
+        onToggleMinimap: () => {
+            if (currentState.mode === 'demo') {
+                currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
+            }
+        },
         getZoom: () => currentState.zoom,
         getCamera: () => currentState.camera
     });
@@ -337,6 +346,12 @@ function handleToggleSellMode() {
     updateButtonsUI();
 }
 
+function handleToggleRepairMode() {
+    if (currentState.mode === 'demo') return;
+    currentState = update(currentState, { type: 'TOGGLE_REPAIR_MODE' });
+    updateButtonsUI();
+}
+
 function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x1: number; y1: number; x2: number; y2: number }) {
     if (currentState.mode === 'demo') return;
 
@@ -351,6 +366,30 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
                 type: 'SELL_BUILDING',
                 payload: { buildingId: clicked.id, playerId: 0 }
             });
+            updateButtonsUI();
+        }
+        return;
+    }
+
+    // Repair Mode
+    if (currentState.repairMode) {
+        const entityList = Object.values(currentState.entities);
+        const clicked = entityList.find(e =>
+            !e.dead && e.owner === 0 && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+        );
+        if (clicked) {
+            // Toggle repair on/off for this building
+            if (clicked.isRepairing) {
+                currentState = update(currentState, {
+                    type: 'STOP_REPAIR',
+                    payload: { buildingId: clicked.id, playerId: 0 }
+                });
+            } else {
+                currentState = update(currentState, {
+                    type: 'START_REPAIR',
+                    payload: { buildingId: clicked.id, playerId: 0 }
+                });
+            }
             updateButtonsUI();
         }
         return;
@@ -398,6 +437,13 @@ function handleRightClick(wx: number, wy: number) {
     // Cancel sell mode
     if (currentState.sellMode) {
         currentState = update(currentState, { type: 'TOGGLE_SELL_MODE' });
+        updateButtonsUI();
+        return;
+    }
+
+    // Cancel repair mode
+    if (currentState.repairMode) {
+        currentState = update(currentState, { type: 'TOGGLE_REPAIR_MODE' });
         updateButtonsUI();
         return;
     }
@@ -456,6 +502,7 @@ function updateButtonsUI() {
         currentState.placingBuilding
     );
     updateSellModeUI(currentState);
+    updateRepairModeUI(currentState);
 }
 
 function gameLoop() {
@@ -464,22 +511,26 @@ function gameLoop() {
         return;
     }
 
-    // AI Logic - iterate over ALL AI players
-    let aiActions: any[] = [];
-    for (const pidStr in currentState.players) {
-        const pid = parseInt(pidStr);
-        const player = currentState.players[pid];
-        if (player.isAi) {
-            const actions = computeAiActions(currentState, pid);
-            aiActions.push(...actions);
+    if (currentState.debugMode) {
+        // Just render, don't update
+    } else {
+        // AI Logic - iterate over ALL AI players
+        let aiActions: any[] = [];
+        for (const pidStr in currentState.players) {
+            const pid = parseInt(pidStr);
+            const player = currentState.players[pid];
+            if (player.isAi) {
+                const actions = computeAiActions(currentState, pid);
+                aiActions.push(...actions);
+            }
         }
-    }
 
-    for (const action of aiActions) {
-        currentState = update(currentState, action);
-    }
+        for (const action of aiActions) {
+            currentState = update(currentState, action);
+        }
 
-    currentState = update(currentState, { type: 'TICK' });
+        currentState = update(currentState, { type: 'TICK' });
+    }
 
     // Update UI - use human player's data, or first player if observer
     const displayPlayerId = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
@@ -554,6 +605,17 @@ function gameLoop() {
         currentState.config.width,
         currentState.config.height
     );
+
+    // Observer Minimap Toggle
+    if (currentState.mode === 'demo') {
+        const observerMinimap = document.getElementById('observer-minimap');
+        if (observerMinimap) {
+            observerMinimap.style.display = currentState.showMinimap ? 'block' : 'none';
+        }
+    }
+
+    // Debug UI
+    updateDebugUI(currentState);
 
     requestAnimationFrame(gameLoop);
 }

@@ -6,12 +6,14 @@ const RULES = rules as any;
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string) => void) | null = null;
 let onToggleSellMode: (() => void) | null = null;
+let onToggleRepairMode: (() => void) | null = null;
 
 
-export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void) {
+export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void, toggleRepair?: () => void) {
     gameState = state;
     onBuildClick = buildBy;
     onToggleSellMode = toggleSell;
+    onToggleRepairMode = toggleRepair || null;
     setupTabs();
     setupButtons();
 
@@ -19,6 +21,13 @@ export function initUI(state: GameState, buildBy: (category: string, key: string
     if (sellBtn) {
         sellBtn.onclick = () => {
             if (onToggleSellMode) onToggleSellMode();
+        };
+    }
+
+    const repairBtn = document.getElementById('repair-btn');
+    if (repairBtn) {
+        repairBtn.onclick = () => {
+            if (onToggleRepairMode) onToggleRepairMode();
         };
     }
 }
@@ -207,8 +216,32 @@ export function updateSellModeUI(state: GameState) {
     if (canvas) {
         if (state.sellMode) {
             canvas.classList.add('sell-mode');
+            canvas.classList.remove('repair-mode');
         } else {
             canvas.classList.remove('sell-mode');
+        }
+    }
+}
+
+export function updateRepairModeUI(state: GameState) {
+    gameState = state;
+    const btn = document.getElementById('repair-btn');
+    const canvas = document.getElementById('gameCanvas');
+
+    if (btn) {
+        if (state.repairMode) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    }
+
+    if (canvas) {
+        if (state.repairMode) {
+            canvas.classList.add('repair-mode');
+            canvas.classList.remove('sell-mode');
+        } else {
+            canvas.classList.remove('repair-mode');
         }
     }
 }
@@ -273,5 +306,46 @@ export function setObserverMode(isObserver: boolean) {
         if (gameContainer) gameContainer.classList.remove('observer-mode');
         if (minimapContainer) minimapContainer.classList.remove('floating');
     }
+
+
+}
+
+export function updateDebugUI(state: GameState) {
+    let debugOverlay = document.getElementById('debug-overlay');
+    if (!state.debugMode) {
+        if (debugOverlay) debugOverlay.style.display = 'none';
+        return;
+    }
+
+    if (!debugOverlay) {
+        debugOverlay = document.createElement('div');
+        debugOverlay.id = 'debug-overlay';
+        document.body.appendChild(debugOverlay);
+    }
+
+    debugOverlay.style.display = 'block';
+
+    let html = '<h2>DEBUG MODE (PAUSED)</h2>';
+    html += `<p>Tick: ${state.tick}</p>`;
+    html += '<div class="debug-stats-container">';
+
+    for (const pid in state.players) {
+        const player = state.players[pid];
+        const entities = Object.values(state.entities).filter(e => e.owner === player.id);
+        const buildings = entities.filter(e => e.type === 'BUILDING').length;
+        const units = entities.filter(e => e.type === 'UNIT').length;
+
+        html += `
+            <div class="player-debug-stat" style="border-left: 4px solid ${player.color}">
+                <h3>Player ${player.id} ${player.isAi ? '(AI)' : '(Human)'}</h3>
+                <p>Credits: $${Math.floor(player.credits)}</p>
+                <p>Buildings: ${buildings}</p>
+                <p>Units: ${units}</p>
+            </div>
+        `;
+    }
+
+    html += '</div>';
+    debugOverlay.innerHTML = html;
 }
 

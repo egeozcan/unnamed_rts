@@ -73,11 +73,14 @@ describe('AI Smart Selling', () => {
             running: true,
             mode: 'game',
             sellMode: false,
+            repairMode: false,
             difficulty: 'easy',
             camera: { x: 0, y: 0 },
             zoom: 1,
             winner: null,
-            config: { width: 1000, height: 1000, resourceDensity: 'medium', rockDensity: 'medium' }
+            config: { width: 1000, height: 1000, resourceDensity: 'medium', rockDensity: 'medium' },
+            debugMode: false,
+            showMinimap: true
         };
 
         // Run AI multiple times to simulate decision process

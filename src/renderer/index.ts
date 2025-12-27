@@ -36,7 +36,7 @@ export class Renderer {
     }
 
     render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }) {
-        const { camera, zoom, entities, projectiles, particles, selection, placingBuilding } = state;
+        const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
 
         // Clear
@@ -51,7 +51,7 @@ export class Renderer {
         // Draw entities
         for (const entity of sortedEntities) {
             if (entity.dead) continue;
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick);
         }
 
         // Draw projectiles
@@ -90,7 +90,7 @@ export class Renderer {
         };
     }
 
-    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string) {
+    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number) {
         const ctx = this.ctx;
         const sc = this.worldToScreen(entity.pos, camera, zoom);
 
@@ -127,6 +127,31 @@ export class Renderer {
                 ctx.fillRect(-15, -entity.radius - 12, 30, 4);
                 ctx.fillStyle = '#0f0';
                 ctx.fillRect(-15, -entity.radius - 12, 30 * Math.max(0, entity.hp / entity.maxHp), 4);
+            }
+        }
+
+        // Draw repair icon for buildings being repaired (flashing)
+        if (entity.type === 'BUILDING' && entity.isRepairing) {
+            const showIcon = (tick % 30) < 20; // Flash on for 20 ticks, off for 10
+            if (showIcon) {
+                ctx.save();
+                // Draw wrench icon above the building
+                ctx.fillStyle = '#00ff00';
+                ctx.strokeStyle = '#004400';
+                ctx.lineWidth = 2;
+
+                // Simple wrench shape
+                const iconY = -entity.radius - 25;
+                ctx.beginPath();
+                ctx.arc(0, iconY, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Wrench handle
+                ctx.fillRect(-2, iconY + 6, 4, 12);
+                ctx.strokeRect(-2, iconY + 6, 4, 12);
+
+                ctx.restore();
             }
         }
 

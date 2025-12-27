@@ -18,12 +18,15 @@ export const INITIAL_STATE: GameState = {
     selection: [],
     placingBuilding: null,
     sellMode: false,
+    repairMode: false,
     players: {
         0: createPlayerState(0, false, 'medium', PLAYER_COLORS[0]),
         1: createPlayerState(1, true, 'medium', PLAYER_COLORS[1])
     },
     winner: null,
-    config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' }
+    config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
+    debugMode: false,
+    showMinimap: true
 };
 
 export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
@@ -64,7 +67,17 @@ export function update(state: GameState, action: Action): GameState {
         case 'SELL_BUILDING':
             return sellBuilding(state, action.payload);
         case 'TOGGLE_SELL_MODE':
-            return { ...state, sellMode: !state.sellMode };
+            return { ...state, sellMode: !state.sellMode, repairMode: false };
+        case 'TOGGLE_REPAIR_MODE':
+            return { ...state, repairMode: !state.repairMode, sellMode: false };
+        case 'START_REPAIR':
+            return startRepair(state, action.payload);
+        case 'STOP_REPAIR':
+            return stopRepair(state, action.payload);
+        case 'TOGGLE_DEBUG':
+            return { ...state, debugMode: !state.debugMode };
+        case 'TOGGLE_MINIMAP':
+            return { ...state, showMinimap: !state.showMinimap };
         default:
             return state;
     }
@@ -127,6 +140,56 @@ function tick(state: GameState): GameState {
                 flash: 5,
                 lastAttackerId: d.attackerId
             };
+        }
+    }
+
+    // Process Building Repairs
+    const repairCostPercentage = RULES.economy?.repairCostPercentage || 0.3;
+    const repairDurationTicks = 600; // Same as build time - 10 seconds at 60fps
+
+    for (const id in updatedEntities) {
+        const ent = updatedEntities[id];
+        if (ent.type === 'BUILDING' && ent.isRepairing && !ent.dead) {
+            const buildingData = RULES.buildings[ent.key];
+            if (!buildingData) continue;
+
+            const player = nextPlayers[ent.owner];
+            if (!player) continue;
+
+            // Calculate repair costs and healing per tick
+            const totalRepairCost = buildingData.cost * repairCostPercentage;
+            const missingHp = ent.maxHp - ent.hp;
+            const hpPerTick = ent.maxHp / repairDurationTicks;
+            const costPerTick = totalRepairCost / repairDurationTicks;
+
+            // Check if player can afford this tick's repair
+            if (player.credits >= costPerTick) {
+                const hpToHeal = Math.min(hpPerTick, missingHp);
+                const actualCost = (hpToHeal / ent.maxHp) * totalRepairCost;
+
+                // Deduct credits
+                nextPlayers[ent.owner] = {
+                    ...nextPlayers[ent.owner],
+                    credits: nextPlayers[ent.owner].credits - actualCost
+                };
+
+                // Heal building
+                const newHp = Math.min(ent.maxHp, ent.hp + hpToHeal);
+                const isFullHp = newHp >= ent.maxHp;
+
+                updatedEntities[id] = {
+                    ...ent,
+                    hp: newHp,
+                    flash: 3, // Flash while repairing
+                    isRepairing: !isFullHp // Auto-stop when full
+                };
+            } else {
+                // No credits - stop repairing
+                updatedEntities[id] = {
+                    ...ent,
+                    isRepairing: false
+                };
+            }
         }
     }
 
@@ -305,6 +368,24 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
     if (q.current) return state;
     if (category === 'building' && player.readyToPlace) return state;
 
+    // === CREDIT VALIDATION ===
+    // Reject build if player can't afford it
+    let cost = 0;
+    if (category === 'building') {
+        const data = RULES.buildings[key];
+        if (!data) return state;
+        cost = data.cost || 0;
+    } else {
+        const data = RULES.units[key];
+        if (!data) return state;
+        cost = data.cost || 0;
+    }
+
+    if (player.credits < cost) {
+        // Player can't afford this - silently reject
+        return state;
+    }
+
     return {
         ...state,
         players: {
@@ -363,6 +444,32 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
     const { key, x, y, playerId } = payload;
     const player = state.players[playerId];
     if (!player || player.readyToPlace !== key) return state;
+
+    // === BUILD RANGE VALIDATION ===
+    // Building must be within BUILD_RADIUS of an existing building (excluding defenses)
+    const BUILD_RADIUS = 400;
+    const myBuildings = Object.values(state.entities).filter(e =>
+        e.owner === playerId && e.type === 'BUILDING' && !e.dead
+    );
+
+    let withinBuildRange = false;
+    for (const b of myBuildings) {
+        const bData = RULES.buildings[b.key];
+        // Defense buildings don't extend build range
+        if (bData?.isDefense) continue;
+
+        const dist = Math.sqrt((x - b.pos.x) ** 2 + (y - b.pos.y) ** 2);
+        if (dist < BUILD_RADIUS) {
+            withinBuildRange = true;
+            break;
+        }
+    }
+
+    // Reject placement if not within build range (unless this is first building)
+    if (myBuildings.length > 0 && !withinBuildRange) {
+        console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) is outside build range`);
+        return state;
+    }
 
     const building = createEntity(x, y, playerId, 'BUILDING', key, state);
 
@@ -460,6 +567,68 @@ function sellBuilding(state: GameState, payload: { buildingId: EntityId; playerI
     return newState;
 }
 
+function startRepair(state: GameState, payload: { buildingId: EntityId; playerId: number }): GameState {
+    const { buildingId, playerId } = payload;
+    const building = state.entities[buildingId];
+
+    // Validate building exists, is owned by player, is a building, not dead
+    if (!building || building.owner !== playerId || building.type !== 'BUILDING' || building.dead) {
+        return state;
+    }
+
+    // Can't repair if already at full HP
+    if (building.hp >= building.maxHp) {
+        return state;
+    }
+
+    // Can't repair if already repairing (toggle off instead)
+    if (building.isRepairing) {
+        return stopRepair(state, payload);
+    }
+
+    const player = state.players[playerId];
+    if (!player) return state;
+
+    // Check if player has any credits
+    if (player.credits <= 0) {
+        return state;
+    }
+
+    return {
+        ...state,
+        entities: {
+            ...state.entities,
+            [buildingId]: {
+                ...building,
+                isRepairing: true
+            }
+        }
+    };
+}
+
+function stopRepair(state: GameState, payload: { buildingId: EntityId; playerId: number }): GameState {
+    const { buildingId, playerId } = payload;
+    const building = state.entities[buildingId];
+
+    if (!building || building.owner !== playerId || building.type !== 'BUILDING') {
+        return state;
+    }
+
+    if (!building.isRepairing) {
+        return state;
+    }
+
+    return {
+        ...state,
+        entities: {
+            ...state.entities,
+            [buildingId]: {
+                ...building,
+                isRepairing: false
+            }
+        }
+    };
+}
 
 function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number; y: number }): GameState {
     const { unitIds, x, y } = payload;
@@ -469,12 +638,22 @@ function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number
     for (const id of unitIds) {
         const entity = nextEntities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
-            nextEntities[id] = {
-                ...entity,
+            const updates: Partial<Entity> = {
                 moveTarget: target,
                 targetId: null,
                 path: null
             };
+
+            // If it's a harvester, clear its harvesting targets so manual move overrides everything
+            if (entity.key === 'harvester') {
+                (updates as any).resourceTargetId = null;
+                (updates as any).baseTargetId = null;
+            }
+
+            nextEntities[id] = {
+                ...entity,
+                ...updates
+            } as Entity;
         }
     }
     return { ...state, entities: nextEntities };
@@ -716,8 +895,12 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         const harvester = nextEntity;
         const capacity = 500;
 
+        // 0. If manual move (flee/player command), skip automated logic
+        if (harvester.moveTarget) {
+            // Do nothing - fall through to generic move logic
+        }
         // 1. If full, return to refinery
-        if (harvester.cargo >= capacity) {
+        else if (harvester.cargo >= capacity) {
             harvester.resourceTargetId = null; // Forget resource
             if (!harvester.baseTargetId) {
                 // Find nearest refinery
@@ -749,7 +932,8 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                             other.key === 'harvester' &&
                             other.owner === harvester.owner &&
                             !other.dead &&
-                            (other as any).cargo > 0) { // Only count harvesters with cargo (wanting to dock)
+                            (other as any).cargo > 0 && // Only count harvesters with cargo (wanting to dock)
+                            other.moveTarget === null) { // Ignore harvesters with player move override
                             const otherDist = other.pos.dist(dockPos);
                             // If another harvester is closer to the dock
                             if (otherDist < ourDist) {
@@ -839,7 +1023,66 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                         // Track minimum distance ever achieved
                         const newBestDist = Math.min(bestDistToOre, distToOre);
 
-                        if (harvestAttemptTicks > 30 && distToOre > 43) {
+                        // Check for congestion - is another friendly harvester closer to this ore?
+                        let positionInQueue = 0;
+                        let blockedByFriendly = false;
+                        for (const other of entityList) {
+                            if (other.id !== harvester.id &&
+                                other.key === 'harvester' &&
+                                other.owner === harvester.owner &&
+                                !other.dead &&
+                                other.resourceTargetId === ore.id) {
+                                const otherDistToOre = other.pos.dist(ore.pos);
+                                if (otherDistToOre < distToOre) {
+                                    positionInQueue++;
+                                    // Check if this other harvester is very close to us (blocking)
+                                    const distToOther = harvester.pos.dist(other.pos);
+                                    if (distToOther < 50) {
+                                        blockedByFriendly = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        // If blocked by a friendly harvester and not making progress, switch to different ore
+                        if (blockedByFriendly && harvestAttemptTicks > 15) {
+                            // Find a different ore
+                            let altOre: Entity | null = null;
+                            let minAltDist = Infinity;
+                            for (const other of entityList) {
+                                if (other.type === 'RESOURCE' && !other.dead && other.id !== ore.id) {
+                                    const d = harvester.pos.dist(other.pos);
+                                    if (d < minAltDist) {
+                                        // Check if this ore is less congested
+                                        let harvestersAtOre = 0;
+                                        for (const h of entityList) {
+                                            if (h.key === 'harvester' && h.owner === harvester.owner && !h.dead && h.resourceTargetId === other.id) {
+                                                harvestersAtOre++;
+                                            }
+                                        }
+                                        // Prefer less congested ores
+                                        if (harvestersAtOre <= positionInQueue) {
+                                            minAltDist = d;
+                                            altOre = other;
+                                        }
+                                    }
+                                }
+                            }
+                            if (altOre) {
+                                nextEntity = {
+                                    ...harvester,
+                                    resourceTargetId: altOre.id,
+                                    path: null,
+                                    pathIdx: 0,
+                                    harvestAttemptTicks: 0,
+                                    lastDistToOre: null,
+                                    bestDistToOre: null
+                                } as any;
+                            } else {
+                                // No alternative ore - wait in queue
+                                nextEntity = { ...harvester, vel: new Vector(0, 0) };
+                            }
+                        } else if (harvestAttemptTicks > 30 && distToOre > 43) {
                             // Give up on this ore after being stuck
                             // Blocked (by building): best distance is far (> 55px, can't get close)
                             // Congested (by units): best distance is close (< 55px, ore is reachable)
@@ -1138,10 +1381,16 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
     }
 
     // Stuck Condition
-    if (distToTarget > 10 && avgVel.mag() < speed * 0.15) {
-        stuckTimer++;
+    // Use average velocity for stuck detection - this tracks actual movement over time
+    // Note: entity.vel is always 0 after position updates, so we can't use it reliably here
+    if (distToTarget > 10) {
+        if (avgVel.mag() < speed * 0.15) {
+            stuckTimer++;
+        } else {
+            stuckTimer = Math.max(0, stuckTimer - 2);
+        }
     } else {
-        stuckTimer = Math.max(0, stuckTimer - 2); // Decay faster when moving
+        stuckTimer = 0;
     }
 
     // Trigger unstuck logic - use smarter unstuck direction
@@ -1230,9 +1479,20 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
         finalDir = dir.add(separation.scale(0.8)).add(avoidance).add(right.scale(rightBias)).norm();
     }
 
+    // Smoothing
+    // Blend with previous velocity to prevent jitter (zigzagging)
+    // 0.6 old + 0.4 new provides good responsiveness while damping high-frequency oscillation
+    let newVel = finalDir.scale(speed);
+    if (entity.vel.mag() > 0.1 && newVel.mag() > 0.1) {
+        const blended = entity.vel.scale(0.6).add(newVel.scale(0.4));
+        if (blended.mag() > 0.01) {
+            newVel = blended.norm().scale(speed);
+        }
+    }
+
     return {
         ...entity,
-        vel: finalDir.scale(speed),
+        vel: newVel,
         stuckTimer,
         unstuckTimer: 0,
         unstuckDir: null,
@@ -1264,7 +1524,7 @@ function createProjectile(source: Entity, target: Entity) {
     };
 }
 
-function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, state: GameState): Entity {
+export function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, state: GameState): Entity {
     const id = 'e_' + state.tick + '_' + Math.floor(Math.random() * 100000);
 
     let data = getRuleData(key);

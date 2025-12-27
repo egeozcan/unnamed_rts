@@ -19,6 +19,8 @@ export interface OffensiveGroup {
 }
 
 // AI State tracking (per player, stored separately since GameState is immutable)
+export type InvestmentPriority = 'economy' | 'warfare' | 'defense' | 'balanced';
+
 export interface AIPlayerState {
     strategy: AIStrategy;
     lastStrategyChange: number;
@@ -30,7 +32,12 @@ export interface AIPlayerState {
     offensiveGroups: OffensiveGroup[];
     enemyBaseLocation: Vector | null;
     lastScoutTick: number;
-    lastProductionType: 'infantry' | 'vehicle' | null;  // For staggered production
+    lastProductionType: 'infantry' | 'vehicle' | null;
+    // Dynamic resource allocation
+    investmentPriority: InvestmentPriority;
+    economyScore: number;      // 0-100 economic health rating
+    threatLevel: number;       // 0-100 military pressure rating
+    expansionTarget: Vector | null;  // Distant ore to expand toward
 }
 
 // Store AI states (keyed by playerId)
@@ -49,7 +56,11 @@ function getAIState(playerId: number): AIPlayerState {
             offensiveGroups: [],
             enemyBaseLocation: null,
             lastScoutTick: 0,
-            lastProductionType: null
+            lastProductionType: null,
+            investmentPriority: 'balanced',
+            economyScore: 50,
+            threatLevel: 0,
+            expansionTarget: null
         };
     }
     return aiStates[playerId];
@@ -114,6 +125,9 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     const personality = AI_CONFIG.personalities['balanced'];
     updateStrategy(aiState, state.tick, myBuildings, myCombatUnits, enemies, threatsNearBase, personality);
 
+    // Dynamic resource allocation - evaluate investment priority
+    evaluateInvestmentPriority(state, playerId, aiState, myBuildings, myCombatUnits, enemies, baseCenter);
+
     // Execute strategy-specific actions
 
     // 1. Always check for emergency selling if cash is low
@@ -122,7 +136,10 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     // 2. Always handle economy
     actions.push(...handleEconomy(state, playerId, myBuildings, player, personality));
 
-    // 2. Handle harvester defense/fleeing
+    // 3. Handle building repairs when appropriate
+    actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
+
+    // 4. Handle harvester defense/fleeing
     actions.push(...handleHarvesterSafety(state, playerId, myHarvesters, myCombatUnits, baseCenter, enemies, aiState));
 
     // 3. Handle base defense (always check, strategy just goes into full defense mode)
@@ -196,6 +213,151 @@ function updateEnemyBaseLocation(aiState: AIPlayerState, enemyBuildings: Entity[
         sumY += b.pos.y;
     }
     aiState.enemyBaseLocation = new Vector(sumX / enemyBuildings.length, sumY / enemyBuildings.length);
+}
+
+// ===== DYNAMIC RESOURCE ALLOCATION =====
+
+function evaluateInvestmentPriority(
+    state: GameState,
+    playerId: number,
+    aiState: AIPlayerState,
+    myBuildings: Entity[],
+    combatUnits: Entity[],
+    enemies: Entity[],
+    baseCenter: Vector
+): void {
+    const player = state.players[playerId];
+    if (!player) return;
+
+    // Calculate economy score
+    aiState.economyScore = calculateEconomyScore(state, playerId, myBuildings);
+
+    // Calculate threat level
+    aiState.threatLevel = calculateThreatLevel(state, playerId, baseCenter, enemies, myBuildings);
+
+    // Calculate army ratio
+    const enemyCombatUnits = enemies.filter(e => e.type === 'UNIT' && e.key !== 'harvester' && e.key !== 'mcv');
+    const armyRatio = enemyCombatUnits.length > 0
+        ? combatUnits.length / enemyCombatUnits.length
+        : 2.0; // If no enemy combat units, we're strong
+
+    // Decision matrix
+    if (aiState.threatLevel > 70) {
+        aiState.investmentPriority = 'defense';
+    } else if (aiState.economyScore < 30) {
+        aiState.investmentPriority = 'economy';
+    } else if (armyRatio < 0.6) {
+        aiState.investmentPriority = 'warfare';
+    } else if (player.credits > 2000 && aiState.economyScore < 70) {
+        aiState.investmentPriority = 'economy'; // Expand with surplus
+    } else {
+        aiState.investmentPriority = 'balanced';
+    }
+
+    // Find expansion target if prioritizing economy
+    if (aiState.investmentPriority === 'economy') {
+        aiState.expansionTarget = findDistantOre(state, playerId, myBuildings);
+    }
+}
+
+function calculateEconomyScore(
+    state: GameState,
+    playerId: number,
+    myBuildings: Entity[]
+): number {
+    // Count harvesters
+    const harvesters = Object.values(state.entities).filter(e =>
+        e.owner === playerId && e.type === 'UNIT' && e.key === 'harvester' && !e.dead
+    );
+
+    // Count refineries  
+    const refineries = myBuildings.filter(b => b.key === 'refinery' && !b.dead);
+
+    // Count nearby ore (within 600 units of any refinery)
+    let accessibleOre = 0;
+    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+    for (const ore of allOre) {
+        for (const ref of refineries) {
+            if (ore.pos.dist(ref.pos) < 600) {
+                accessibleOre++;
+                break;
+            }
+        }
+    }
+
+    // Ideal: 2 harvesters per refinery, plenty of accessible ore
+    const idealHarvesters = Math.max(refineries.length * 2, 1);
+    const harvesterRatio = Math.min(harvesters.length / idealHarvesters, 1.5);
+    const oreScore = Math.min(accessibleOre / 8, 1.0); // 8 ore nodes = max score
+
+    const score = (harvesterRatio * 50) + (oreScore * 50);
+    return Math.max(0, Math.min(100, score));
+}
+
+function calculateThreatLevel(
+    _state: GameState,
+    _playerId: number,
+    baseCenter: Vector,
+    enemies: Entity[],
+    myBuildings: Entity[]
+): number {
+    // Count enemies near base
+    const nearbyThreats = enemies.filter(e =>
+        e.type === 'UNIT' && e.key !== 'harvester' && e.pos.dist(baseCenter) < 600
+    );
+
+    // Count our defenses
+    const defenses = myBuildings.filter(b => {
+        const data = RULES.buildings[b.key];
+        return data?.isDefense && !b.dead;
+    });
+
+    // High threat if enemies near base and few defenses
+    const threatScore = nearbyThreats.length * 25 - defenses.length * 15;
+    return Math.max(0, Math.min(100, threatScore));
+}
+
+function findDistantOre(
+    state: GameState,
+    _playerId: number,
+    myBuildings: Entity[]
+): Vector | null {
+    const allOre = Object.values(state.entities).filter(e =>
+        e.type === 'RESOURCE' && !e.dead && e.hp > 200
+    );
+    const nonDefenseBuildings = myBuildings.filter(b => {
+        const data = RULES.buildings[b.key];
+        return !data?.isDefense;
+    });
+
+    let bestOre: Vector | null = null;
+    let bestScore = -Infinity;
+
+    for (const ore of allOre) {
+        // Check if already covered by a refinery
+        const hasNearbyRefinery = myBuildings.some(b =>
+            b.key === 'refinery' && b.pos.dist(ore.pos) < 250
+        );
+        if (hasNearbyRefinery) continue;
+
+        // Check distance from our buildings (want distant but reachable)
+        let minDistToBuilding = Infinity;
+        for (const b of nonDefenseBuildings) {
+            const d = b.pos.dist(ore.pos);
+            if (d < minDistToBuilding) minDistToBuilding = d;
+        }
+
+        // Prefer ore that's 400-1200 units away (not too close, not too far)
+        if (minDistToBuilding >= 400 && minDistToBuilding <= 1500) {
+            const score = 1000 - Math.abs(minDistToBuilding - 800); // Optimal at 800
+            if (score > bestScore) {
+                bestScore = score;
+                bestOre = ore.pos;
+            }
+        }
+    }
+
+    return bestOre;
 }
 
 function detectThreats(
@@ -298,7 +460,7 @@ function updateStrategy(
 }
 
 function handleEconomy(
-    _state: GameState,
+    state: GameState,
     playerId: number,
     buildings: Entity[],
     player: any,
@@ -306,6 +468,84 @@ function handleEconomy(
 ): Action[] {
     const actions: Action[] = [];
     const buildOrder = personality.build_order_priority;
+    const aiState = getAIState(playerId);
+
+    // ===== INVESTMENT PRIORITY HANDLING =====
+
+    // Count current harvesters and refineries
+    const harvesters = Object.values(state.entities).filter(e =>
+        e.owner === playerId && e.type === 'UNIT' && e.key === 'harvester' && !e.dead
+    );
+    const refineries = buildings.filter(b => b.key === 'refinery' && !b.dead);
+    const hasFactory = buildings.some(b => b.key === 'factory');
+    const buildingQueueEmpty = !player.queues.building.current;
+    const vehicleQueueEmpty = !player.queues.vehicle.current;
+
+    if (aiState.investmentPriority === 'economy') {
+        // ECONOMY PRIORITY: Build harvesters and expand toward ore
+
+        // 1. Build harvesters if we have too few (need 2 per refinery)
+        const idealHarvesters = Math.max(refineries.length * 2, 2);
+        const canBuildHarvester = refineries.length > 0; // Need refinery for harvesters
+        if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
+            const harvData = RULES.units['harvester'];
+            const harvReqsMet = (harvData?.req || []).every((r: string) => buildings.some(b => b.key === r));
+            if (harvData && harvReqsMet && player.credits >= harvData.cost) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
+                return actions; // Focus on harvesters
+            }
+        }
+
+        // 2. Build refinery near distant ore if we have an expansion target
+        if (aiState.expansionTarget && buildingQueueEmpty) {
+            const refineryData = RULES.buildings['refinery'];
+            const canBuildRefinery = buildings.some(b => b.key === 'factory'); // Refinery req
+
+            // Check if we can reach the expansion target with current build range
+            const BUILD_RADIUS = 400;
+            const nonDefenseBuildings = buildings.filter(b => {
+                const bData = RULES.buildings[b.key];
+                return !bData?.isDefense;
+            });
+
+            let canReachTarget = false;
+            for (const b of nonDefenseBuildings) {
+                if (b.pos.dist(aiState.expansionTarget) < BUILD_RADIUS + 100) {
+                    canReachTarget = true;
+                    break;
+                }
+            }
+
+            // Count existing power plants to limit building walk
+            const existingPowerPlants = buildings.filter(b => b.key === 'power').length;
+            const MAX_POWER_FOR_EXPANSION = 4; // Limit building walk to 4 power plants
+
+            if (canReachTarget && canBuildRefinery && refineryData && player.credits >= refineryData.cost) {
+                // Build refinery near the ore
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                return actions;
+            } else if (!canReachTarget && buildingQueueEmpty && existingPowerPlants < MAX_POWER_FOR_EXPANSION) {
+                // BUILDING WALK: Build power plant toward the ore (limited number)
+                const powerData = RULES.buildings['power'];
+                if (powerData && player.credits >= powerData.cost) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId } });
+                    return actions;
+                }
+            }
+        }
+    } else if (aiState.investmentPriority === 'defense') {
+        // DEFENSE PRIORITY: Build turrets
+        if (buildingQueueEmpty) {
+            const turretData = RULES.buildings['turret'];
+            const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret req
+            if (canBuildTurret && turretData && player.credits >= turretData.cost) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
+                // Don't return - continue with unit production for defense
+            }
+        }
+    }
+
+    // ===== STANDARD BUILD ORDER =====
 
     // Build order fulfillment
     for (const item of buildOrder) {
@@ -327,7 +567,6 @@ function handleEconomy(
 
     // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
-    const aiState = getAIState(playerId);
 
     // Strategy-based credit thresholds
     // - Attack mode: lower threshold (500) to maximize army size
@@ -340,9 +579,7 @@ function handleEconomy(
     const creditBuffer = aiState.strategy === 'attack' ? 300 : 500;
 
     const hasBarracks = buildings.some(b => b.key === 'barracks');
-    const hasFactory = buildings.some(b => b.key === 'factory');
     const infantryQueueEmpty = !player.queues.infantry.current;
-    const vehicleQueueEmpty = !player.queues.vehicle.current;
 
     if (player.credits > creditThreshold) {
         // STAGGERED PRODUCTION: Alternate between infantry and vehicles
@@ -423,7 +660,7 @@ function handleEconomy(
     const mcvCost = RULES.units.mcv?.cost || 3000;
     // hasFactory already defined above in unit production section
     const alreadyBuildingMcv = player.queues.vehicle.current === 'mcv';
-    const existingMcvs = Object.values(_state.entities).filter((e: any) =>
+    const existingMcvs = Object.values(state.entities).filter((e: any) =>
         e.owner === playerId && e.key === 'mcv' && !e.dead
     );
 
@@ -434,7 +671,7 @@ function handleEconomy(
             const BUILD_RADIUS = 400;
             let hasDistantOre = false;
 
-            for (const e of Object.values(_state.entities)) {
+            for (const e of Object.values(state.entities)) {
                 const entity = e as Entity;
                 if (entity.type !== 'RESOURCE' || entity.dead) continue;
 
@@ -503,6 +740,24 @@ function handleHarvesterSafety(
                 if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
                     nearestDist = dist;
                     nearestThreat = enemy;
+                }
+            }
+        }
+
+        // Also check if our destination (refinery) is compromised
+        // This prevents the "yoyo" effect of fleeing -> safe -> return to unsafe refinery -> flee
+        if (!nearestThreat && harv.baseTargetId) {
+            const refinery = state.entities[harv.baseTargetId];
+            if (refinery && !refinery.dead) {
+                for (const enemy of enemies) {
+                    if (enemy.type !== 'UNIT') continue;
+                    const dist = enemy.pos.dist(refinery.pos);
+                    // If enemy is camping the refinery, treat it as a threat to us
+                    if (dist < THREAT_DETECTION_RADIUS) {
+                        nearestThreat = enemy;
+                        nearestDist = dist; // Treat distance to refinery as threat distance
+                        break;
+                    }
                 }
             }
         }
@@ -723,9 +978,16 @@ function handleRally(
     }
 
     // Move idle units to rally point
+    // BUT exclude units that are part of an active offensive group
+    const activeUnitIds = new Set<EntityId>();
+    aiState.offensiveGroups.forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
+    aiState.attackGroup.forEach(id => activeUnitIds.add(id));
+    aiState.harassGroup.forEach(id => activeUnitIds.add(id));
+
     const idleUnits = combatUnits.filter(u =>
-        !u.targetId &&
-        !u.moveTarget &&
+        !activeUnitIds.has(u.id) && // Not in an active group
+        !u.targetId && // Not currently attacking
+        !u.moveTarget && // Not currently moving
         u.pos.dist(rallyPoint) > 100 // Not already near rally
     );
 
@@ -890,6 +1152,11 @@ function handleAttack(
     // Manage offensive group (create if doesn't exist or was cleared)
     let mainGroup = aiState.offensiveGroups.find(g => g.id === 'main_attack');
 
+    // Update group members immediately to include any new recruits
+    if (mainGroup) {
+        mainGroup.unitIds = [...aiState.attackGroup];
+    }
+
     // If we switched strategy and came back, need a fresh group
     if (mainGroup && mainGroup.status === 'attacking') {
         // Check if we should reset for a new attack wave
@@ -916,9 +1183,6 @@ function handleAttack(
         };
         aiState.offensiveGroups.push(mainGroup);
     }
-
-    // Update group members
-    mainGroup.unitIds = [...aiState.attackGroup];
 
     // Calculate rally point if not set
     if (!mainGroup.rallyPoint && aiState.enemyBaseLocation) {
@@ -990,38 +1254,50 @@ function handleAttack(
 
     // --- During attack: Check if group needs to regroup ---
     if (mainGroup.status === 'attacking') {
-        // Calculate current spread from group center
-        let maxSpreadFromCenter = 0;
-        for (const id of mainGroup.unitIds) {
-            const unit = state.entities[id];
-            if (unit && !unit.dead) {
-                const d = unit.pos.dist(groupCenter);
-                if (d > maxSpreadFromCenter) maxSpreadFromCenter = d;
-            }
-        }
+        // Check if multi-front attack is active (large army with 2+ targets)
+        // If so, skip regroup logic - units are intentionally spread between targets
+        const MULTI_FRONT_THRESHOLD = 10;
+        const aliveUnitsForRegroup = aiState.attackGroup.filter(id => {
+            const u = state.entities[id];
+            return u && !u.dead;
+        });
+        const isMultiFront = aliveUnitsForRegroup.length >= MULTI_FRONT_THRESHOLD && enemies.length > 1;
 
-        // If group is too spread out (units > 500 apart), force a regroup
-        const MAX_ATTACK_SPREAD = 500;
-        if (maxSpreadFromCenter > MAX_ATTACK_SPREAD) {
-            // Units have scattered - move them toward group center instead of attacking
-            const unitsToRegroup = mainGroup.unitIds.filter(id => {
+        // Only apply regroup logic for single-front attacks
+        if (!isMultiFront) {
+            // Calculate current spread from group center
+            let maxSpreadFromCenter = 0;
+            for (const id of mainGroup.unitIds) {
                 const unit = state.entities[id];
-                if (!unit || unit.dead) return false;
-                // Only regroup units that are far from center
-                if (unit.pos.dist(groupCenter) > 200) return true;
-                return false;
-            });
+                if (unit && !unit.dead) {
+                    const d = unit.pos.dist(groupCenter);
+                    if (d > maxSpreadFromCenter) maxSpreadFromCenter = d;
+                }
+            }
 
-            if (unitsToRegroup.length > 0) {
-                actions.push({
-                    type: 'COMMAND_MOVE',
-                    payload: {
-                        unitIds: unitsToRegroup,
-                        x: groupCenter.x,
-                        y: groupCenter.y
-                    }
+            // If group is too spread out (units > 500 apart), force a regroup
+            const MAX_ATTACK_SPREAD = 500;
+            if (maxSpreadFromCenter > MAX_ATTACK_SPREAD) {
+                // Units have scattered - move them toward group center instead of attacking
+                const unitsToRegroup = mainGroup.unitIds.filter(id => {
+                    const unit = state.entities[id];
+                    if (!unit || unit.dead) return false;
+                    // Only regroup units that are far from center
+                    if (unit.pos.dist(groupCenter) > 200) return true;
+                    return false;
                 });
-                return actions; // Don't issue attack commands - regrouping
+
+                if (unitsToRegroup.length > 0) {
+                    actions.push({
+                        type: 'COMMAND_MOVE',
+                        payload: {
+                            unitIds: unitsToRegroup,
+                            x: groupCenter.x,
+                            y: groupCenter.y
+                        }
+                    });
+                    return actions; // Don't issue attack commands - regrouping
+                }
             }
         }
     }
@@ -1484,11 +1760,25 @@ function handleBuildingPlacement(
     if (key === 'refinery') {
         let bestOre: Entity | null = null;
         let minDist = Infinity;
-        const MAX_ORE_DISTANCE = 600;
+        const MAX_ORE_DISTANCE = 550; // Max distance from ore to nearby building
+
+        // Get non-defense buildings for distance calculation
+        const nonDefenseBuildings = buildings.filter(b => {
+            const bData = RULES.buildings[b.key];
+            return !bData?.isDefense;
+        });
 
         for (const ore of resources) {
-            const dist = ore.pos.dist(center);
-            if (dist > MAX_ORE_DISTANCE) continue;
+            // Find distance to NEAREST building (not base center)
+            // This supports building walk - ore near expansion front is valid
+            let minDistToBuilding = Infinity;
+            for (const b of nonDefenseBuildings) {
+                const d = ore.pos.dist(b.pos);
+                if (d < minDistToBuilding) minDistToBuilding = d;
+            }
+
+            // Skip ore too far from any building (can't reach)
+            if (minDistToBuilding > MAX_ORE_DISTANCE) continue;
 
             const allEntities = Object.values(state.entities);
             const hasRefinery = allEntities.some(b =>
@@ -1498,8 +1788,8 @@ function handleBuildingPlacement(
                 b.pos.dist(ore.pos) < 200
             );
 
-            let effectiveDist = dist;
-            if (hasRefinery) effectiveDist += 5000;
+            let effectiveDist = minDistToBuilding;
+            if (hasRefinery) effectiveDist += 5000; // Strongly avoid already-claimed ore
 
             if (effectiveDist < minDist) {
                 minDist = effectiveDist;
@@ -1517,11 +1807,18 @@ function handleBuildingPlacement(
         searchRadiusMax = 350;
     } else if (key === 'power' && distantOreTarget) {
         // Power plants can be used for "building walk" expansion towards distant ore
-        const dirToOre = distantOreTarget.sub(expansionFront).norm();
-        searchCenter = expansionFront.add(dirToOre.scale(150));
-        searchRadiusMin = 80;
-        searchRadiusMax = 250;
-        expandingTowardsOre = true;
+        // BUT only if we don't already have too many power plants
+        const existingPowerPlants = buildings.filter(b => b.key === 'power').length;
+        const MAX_POWER_FOR_EXPANSION = 5;
+
+        if (existingPowerPlants < MAX_POWER_FOR_EXPANSION) {
+            const dirToOre = distantOreTarget.sub(expansionFront).norm();
+            searchCenter = expansionFront.add(dirToOre.scale(150));
+            searchRadiusMin = 80;
+            searchRadiusMax = 250;
+            expandingTowardsOre = true;
+        }
+        // If we already have enough power plants, use default placement
     } else if (buildingData.isDefense) {
         // === STRATEGIC DEFENSIVE BUILDING PLACEMENT ===
         const aiState = getAIState(playerId);
@@ -1671,15 +1968,32 @@ function isValidPlacement(
     w: number,
     h: number,
     state: GameState,
-    _myBuildings: Entity[],
+    myBuildings: Entity[],
     buildingKey: string
 ): boolean {
     const margin = 25;
     const mapMargin = 50;
+    const BUILD_RADIUS = 400;
 
     if (x < mapMargin || x > state.config.width - mapMargin ||
         y < mapMargin || y > state.config.height - mapMargin) {
         return false;
+    }
+
+    // === BUILD RANGE CHECK ===
+    // Must be within BUILD_RADIUS of an existing non-defense building
+    if (myBuildings.length > 0) {
+        let withinRange = false;
+        for (const b of myBuildings) {
+            const bData = RULES.buildings[b.key];
+            if (bData?.isDefense) continue; // Defense buildings don't extend range
+            const dist = Math.sqrt((x - b.pos.x) ** 2 + (y - b.pos.y) ** 2);
+            if (dist < BUILD_RADIUS) {
+                withinRange = true;
+                break;
+            }
+        }
+        if (!withinRange) return false;
     }
 
     const myRect = {
@@ -1742,6 +2056,117 @@ function isValidPlacement(
 
 function rectOverlap(r1: { l: number, r: number, t: number, b: number }, r2: { l: number, r: number, t: number, b: number }): boolean {
     return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
+}
+
+/**
+ * AI Building Repair Logic
+ * Strategically repairs damaged buildings based on priority and current game state
+ */
+function handleBuildingRepair(
+    _state: GameState,
+    playerId: number,
+    buildings: Entity[],
+    player: any,
+    aiState: AIPlayerState
+): Action[] {
+    const actions: Action[] = [];
+
+    // Don't repair if we're in a critical emergency (low funds, under attack)
+    if (player.credits < 500 && aiState.threatsNearBase.length > 0) {
+        return actions;
+    }
+
+    // Define repair thresholds and priorities
+    // Lower threshold = repair when more damaged
+    const repairPriorities: { [key: string]: { threshold: number; priority: number } } = {
+        'conyard': { threshold: 0.7, priority: 1 },      // Critical - repair at 70% HP
+        'refinery': { threshold: 0.6, priority: 2 },     // Very important - repair at 60% HP
+        'factory': { threshold: 0.5, priority: 3 },      // Important - repair at 50% HP
+        'barracks': { threshold: 0.5, priority: 4 },     // Important - repair at 50% HP
+        'power': { threshold: 0.4, priority: 5 },        // Medium - repair at 40% HP
+        'turret': { threshold: 0.4, priority: 6 },       // Defenses during lulls
+        'pillbox': { threshold: 0.4, priority: 7 },
+        'sam_site': { threshold: 0.4, priority: 8 },
+    };
+
+    // Find buildings that need repair
+    const damagedBuildings: { entity: Entity; priority: number; threshold: number }[] = [];
+
+    for (const building of buildings) {
+        if (building.dead) continue;
+
+        const hpRatio = building.hp / building.maxHp;
+        const repairConfig = repairPriorities[building.key] || { threshold: 0.3, priority: 10 };
+
+        // Check if building needs repair and isn't already being repaired
+        if (hpRatio < repairConfig.threshold && !building.isRepairing) {
+            damagedBuildings.push({
+                entity: building,
+                priority: repairConfig.priority,
+                threshold: repairConfig.threshold
+            });
+        }
+    }
+
+    if (damagedBuildings.length === 0) {
+        return actions;
+    }
+
+    // Sort by priority (lower = more important)
+    damagedBuildings.sort((a, b) => a.priority - b.priority);
+
+    // Count how many buildings are already being repaired
+    const currentlyRepairing = buildings.filter(b => b.isRepairing).length;
+    const maxConcurrentRepairs = player.credits > 2000 ? 2 : 1;
+
+    // Repair logic based on current game state
+    const underAttack = aiState.threatsNearBase.length > 0;
+    const wealthyEnough = player.credits > 1000;
+    const veryWealthy = player.credits > 2000;
+
+    // Start repairs on priority buildings
+    for (const damaged of damagedBuildings) {
+        if (currentlyRepairing >= maxConcurrentRepairs) break;
+
+        const isProduction = ['conyard', 'refinery', 'factory', 'barracks'].includes(damaged.entity.key);
+        const isDefense = ['turret', 'pillbox', 'sam_site'].includes(damaged.entity.key);
+        const isPower = damaged.entity.key === 'power';
+
+        // Decide whether to repair based on conditions
+        let shouldRepair = false;
+
+        // Always repair production buildings if we can afford it
+        if (isProduction && wealthyEnough) {
+            shouldRepair = true;
+        }
+
+        // Repair defenses only when not under attack (lull in combat)
+        if (isDefense && !underAttack && wealthyEnough) {
+            shouldRepair = true;
+        }
+
+        // Repair power plants when low (prevents power shortage)
+        if (isPower && damaged.entity.hp / damaged.entity.maxHp < 0.3 && wealthyEnough) {
+            shouldRepair = true;
+        }
+
+        // Repair any building if we're very wealthy
+        if (veryWealthy && damaged.entity.hp / damaged.entity.maxHp < 0.2) {
+            shouldRepair = true;
+        }
+
+        if (shouldRepair) {
+            actions.push({
+                type: 'START_REPAIR',
+                payload: {
+                    buildingId: damaged.entity.id,
+                    playerId
+                }
+            });
+        }
+    }
+
+    return actions;
 }
 
 function handleEmergencySell(

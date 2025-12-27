@@ -58,6 +58,8 @@ export function initInput(
         onLeftClick: (wx: number, wy: number, isDrag: boolean, dragRect?: { x1: number, y1: number, x2: number, y2: number }) => void;
         onRightClick: (wx: number, wy: number) => void;
         onDeployMCV: () => void;
+        onToggleDebug: () => void;
+        onToggleMinimap: () => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -66,6 +68,8 @@ export function initInput(
     onLeftClick = callbacks.onLeftClick;
     onRightClick = callbacks.onRightClick;
     onDeployMCV = callbacks.onDeployMCV;
+    (inputState as any).onToggleDebug = callbacks.onToggleDebug;
+    (inputState as any).onToggleMinimap = callbacks.onToggleMinimap;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -83,7 +87,10 @@ function setupEventListeners() {
     window.addEventListener('keydown', e => {
         inputState.keys[e.key] = true;
         if (e.key === 'd' || e.key === 'D') {
-            onDeployMCV?.();
+            (inputState as any).onToggleDebug?.();
+        }
+        if (e.key === 'm' || e.key === 'M') {
+            (inputState as any).onToggleMinimap?.();
         }
     });
 

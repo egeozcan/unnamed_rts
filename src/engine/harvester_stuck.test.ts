@@ -295,5 +295,48 @@ describe('Harvester Stuck at Ore', () => {
         expect(foundNewResource).toBe(true); // Main success criteria - found new ore
         expect(stuckTicks).toBeLessThan(220); // Should have given up before 220 ticks
     });
+
+    it('harvester using direct movement (no path) should detect stuck when blocked', () => {
+        // Scenario: Harvester has no path (failed A* or cleared), trying direct move
+        // But blocked by a wall, so velocity is zero
+        let state = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };
+
+        state = spawnResource(state, 500, 500, 'ore_direct');
+        // Wall blocking direct path (use valid building key)
+        state = spawnBuilding(state, 300, 300, 100, 20, 'wall', 1, 'power');
+
+        // Spawn harvester
+        state = spawnUnit(state, 250, 250, 'h_direct', 1, 'harvester');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                h_direct: {
+                    ...state.entities['h_direct'],
+                    id: 'h_direct',
+                    cargo: 0,
+                    resourceTargetId: 'ore_direct',
+                    path: null, // Force direct movement
+                    finalDest: new Vector(500, 500)
+                }
+            }
+        };
+
+        // Run simulation
+        let stuckDetected = false;
+
+        for (let i = 0; i < 50; i++) {
+            state = update(state, { type: 'TICK' });
+            const h = state.entities['h_direct'];
+
+            // Movement logic should detect low velocity and increment stuckTimer
+            if (h.stuckTimer > 0) {
+                stuckDetected = true;
+                break;
+            }
+        }
+
+        expect(stuckDetected).toBe(true);
+    });
 });
 

@@ -89,6 +89,9 @@ export interface Entity {
     // Specialized unit flags
     readonly captureTargetId?: EntityId | null;
     readonly repairTargetId?: EntityId | null;
+
+    // Building repair state
+    readonly isRepairing?: boolean;
 }
 
 export interface Projectile {
@@ -172,6 +175,7 @@ export interface GameState {
     readonly running: boolean;
     readonly mode: GameMode;
     readonly sellMode: boolean;
+    readonly repairMode: boolean;
     readonly difficulty: 'easy' | 'hard';
     readonly tick: number;
 
@@ -189,6 +193,9 @@ export interface GameState {
 
     readonly winner: number | null;
     readonly config: MapConfig;
+
+    readonly debugMode: boolean;
+    readonly showMinimap: boolean;
 }
 
 export type ActionType =
@@ -200,7 +207,12 @@ export type ActionType =
     | 'CANCEL_BUILD'
     | 'SELECT_UNITS'
     | 'SELL_BUILDING'
-    | 'TOGGLE_SELL_MODE';
+    | 'TOGGLE_SELL_MODE'
+    | 'TOGGLE_REPAIR_MODE'
+    | 'START_REPAIR'
+    | 'STOP_REPAIR'
+    | 'TOGGLE_DEBUG'
+    | 'TOGGLE_MINIMAP';
 
 export interface Action {
     type: ActionType;

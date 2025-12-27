@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
-import { INITIAL_STATE } from './reducer';
+import { INITIAL_STATE, createPlayerState } from './reducer';
 import { GameState, Vector, Entity, EntityId } from './types';
 
 const { getAIState, ATTACK_GROUP_MIN_SIZE } = _testUtils;
@@ -300,6 +300,68 @@ describe('AI Multi-Front Attack', () => {
         // Either multiple attack commands issued, or at least one attack is happening
         expect(attackActions.length).toBeGreaterThan(0);
     });
+
+    it('should NOT regroup during multi-front attack when groups are spread apart', () => {
+        const entities: Record<EntityId, Entity> = {};
+        entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+        entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 1100, 1000);
+
+        // Large army of 12 units, SPREAD APART simulating multi-front attack
+        // Group 1: 7 units near target 1 (position ~1500)
+        for (let i = 0; i < 7; i++) {
+            entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'tank', 1500 + i * 20, 1500, {
+                targetId: 'enemy_cy' // Already attacking target 1
+            });
+        }
+        // Group 2: 5 units near target 2 (position ~2200 - >500 from group 1)
+        for (let i = 7; i < 12; i++) {
+            entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'tank', 2200 + (i - 7) * 20, 2200, {
+                targetId: 'enemy_factory' // Already attacking target 2
+            });
+        }
+
+        // Two enemy targets (one for each group)
+        entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 1600, 1600);
+        entities['enemy_factory'] = createEntity('enemy_factory', 0, 'BUILDING', 'factory', 2300, 2300);
+
+        const state = createTestState(entities);
+        const aiState = getAIState(1);
+        aiState.strategy = 'attack';
+        aiState.lastStrategyChange = -100;
+        aiState.enemyBaseLocation = new Vector(2000, 2000);
+
+        // Set up attacking status with spread units
+        aiState.offensiveGroups = [{
+            id: 'main_attack',
+            unitIds: Array.from({ length: 12 }, (_, i) => `tank${i}`),
+            target: null,
+            rallyPoint: new Vector(1800, 1800),
+            status: 'attacking',
+            lastOrderTick: 0
+        }];
+        aiState.attackGroup = Array.from({ length: 12 }, (_, i) => `tank${i}`);
+
+        const actions = computeAiActions(state, 1);
+
+        // Calculate group center (should be ~1800, 1800)
+        const groupCenterX = (1500 + 1520 + 1540 + 1560 + 1580 + 1600 + 1620 + 2200 + 2220 + 2240 + 2260 + 2280) / 12;
+        const groupCenterY = (1500 * 7 + 2200 * 5) / 12;
+
+        // Should NOT issue COMMAND_MOVE to group center (regroup)
+        // Should either issue attack commands or do nothing
+        const regroupMove = actions.find(a =>
+            a.type === 'COMMAND_MOVE' &&
+            // Check if moving toward approximate group center (regroup command)
+            Math.abs(a.payload.x - groupCenterX) < 100 &&
+            Math.abs(a.payload.y - groupCenterY) < 100
+        );
+
+        // Multi-front attack should NOT trigger regroup
+        expect(regroupMove).toBeUndefined();
+
+        // Units already have targetId set, so no new attack commands are needed
+        // The key behavior tested here is: NO regroup command is issued
+    });
 });
 
 describe('AI Smart Combat Targeting', () => {
@@ -457,6 +519,112 @@ describe('AI Smart Combat Targeting', () => {
         const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
         expect(attackAction).toBeDefined();
         expect(attackAction?.payload.targetId).toBe('nearby_turret');
+    });
+    it('should not recall units in active attack group to rally point during buildup', () => {
+        const entities: Record<EntityId, Entity> = {};
+        // Create units that are part of an attack group
+        const unit1 = createEntity('unit1', 1, 'UNIT', 'rifle', 1000, 1000); // Far from base
+        const unit2 = createEntity('unit2', 1, 'UNIT', 'rifle', 1050, 1000);
+
+        entities['unit1'] = unit1;
+        entities['unit2'] = unit2;
+        entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500); // Base center
+
+        let state = createTestState(entities);
+        // Ensure player exists
+        if (!state.players[1]) {
+            state.players[1] = {
+                ...createPlayerState(1, false, 'medium'),
+                credits: 1000
+            };
+        }
+
+        // Setup AI state
+        const aiState = getAIState(1);
+        aiState.strategy = 'buildup'; // Strategy that triggers rally
+        aiState.attackGroup = ['unit1', 'unit2']; // Units are in an attack group
+        // Add to offensiveGroups as well for completeness, as that's what the AI usually does
+        aiState.offensiveGroups = [{
+            id: 'test_attack',
+            unitIds: ['unit1', 'unit2'],
+            target: null,
+            rallyPoint: new Vector(800, 800),
+            status: 'attacking',
+            lastOrderTick: 0
+        }];
+
+        // Run AI
+        const actions = computeAiActions(state, 1);
+
+        // Check for move commands to rally point
+        // Rally point is usually base + 150 = 650, 500
+        const rallyMove = actions.find(a =>
+            a.type === 'COMMAND_MOVE' &&
+            a.payload.unitIds.includes('unit1') &&
+            (a.payload.x < 700) // Moving back towards base
+        );
+
+        expect(rallyMove).toBeUndefined();
+    });
+
+    it('should not disband attacking group if reinforcements sustain it', () => {
+        const entities: Record<EntityId, Entity> = {};
+        // Create 6 units (min size)
+        for (let i = 0; i < 6; i++) {
+            entities[`u${i}`] = createEntity(`u${i}`, 1, 'UNIT', 'rifle', 1000, 1000);
+        }
+        entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+        entities['enemy1'] = createEntity('enemy1', 0, 'UNIT', 'rifle', 2000, 2000);
+
+        let state = createTestState(entities);
+        // Ensure player exists
+        if (!state.players[1]) {
+            state.players[1] = {
+                ...createPlayerState(1, false, 'medium'),
+                credits: 1000
+            };
+        }
+
+        const aiState = getAIState(1);
+        aiState.strategy = 'attack';
+        aiState.lastStrategyChange = state.tick; // Prevent strategy switch due to low count
+        // Initial group formation
+        aiState.attackGroup = ['u0', 'u1', 'u2', 'u3', 'u4', 'u5'];
+
+        // Run AI to form group
+        computeAiActions(state, 1);
+
+        // Fast forward group to attacking status
+        const group = aiState.offensiveGroups[0];
+        expect(group).toBeDefined();
+        if (group) group.status = 'attacking';
+
+        // Kill 3 units (u0, u1, u2)
+        state.entities['u0'] = { ...state.entities['u0'], dead: true };
+        state.entities['u1'] = { ...state.entities['u1'], dead: true };
+        state.entities['u2'] = { ...state.entities['u2'], dead: true };
+
+        // Add 3 NEW units (reinforcements)
+        const u6 = createEntity('u6', 1, 'UNIT', 'rifle', 500, 500);
+        const u7 = createEntity('u7', 1, 'UNIT', 'rifle', 500, 500);
+        const u8 = createEntity('u8', 1, 'UNIT', 'rifle', 500, 500);
+        state.entities['u6'] = u6;
+        state.entities['u7'] = u7;
+        state.entities['u8'] = u8;
+
+        // Update attackGroup in state (simulating handleAttack logic)
+        aiState.attackGroup = ['u3', 'u4', 'u5', 'u6', 'u7', 'u8'];
+
+        // Run AI again
+        // Run AI again
+        computeAiActions(state, 1);
+
+        // Group should NOT be reset
+        // It should still be the same group object or at least have status 'attacking'
+        const newGroup = aiState.offensiveGroups.find(g => g.id === 'main_attack');
+        expect(newGroup).toBeDefined();
+        expect(newGroup?.status).toBe('attacking'); // Should NOT be 'forming' or 'rallying'
+        expect(newGroup?.unitIds).toContain('u8'); // Should contain new units
     });
 });
 

@@ -1,6 +1,7 @@
 {
     "economy": {
-        "sellBuildingReturnPercentage": 0.5
+        "sellBuildingReturnPercentage": 0.5,
+        "repairCostPercentage": 0.3
     },
     "meta": {
         "version": "1.0",
