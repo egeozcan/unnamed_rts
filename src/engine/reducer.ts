@@ -693,7 +693,7 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
         if (entity.dead) continue;
 
         if (entity.type === 'UNIT') {
-            const res = updateUnit(entity, state.entities, entityList);
+            const res = updateUnit(entity, state.entities, entityList, state.config);
             nextEntities[id] = res.entity;
             if (res.projectile) newProjectiles.push(res.projectile);
             if (res.creditsEarned > 0) {
@@ -882,7 +882,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 }
 
 
-function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: any, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
+function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: Entity, projectile?: any, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
     let nextEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
@@ -922,7 +922,12 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                 const ref = allEntities[harvester.baseTargetId];
                 if (ref && !ref.dead) {
                     // Target "Docking Point" (bottom of refinery)
-                    const dockPos = ref.pos.add(new Vector(0, 60));
+                    // Clamp dock position to map bounds to prevent pathfinding issues
+                    const rawDockPos = ref.pos.add(new Vector(0, 60));
+                    const dockPos = new Vector(
+                        Math.max(0, Math.min(mapConfig.width - 1, rawDockPos.x)),
+                        Math.max(0, Math.min(mapConfig.height - 1, rawDockPos.y))
+                    );
                     const ourDist = harvester.pos.dist(dockPos);
 
                     // Check if another harvester is ahead of us in the queue
@@ -933,6 +938,7 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                             other.owner === harvester.owner &&
                             !other.dead &&
                             (other as any).cargo > 0 && // Only count harvesters with cargo (wanting to dock)
+                            (other as any).baseTargetId === harvester.baseTargetId && // Only count harvesters targeting SAME refinery
                             other.moveTarget === null) { // Ignore harvesters with player move override
                             const otherDist = other.pos.dist(dockPos);
                             // If another harvester is closer to the dock
@@ -941,6 +947,7 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                             }
                         }
                     }
+
 
                     if (ourDist < 20 && positionInQueue === 0) {
                         // We're at dock and first in line - Unload

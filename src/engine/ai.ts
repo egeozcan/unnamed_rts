@@ -556,6 +556,47 @@ function handleEconomy(
                 }
             }
         }
+
+        // 3. Build refinery near accessible unclaimed ore (when expansionTarget is null)
+        // This happens when findDistantOre returns null because there's ore within build range
+        // that doesn't have a refinery nearby
+        if (!aiState.expansionTarget && buildingQueueEmpty) {
+            const refineryData = RULES.buildings['refinery'];
+            const canBuildRefinery = buildings.some(b => b.key === 'factory');
+            const BUILD_RADIUS = 400;
+
+            // Check for accessible ore without a refinery
+            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const nonDefenseBuildings = buildings.filter(b => {
+                const bData = RULES.buildings[b.key];
+                return !bData?.isDefense;
+            });
+
+            let hasUnclaimedAccessibleOre = false;
+            for (const ore of allOre) {
+                // Check if ore is within build range
+                let isAccessible = false;
+                for (const b of nonDefenseBuildings) {
+                    if (b.pos.dist(ore.pos) < BUILD_RADIUS + 150) {
+                        isAccessible = true;
+                        break;
+                    }
+                }
+                if (!isAccessible) continue;
+
+                // Check if ore already has a refinery nearby
+                const hasNearbyRefinery = refineries.some(r => r.pos.dist(ore.pos) < 300);
+                if (!hasNearbyRefinery) {
+                    hasUnclaimedAccessibleOre = true;
+                    break;
+                }
+            }
+
+            if (hasUnclaimedAccessibleOre && canBuildRefinery && refineryData && player.credits >= refineryData.cost) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                return actions;
+            }
+        }
     } else if (aiState.investmentPriority === 'defense') {
         // DEFENSE PRIORITY: Build turrets
         if (buildingQueueEmpty) {
@@ -564,6 +605,72 @@ function handleEconomy(
             if (canBuildTurret && turretData && player.credits >= turretData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
                 // Don't return - continue with unit production for defense
+            }
+        }
+    }
+
+    // ===== PEACETIME ECONOMY EXPANSION =====
+    // When not under pressure (low threat), opportunistically build harvesters and refineries
+    // This applies to balanced and warfare priorities to strengthen economy during peaceful periods
+    const isPeacetime = aiState.threatLevel <= 20 &&
+        (aiState.investmentPriority === 'balanced' || aiState.investmentPriority === 'warfare');
+
+    if (isPeacetime) {
+        // 1. Build harvesters if below ideal (2 per refinery)
+        const idealHarvesters = Math.max(refineries.length * 2, 2);
+        const canBuildHarvester = refineries.length > 0;
+
+        if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
+            const harvData = RULES.units['harvester'];
+            const harvReqsMet = (harvData?.req || []).every((r: string) => buildings.some(b => b.key === r));
+            // Use a higher credit threshold for peacetime - only spend surplus
+            const peacetimeCreditThreshold = 800;
+            if (harvData && harvReqsMet && player.credits >= harvData.cost + peacetimeCreditThreshold) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
+                return actions; // Prioritize harvester production in peacetime
+            }
+        }
+
+        // 2. Build additional refinery if we have accessible ore without refinery coverage
+        if (buildingQueueEmpty) {
+            const refineryData = RULES.buildings['refinery'];
+            const canBuildRefinery = buildings.some(b => b.key === 'factory');
+            const BUILD_RADIUS = 400;
+
+            // Find ore patches within build range that don't have a nearby refinery
+            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const nonDefenseBuildings = buildings.filter(b => {
+                const bData = RULES.buildings[b.key];
+                return !bData?.isDefense;
+            });
+
+            let hasUnclaimedAccessibleOre = false;
+            for (const ore of allOre) {
+                // Check if ore is within build range
+                let isAccessible = false;
+                for (const b of nonDefenseBuildings) {
+                    if (b.pos.dist(ore.pos) < BUILD_RADIUS + 150) {
+                        isAccessible = true;
+                        break;
+                    }
+                }
+                if (!isAccessible) continue;
+
+                // Check if ore already has a refinery nearby
+                const hasNearbyRefinery = refineries.some(r => r.pos.dist(ore.pos) < 300);
+                if (!hasNearbyRefinery) {
+                    hasUnclaimedAccessibleOre = true;
+                    break;
+                }
+            }
+
+            // Build refinery if we have money and unclaimed accessible ore
+            // Use higher threshold in peacetime
+            const peacetimeRefineryThreshold = 1000;
+            if (hasUnclaimedAccessibleOre && canBuildRefinery && refineryData &&
+                player.credits >= refineryData.cost + peacetimeRefineryThreshold) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                return actions; // Prioritize refinery expansion
             }
         }
     }
