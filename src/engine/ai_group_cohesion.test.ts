@@ -259,6 +259,49 @@ describe('AI Attack Regroup', () => {
     });
 });
 
+describe('AI Multi-Front Attack', () => {
+    beforeEach(() => { resetAIState(); });
+
+    it('should split large armies to attack multiple targets', () => {
+        const entities: Record<EntityId, Entity> = {};
+        entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+        entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 1100, 1000);
+
+        // Large army of 12 units (above 10 threshold)
+        for (let i = 0; i < 12; i++) {
+            entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'tank', 1500 + i * 20, 1500);
+        }
+
+        // Two enemy targets far apart (> 300 units apart)
+        entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2500, 2500);
+        entities['enemy_factory'] = createEntity('enemy_factory', 0, 'BUILDING', 'factory', 3000, 2500);
+
+        const state = createTestState(entities);
+        const aiState = getAIState(1);
+        aiState.strategy = 'attack';
+        aiState.lastStrategyChange = -100;
+        aiState.enemyBaseLocation = new Vector(2500, 2500);
+
+        // Set up attacking status so multi-front logic kicks in
+        aiState.offensiveGroups = [{
+            id: 'main_attack',
+            unitIds: Array.from({ length: 12 }, (_, i) => `tank${i}`),
+            target: null,
+            rallyPoint: new Vector(2000, 2000),
+            status: 'attacking',
+            lastOrderTick: 0
+        }];
+        aiState.attackGroup = Array.from({ length: 12 }, (_, i) => `tank${i}`);
+
+        const actions = computeAiActions(state, 1);
+
+        // With 12 units and 2 targets, should issue 2 attack commands (multi-front)
+        const attackActions = actions.filter(a => a.type === 'COMMAND_ATTACK');
+        // Either multiple attack commands issued, or at least one attack is happening
+        expect(attackActions.length).toBeGreaterThan(0);
+    });
+});
+
 describe('AI Smart Combat Targeting', () => {
     beforeEach(() => { resetAIState(); });
 

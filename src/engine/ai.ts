@@ -1114,46 +1114,130 @@ function handleAttack(
     }
 
     if (bestTarget) {
-        // Get units that need new orders
-        const unitsNeedingOrders = aiState.attackGroup.filter(id => {
-            const unit = state.entities[id];
-            if (!unit || unit.dead) return false;
-            // Give orders if:
-            // 1. No current target
-            if (!unit.targetId) return true;
-            // 2. Current target is dead
-            const currentTarget = state.entities[unit.targetId];
-            if (!currentTarget || currentTarget.dead) return true;
-            // 3. Current target is not the best target and we want to focus fire
-            if (unit.targetId !== bestTarget.id && bestScore > 100) return true;
-            return false;
+        // === MULTI-FRONT ATTACK ===
+        // If army is large enough (10+ units), split into two attack groups
+        const MULTI_FRONT_THRESHOLD = 10;
+        const aliveUnits = aiState.attackGroup.filter(id => {
+            const u = state.entities[id];
+            return u && !u.dead;
         });
 
-        if (unitsNeedingOrders.length > 0) {
-            actions.push({
-                type: 'COMMAND_ATTACK',
-                payload: {
-                    unitIds: unitsNeedingOrders,
-                    targetId: bestTarget.id
-                }
-            });
-        }
+        if (aliveUnits.length >= MULTI_FRONT_THRESHOLD && enemies.length > 1) {
+            // Find second best target (different from first)
+            let secondBestScore = -Infinity;
+            let secondBestTarget: Entity | null = null;
 
-        // For units that have NO orders and aren't attacking, send them towards the target
-        const idleUnits = aiState.attackGroup.filter(id => {
-            const unit = state.entities[id];
-            return unit && !unit.dead && !unit.targetId && !unit.moveTarget;
-        });
+            for (const enemy of enemies) {
+                if (enemy.id === bestTarget.id) continue; // Skip primary target
 
-        if (idleUnits.length > 0) {
-            // Move toward target position (attack-move behavior)
-            actions.push({
-                type: 'COMMAND_ATTACK',
-                payload: {
-                    unitIds: idleUnits,
-                    targetId: bestTarget.id
+                let score = 0;
+                // Score buildings higher for secondary target (different objective)
+                if (enemy.type === 'BUILDING') {
+                    score += 60;
+                    const priorityIndex = targetPriority.indexOf(enemy.key);
+                    if (priorityIndex >= 0) {
+                        score += 50 - priorityIndex * 10;
+                    }
                 }
+                // Prefer targets somewhat distant from primary (true multi-front)
+                const distFromPrimary = enemy.pos.dist(bestTarget.pos);
+                if (distFromPrimary > 300) {
+                    score += 40; // Bonus for spread attacks
+                }
+                // Low HP bonus still applies
+                score += (1 - enemy.hp / enemy.maxHp) * 30;
+
+                if (score > secondBestScore) {
+                    secondBestScore = score;
+                    secondBestTarget = enemy;
+                }
+            }
+
+            // Split the army: ~60% main, ~40% flank
+            const splitIndex = Math.floor(aliveUnits.length * 0.6);
+            const mainGroupUnits = aliveUnits.slice(0, splitIndex);
+            const flankGroupUnits = aliveUnits.slice(splitIndex);
+
+            // Main group attacks primary target
+            const mainUnitsNeedingOrders = mainGroupUnits.filter(id => {
+                const unit = state.entities[id];
+                if (!unit || unit.dead) return false;
+                if (!unit.targetId) return true;
+                const currentTarget = state.entities[unit.targetId];
+                if (!currentTarget || currentTarget.dead) return true;
+                if (unit.targetId !== bestTarget.id) return true;
+                return false;
             });
+
+            if (mainUnitsNeedingOrders.length > 0) {
+                actions.push({
+                    type: 'COMMAND_ATTACK',
+                    payload: {
+                        unitIds: mainUnitsNeedingOrders,
+                        targetId: bestTarget.id
+                    }
+                });
+            }
+
+            // Flank group attacks secondary target (or primary if no secondary)
+            if (secondBestTarget && flankGroupUnits.length > 0) {
+                const flankUnitsNeedingOrders = flankGroupUnits.filter(id => {
+                    const unit = state.entities[id];
+                    if (!unit || unit.dead) return false;
+                    if (!unit.targetId) return true;
+                    const currentTarget = state.entities[unit.targetId];
+                    if (!currentTarget || currentTarget.dead) return true;
+                    if (unit.targetId !== secondBestTarget!.id) return true;
+                    return false;
+                });
+
+                if (flankUnitsNeedingOrders.length > 0) {
+                    actions.push({
+                        type: 'COMMAND_ATTACK',
+                        payload: {
+                            unitIds: flankUnitsNeedingOrders,
+                            targetId: secondBestTarget.id
+                        }
+                    });
+                }
+            }
+        } else {
+            // Standard single-front attack for smaller armies
+            const unitsNeedingOrders = aiState.attackGroup.filter(id => {
+                const unit = state.entities[id];
+                if (!unit || unit.dead) return false;
+                if (!unit.targetId) return true;
+                const currentTarget = state.entities[unit.targetId];
+                if (!currentTarget || currentTarget.dead) return true;
+                if (unit.targetId !== bestTarget.id && bestScore > 100) return true;
+                return false;
+            });
+
+            if (unitsNeedingOrders.length > 0) {
+                actions.push({
+                    type: 'COMMAND_ATTACK',
+                    payload: {
+                        unitIds: unitsNeedingOrders,
+                        targetId: bestTarget.id
+                    }
+                });
+            }
+
+            // For units that have NO orders and aren't attacking, send them towards the target
+            const idleUnits = aiState.attackGroup.filter(id => {
+                const unit = state.entities[id];
+                return unit && !unit.dead && !unit.targetId && !unit.moveTarget;
+            });
+
+            if (idleUnits.length > 0) {
+                actions.push({
+                    type: 'COMMAND_ATTACK',
+                    payload: {
+                        unitIds: idleUnits,
+                        targetId: bestTarget.id
+                    }
+                });
+            }
         }
     }
 
@@ -1438,6 +1522,51 @@ function handleBuildingPlacement(
         searchRadiusMin = 80;
         searchRadiusMax = 250;
         expandingTowardsOre = true;
+    } else if (buildingData.isDefense) {
+        // === STRATEGIC DEFENSIVE BUILDING PLACEMENT ===
+        const aiState = getAIState(playerId);
+        const refineries = buildings.filter(b => b.key === 'refinery');
+        const existingDefenses = buildings.filter(b => {
+            const bd = RULES.buildings[b.key];
+            return bd?.isDefense;
+        });
+
+        // Strategy 1: Place between base and enemy (if known)
+        if (aiState.enemyBaseLocation) {
+            const dirToEnemy = aiState.enemyBaseLocation.sub(center).norm();
+            // Place at 200-400 from base center toward enemy
+            searchCenter = center.add(dirToEnemy.scale(250));
+            searchRadiusMin = 100;
+            searchRadiusMax = 200;
+        }
+
+        // Strategy 2: If we have refineries, prioritize protecting them
+        if (refineries.length > 0) {
+            // Find refinery with least nearby defenses
+            let leastDefendedRefinery: Entity | null = null;
+            let minDefenses = Infinity;
+
+            for (const ref of refineries) {
+                const nearbyDefenses = existingDefenses.filter(d =>
+                    d.pos.dist(ref.pos) < 300
+                ).length;
+
+                if (nearbyDefenses < minDefenses) {
+                    minDefenses = nearbyDefenses;
+                    leastDefendedRefinery = ref;
+                }
+            }
+
+            if (leastDefendedRefinery && minDefenses < 2) {
+                // Place defense near this refinery
+                searchCenter = leastDefendedRefinery.pos;
+                searchRadiusMin = 80;
+                searchRadiusMax = 200;
+            }
+        }
+
+        // Strategy 3: Ensure spacing - avoid clustering defenses
+        // (handled in scoring below)
     }
 
     // Try multiple spots
@@ -1473,6 +1602,40 @@ function handleBuildingPlacement(
                 // Prefer spots closer to distant ore (expansion)
                 score -= new Vector(x, y).dist(distantOreTarget) * 0.8;
                 score += new Vector(x, y).dist(center) * 0.2;
+            } else if (buildingData.isDefense) {
+                // Defensive buildings: prefer positions toward enemy
+                const aiState = getAIState(playerId);
+                if (aiState.enemyBaseLocation) {
+                    const spotPos = new Vector(x, y);
+                    const toEnemy = aiState.enemyBaseLocation.sub(center).norm();
+                    const spotDir = spotPos.sub(center).norm();
+                    const alignment = toEnemy.dot(spotDir);
+                    score += alignment * 50; // Bonus for facing enemy
+                }
+
+                // Penalize being too close to other defenses (avoid clustering)
+                const existingDefenses = buildings.filter(b => {
+                    const bd = RULES.buildings[b.key];
+                    return bd?.isDefense;
+                });
+                for (const def of existingDefenses) {
+                    const distToDefense = def.pos.dist(new Vector(x, y));
+                    if (distToDefense < 150) {
+                        score -= (150 - distToDefense) * 2; // Heavy penalty for clustering
+                    }
+                }
+
+                // Bonus for being near refineries (protecting economy)
+                const refineries = buildings.filter(b => b.key === 'refinery');
+                for (const ref of refineries) {
+                    const distToRef = ref.pos.dist(new Vector(x, y));
+                    if (distToRef < 250) {
+                        score += (250 - distToRef) * 0.3; // Bonus for protecting refineries
+                    }
+                }
+
+                // Moderate distance from base center
+                score -= Math.abs(distToCenter - 200) * 0.3;
             } else {
                 score -= new Vector(x, y).dist(center) * 0.5;
             }
