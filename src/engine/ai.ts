@@ -330,6 +330,29 @@ function findDistantOre(
         return !data?.isDefense;
     });
 
+    const BUILD_RADIUS = 400; // Distance within which we can place buildings
+
+    // FIRST: Check if there's already accessible ore within build range that doesn't have a refinery
+    // If yes, no need to building walk - just build a refinery there
+    for (const ore of allOre) {
+        // Check if already covered by a refinery
+        const hasNearbyRefinery = myBuildings.some(b =>
+            b.key === 'refinery' && b.pos.dist(ore.pos) < 250
+        );
+        if (hasNearbyRefinery) continue;
+
+        // Check if this ore is within build range of any building
+        for (const b of nonDefenseBuildings) {
+            // Use BUILD_RADIUS + some buffer for refinery placement
+            if (b.pos.dist(ore.pos) < BUILD_RADIUS + 150) {
+                // Found accessible ore that's not covered by a refinery
+                // No need to building walk - return null so we focus on building refinery instead
+                return null;
+            }
+        }
+    }
+
+    // Only look for distant ore if no accessible unclaimed ore exists
     let bestOre: Vector | null = null;
     let bestScore = -Infinity;
 
