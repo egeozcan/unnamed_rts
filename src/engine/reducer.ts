@@ -896,8 +896,14 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         const capacity = 500;
 
         // 0. If manual move (flee/player command), skip automated logic
+        // BUT: If harvester has full cargo and is stuck with a moveTarget,
+        // clear the moveTarget after some time so it can go unload
         if (harvester.moveTarget) {
-            // Do nothing - fall through to generic move logic
+            if (harvester.cargo >= capacity && harvester.stuckTimer > 20) {
+                // Full cargo and stuck trying to reach flee target - give up and go unload
+                nextEntity = { ...harvester, moveTarget: null, path: null, pathIdx: 0 };
+            }
+            // Otherwise, fall through to generic move logic
         }
         // 1. If full, return to refinery
         else if (harvester.cargo >= capacity) {
@@ -957,6 +963,10 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                         // Someone is ahead of us and we're near dock - wait stationary
                         // Explicitly set velocity to zero
                         nextEntity = { ...harvester, vel: new Vector(0, 0) };
+                    } else if (positionInQueue > 2 && ourDist < 200) {
+                        // Far back in queue (3rd or later) and getting close - slow down/wait
+                        // This prevents traffic jams from harvesters all rushing to the same waypoint
+                        nextEntity = { ...harvester, vel: new Vector(0, 0) };
                     } else {
                         // Move toward dock
                         nextEntity = moveToward(harvester, dockPos, entityList);
@@ -969,19 +979,61 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         // 2. If valid resource target, go gather
         else {
             if (!harvester.resourceTargetId) {
-                // Find nearest ore (excluding any blocked ore)
+                // Find best ore considering:
+                // 1. Distance (prefer closer)
+                // 2. Congestion (prefer ores with fewer harvesters, max 2 per ore)
                 const blockedOreId = (harvester as any).blockedOreId;
+                const MAX_HARVESTERS_PER_ORE = 2;
+
+                // First, count harvesters per ore
+                const harvestersPerOre: Record<string, number> = {};
+                for (const other of entityList) {
+                    if (other.key === 'harvester' &&
+                        other.owner === harvester.owner &&
+                        !other.dead &&
+                        other.id !== harvester.id &&
+                        other.resourceTargetId) {
+                        harvestersPerOre[other.resourceTargetId] = (harvestersPerOre[other.resourceTargetId] || 0) + 1;
+                    }
+                }
+
                 let bestOre: Entity | null = null;
-                let minDst = Infinity;
+                let bestScore = -Infinity;
+
                 for (const other of entityList) {
                     if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
-                        const d = harvester.pos.dist(other.pos);
-                        if (d < minDst) {
-                            minDst = d;
+                        const dist = harvester.pos.dist(other.pos);
+                        const harvestersAtOre = harvestersPerOre[other.id] || 0;
+
+                        // Skip if already at max capacity
+                        if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
+
+                        // Score: closer is better, fewer harvesters is better
+                        // Congestion penalty: each existing harvester is like 100 extra distance
+                        const effectiveDist = dist + harvestersAtOre * 100;
+                        const score = -effectiveDist; // Higher is better (less distance = higher score)
+
+                        if (score > bestScore) {
+                            bestScore = score;
                             bestOre = other;
                         }
                     }
                 }
+
+                // Fallback: if all ore is congested, still pick the nearest one
+                if (!bestOre) {
+                    let minDst = Infinity;
+                    for (const other of entityList) {
+                        if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
+                            const d = harvester.pos.dist(other.pos);
+                            if (d < minDst) {
+                                minDst = d;
+                                bestOre = other;
+                            }
+                        }
+                    }
+                }
+
                 if (bestOre) harvester.resourceTargetId = bestOre.id;
             }
 
@@ -1053,25 +1105,31 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
 
                         // If blocked by a friendly harvester and not making progress, switch to different ore
                         if (blockedByFriendly && harvestAttemptTicks > 15) {
-                            // Find a different ore
+                            // Find a different ore with less congestion
+                            const MAX_HARVESTERS_PER_ORE = 2;
                             let altOre: Entity | null = null;
-                            let minAltDist = Infinity;
+                            let bestAltScore = -Infinity;
+
                             for (const other of entityList) {
                                 if (other.type === 'RESOURCE' && !other.dead && other.id !== ore.id) {
                                     const d = harvester.pos.dist(other.pos);
-                                    if (d < minAltDist) {
-                                        // Check if this ore is less congested
-                                        let harvestersAtOre = 0;
-                                        for (const h of entityList) {
-                                            if (h.key === 'harvester' && h.owner === harvester.owner && !h.dead && h.resourceTargetId === other.id) {
-                                                harvestersAtOre++;
-                                            }
+                                    // Count harvesters at this ore
+                                    let harvestersAtOre = 0;
+                                    for (const h of entityList) {
+                                        if (h.key === 'harvester' && h.owner === harvester.owner && !h.dead && h.resourceTargetId === other.id) {
+                                            harvestersAtOre++;
                                         }
-                                        // Prefer less congested ores
-                                        if (harvestersAtOre <= positionInQueue) {
-                                            minAltDist = d;
-                                            altOre = other;
-                                        }
+                                    }
+                                    // Skip if already at max capacity
+                                    if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
+
+                                    // Score: closer is better, fewer harvesters is better
+                                    const effectiveDist = d + harvestersAtOre * 100;
+                                    const score = -effectiveDist;
+
+                                    if (score > bestAltScore) {
+                                        bestAltScore = score;
+                                        altOre = other;
                                     }
                                 }
                             }

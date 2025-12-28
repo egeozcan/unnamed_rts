@@ -338,5 +338,74 @@ describe('Harvester Stuck at Ore', () => {
 
         expect(stuckDetected).toBe(true);
     });
+
+    it('harvesters should distribute across multiple ore patches to avoid congestion', () => {
+        // Test that when there are multiple ore patches, harvesters spread out
+        // instead of all targeting the same one
+        let state = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };
+
+        // Spawn 3 ore patches at similar distances
+        state = spawnResource(state, 500, 300, 'ore1');
+        state = spawnResource(state, 300, 500, 'ore2');
+        state = spawnResource(state, 500, 500, 'ore3');
+
+        // Spawn a refinery
+        state = spawnBuilding(state, 400, 100, 100, 80, 'ref1', 1, 'refinery');
+
+        // Spawn 4 harvesters in the center area
+        state = spawnUnit(state, 400, 400, 'h1', 1, 'harvester');
+        state = spawnUnit(state, 410, 400, 'h2', 1, 'harvester');
+        state = spawnUnit(state, 400, 410, 'h3', 1, 'harvester');
+        state = spawnUnit(state, 410, 410, 'h4', 1, 'harvester');
+
+        // All start with no resourceTargetId - they need to find ore
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: null },
+                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: null },
+                h3: { ...state.entities['h3'], cargo: 0, resourceTargetId: null },
+                h4: { ...state.entities['h4'], cargo: 0, resourceTargetId: null }
+            }
+        };
+
+        // Run for a few ticks to let them pick targets
+        for (let i = 0; i < 10; i++) {
+            state = update(state, { type: 'TICK' });
+        }
+
+        // Count harvesters per ore
+        const harvestersPerOre: Record<string, number> = {
+            ore1: 0,
+            ore2: 0,
+            ore3: 0
+        };
+
+        for (const id of ['h1', 'h2', 'h3', 'h4']) {
+            const h = state.entities[id];
+            if (h.resourceTargetId && harvestersPerOre[h.resourceTargetId] !== undefined) {
+                harvestersPerOre[h.resourceTargetId]++;
+            }
+        }
+
+        console.log('Harvester distribution test:', {
+            harvestersPerOre,
+            targets: ['h1', 'h2', 'h3', 'h4'].map(id => state.entities[id].resourceTargetId)
+        });
+
+        // No ore should have more than 2 harvesters (the limit)
+        expect(harvestersPerOre['ore1']).toBeLessThanOrEqual(2);
+        expect(harvestersPerOre['ore2']).toBeLessThanOrEqual(2);
+        expect(harvestersPerOre['ore3']).toBeLessThanOrEqual(2);
+
+        // Harvesters should be spread - at least 2 different ores should be targeted
+        const uniqueTargets = new Set(
+            ['h1', 'h2', 'h3', 'h4']
+                .map(id => state.entities[id].resourceTargetId)
+                .filter(t => t !== null)
+        );
+        expect(uniqueTargets.size).toBeGreaterThanOrEqual(2);
+    });
 });
 
