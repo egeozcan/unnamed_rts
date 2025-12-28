@@ -310,13 +310,26 @@ export function setObserverMode(isObserver: boolean) {
 
 }
 
+// Callback for loading game state
+let onLoadGameState: ((state: GameState) => void) | null = null;
+let debugOverlayInitialized = false;
+let currentDebugState: GameState | null = null;
+
+export function setLoadGameStateCallback(callback: (state: GameState) => void) {
+    onLoadGameState = callback;
+}
+
 export function updateDebugUI(state: GameState) {
+    currentDebugState = state;
+
     let debugOverlay = document.getElementById('debug-overlay');
     if (!state.debugMode) {
         if (debugOverlay) debugOverlay.style.display = 'none';
+        debugOverlayInitialized = false;
         return;
     }
 
+    // Create overlay if it doesn't exist
     if (!debugOverlay) {
         debugOverlay = document.createElement('div');
         debugOverlay.id = 'debug-overlay';
@@ -325,27 +338,190 @@ export function updateDebugUI(state: GameState) {
 
     debugOverlay.style.display = 'block';
 
-    let html = '<h2>DEBUG MODE (PAUSED)</h2>';
-    html += `<p>Tick: ${state.tick}</p>`;
-    html += '<div class="debug-stats-container">';
+    // Only create the structure once, then update dynamic content
+    if (!debugOverlayInitialized) {
+        let html = '<h2>DEBUG MODE (PAUSED)</h2>';
+        html += '<p id="debug-tick">Tick: 0</p>';
 
-    for (const pid in state.players) {
-        const player = state.players[pid];
-        const entities = Object.values(state.entities).filter(e => e.owner === player.id);
-        const buildings = entities.filter(e => e.type === 'BUILDING').length;
-        const units = entities.filter(e => e.type === 'UNIT').length;
+        // Save/Load buttons section (static, created once)
+        html += '<div class="debug-save-load-section">';
+        html += '<h3>Save / Load State</h3>';
+        html += '<div class="debug-btn-row">';
+        html += '<button id="debug-save-clipboard" class="debug-btn">📋 Copy to Clipboard</button>';
+        html += '<button id="debug-save-file" class="debug-btn">💾 Download JSON</button>';
+        html += '</div>';
+        html += '<div class="debug-btn-row">';
+        html += '<button id="debug-load-clipboard" class="debug-btn">📋 Paste from Clipboard</button>';
+        html += '<button id="debug-load-file" class="debug-btn">📂 Load JSON File</button>';
+        html += '</div>';
+        html += '<input type="file" id="debug-file-input" accept=".json" style="display: none;" />';
+        html += '<p id="debug-status" class="debug-status"></p>';
+        html += '</div>';
 
-        html += `
-            <div class="player-debug-stat" style="border-left: 4px solid ${player.color}">
-                <h3>Player ${player.id} ${player.isAi ? '(AI)' : '(Human)'}</h3>
-                <p>Credits: $${Math.floor(player.credits)}</p>
-                <p>Buildings: ${buildings}</p>
-                <p>Units: ${units}</p>
-            </div>
-        `;
+        html += '<div id="debug-stats-container" class="debug-stats-container"></div>';
+
+        debugOverlay.innerHTML = html;
+
+        // Attach event listeners ONCE
+        setupDebugSaveLoadHandlers();
+        debugOverlayInitialized = true;
     }
 
-    html += '</div>';
-    debugOverlay.innerHTML = html;
+    // Update dynamic content only
+    const tickEl = document.getElementById('debug-tick');
+    if (tickEl) {
+        tickEl.textContent = `Tick: ${state.tick}`;
+    }
+
+    // Update player stats
+    const statsContainer = document.getElementById('debug-stats-container');
+    if (statsContainer) {
+        let statsHtml = '';
+        for (const pid in state.players) {
+            const player = state.players[pid];
+            const entities = Object.values(state.entities).filter(e => e.owner === player.id);
+            const buildings = entities.filter(e => e.type === 'BUILDING').length;
+            const units = entities.filter(e => e.type === 'UNIT').length;
+
+            statsHtml += `
+                <div class="player-debug-stat" style="border-left: 4px solid ${player.color}">
+                    <h3>Player ${player.id} ${player.isAi ? '(AI)' : '(Human)'}</h3>
+                    <p>Credits: $${Math.floor(player.credits)}</p>
+                    <p>Buildings: ${buildings}</p>
+                    <p>Units: ${units}</p>
+                </div>
+            `;
+        }
+        statsContainer.innerHTML = statsHtml;
+    }
+}
+
+// Get the current debug state (used by button handlers)
+function getCurrentDebugState(): GameState | null {
+    return currentDebugState;
+}
+
+function setupDebugSaveLoadHandlers() {
+    const showStatus = (msg: string, isError = false) => {
+        const statusEl = document.getElementById('debug-status');
+        if (statusEl) {
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? '#f66' : '#6f6';
+            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+        }
+    };
+
+    // Helper to serialize state with Vector objects as plain objects
+    const serializeState = (s: GameState): string => {
+        return JSON.stringify(s, (_key, value) => {
+            if (value && typeof value === 'object' && 'x' in value && 'y' in value && typeof value.x === 'number' && typeof value.y === 'number') {
+                return { x: value.x, y: value.y };
+            }
+            return value;
+        }, 2);
+    };
+
+    // Save to clipboard
+    const saveClipboardBtn = document.getElementById('debug-save-clipboard');
+    if (saveClipboardBtn) {
+        saveClipboardBtn.onclick = async () => {
+            const state = getCurrentDebugState();
+            if (!state) return;
+            try {
+                const json = serializeState(state);
+                await navigator.clipboard.writeText(json);
+                showStatus('✓ State copied to clipboard!');
+            } catch (e) {
+                showStatus('✗ Failed to copy to clipboard', true);
+            }
+        };
+    }
+
+    // Save to file
+    const saveFileBtn = document.getElementById('debug-save-file');
+    if (saveFileBtn) {
+        saveFileBtn.onclick = () => {
+            const state = getCurrentDebugState();
+            if (!state) return;
+            try {
+                const json = serializeState(state);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `game_state_tick_${state.tick}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showStatus('✓ State downloaded!');
+            } catch (e) {
+                showStatus('✗ Failed to save file', true);
+            }
+        };
+    }
+
+    // Load from clipboard
+    const loadClipboardBtn = document.getElementById('debug-load-clipboard');
+    if (loadClipboardBtn) {
+        loadClipboardBtn.onclick = async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const loadedState = parseGameState(text);
+                if (loadedState && onLoadGameState) {
+                    onLoadGameState(loadedState);
+                    showStatus('✓ State loaded from clipboard!');
+                } else if (!onLoadGameState) {
+                    showStatus('✗ Load callback not set', true);
+                }
+            } catch (e) {
+                showStatus('✗ Failed to load from clipboard', true);
+            }
+        };
+    }
+
+    // Load from file
+    const loadFileBtn = document.getElementById('debug-load-file');
+    const fileInput = document.getElementById('debug-file-input') as HTMLInputElement;
+    if (loadFileBtn && fileInput) {
+        loadFileBtn.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const text = event.target?.result as string;
+                    const loadedState = parseGameState(text);
+                    if (loadedState && onLoadGameState) {
+                        onLoadGameState(loadedState);
+                        showStatus('✓ State loaded from file!');
+                    } else if (!onLoadGameState) {
+                        showStatus('✗ Load callback not set', true);
+                    }
+                } catch (e) {
+                    showStatus('✗ Failed to parse file', true);
+                }
+            };
+            reader.readAsText(file);
+            fileInput.value = ''; // Reset for next use
+        };
+    }
+}
+
+// Parse and reconstruct game state from JSON, restoring Vector objects
+function parseGameState(json: string): GameState | null {
+    try {
+        const data = JSON.parse(json);
+
+        // Import Vector dynamically to reconstruct
+        // Since we can't import here, we'll use a simple object check
+        // The game engine should handle plain {x, y} objects  
+        return data as GameState;
+    } catch (e) {
+        console.error('Failed to parse game state:', e);
+        return null;
+    }
 }
 

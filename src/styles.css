@@ -682,7 +682,7 @@ canvas#gameCanvas {
     font-family: 'Courier New', monospace;
     min-width: 400px;
     box-shadow: 0 0 50px rgba(255, 0, 0, 0.5);
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 #debug-overlay h2 {
@@ -715,4 +715,62 @@ canvas#gameCanvas {
 .player-debug-stat p {
     margin: 5px 0;
     font-size: 14px;
+}
+
+/* Debug Save/Load Section */
+.debug-save-load-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    pointer-events: auto;
+}
+
+.debug-save-load-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #ff8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.debug-btn-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.debug-btn {
+    flex: 1;
+    padding: 10px 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: bold;
+    background: linear-gradient(180deg, #333 0%, #222 100%);
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.debug-btn:hover {
+    background: linear-gradient(180deg, #444 0%, #333 100%);
+    border-color: #888;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.debug-btn:active {
+    transform: scale(0.98);
+    background: linear-gradient(180deg, #222 0%, #111 100%);
+}
+
+.debug-status {
+    margin: 10px 0 0 0;
+    font-size: 12px;
+    text-align: center;
+    min-height: 16px;
+    color: #6f6;
 }

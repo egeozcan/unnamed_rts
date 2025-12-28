@@ -2,7 +2,7 @@ import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
@@ -211,6 +211,31 @@ document.getElementById('restart-btn')?.addEventListener('click', () => {
 // Initialize skirmish UI
 setupSkirmishUI();
 
+// Helper to reconstruct Vector objects from plain {x, y} when loading game state
+function reconstructVectors(state: GameState): GameState {
+    // Deep clone and reconstruct vectors
+    const entities: Record<EntityId, Entity> = {};
+    for (const id in state.entities) {
+        const e = state.entities[id];
+        entities[id] = {
+            ...e,
+            pos: new Vector(e.pos.x, e.pos.y),
+            prevPos: new Vector(e.prevPos.x, e.prevPos.y),
+            vel: new Vector(e.vel.x, e.vel.y),
+            moveTarget: e.moveTarget ? new Vector(e.moveTarget.x, e.moveTarget.y) : null,
+            finalDest: e.finalDest ? new Vector(e.finalDest.x, e.finalDest.y) : null,
+            unstuckDir: e.unstuckDir ? new Vector(e.unstuckDir.x, e.unstuckDir.y) : null,
+            path: e.path ? e.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null
+        };
+    }
+
+    return {
+        ...state,
+        entities,
+        camera: { x: state.camera.x, y: state.camera.y }
+    };
+}
+
 function startGameWithConfig(config: SkirmishConfig) {
     hideMenu();
 
@@ -276,6 +301,13 @@ function startGameWithConfig(config: SkirmishConfig) {
     };
 
     currentState = state;
+
+    // Set up callback for loading game state from debug UI
+    setLoadGameStateCallback((loadedState) => {
+        // Reconstruct Vector objects from plain {x, y} objects
+        currentState = reconstructVectors(loadedState);
+        updateButtonsUI();
+    });
 
     // Initialize UI  
     initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode);

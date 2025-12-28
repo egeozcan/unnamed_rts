@@ -86,7 +86,8 @@ function setupEventListeners() {
     // Keyboard
     window.addEventListener('keydown', e => {
         inputState.keys[e.key] = true;
-        if (e.key === 'd' || e.key === 'D') {
+        if (e.key === 'F3') {
+            e.preventDefault(); // Prevent browser's default F3 behavior (find)
             (inputState as any).onToggleDebug?.();
         }
         if (e.key === 'm' || e.key === 'M') {
