@@ -1,64 +1,132 @@
-import { Entity, Vector, TILE_SIZE, GRID_W, GRID_H } from './types.js';
+import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from './types.js';
 import rules from '../data/rules.json';
 
 const RULES = rules as any;
 
-// Collision grid
-export const collisionGrid = new Uint8Array(GRID_W * GRID_H);
-// Danger grids for Player 0 and Player 1
-export const dangerGrids: Record<number, Uint8Array> = {
-    0: new Uint8Array(GRID_W * GRID_H), // Danger FOR Player 0 (contains P1 stuff)
-    1: new Uint8Array(GRID_W * GRID_H)  // Danger FOR Player 1 (contains P0 stuff)
-};
+// Default grid dimensions based on default map size
+const DEFAULT_GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
+const DEFAULT_GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
 
-export function markGrid(x: number, y: number, w: number, h: number, blocked: boolean): void {
-    const gx = Math.floor(x / TILE_SIZE);
-    const gy = Math.floor(y / TILE_SIZE);
-    const gw = Math.ceil(w / TILE_SIZE);
-    const gh = Math.ceil(h / TILE_SIZE);
+// Dynamic Grid Manager - allows resizing based on map config
+class GridManager {
+    private _gridW: number = DEFAULT_GRID_W;
+    private _gridH: number = DEFAULT_GRID_H;
+    private _collisionGrid: Uint8Array;
+    private _dangerGrids: Record<number, Uint8Array>;
 
-    for (let j = gy; j < gy + gh; j++) {
-        for (let i = gx; i < gx + gw; i++) {
-            if (i >= 0 && i < GRID_W && j >= 0 && j < GRID_H) {
-                collisionGrid[j * GRID_W + i] = blocked ? 1 : 0;
+    constructor() {
+        this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
+        this._dangerGrids = {
+            0: new Uint8Array(this._gridW * this._gridH),
+            1: new Uint8Array(this._gridW * this._gridH)
+        };
+    }
+
+    get gridW(): number { return this._gridW; }
+    get gridH(): number { return this._gridH; }
+    get collisionGrid(): Uint8Array { return this._collisionGrid; }
+    get dangerGrids(): Record<number, Uint8Array> { return this._dangerGrids; }
+
+    // Resize grids if map config changed
+    ensureSize(mapWidth: number, mapHeight: number): void {
+        const newGridW = Math.ceil(mapWidth / TILE_SIZE);
+        const newGridH = Math.ceil(mapHeight / TILE_SIZE);
+
+        if (newGridW !== this._gridW || newGridH !== this._gridH) {
+            this._gridW = newGridW;
+            this._gridH = newGridH;
+            this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
+            this._dangerGrids = {
+                0: new Uint8Array(this._gridW * this._gridH),
+                1: new Uint8Array(this._gridW * this._gridH)
+            };
+        }
+    }
+
+    clear(): void {
+        this._collisionGrid.fill(0);
+        this._dangerGrids[0].fill(0);
+        this._dangerGrids[1].fill(0);
+    }
+
+    markGrid(x: number, y: number, w: number, h: number, blocked: boolean): void {
+        const gx = Math.floor(x / TILE_SIZE);
+        const gy = Math.floor(y / TILE_SIZE);
+        const gw = Math.ceil(w / TILE_SIZE);
+        const gh = Math.ceil(h / TILE_SIZE);
+
+        for (let j = gy; j < gy + gh; j++) {
+            for (let i = gx; i < gx + gw; i++) {
+                if (i >= 0 && i < this._gridW && j >= 0 && j < this._gridH) {
+                    this._collisionGrid[j * this._gridW + i] = blocked ? 1 : 0;
+                }
             }
         }
     }
-}
 
-export function markDanger(playerId: number, x: number, y: number, radius: number): void {
-    const gx = Math.floor(x / TILE_SIZE);
-    const gy = Math.floor(y / TILE_SIZE);
-    const gr = Math.ceil(radius / TILE_SIZE);
+    markDanger(playerId: number, x: number, y: number, radius: number): void {
+        const gx = Math.floor(x / TILE_SIZE);
+        const gy = Math.floor(y / TILE_SIZE);
+        const gr = Math.ceil(radius / TILE_SIZE);
 
-    // This grid represents danger FOR the given playerId.
-    // So if P1 building, we mark on dangerGrids[0].
-    const grid = dangerGrids[playerId];
+        const grid = this._dangerGrids[playerId];
+        if (!grid) return;
 
-    for (let j = gy - gr; j <= gy + gr; j++) {
-        for (let i = gx - gr; i <= gx + gr; i++) {
-            if (i >= 0 && i < GRID_W && j >= 0 && j < GRID_H) {
-                // Circle check with distance
-                const dx = i - gx;
-                const dy = j - gy;
-                const distSq = dx * dx + dy * dy;
-                if (distSq <= gr * gr) {
-                    // Gradient danger cost: higher closer to the center
-                    // Center of danger = 100 cost, edge = 50 cost
-                    const distRatio = Math.sqrt(distSq) / gr; // 0 at center, 1 at edge
-                    const dangerCost = Math.floor(100 - 50 * distRatio);
-                    // Use max in case of overlapping danger zones
-                    grid[j * GRID_W + i] = Math.max(grid[j * GRID_W + i], dangerCost);
+        for (let j = gy - gr; j <= gy + gr; j++) {
+            for (let i = gx - gr; i <= gx + gr; i++) {
+                if (i >= 0 && i < this._gridW && j >= 0 && j < this._gridH) {
+                    const dx = i - gx;
+                    const dy = j - gy;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq <= gr * gr) {
+                        const distRatio = Math.sqrt(distSq) / gr;
+                        const dangerCost = Math.floor(100 - 50 * distRatio);
+                        grid[j * this._gridW + i] = Math.max(grid[j * this._gridW + i], dangerCost);
+                    }
                 }
             }
         }
     }
 }
 
-export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]): void {
-    collisionGrid.fill(0);
-    dangerGrids[0].fill(0);
-    dangerGrids[1].fill(0);
+// Global grid manager instance
+const gridManager = new GridManager();
+
+// Export getters for backwards compatibility
+export function getGridW(): number { return gridManager.gridW; }
+export function getGridH(): number { return gridManager.gridH; }
+export const collisionGrid = new Proxy({} as Uint8Array, {
+    get(_, prop) {
+        return (gridManager.collisionGrid as any)[prop];
+    },
+    set(_, prop, value) {
+        (gridManager.collisionGrid as any)[prop] = value;
+        return true;
+    }
+});
+export const dangerGrids = new Proxy({} as Record<number, Uint8Array>, {
+    get(_, prop) {
+        return (gridManager.dangerGrids as any)[prop];
+    }
+});
+
+// Legacy standalone functions that delegate to gridManager
+export function markGrid(x: number, y: number, w: number, h: number, blocked: boolean): void {
+    gridManager.markGrid(x, y, w, h, blocked);
+}
+
+export function markDanger(playerId: number, x: number, y: number, radius: number): void {
+    gridManager.markDanger(playerId, x, y, radius);
+}
+
+
+export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[], mapConfig?: { width: number, height: number }): void {
+    // Resize grids if map config is provided and different from current
+    if (mapConfig) {
+        gridManager.ensureSize(mapConfig.width, mapConfig.height);
+    }
+
+    gridManager.clear();
 
     const list = Array.isArray(entities) ? entities : Object.values(entities);
     for (const e of list) {
@@ -81,6 +149,7 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
         // Trees?
     }
 }
+
 
 let nextEntityId = 1;
 
@@ -144,7 +213,7 @@ export function findOpenSpot(x: number, y: number, radius: number, entities: Ent
             const gx = Math.floor(cx / TILE_SIZE);
             const gy = Math.floor(cy / TILE_SIZE);
 
-            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H && collisionGrid[gy * GRID_W + gx] === 0) {
+            if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH() && gridManager.collisionGrid[gy * getGridW() + gx] === 0) {
                 let clear = true;
                 for (const e of entities) {
                     if (e.pos.dist(new Vector(cx, cy)) < e.radius + 15) {
@@ -205,8 +274,8 @@ export function isValidMCVSpot(x: number, y: number, selfId: string | null, enti
     const gx = Math.floor(x / TILE_SIZE);
     const gy = Math.floor(y / TILE_SIZE);
 
-    if (gx >= 0 && gx + 2 < GRID_W && gy >= 0 && gy + 2 < GRID_H) {
-        if (collisionGrid[gy * GRID_W + gx] === 1) return false;
+    if (gx >= 0 && gx + 2 < getGridW() && gy >= 0 && gy + 2 < getGridH()) {
+        if (gridManager.collisionGrid[gy * getGridW() + gx] === 1) return false;
     }
 
     for (const e of entities) {
@@ -289,8 +358,8 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
     let actualGoalGx = goalGx;
     let actualGoalGy = goalGy;
 
-    if (goalGx >= 0 && goalGx < GRID_W && goalGy >= 0 && goalGy < GRID_H) {
-        if (collisionGrid[goalGy * GRID_W + goalGx] === 1) {
+    if (goalGx >= 0 && goalGx < getGridW() && goalGy >= 0 && goalGy < getGridH()) {
+        if (gridManager.collisionGrid[goalGy * getGridW() + goalGx] === 1) {
             // Find nearest unblocked tile
             let found = false;
             for (let r = 1; r <= 5 && !found; r++) {
@@ -299,8 +368,8 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
                         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
                         const nx = goalGx + dx;
                         const ny = goalGy + dy;
-                        if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
-                            if (collisionGrid[ny * GRID_W + nx] === 0) {
+                        if (nx >= 0 && nx < getGridW() && ny >= 0 && ny < getGridH()) {
+                            if (gridManager.collisionGrid[ny * getGridW() + nx] === 0) {
                                 actualGoalGx = nx;
                                 actualGoalGy = ny;
                                 found = true;
@@ -313,8 +382,8 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
     }
 
     // If start is blocked, return null
-    if (startGx >= 0 && startGx < GRID_W && startGy >= 0 && startGy < GRID_H) {
-        if (collisionGrid[startGy * GRID_W + startGx] === 1) {
+    if (startGx >= 0 && startGx < getGridW() && startGy >= 0 && startGy < getGridH()) {
+        if (gridManager.collisionGrid[startGy * getGridW() + startGx] === 1) {
             // We're on a blocked tile - return direct movement to let steering handle it
             return null;
         }
@@ -395,21 +464,21 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
             const ny = current.y + dir.dy;
             const neighborKey = `${nx},${ny}`;
 
-            if (nx < 0 || nx >= GRID_W || ny < 0 || ny >= GRID_H) continue;
+            if (nx < 0 || nx >= getGridW() || ny < 0 || ny >= getGridH()) continue;
             if (closedSet.has(neighborKey)) continue;
-            if (collisionGrid[ny * GRID_W + nx] === 1) continue;
+            if (gridManager.collisionGrid[ny * getGridW() + nx] === 1) continue;
 
             // Check diagonal corner cutting
             if (dir.dx !== 0 && dir.dy !== 0) {
-                const corner1 = collisionGrid[current.y * GRID_W + nx];
-                const corner2 = collisionGrid[ny * GRID_W + current.x];
+                const corner1 = gridManager.collisionGrid[current.y * getGridW() + nx];
+                const corner2 = gridManager.collisionGrid[ny * getGridW() + current.x];
                 if (corner1 === 1 || corner2 === 1) continue; // Don't cut corners
             }
 
             // Calculate heuristic cost modifier for danger
             let dangerCost = 0;
             if (dangerGrid) {
-                dangerCost = dangerGrid[ny * GRID_W + nx];
+                dangerCost = dangerGrid[ny * getGridW() + nx];
             }
 
             const g = current.g + dir.cost + dangerCost;
@@ -487,9 +556,9 @@ function hasLineOfSight(from: Vector, to: Vector, entityRadius: number, ownerId?
             const gx = Math.floor((x + offset.dx) / TILE_SIZE);
             const gy = Math.floor((y + offset.dy) / TILE_SIZE);
 
-            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
-                const idx = gy * GRID_W + gx;
-                if (collisionGrid[idx] === 1) {
+            if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
+                const idx = gy * getGridW() + gx;
+                if (gridManager.collisionGrid[idx] === 1) {
                     return false;
                 }
                 // Check danger

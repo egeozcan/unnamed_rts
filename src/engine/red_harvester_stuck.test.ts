@@ -552,5 +552,64 @@ describe('Red Harvester Stuck at Dock', () => {
         // Stuck timer shouldn't spike too high
         expect(maxStuckTimer).toBeLessThan(60);
     });
+
+    it('should handle entities beyond old 3000 grid limit on 4000x4000 map', () => {
+        // This test specifically verifies the dynamic grid sizing works for positions > 3000
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {} as Record<EntityId, Entity>,
+            config: { width: 4000, height: 4000, resourceDensity: 'low', rockDensity: 'high' }
+        };
+
+        // Place refinery at position beyond old grid limit
+        // Refinery at (3500, 3500) - dock would be at (3500, 3560)
+        state = spawnBuilding(state, 3500, 3500, 100, 80, 'ref1', 1, 'refinery');
+
+        // Harvester at (3400, 3400) needs to reach dock at (3500, 3560)
+        state = spawnUnit(state, 3400, 3400, 'harv1', 1, 'harvester');
+
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                harv1: { ...state.entities['harv1'], cargo: 500, baseTargetId: 'ref1' }
+            }
+        };
+
+        refreshCollisionGrid(state.entities, state.config);
+
+        const dock = new Vector(3500, 3560);
+        let docked = false;
+        let maxStuckTimer = 0;
+
+        // Run for 300 ticks
+        for (let i = 0; i < 300; i++) {
+            state = update(state, { type: 'TICK' });
+
+            const harv = state.entities['harv1'];
+            if (harv.cargo === 0) {
+                docked = true;
+                break;
+            }
+            maxStuckTimer = Math.max(maxStuckTimer, harv.stuckTimer || 0);
+        }
+
+        const finalHarv = state.entities['harv1'];
+
+        console.log('Beyond 3000 grid limit test:', {
+            startPos: '3400, 3400',
+            finalPos: `${finalHarv.pos.x.toFixed(0)}, ${finalHarv.pos.y.toFixed(0)}`,
+            dock: '3500, 3560',
+            distToDock: finalHarv.pos.dist(dock).toFixed(0),
+            cargo: finalHarv.cargo,
+            docked,
+            maxStuckTimer
+        });
+
+        // Harvester should have docked successfully
+        expect(docked).toBe(true);
+        expect(maxStuckTimer).toBeLessThan(60);
+    });
 });
 

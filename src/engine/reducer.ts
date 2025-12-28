@@ -1,6 +1,6 @@
-import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, GRID_W, GRID_H, PLAYER_COLORS } from './types.js';
+import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS } from './types.js';
 import rules from '../data/rules.json';
-import { collisionGrid, refreshCollisionGrid, findPath } from './utils.js';
+import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH } from './utils.js';
 
 // Type assertions for JSON data
 const RULES = rules as any;
@@ -683,8 +683,8 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
     let newParticles: any[] = [];
     let creditsEarned: Record<number, number> = {};
 
-    // Refresh collision grid for pathfinding
-    refreshCollisionGrid(state.entities);
+    // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
+    refreshCollisionGrid(state.entities, state.config);
 
     const entityList = Object.values(state.entities);
 
@@ -1466,8 +1466,8 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
         const gx = Math.floor(checkPos.x / TILE_SIZE);
         const gy = Math.floor(checkPos.y / TILE_SIZE);
 
-        if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
-            if (collisionGrid[gy * GRID_W + gx] === 1) {
+        if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
+            if (collisionGrid[gy * getGridW() + gx] === 1) {
                 // Reduced avoidance when we have a path (path already handles navigation)
                 const baseWeight = hasValidPath ? 1.0 : 2.5;
                 const weight = a === 0 ? baseWeight : baseWeight * 0.6;
