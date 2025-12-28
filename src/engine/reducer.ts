@@ -194,7 +194,7 @@ function tick(state: GameState): GameState {
     }
 
     // Filter dead entities
-    const finalEntities: Record<EntityId, Entity> = {};
+    let finalEntities: Record<EntityId, Entity> = {};
     const buildingCounts: Record<number, number> = {};
     const mcvCounts: Record<number, number> = {};
 
@@ -231,6 +231,13 @@ function tick(state: GameState): GameState {
         if (alivePlayers.length === 1) {
             nextWinner = alivePlayers[0];
             nextRunning = false; // Stop game on win
+
+            // Kill loser's entities
+            const losers = Object.keys(nextPlayers).map(Number).filter(id => id !== nextWinner);
+            for (const loserId of losers) {
+                finalEntities = killPlayerEntities(finalEntities, loserId);
+            }
+
         } else if (alivePlayers.length === 0 && Object.keys(nextPlayers).length > 0) {
             // Draw or everyone destroyed?
             nextWinner = -1; // -1 for draw
@@ -564,9 +571,18 @@ function sellBuilding(state: GameState, payload: { buildingId: EntityId; playerI
             .filter(pid => (buildingCounts[pid] || 0) > 0 || (mcvCounts[pid] || 0) > 0);
 
         if (alivePlayers.length === 1) {
+            // Kill loser entities
+            const winner = alivePlayers[0];
+            const losers = Object.keys(newState.players).map(Number).filter(id => id !== winner);
+            let finalEntities = { ...newState.entities };
+            for (const loserId of losers) {
+                finalEntities = killPlayerEntities(finalEntities, loserId);
+            }
+
             return {
                 ...newState,
-                winner: alivePlayers[0],
+                entities: finalEntities,
+                winner: winner,
                 running: false
             };
         } else if (alivePlayers.length === 0 && Object.keys(newState.players).length > 0) {
@@ -1643,4 +1659,14 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         baseTargetId: null,
         dockPos: undefined
     };
+}
+
+function killPlayerEntities(entities: Record<EntityId, Entity>, playerId: number): Record<EntityId, Entity> {
+    const nextEntities = { ...entities };
+    for (const id in nextEntities) {
+        if (nextEntities[id].owner === playerId && !nextEntities[id].dead) {
+            nextEntities[id] = { ...nextEntities[id], dead: true, hp: 0, flash: 10 };
+        }
+    }
+    return nextEntities;
 }

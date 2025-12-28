@@ -2481,25 +2481,66 @@ function handleEmergencySell(
     // 1. Identify Critical Needs
     const hasRefinery = buildings.some(b => b.key === 'refinery');
     const hasConyard = buildings.some(b => b.key === 'conyard');
+    const hasFactory = buildings.some(b => b.key === 'factory');
+    const hasBarracks = buildings.some(b => b.key === 'barracks');
+
+    // Check for "Stalemate / Fire Sale" condition
+    // No Harvesters OR No Refinery => No Income
+    // Low Credits => Can't produce
+    const harvesters = Object.values(_state.entities).filter(e =>
+        e.owner === playerId && e.key === 'harvester' && !e.dead
+    );
+    const hasIncome = harvesters.length > 0 && hasRefinery;
+    const isBroke = player.credits < 200; // Can't even buy a rifle/scout
+    const isStalemate = !hasIncome && isBroke;
 
     // If we have no refinery and exist logic didn't build one (likely due to funds), consider selling
     const needsRefinery = hasConyard && !hasRefinery && player.credits < REFINERY_COST;
 
     // 2. Define Sell Candidates with Priority
     // Lower index = Higher priority to sell
-    const sellPriority = ['turret', 'tech', 'barracks', 'factory', 'power'];
+    const sellPriority = ['turret', 'pillbox', 'sam_site', 'tech', 'power', 'conyard', 'barracks', 'factory'];
 
     let shouldSell = false;
     let candidates: Entity[] = [];
+
+    // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
+    // If we are broke and have no income, sell buildings to buy units for a final attack
+    if (isStalemate) {
+        // Can we produce anything?
+        if (hasFactory || hasBarracks) {
+            shouldSell = true;
+            // logic: Sell everything except ONE production building
+            // We need 1 factory (preferred) or 1 barracks to produce.
+            // If we have factory, Conyard and Barracks are sellable.
+
+            candidates = buildings.filter(b => {
+                // Keep the LAST Factory
+                if (b.key === 'factory' && buildings.filter(f => f.key === 'factory').length === 1) return false;
+                // Keep the LAST Barracks (if no factory)
+                if (b.key === 'barracks' && !hasFactory && buildings.filter(br => br.key === 'barracks').length === 1) return false;
+                // Otherwise, everything else is fair game if it gives us money
+                return true;
+            });
+
+            // Sort by priority (Sell Power/Defenses/Conyard first)
+            candidates.sort((a, b) => {
+                const idxA = getPriorityIndex(a.key, sellPriority);
+                const idxB = getPriorityIndex(b.key, sellPriority);
+                if (idxA !== idxB) return idxA - idxB;
+                return 0;
+            });
+        }
+    }
 
     // Condition A: Critical Low Funds (Classic Emergency)
     const criticalLow = player.credits <= 200;
     const underAttack = aiState.threatsNearBase.length > 0 || aiState.harvestersUnderAttack.length > 0;
 
-    if (criticalLow && (underAttack || player.credits <= 50)) {
+    if (!shouldSell && criticalLow && (underAttack || player.credits <= 50)) {
         shouldSell = true;
         // Sell anything except critical
-        const critical = ['conyard', 'refinery'];
+        const critical = ['conyard', 'refinery', 'factory', 'barracks'];
         candidates = buildings.filter(b => !critical.includes(b.key));
         // Sort by HP (damage)
         candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp));
@@ -2507,41 +2548,29 @@ function handleEmergencySell(
 
     // Condition B: Need Refinery (Strategic Sell)
     if (!shouldSell && needsRefinery) {
-        // Only sell if existing funds + potential sell gives us enough?
-        // Actually, just sell one by one until we have enough.
-        // But don't sell if we have NO chance of affording it (e.g. need 2000, have 0, only have 1 turret worth 400).
-        // For now, let's just be aggressive: if we need a refinery, sell non-essential stuff.
-
         shouldSell = true;
-
-        // Filter candidates based on priority
-        // We keep Conyard and at least one Power Plant (unless valid fallback)
         const powerPlants = buildings.filter(b => b.key === 'power');
 
         candidates = buildings.filter(b => {
+            // Don't sell the things we need to build/exist
             if (b.key === 'conyard') return false;
-            if (b.key === 'refinery') return false; // Should be none, but for safety
-            if (b.key === 'power' && powerPlants.length <= 1) return false; // Keep last power
+            if (b.key === 'refinery') return false;
+            if (b.key === 'power' && powerPlants.length <= 1) return false;
             return true;
         });
 
-        // Sort candidates by priority
+        // Use standard priority logic
         candidates.sort((a, b) => {
-            const pA = sellPriority.indexOf(a.key);
-            const pB = sellPriority.indexOf(b.key);
-            // If both not in priority list (unknown), treat as low priority (high index)
-            const idxA = pA === -1 ? 99 : pA;
-            const idxB = pB === -1 ? 99 : pB;
-
+            const idxA = getPriorityIndex(a.key, sellPriority);
+            const idxB = getPriorityIndex(b.key, sellPriority);
             if (idxA !== idxB) return idxA - idxB;
-
-            // Tie-break: Sell most expensive (to get money faster)? Or least expensive?
-            // Creating a refinery is vital. Sell high value stuff.
+            // Tie-break: Sell expensive
             const costA = RULES.buildings[a.key]?.cost || 0;
             const costB = RULES.buildings[b.key]?.cost || 0;
             return costB - costA;
         });
     }
+
 
     if (shouldSell && candidates.length > 0) {
         const toSell = candidates[0];
@@ -2555,6 +2584,11 @@ function handleEmergencySell(
     }
 
     return actions;
+}
+
+function getPriorityIndex(key: string, priorityList: string[]): number {
+    const idx = priorityList.indexOf(key);
+    return idx === -1 ? 99 : idx;
 }
 
 // Export internal functions for testing
