@@ -1082,19 +1082,18 @@ describe('AI System', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
 
-            // Useless refinery taking damage (under attack)
-            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 400, maxHp: 1000 });
+            // Useless refinery taking damage (under attack) - set placedTick to make it "mature"
+            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 400, maxHp: 1000, placedTick: 0 });
             // Useful refinery safe
-            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 1000, maxHp: 1000 });
+            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 1000, maxHp: 1000, placedTick: 0 });
             entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
 
             // Under attack threat
             entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 1050, 1050);
 
             let state = createTestState(entities);
-            // Low credits to simulate need? Or normal credits? The logic should work regardless for "useless" buildings if damaged.
-            // But let's set it lowish (200) to match the previous separate test environment
-            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
+            // Use tick 600 to be past the 300 tick grace period, and set credits low
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
 
             const actions = computeAiActions(state, 1);
 
@@ -1109,20 +1108,20 @@ describe('AI System', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
 
-            // Critical Conyard
-            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100);
+            // Critical Conyard - set placedTick to make buildings "mature"
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100, { placedTick: 0 });
             // Power Plant
-            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100);
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
             // Expensive Factory (Cost 2000, Sell 1000)
-            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 300, 100);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 300, 100, { placedTick: 0 });
             // Turret (Cost 800, Sell 400)
-            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100);
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
             // Barracks (Cost 500, Sell 250)
-            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 500, 100);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 500, 100, { placedTick: 0 });
 
             let state = createTestState(entities);
-            // Credits 500. Refinery cost 2000. Needs 1500 more.
-            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
+            // Credits 500. Refinery cost 2000. Needs 1500 more. Use tick 600 for grace period
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
 
             const actions = computeAiActions(state, 1);
             const hasSell = actions.some(a => a.type === 'SELL_BUILDING');
@@ -1135,14 +1134,15 @@ describe('AI System', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
 
-            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
-            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100);
-            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 300, 100);
-            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100);
+            // Set placedTick to make buildings "mature"
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 300, 100, { placedTick: 0 });
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
 
-            // Stalemate: 0 credits, no income (no refinery/harvesters)
+            // Stalemate: 0 credits, no income (no refinery/harvesters), use tick 600 for grace period
             let state = createTestState(entities);
-            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
 
             const actions = computeAiActions(state, 1);
             const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
@@ -1169,11 +1169,13 @@ describe('AI System', () => {
         it('should sell Conyard if Factory exists in stalemate', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
-            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
-            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100);
+            // Set placedTick to make buildings "mature"
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities);
-            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+            // Use tick 600 for grace period
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
 
             const actions = computeAiActions(state, 1);
             const sellAction = actions.find(a => a.type === 'SELL_BUILDING');

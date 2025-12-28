@@ -77,10 +77,14 @@ describe('Building Selling', () => {
 describe('AI Emergency Selling', () => {
     it('should sell building when low on credits and under attack', () => {
         resetAIState(1);
-        const state = getInitialState();
+        let state = getInitialState();
+        // Use tick 600 to be past the 300 tick building grace period
+        state = { ...state, tick: 600 };
+
         const building = {
             id: 'b_ai', owner: 1, type: 'BUILDING', key: 'power',
-            pos: new Vector(2000, 2000), hp: 400, maxHp: 800, dead: false, radius: 30
+            pos: new Vector(2000, 2000), hp: 400, maxHp: 800, dead: false, radius: 30,
+            placedTick: 0  // Building is "mature" (placed at tick 0, now at tick 600)
         } as Entity;
 
         const aiPlayer = { ...state.players[1], credits: 10 };

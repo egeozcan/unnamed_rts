@@ -39,6 +39,15 @@ export interface AIPlayerState {
     threatLevel: number;       // 0-100 military pressure rating
     expansionTarget: Vector | null;  // Distant ore to expand toward
     peaceTicks: number;        // Ticks spent at peace with surplus resources
+    // Emergency sell tracking
+    lastSellTick: number;      // Last tick when a building was sold
+    // Enemy intelligence for counter-building
+    enemyIntelligence: {
+        lastUpdate: number;
+        unitCounts: Record<string, number>;
+        buildingCounts: Record<string, number>;
+        dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed';
+    };
 }
 
 // Store AI states (keyed by playerId)
@@ -62,7 +71,14 @@ function getAIState(playerId: number): AIPlayerState {
             economyScore: 50,
             threatLevel: 0,
             expansionTarget: null,
-            peaceTicks: 0
+            peaceTicks: 0,
+            lastSellTick: 0,
+            enemyIntelligence: {
+                lastUpdate: 0,
+                unitCounts: {},
+                buildingCounts: {},
+                dominantArmor: 'mixed'
+            }
         };
     }
     return aiStates[playerId];
@@ -111,7 +127,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     const myBuildings = myEntities.filter(e => e.type === 'BUILDING');
     const myUnits = myEntities.filter(e => e.type === 'UNIT');
     const myHarvesters = myUnits.filter(u => u.key === 'harvester');
-    const myCombatUnits = myUnits.filter(u => u.key !== 'harvester');
+    const myCombatUnits = myUnits.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
     const enemies = Object.values(state.entities).filter(e => e.owner !== playerId && e.owner !== -1 && !e.dead);
     const enemyBuildings = enemies.filter(e => e.type === 'BUILDING');
     const enemyUnits = enemies.filter(e => e.type === 'UNIT');
@@ -121,6 +137,9 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Discover enemy base location (for attack targeting)
     updateEnemyBaseLocation(aiState, enemyBuildings);
+
+    // Update enemy intelligence for counter-building (every 300 ticks = 5 seconds)
+    updateEnemyIntelligence(aiState, enemies, state.tick);
 
     // Update threat detection
     const { threatsNearBase, harvestersUnderAttack } = detectThreats(
@@ -138,11 +157,11 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Execute strategy-specific actions
 
-    // 1. Always check for emergency selling if cash is low
-    actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
+    // 1. Handle economy FIRST so we know what we're building
+    actions.push(...handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies));
 
-    // 2. Always handle economy
-    actions.push(...handleEconomy(state, playerId, myBuildings, player, personality));
+    // 2. Handle emergency selling AFTER economy - prevents build-then-sell loops
+    actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
 
     // 3. Handle building repairs when appropriate
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
@@ -150,12 +169,15 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     // 4. Handle harvester defense/fleeing
     actions.push(...handleHarvesterSafety(state, playerId, myHarvesters, myCombatUnits, baseCenter, enemies, aiState));
 
-    // 3. Handle base defense (always check, strategy just goes into full defense mode)
+    // 5. Handle MCV operations (movement, deployment)
+    actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
+
+    // 6. Handle base defense (always check, strategy just goes into full defense mode)
     if (aiState.strategy === 'defend' || threatsNearBase.length > 0) {
         actions.push(...handleDefense(state, playerId, myCombatUnits, threatsNearBase, baseCenter));
     }
 
-    // 4. Handle offensive operations based on strategy
+    // 7. Handle offensive operations based on strategy
     if (threatsNearBase.length === 0) {
         if (aiState.strategy === 'attack') {
             actions.push(...handleAttack(state, playerId, aiState, myCombatUnits, enemies, baseCenter, personality));
@@ -167,17 +189,17 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
         }
     }
 
-    // 5. Place buildings
+    // 8. Place buildings
     if (player.readyToPlace) {
         actions.push(...handleBuildingPlacement(state, playerId, myBuildings, player));
     }
 
-    // 6. Scouting (when idle and enemy location unknown)
+    // 9. Scouting (when idle and enemy location unknown)
     if (aiState.strategy === 'buildup' && !aiState.enemyBaseLocation) {
         actions.push(...handleScouting(state, playerId, myCombatUnits, aiState, baseCenter));
     }
 
-    // 7. Micro-management for combat units
+    // 10. Micro-management for combat units
     if (aiState.strategy === 'attack' || aiState.strategy === 'harass') {
         actions.push(...handleMicro(state, myCombatUnits, enemies, baseCenter));
     }
@@ -221,6 +243,51 @@ function updateEnemyBaseLocation(aiState: AIPlayerState, enemyBuildings: Entity[
         sumY += b.pos.y;
     }
     aiState.enemyBaseLocation = new Vector(sumX / enemyBuildings.length, sumY / enemyBuildings.length);
+}
+
+// ===== ENEMY INTELLIGENCE =====
+
+function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[], tick: number): void {
+    // Only update every 300 ticks (5 seconds)
+    if (tick - aiState.enemyIntelligence.lastUpdate < 300) return;
+
+    const unitCounts: Record<string, number> = {};
+    const buildingCounts: Record<string, number> = {};
+    let infantryCount = 0;
+    let lightCount = 0;
+    let heavyCount = 0;
+
+    for (const e of enemies) {
+        if (e.type === 'UNIT') {
+            unitCounts[e.key] = (unitCounts[e.key] || 0) + 1;
+
+            // Categorize by armor type
+            const data = RULES.units?.[e.key];
+            if (data) {
+                if (data.armor === 'infantry') infantryCount++;
+                else if (data.armor === 'light') lightCount++;
+                else if (data.armor === 'heavy' || data.armor === 'medium') heavyCount++;
+            }
+        } else if (e.type === 'BUILDING') {
+            buildingCounts[e.key] = (buildingCounts[e.key] || 0) + 1;
+        }
+    }
+
+    // Determine dominant armor type
+    let dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed' = 'mixed';
+    const total = infantryCount + lightCount + heavyCount;
+    if (total > 0) {
+        if (infantryCount > total * 0.6) dominantArmor = 'infantry';
+        else if (heavyCount > total * 0.4) dominantArmor = 'heavy';
+        else if (lightCount > total * 0.4) dominantArmor = 'light';
+    }
+
+    aiState.enemyIntelligence = {
+        lastUpdate: tick,
+        unitCounts,
+        buildingCounts,
+        dominantArmor
+    };
 }
 
 // ===== DYNAMIC RESOURCE ALLOCATION =====
@@ -482,20 +549,25 @@ function updateStrategy(
     }
 
     // Priority 2.5: PEACE BREAK - Force attack when wealthy and peaceful for too long
-    // Even with a smaller army, break the peace lock with a random chance
-    const peaceBreakArmyThreshold = Math.max(3, attackThreshold - 2); // Lower threshold
+    // ===== MORE DETERMINISTIC PEACE BREAK (Issue #11) =====
+    const GUARANTEED_PEACE_BREAK_TICKS = 1200; // 20 seconds guaranteed attack
+    const peaceBreakArmyThreshold = Math.max(3, attackThreshold - 2);
+
     if (aiState.peaceTicks >= PEACE_BREAK_TICKS &&
         credits >= SURPLUS_CREDIT_THRESHOLD &&
         armySize >= peaceBreakArmyThreshold &&
         hasFactory &&
         enemies.length > 0) {
-        // Random chance to break peace (increases with more credits)
-        const peaceBreakChance = Math.min(0.5, (credits - SURPLUS_CREDIT_THRESHOLD) / 10000);
-        if (Math.random() < peaceBreakChance || credits >= SURPLUS_CREDIT_THRESHOLD * 2) {
+
+        // Deterministic peace break: attack if peaceful for long enough OR very wealthy
+        const shouldBreakPeace = aiState.peaceTicks >= GUARANTEED_PEACE_BREAK_TICKS ||
+            credits >= SURPLUS_CREDIT_THRESHOLD * 2;
+
+        if (shouldBreakPeace) {
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = tick;
             aiState.attackGroup = combatUnits.map(u => u.id);
-            aiState.peaceTicks = 0; // Reset peace counter
+            aiState.peaceTicks = 0;
             return;
         }
     }
@@ -524,11 +596,12 @@ function handleEconomy(
     playerId: number,
     buildings: Entity[],
     player: any,
-    personality: any
+    personality: any,
+    aiState: AIPlayerState,
+    _enemies: Entity[]
 ): Action[] {
     const actions: Action[] = [];
     const buildOrder = personality.build_order_priority;
-    const aiState = getAIState(playerId);
 
     // ===== INVESTMENT PRIORITY HANDLING =====
 
@@ -541,8 +614,9 @@ function handleEconomy(
     const buildingQueueEmpty = !player.queues.building.current;
     const vehicleQueueEmpty = !player.queues.vehicle.current;
 
-    // Detect Panic Mode
+    // Detect Panic Mode and Combat Mode
     const isPanic = aiState.threatLevel > 75 || (aiState.threatLevel > 50 && player.credits < 1000);
+    const isInCombat = aiState.strategy === 'attack' || aiState.strategy === 'defend';
 
     // PANIC DEFENSE: Prioritize defensive structures over everything else if in panic
     if (isPanic && buildingQueueEmpty) {
@@ -794,6 +868,11 @@ function handleEconomy(
 
     // Build order fulfillment
     for (const item of buildOrder) {
+        // Skip economic buildings during active combat (Issue #12)
+        if (isInCombat && ['power', 'refinery'].includes(item) && player.credits < 3000) {
+            continue;
+        }
+
         const having = buildings.some(b => b.key === item);
         const q = player.queues.building;
         const building = q.current === item;
@@ -813,10 +892,6 @@ function handleEconomy(
     // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
 
-    // Detect Panic Mode
-    // High threat OR (Significant threat AND Low Economy/Credits)
-    // const isPanic = ... (Already defined above)
-
     // Strategy-based credit thresholds
     let creditThreshold = aiState.strategy === 'attack' ? 500 :
         aiState.strategy === 'defend' ? 600 : 800;
@@ -832,6 +907,26 @@ function handleEconomy(
 
     const hasBarracks = buildings.some(b => b.key === 'barracks');
     const infantryQueueEmpty = !player.queues.infantry.current;
+
+    // ===== COUNTER-BUILDING LOGIC (Issue #9 & #10) =====
+    // Adjust unit preferences based on enemy composition
+    let counterInfantry = prefs?.infantry || ['rifle'];
+    let counterVehicle = prefs?.vehicle || ['light'];
+
+    const dominantArmor = aiState.enemyIntelligence.dominantArmor;
+    if (dominantArmor === 'infantry') {
+        // Enemy has lots of infantry - build flamers and flame tanks
+        counterInfantry = ['flamer', 'rifle', 'grenadier'];
+        counterVehicle = ['flame_tank', 'light', 'heavy'];
+    } else if (dominantArmor === 'heavy') {
+        // Enemy has heavy armor - build rockets and heavies
+        counterInfantry = ['rocket', 'rifle'];
+        counterVehicle = ['heavy', 'artillery', 'light'];
+    } else if (dominantArmor === 'light') {
+        // Enemy has light armor - standard counters work well
+        counterInfantry = ['rifle', 'rocket'];
+        counterVehicle = ['light', 'heavy'];
+    }
 
     if (player.credits > creditThreshold) {
         // STAGGERED PRODUCTION: Alternate between infantry and vehicles
@@ -863,13 +958,11 @@ function handleEconomy(
             }
         }
 
-        // Execute infantry production
+        // Execute infantry production with counter-building
         if (buildInfantry) {
-            // Panic preference: Cheap & Fast (Rifle, Rocket)
-            // Normal preference: AI Config
             const list = isPanic
                 ? ['rocket', 'rifle'] // Panic: Rocket/Rifle
-                : (prefs?.infantry || ['rifle']);
+                : counterInfantry;
 
             for (const key of list) {
                 const data = RULES.units[key];
@@ -885,13 +978,11 @@ function handleEconomy(
             }
         }
 
-        // Execute vehicle production
+        // Execute vehicle production with counter-building
         if (buildVehicle) {
-            // Panic preference: Cheap & Versatile (Light Tank, Jeep/Ranger)
-            // Normal preference: AI Config
             const list = isPanic
                 ? ['light', 'jeep']
-                : (prefs?.vehicle || ['light']);
+                : counterVehicle;
 
             for (const key of list) {
                 const data = RULES.units[key];
@@ -952,6 +1043,106 @@ function handleEconomy(
     return actions;
 }
 
+// ===== MCV OPERATIONS (Issue #7) =====
+
+function handleMCVOperations(
+    state: GameState,
+    playerId: number,
+    _aiState: AIPlayerState,
+    myBuildings: Entity[],
+    myUnits: Entity[]
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find MCVs owned by this player
+    const mcvs = myUnits.filter(u => u.key === 'mcv' && !u.dead);
+    if (mcvs.length === 0) return actions;
+
+    const BUILD_RADIUS = 400;
+    const baseCenter = findBaseCenter(myBuildings);
+
+    // Find expansion location - distant ore that needs a new base
+    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+    let bestExpansionTarget: Vector | null = null;
+    let bestScore = -Infinity;
+
+    for (const ore of allOre) {
+        // Check if ore is covered by existing buildings
+        let inBuildRange = false;
+        for (const b of myBuildings) {
+            const bData = RULES.buildings[b.key];
+            if (bData?.isDefense) continue;
+            if (ore.pos.dist(b.pos) < BUILD_RADIUS + 200) {
+                inBuildRange = true;
+                break;
+            }
+        }
+        if (inBuildRange) continue; // Already covered
+
+        // Check if ore has nearby enemy presence (dangerous)
+        let nearbyEnemyThreats = 0;
+        for (const e of Object.values(state.entities)) {
+            if (e.owner !== playerId && e.owner !== -1 && !e.dead) {
+                if (e.pos.dist(ore.pos) < 500) nearbyEnemyThreats++;
+            }
+        }
+        if (nearbyEnemyThreats > 2) continue; // Too dangerous
+
+        // Score: prefer closer ore, penalize dangerous areas
+        const distFromBase = ore.pos.dist(baseCenter);
+        if (distFromBase > 600 && distFromBase < 1500) {
+            const score = 1000 - distFromBase - nearbyEnemyThreats * 100;
+            if (score > bestScore) {
+                bestScore = score;
+                bestExpansionTarget = ore.pos;
+            }
+        }
+    }
+
+    for (const mcv of mcvs) {
+        // If MCV has no destination, assign expansion target
+        if (!mcv.moveTarget && !mcv.finalDest && bestExpansionTarget) {
+            // Move to expansion target (offset from ore so we don't block it)
+            const targetPos = bestExpansionTarget.add(new Vector(100, 0));
+            actions.push({
+                type: 'COMMAND_MOVE',
+                payload: { unitIds: [mcv.id], x: targetPos.x, y: targetPos.y }
+            });
+        }
+
+        // If MCV is near its destination (within 100 units), deploy it
+        // Note: This requires a DEPLOY_MCV action in reducer. If not implemented,
+        // we can simulate by having MCV build a conyard
+        if (mcv.finalDest && mcv.pos.dist(mcv.finalDest) < 100) {
+            // Check if there's enough space to deploy
+            const deployPos = mcv.pos;
+            let canDeploy = true;
+
+            // Check for nearby buildings that would block
+            for (const b of Object.values(state.entities)) {
+                if (b.dead) continue;
+                if (b.type === 'BUILDING' || b.type === 'ROCK') {
+                    if (b.pos.dist(deployPos) < 100) {
+                        canDeploy = false;
+                        break;
+                    }
+                }
+            }
+
+            if (canDeploy) {
+                // Issue deploy command (if reducer supports it)
+                // For now, we'll use a placeholder - this needs DEPLOY_MCV action
+                // actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id, playerId } });
+
+                // Alternative: Just stop the MCV so it doesn't wander
+                // The user may need to implement DEPLOY_MCV in reducer
+            }
+        }
+    }
+
+    return actions;
+}
+
 // Helper function to find nearest available defender
 function findNearestDefender(
     combatUnits: Entity[],
@@ -1000,21 +1191,24 @@ function handleHarvesterSafety(
     const enemiesTargeted = new Set<EntityId>();
 
     // Track which safe spots have already been assigned to harvesters this tick
-    // This helps spread harvesters across different safe ore patches
     const assignedSafeSpots: Vector[] = [];
 
-    // Check economic pressure - when credits are very low, harvesters should be more aggressive
-    // about continuing to harvest even under threat (unless directly attacked)
+    // ===== IMPROVED ECONOMIC PRESSURE LOGIC (Issue #6) =====
+    // Only ignore threats if:
+    // 1. Credits are critically low (<100)
+    // 2. AND the harvester has significant cargo to deliver
     const player = state.players[playerId];
-    const isUnderEconomicPressure = player && (
-        player.credits < 200 || // Very low credits
-        aiState.economyScore < 25 // Bad economy score
-    );
-
-    // Reduced flee distance when not directly attacked - be less jumpy
-    const PASSIVE_FLEE_DISTANCE = 150; // Much closer than HARVESTER_FLEE_DISTANCE (300)
+    const MINIMUM_SAFE_DISTANCE = 80; // Always flee from threats this close
 
     for (const harv of harvesters) {
+        // Check economic pressure per-harvester based on cargo
+        const hasSignificantCargo = harv.cargo > 200;
+        const isCriticallyBroke = player && player.credits < 100;
+        const isUnderEconomicPressure = isCriticallyBroke && hasSignificantCargo;
+
+        // Reduced flee distance when not directly attacked - be less jumpy
+        const PASSIVE_FLEE_DISTANCE = 150;
+
         // Check if harvester is under threat
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
@@ -1036,8 +1230,6 @@ function handleHarvesterSafety(
         // Scan for nearby unit threats if no direct attacker yet
         // Use reduced distance for passive detection when under economic pressure
         if (!nearestThreat) {
-            // Under economic pressure: only flee from VERY close enemies (passive flee)
-            // Normal: flee from enemies within HARVESTER_FLEE_DISTANCE
             const fleeDistance = isUnderEconomicPressure ? PASSIVE_FLEE_DISTANCE : HARVESTER_FLEE_DISTANCE;
 
             for (const enemy of enemies) {
@@ -1051,18 +1243,15 @@ function handleHarvesterSafety(
         }
 
         // Also check if our destination (refinery) is compromised
-        // This prevents the "yoyo" effect of fleeing -> safe -> return to unsafe refinery -> flee
-        // But under economic pressure, skip this check - we need to try to unload!
         if (!nearestThreat && harv.baseTargetId && !isUnderEconomicPressure) {
             const refinery = state.entities[harv.baseTargetId];
             if (refinery && !refinery.dead) {
                 for (const enemy of enemies) {
                     if (enemy.type !== 'UNIT') continue;
                     const dist = enemy.pos.dist(refinery.pos);
-                    // If enemy is camping the refinery, treat it as a threat to us
                     if (dist < THREAT_DETECTION_RADIUS) {
                         nearestThreat = enemy;
-                        nearestDist = dist; // Treat distance to refinery as threat distance
+                        nearestDist = dist;
                         break;
                     }
                 }
@@ -1070,6 +1259,12 @@ function handleHarvesterSafety(
         }
 
         if (nearestThreat) {
+            // ===== MINIMUM SAFE DISTANCE (Issue #6) =====
+            // Even under economic pressure, flee from VERY close threats
+            if (nearestDist < MINIMUM_SAFE_DISTANCE) {
+                isDirectAttack = true; // Treat as direct attack - force flee
+            }
+
             // Under economic pressure AND not directly attacked: skip flee, keep harvesting
             if (isUnderEconomicPressure && !isDirectAttack) {
                 // Don't flee - the economy needs resources desperately
@@ -1662,6 +1857,17 @@ function handleAttack(
     for (const enemy of enemies) {
         let score = 0;
 
+        // ===== LEASH DISTANCE (Issue #4) =====
+        // Heavily penalize targets that are too far from group center
+        // This prevents units from chasing enemies across the map
+        const MAX_CHASE_DISTANCE = 400;
+        const distFromGroup = enemy.pos.dist(groupCenter);
+        if (distFromGroup > MAX_CHASE_DISTANCE * 2) {
+            score -= 500; // Massive penalty for very far targets
+        } else if (distFromGroup > MAX_CHASE_DISTANCE) {
+            score -= (distFromGroup - MAX_CHASE_DISTANCE) * 0.5;
+        }
+
         // --- THREAT SCORING (highest priority) ---
         const isThreat = activeThreats.has(enemy.id);
         if (isThreat) {
@@ -1683,7 +1889,6 @@ function handleAttack(
                 score += 100; // Active defensive building = top priority
             } else {
                 // Even non-attacking defenses near our units are dangerous
-                const distFromGroup = enemy.pos.dist(groupCenter);
                 if (distFromGroup < 300) {
                     score += 75; // Nearby turret - clear it
                 }
@@ -1694,7 +1899,7 @@ function handleAttack(
         if (enemy.type === 'BUILDING') {
             const priorityIndex = targetPriority.indexOf(enemy.key);
             if (priorityIndex >= 0) {
-                score += 80 - priorityIndex * 15; // Reduced from 200, threats take priority
+                score += 80 - priorityIndex * 15;
             } else {
                 score += 30; // Generic building
             }
@@ -1705,16 +1910,29 @@ function handleAttack(
             score += 40; // Combat units are moderate priority
         }
 
-        // Prioritize low HP targets (easier to kill)
-        score += (1 - enemy.hp / enemy.maxHp) * 50;
+        // ===== IMPROVED FOCUS FIRE (Issue #5) =====
+        // Prioritize low HP targets more aggressively to secure kills
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio < 0.2) {
+            score += 100; // Very low HP - secure the kill!
+        } else if (hpRatio < 0.5) {
+            score += 75; // Half health - good target
+        } else {
+            score += (1 - hpRatio) * 50;
+        }
 
         // Distance penalty - closer is better for group coherence
         const dist = enemy.pos.dist(groupCenter);
         score -= dist / 25;
 
-        // Bonus for attacking what allies are attacking (focus fire)
+        // ===== STRONGER FOCUS FIRE BONUS (Issue #5) =====
+        // Much stronger bonus for attacking what allies are attacking
         const alliesAttacking = combatUnits.filter(u => u.targetId === enemy.id).length;
-        score += alliesAttacking * 20;
+        if (alliesAttacking >= 3) {
+            score += 100 + alliesAttacking * 30; // Strong focus fire bonus
+        } else {
+            score += alliesAttacking * 25;
+        }
 
         if (score > bestScore) {
             bestScore = score;
@@ -2233,39 +2451,75 @@ function handleBuildingPlacement(
                 score -= new Vector(x, y).dist(distantOreTarget) * 0.8;
                 score += new Vector(x, y).dist(center) * 0.2;
             } else if (buildingData.isDefense) {
-                // Defensive buildings: prefer positions toward enemy
+                // ===== IMPROVED DEFENSE PLACEMENT (Issue #8) =====
                 const aiState = getAIState(playerId);
-                if (aiState.enemyBaseLocation) {
-                    const spotPos = new Vector(x, y);
-                    const toEnemy = aiState.enemyBaseLocation.sub(center).norm();
-                    const spotDir = spotPos.sub(center).norm();
-                    const alignment = toEnemy.dot(spotDir);
-                    score += alignment * 50; // Bonus for facing enemy
-                }
+                const spotPos = new Vector(x, y);
 
-                // Penalize being too close to other defenses (avoid clustering)
+                // Get existing defenses for spacing check
                 const existingDefenses = buildings.filter(b => {
                     const bd = RULES.buildings[b.key];
                     return bd?.isDefense;
                 });
+
+                // ===== STRICT SPACING: Minimum 200 units apart =====
+                let tooClose = false;
                 for (const def of existingDefenses) {
-                    const distToDefense = def.pos.dist(new Vector(x, y));
-                    if (distToDefense < 150) {
-                        score -= (150 - distToDefense) * 2; // Heavy penalty for clustering
+                    const distToDefense = def.pos.dist(spotPos);
+                    if (distToDefense < 200) {
+                        score -= (200 - distToDefense) * 5; // Heavy penalty
+                        if (distToDefense < 100) {
+                            tooClose = true; // Reject completely
+                        }
                     }
+                }
+                if (tooClose) continue; // Skip this spot entirely
+
+                // ===== COVERAGE ANGLE: Prefer covering new directions =====
+                if (existingDefenses.length > 0) {
+                    // Calculate angle from base center to this spot
+                    const spotAngle = Math.atan2(spotPos.y - center.y, spotPos.x - center.x);
+
+                    // Find closest existing defense angle
+                    let minAngleDiff = Infinity;
+                    for (const def of existingDefenses) {
+                        const defAngle = Math.atan2(def.pos.y - center.y, def.pos.x - center.x);
+                        let angleDiff = Math.abs(spotAngle - defAngle);
+                        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                        if (angleDiff < minAngleDiff) minAngleDiff = angleDiff;
+                    }
+
+                    // Bonus for covering a new angle (>45 degrees from other defenses)
+                    if (minAngleDiff > Math.PI / 4) {
+                        score += minAngleDiff * 30;
+                    }
+                }
+
+                // Enemy base direction bonus
+                if (aiState.enemyBaseLocation) {
+                    const toEnemy = aiState.enemyBaseLocation.sub(center).norm();
+                    const spotDir = spotPos.sub(center).norm();
+                    const alignment = toEnemy.dot(spotDir);
+                    score += alignment * 50;
                 }
 
                 // Bonus for being near refineries (protecting economy)
                 const refineries = buildings.filter(b => b.key === 'refinery');
                 for (const ref of refineries) {
-                    const distToRef = ref.pos.dist(new Vector(x, y));
-                    if (distToRef < 250) {
-                        score += (250 - distToRef) * 0.3; // Bonus for protecting refineries
+                    const distToRef = ref.pos.dist(spotPos);
+                    if (distToRef < 300 && distToRef > 100) {
+                        score += 80; // Good distance to protect refinery
+                    } else if (distToRef < 100) {
+                        score -= 30; // Too close - blocks refinery operations
                     }
                 }
 
-                // Moderate distance from base center
-                score -= Math.abs(distToCenter - 200) * 0.3;
+                // Moderate distance from base center (150-300 is ideal)
+                const distFromCenter = spotPos.dist(center);
+                if (distFromCenter > 150 && distFromCenter < 300) {
+                    score += 30;
+                } else {
+                    score -= Math.abs(distFromCenter - 225) * 0.2;
+                }
             } else {
                 score -= new Vector(x, y).dist(center) * 0.5;
             }
@@ -2516,6 +2770,22 @@ function handleEmergencySell(
     aiState: AIPlayerState
 ): Action[] {
     const actions: Action[] = [];
+
+    // ===== SELL COOLDOWN (Issue #2) =====
+    // Prevent selling multiple buildings in rapid succession
+    const SELL_COOLDOWN = 120; // 2 seconds
+    if (_state.tick - aiState.lastSellTick < SELL_COOLDOWN) {
+        return actions;
+    }
+
+    // ===== BUILDING AGE GRACE PERIOD (Issue #1) =====
+    // Filter out buildings that were just placed (prevent build-then-sell loops)
+    const BUILDING_GRACE_PERIOD = 300; // 5 seconds
+    const matureBuildings = buildings.filter(b => {
+        const age = _state.tick - (b.placedTick || 0);
+        return age >= BUILDING_GRACE_PERIOD;
+    });
+
     const REFINERY_COST = RULES.buildings.refinery.cost;
 
     // 1. Identify Critical Needs
@@ -2525,45 +2795,47 @@ function handleEmergencySell(
     const hasBarracks = buildings.some(b => b.key === 'barracks');
 
     // Check for "Stalemate / Fire Sale" condition
-    // No Harvesters OR No Refinery => No Income
-    // Low Credits => Can't produce
     const harvesters = Object.values(_state.entities).filter(e =>
         e.owner === playerId && e.key === 'harvester' && !e.dead
     );
     const hasIncome = harvesters.length > 0 && hasRefinery;
-    const isBroke = player.credits < 200; // Can't even buy a rifle/scout
+    const isBroke = player.credits < 200;
     const isStalemate = !hasIncome && isBroke;
 
-    // If we have no refinery and exist logic didn't build one (likely due to funds), consider selling
     const needsRefinery = hasConyard && !hasRefinery && player.credits < REFINERY_COST;
 
     // 2. Define Sell Candidates with Priority
-    // Lower index = Higher priority to sell
     const sellPriority = ['turret', 'pillbox', 'sam_site', 'tech', 'power', 'conyard', 'barracks', 'factory'];
 
     let shouldSell = false;
     let candidates: Entity[] = [];
 
+    // ===== PROACTIVE USELESS REFINERY SELLING (Issue #3 Enhancement) =====
+    // Sell refineries that are far from any ore, even if not damaged
+    // This prevents wasted resources on useless buildings
+    if (!shouldSell) {
+        const uselessRefineries = matureBuildings.filter(b =>
+            b.key === 'refinery' && !isRefineryUseful(b, _state)
+        );
+
+        // Only sell if we have more than one refinery OR the refinery is really useless
+        const allRefineries = buildings.filter(b => b.key === 'refinery');
+        if (uselessRefineries.length > 0 && allRefineries.length > 1) {
+            shouldSell = true;
+            candidates = uselessRefineries;
+        }
+    }
+
     // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
-    // If we are broke and have no income, sell buildings to buy units for a final attack
-    if (isStalemate) {
-        // Can we produce anything?
+    if (!shouldSell && isStalemate) {
         if (hasFactory || hasBarracks) {
             shouldSell = true;
-            // logic: Sell everything except ONE production building
-            // We need 1 factory (preferred) or 1 barracks to produce.
-            // If we have factory, Conyard and Barracks are sellable.
-
-            candidates = buildings.filter(b => {
-                // Keep the LAST Factory
+            candidates = matureBuildings.filter(b => {
                 if (b.key === 'factory' && buildings.filter(f => f.key === 'factory').length === 1) return false;
-                // Keep the LAST Barracks (if no factory)
                 if (b.key === 'barracks' && !hasFactory && buildings.filter(br => br.key === 'barracks').length === 1) return false;
-                // Otherwise, everything else is fair game if it gives us money
                 return true;
             });
 
-            // Sort by priority (Sell Power/Defenses/Conyard first)
             candidates.sort((a, b) => {
                 const idxA = getPriorityIndex(a.key, sellPriority);
                 const idxB = getPriorityIndex(b.key, sellPriority);
@@ -2573,11 +2845,9 @@ function handleEmergencySell(
         }
     }
 
-    // Condition D: Sell Useless Refineries Under Attack
-    // If a refinery is far from ore and damaged, sell it to recover funds
-    // This takes precedence over generic panic selling (Condition A) because it's "safe" to sell waste
+    // Condition D: Sell Useless Refineries Under Attack (damaged + useless)
     if (!shouldSell) {
-        const uselessDamagedRefinery = buildings.find(b =>
+        const uselessDamagedRefinery = matureBuildings.find(b =>
             b.key === 'refinery' &&
             b.hp < b.maxHp &&
             !isRefineryUseful(b, _state)
@@ -2595,10 +2865,8 @@ function handleEmergencySell(
 
     if (!shouldSell && criticalLow && (underAttack || player.credits <= 50)) {
         shouldSell = true;
-        // Sell anything except critical
         const critical = ['conyard', 'refinery', 'factory', 'barracks'];
-        candidates = buildings.filter(b => !critical.includes(b.key));
-        // Sort by HP (damage)
+        candidates = matureBuildings.filter(b => !critical.includes(b.key));
         candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp));
     }
 
@@ -2607,31 +2875,26 @@ function handleEmergencySell(
         shouldSell = true;
         const powerPlants = buildings.filter(b => b.key === 'power');
 
-        candidates = buildings.filter(b => {
-            // Don't sell the things we need to build/exist
+        candidates = matureBuildings.filter(b => {
             if (b.key === 'conyard') return false;
             if (b.key === 'refinery') return false;
             if (b.key === 'power' && powerPlants.length <= 1) return false;
             return true;
         });
 
-        // Use standard priority logic
         candidates.sort((a, b) => {
             const idxA = getPriorityIndex(a.key, sellPriority);
             const idxB = getPriorityIndex(b.key, sellPriority);
             if (idxA !== idxB) return idxA - idxB;
-            // Tie-break: Sell expensive
             const costA = RULES.buildings[a.key]?.cost || 0;
             const costB = RULES.buildings[b.key]?.cost || 0;
             return costB - costA;
         });
     }
 
-
-
-
     if (shouldSell && candidates.length > 0) {
         const toSell = candidates[0];
+        aiState.lastSellTick = _state.tick; // Update cooldown tracker
         actions.push({
             type: 'SELL_BUILDING',
             payload: {
@@ -2673,6 +2936,8 @@ export const _testUtils = {
     handleRally,
     handleHarvesterSafety,
     handleEmergencySell,
+    handleMCVOperations,
+    updateEnemyIntelligence,
     getAIState,
     getGroupCenter,
     updateEnemyBaseLocation,

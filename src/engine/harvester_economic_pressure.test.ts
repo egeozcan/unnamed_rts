@@ -142,7 +142,7 @@ describe('Harvester Economic Pressure', () => {
         // Add ore near refinery
         state = spawnResource(state, 700, 500, 'ore1');
 
-        // Create a harvester actively harvesting
+        // Create a harvester actively harvesting with SIGNIFICANT cargo (>200 required for economic pressure)
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
         state = {
             ...state,
@@ -150,7 +150,7 @@ describe('Harvester Economic Pressure', () => {
                 ...state.entities,
                 'harv_p1': {
                     ...state.entities['harv_p1'],
-                    cargo: 100, // Some cargo
+                    cargo: 300, // Significant cargo - economic pressure activates
                     resourceTargetId: 'ore1' as EntityId,
                     baseTargetId: null,
                     avgVel: new Vector(0, 0)
@@ -159,6 +159,7 @@ describe('Harvester Economic Pressure', () => {
         };
 
         // Create an enemy unit - not too close but within flee distance (HARVESTER_FLEE_DISTANCE = 300)
+        // Position at 170 units away to test economic pressure (must be >80 to not trigger minimum safe distance)
         state = spawnUnit(state, 850, 500, 'enemy_unit', 2, 'rifle'); // 170 units away
 
         // Run AI
@@ -172,7 +173,8 @@ describe('Harvester Economic Pressure', () => {
 
         console.log('Actions under pressure:', aiActions.map(a => a.type));
 
-        // Under economic pressure, harvesters should NOT flee from non-attacking enemies
+        // Under economic pressure (credits <100 AND cargo >200), harvesters should NOT flee 
+        // from non-attacking enemies that are beyond minimum safe distance (80 units)
         expect(fleeActions.length).toBe(0);
     });
 

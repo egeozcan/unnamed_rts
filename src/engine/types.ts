@@ -92,6 +92,9 @@ export interface Entity {
 
     // Building repair state
     readonly isRepairing?: boolean;
+
+    // Building metadata
+    readonly placedTick?: number; // Tick when building was placed (for AI decision-making)
 }
 
 export interface Projectile {

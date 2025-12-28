@@ -1657,7 +1657,8 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         cargo: 0,
         resourceTargetId: null,
         baseTargetId: null,
-        dockPos: undefined
+        dockPos: undefined,
+        placedTick: type === 'BUILDING' ? state.tick : undefined
     };
 }
 
