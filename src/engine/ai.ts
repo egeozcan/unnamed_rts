@@ -908,24 +908,29 @@ function handleEconomy(
     const hasBarracks = buildings.some(b => b.key === 'barracks');
     const infantryQueueEmpty = !player.queues.infantry.current;
 
-    // ===== COUNTER-BUILDING LOGIC (Issue #9 & #10) =====
-    // Adjust unit preferences based on enemy composition
+    // ===== COUNTER-BUILDING LOGIC =====
+    // Adjust unit preferences based on enemy armor composition
+    // Each counter list is ordered by effectiveness - AI will build first available
     let counterInfantry = prefs?.infantry || ['rifle'];
     let counterVehicle = prefs?.vehicle || ['light'];
 
     const dominantArmor = aiState.enemyIntelligence.dominantArmor;
     if (dominantArmor === 'infantry') {
-        // Enemy has lots of infantry - build flamers and flame tanks
-        counterInfantry = ['flamer', 'rifle', 'grenadier'];
-        counterVehicle = ['flame_tank', 'light', 'heavy'];
+        // Enemy has lots of infantry - use fire and snipers (1.75x and 4x damage)
+        counterInfantry = ['flamer', 'sniper', 'grenadier', 'rifle'];
+        counterVehicle = ['flame_tank', 'apc', 'light'];  // Flame tank + fast units to chase
     } else if (dominantArmor === 'heavy') {
-        // Enemy has heavy armor - build rockets and heavies
-        counterInfantry = ['rocket', 'rifle'];
-        counterVehicle = ['heavy', 'artillery', 'light'];
+        // Enemy has heavy armor - missiles and rockets are needed (1.5x and 1.0x)
+        counterInfantry = ['rocket'];  // Rocket soldiers are key vs heavy
+        counterVehicle = ['mlrs', 'artillery', 'mammoth', 'heavy'];  // Artillery/missiles outrange
     } else if (dominantArmor === 'light') {
-        // Enemy has light armor - standard counters work well
-        counterInfantry = ['rifle', 'rocket'];
-        counterVehicle = ['light', 'heavy'];
+        // Enemy has light vehicles - cannons and AP bullets work well
+        counterInfantry = ['commando', 'rifle', 'rocket'];  // AP bullets (1.25x vs light)
+        counterVehicle = ['light', 'heavy', 'stealth'];  // Cannons effective
+    } else {
+        // Mixed army - build a balanced force
+        counterInfantry = ['rifle', 'rocket', 'flamer'];
+        counterVehicle = ['heavy', 'light', 'flame_tank'];
     }
 
     if (player.credits > creditThreshold) {
