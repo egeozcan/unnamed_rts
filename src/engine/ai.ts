@@ -83,7 +83,7 @@ export function resetAIState(playerId?: number): void {
 const BASE_DEFENSE_RADIUS = 500;
 const ATTACK_GROUP_MIN_SIZE = 5;
 const HARASS_GROUP_SIZE = 3;
-const HARVESTER_FLEE_DISTANCE = 300;
+const HARVESTER_FLEE_DISTANCE = 200;
 const THREAT_DETECTION_RADIUS = 400;
 const STRATEGY_COOLDOWN = 300; // 5 seconds at 60 ticks/sec
 const RALLY_DISTANCE = 150; // Distance from target to rally before attack
@@ -918,9 +918,42 @@ function handleEconomy(
     return actions;
 }
 
+// Helper function to find nearest available defender
+function findNearestDefender(
+    combatUnits: Entity[],
+    threat: Entity,
+    aiState: AIPlayerState
+): EntityId | null {
+    let potentialDefenders = combatUnits.filter(u =>
+        !u.targetId && // Not currently attacking
+        u.key !== 'harvester' // Should be filtered by combatUnits arg but double check
+    );
+
+    if (potentialDefenders.length === 0) {
+        // Steal from attack group if desperate
+        if (aiState.attackGroup.length > 0) {
+            const attackGroupUnits = combatUnits.filter(u => aiState.attackGroup.includes(u.id));
+            potentialDefenders = attackGroupUnits;
+        }
+    }
+
+    let bestDefender: EntityId | null = null;
+    let bestDefDist = Infinity;
+
+    for (const defender of potentialDefenders) {
+        const d = defender.pos.dist(threat.pos);
+        if (d < bestDefDist && d < 2000) { // Limit distance
+            bestDefDist = d;
+            bestDefender = defender.id;
+        }
+    }
+
+    return bestDefender;
+}
+
 function handleHarvesterSafety(
     state: GameState,
-    _playerId: number,
+    playerId: number,
     harvesters: Entity[],
     combatUnits: Entity[],
     baseCenter: Vector,
@@ -932,12 +965,28 @@ function handleHarvesterSafety(
     // Tracks which enemies are already being targeted by a defender in this tick
     const enemiesTargeted = new Set<EntityId>();
 
+    // Track which safe spots have already been assigned to harvesters this tick
+    // This helps spread harvesters across different safe ore patches
+    const assignedSafeSpots: Vector[] = [];
+
+    // Check economic pressure - when credits are very low, harvesters should be more aggressive
+    // about continuing to harvest even under threat (unless directly attacked)
+    const player = state.players[playerId];
+    const isUnderEconomicPressure = player && (
+        player.credits < 200 || // Very low credits
+        aiState.economyScore < 25 // Bad economy score
+    );
+
+    // Reduced flee distance when not directly attacked - be less jumpy
+    const PASSIVE_FLEE_DISTANCE = 150; // Much closer than HARVESTER_FLEE_DISTANCE (300)
+
     for (const harv of harvesters) {
         // Check if harvester is under threat
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
+        let isDirectAttack = false; // Was this harvester directly attacked?
 
-        // Prioritize the last attacker
+        // Prioritize the last attacker - this is a DIRECT attack, always flee
         if (harv.lastAttackerId) {
             const attacker = state.entities[harv.lastAttackerId];
             if (attacker && !attacker.dead) {
@@ -945,16 +994,22 @@ function handleHarvesterSafety(
                 if (attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
                     nearestThreat = attacker;
                     nearestDist = attacker.pos.dist(harv.pos);
+                    isDirectAttack = true;
                 }
             }
         }
 
         // Scan for nearby unit threats if no direct attacker yet
+        // Use reduced distance for passive detection when under economic pressure
         if (!nearestThreat) {
+            // Under economic pressure: only flee from VERY close enemies (passive flee)
+            // Normal: flee from enemies within HARVESTER_FLEE_DISTANCE
+            const fleeDistance = isUnderEconomicPressure ? PASSIVE_FLEE_DISTANCE : HARVESTER_FLEE_DISTANCE;
+
             for (const enemy of enemies) {
                 if (enemy.type !== 'UNIT') continue;
                 const dist = enemy.pos.dist(harv.pos);
-                if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
+                if (dist < fleeDistance && dist < nearestDist) {
                     nearestDist = dist;
                     nearestThreat = enemy;
                 }
@@ -963,7 +1018,8 @@ function handleHarvesterSafety(
 
         // Also check if our destination (refinery) is compromised
         // This prevents the "yoyo" effect of fleeing -> safe -> return to unsafe refinery -> flee
-        if (!nearestThreat && harv.baseTargetId) {
+        // But under economic pressure, skip this check - we need to try to unload!
+        if (!nearestThreat && harv.baseTargetId && !isUnderEconomicPressure) {
             const refinery = state.entities[harv.baseTargetId];
             if (refinery && !refinery.dead) {
                 for (const enemy of enemies) {
@@ -980,12 +1036,32 @@ function handleHarvesterSafety(
         }
 
         if (nearestThreat) {
+            // Under economic pressure AND not directly attacked: skip flee, keep harvesting
+            if (isUnderEconomicPressure && !isDirectAttack) {
+                // Don't flee - the economy needs resources desperately
+                // Still dispatch defenders though
+                if (!enemiesTargeted.has(nearestThreat.id)) {
+                    const defender = findNearestDefender(combatUnits, nearestThreat, aiState);
+                    if (defender) {
+                        actions.push({
+                            type: 'COMMAND_ATTACK',
+                            payload: {
+                                unitIds: [defender],
+                                targetId: nearestThreat.id
+                            }
+                        });
+                        enemiesTargeted.add(nearestThreat.id);
+                    }
+                }
+                continue; // Skip flee, continue to next harvester
+            }
+
             // Smart Flee: Try to find a safe resource area
             // 1. Identify all friendly refineries
             const refineries = state.entities ? Object.values(state.entities).filter(e => e.owner === harv.owner && e.key === 'refinery' && !e.dead) : [];
 
-            let bestSafeSpot: Vector | null = null;
-            let bestSafeScore = -Infinity;
+            // Collect all safe spots with scores
+            const safeSpots: { spot: Vector, score: number, refinery: Entity }[] = [];
 
             for (const ref of refineries) {
                 // Check safety of this refinery area
@@ -1004,40 +1080,46 @@ function handleHarvesterSafety(
                 // If refinery is under threat, skip it
                 if (threatDist < 500) continue;
 
-                // Score this spot
-                // Prefer closer spots (travel time) but MUST be safe
-                // Score = ThreatDist - TravelDist
-                const travelDist = harv.pos.dist(ref.pos);
-                const score = threatDist * 2 - travelDist;
+                // Find resource near ref
+                const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+                for (const res of resources) {
+                    const rd = res.pos.dist(ref.pos);
+                    if (rd < 300) {
+                        // Calculate score
+                        // Prefer closer spots (travel time) but MUST be safe
+                        // Also penalize spots that are already assigned to other harvesters
+                        const travelDist = harv.pos.dist(res.pos);
+                        let score = threatDist * 2 - travelDist;
 
-                if (score > bestSafeScore) {
-                    bestSafeScore = score;
-                    // Target a resource near this refinery if possible
-                    // Or just the refinery dock area
-                    // Find resource near ref
-                    const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-                    let closestRes: Entity | null = null;
-                    let minResDist = Infinity;
-                    for (const res of resources) {
-                        const rd = res.pos.dist(ref.pos);
-                        if (rd < 300 && rd < minResDist) {
-                            minResDist = rd;
-                            closestRes = res;
-                        }
-                    }
+                        // Penalty for spots already assigned (encourages spreading)
+                        const alreadyAssignedCount = assignedSafeSpots.filter(s =>
+                            s.dist(res.pos) < 50
+                        ).length;
+                        score -= alreadyAssignedCount * 200; // Heavy penalty for crowding
 
-                    if (closestRes) {
-                        bestSafeSpot = closestRes.pos;
-                    } else {
-                        bestSafeSpot = ref.pos.add(new Vector(0, 60)); // Dock pos
+                        safeSpots.push({ spot: res.pos, score, refinery: ref });
                     }
                 }
+
+                // Also add refinery dock as fallback
+                const dockPos = ref.pos.add(new Vector(0, 60));
+                const travelDist = harv.pos.dist(dockPos);
+                let score = threatDist * 2 - travelDist - 50; // Slight penalty vs ore
+                const alreadyAssignedCount = assignedSafeSpots.filter(s =>
+                    s.dist(dockPos) < 50
+                ).length;
+                score -= alreadyAssignedCount * 200;
+                safeSpots.push({ spot: dockPos, score, refinery: ref });
             }
 
             let moveTarget: Vector;
 
-            if (bestSafeSpot) {
-                moveTarget = bestSafeSpot;
+            // Sort by score and pick the best
+            safeSpots.sort((a, b) => b.score - a.score);
+
+            if (safeSpots.length > 0) {
+                moveTarget = safeSpots[0].spot;
+                assignedSafeSpots.push(moveTarget); // Track assignment
             } else {
                 // Fallback: Run Home / Away
                 // 1. Flee toward base

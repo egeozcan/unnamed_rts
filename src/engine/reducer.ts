@@ -910,14 +910,16 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         const capacity = 500;
 
         // 0. If manual move (flee/player command), skip automated logic
-        // BUT: If harvester has full cargo and is stuck with a moveTarget,
-        // clear the moveTarget after some time so it can go unload
+        // BUT: If harvester has full cargo, ALWAYS clear moveTarget so it can go unload
+        // This fixes the "dancing" bug where harvesters flee to safety but then can't return
+        // to base because they keep trying to reach the flee destination
         if (harvester.moveTarget) {
-            if (harvester.cargo >= capacity && harvester.stuckTimer > 20) {
-                // Full cargo and stuck trying to reach flee target - give up and go unload
+            if (harvester.cargo >= capacity) {
+                // Full cargo - clear flee target immediately so harvester can go unload
+                // Don't wait for stuckTimer - harvesters with full cargo should prioritize unloading
                 nextEntity = { ...harvester, moveTarget: null, path: null, pathIdx: 0 };
             }
-            // Otherwise, fall through to generic move logic
+            // Otherwise, fall through to generic move logic (allow fleeing with low cargo)
         }
         // 1. If full, return to refinery
         else if (harvester.cargo >= capacity) {
@@ -1473,7 +1475,7 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
     }
 
     // Trigger unstuck logic - use smarter unstuck direction
-    if (stuckTimer > 40) {
+    if (stuckTimer > 20) {
         unstuckTimer = 25;
         stuckTimer = 0;
         // Choose perpendicular direction to current heading for better unsticking
