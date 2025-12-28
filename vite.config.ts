@@ -1,5 +1,14 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-    // config options
+    test: {
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'html', 'lcov'],
+            reportsDirectory: './coverage',
+            include: ['src/**/*.ts'],
+            exclude: ['src/**/*.test.ts', 'src/**/*.d.ts']
+        }
+    }
 })
