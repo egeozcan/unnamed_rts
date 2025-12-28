@@ -48,6 +48,8 @@ export interface AIPlayerState {
         buildingCounts: Record<string, number>;
         dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed';
     };
+    // Vengeance tracking: damage received from each player (higher = more likely to target)
+    vengeanceScores: Record<number, number>;
 }
 
 // Store AI states (keyed by playerId)
@@ -78,7 +80,8 @@ function getAIState(playerId: number): AIPlayerState {
                 unitCounts: {},
                 buildingCounts: {},
                 dominantArmor: 'mixed'
-            }
+            },
+            vengeanceScores: {}
         };
     }
     return aiStates[playerId];
@@ -140,6 +143,9 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Update enemy intelligence for counter-building (every 300 ticks = 5 seconds)
     updateEnemyIntelligence(aiState, enemies, state.tick);
+
+    // Update vengeance tracking (bias toward players who attacked us)
+    updateVengeance(state, playerId, aiState, myEntities);
 
     // Update threat detection
     const { threatsNearBase, harvestersUnderAttack } = detectThreats(
@@ -288,6 +294,40 @@ function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[], tick
         buildingCounts,
         dominantArmor
     };
+}
+
+// ===== VENGEANCE TRACKING =====
+// Track damage received from each player to bias target selection
+
+const VENGEANCE_DECAY = 0.995; // Decay factor per AI tick (grudges fade slowly)
+const VENGEANCE_PER_HIT = 10; // Base vengeance added per attacked entity
+
+function updateVengeance(
+    state: GameState,
+    playerId: number,
+    aiState: AIPlayerState,
+    myEntities: Entity[]
+): void {
+    // Apply decay to existing vengeance scores
+    for (const pid in aiState.vengeanceScores) {
+        aiState.vengeanceScores[pid] *= VENGEANCE_DECAY;
+        // Clean up negligible scores
+        if (aiState.vengeanceScores[pid] < 0.1) {
+            delete aiState.vengeanceScores[pid];
+        }
+    }
+
+    // Track damage from attackers
+    for (const entity of myEntities) {
+        if (entity.lastAttackerId) {
+            const attacker = state.entities[entity.lastAttackerId];
+            if (attacker && attacker.owner !== playerId && attacker.owner !== -1) {
+                const attackerOwner = attacker.owner;
+                aiState.vengeanceScores[attackerOwner] =
+                    (aiState.vengeanceScores[attackerOwner] || 0) + VENGEANCE_PER_HIT;
+            }
+        }
+    }
 }
 
 // ===== DYNAMIC RESOURCE ALLOCATION =====
@@ -1939,6 +1979,11 @@ function handleAttack(
             score += alliesAttacking * 25;
         }
 
+        // ===== VENGEANCE SCORING =====
+        // Prioritize targets from players who have attacked us
+        const vengeanceBonus = aiState.vengeanceScores[enemy.owner] || 0;
+        score += vengeanceBonus * 0.5; // Scale vengeance influence
+
         if (score > bestScore) {
             bestScore = score;
             bestTarget = enemy;
@@ -2943,6 +2988,7 @@ export const _testUtils = {
     handleEmergencySell,
     handleMCVOperations,
     updateEnemyIntelligence,
+    updateVengeance,
     getAIState,
     getGroupCenter,
     updateEnemyBaseLocation,
@@ -2950,5 +2996,7 @@ export const _testUtils = {
     HARASS_GROUP_SIZE,
     BASE_DEFENSE_RADIUS,
     HARVESTER_FLEE_DISTANCE,
-    RALLY_DISTANCE
+    RALLY_DISTANCE,
+    VENGEANCE_DECAY,
+    VENGEANCE_PER_HIT
 };
