@@ -38,6 +38,7 @@ export interface AIPlayerState {
     economyScore: number;      // 0-100 economic health rating
     threatLevel: number;       // 0-100 military pressure rating
     expansionTarget: Vector | null;  // Distant ore to expand toward
+    peaceTicks: number;        // Ticks spent at peace with surplus resources
 }
 
 // Store AI states (keyed by playerId)
@@ -60,7 +61,8 @@ function getAIState(playerId: number): AIPlayerState {
             investmentPriority: 'balanced',
             economyScore: 50,
             threatLevel: 0,
-            expansionTarget: null
+            expansionTarget: null,
+            peaceTicks: 0
         };
     }
     return aiStates[playerId];
@@ -87,6 +89,12 @@ const STRATEGY_COOLDOWN = 300; // 5 seconds at 60 ticks/sec
 const RALLY_DISTANCE = 150; // Distance from target to rally before attack
 const RALLY_TIMEOUT = 300; // 5 seconds to wait for stragglers
 const SCOUT_INTERVAL = 600; // 10 seconds between scout attempts
+
+// Peace-break constants - triggers aggressive behavior when wealthy and peaceful
+const SURPLUS_CREDIT_THRESHOLD = 4000; // Credits considered "surplus"
+const PEACE_BREAK_TICKS = 600; // 10 seconds of peace before considering attack
+const SURPLUS_DEFENSE_THRESHOLD = 5000; // Credits to trigger extra defense building
+const MAX_SURPLUS_TURRETS = 4; // Maximum turrets to build from surplus
 
 
 export function computeAiActions(state: GameState, playerId: number): Action[] {
@@ -123,7 +131,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Strategy decision
     const personality = AI_CONFIG.personalities['balanced'];
-    updateStrategy(aiState, state.tick, myBuildings, myCombatUnits, enemies, threatsNearBase, personality);
+    updateStrategy(aiState, state.tick, myBuildings, myCombatUnits, enemies, threatsNearBase, personality, player.credits);
 
     // Dynamic resource allocation - evaluate investment priority
     evaluateInvestmentPriority(state, playerId, aiState, myBuildings, myCombatUnits, enemies, baseCenter);
@@ -432,7 +440,8 @@ function updateStrategy(
     combatUnits: Entity[],
     enemies: Entity[],
     threatsNearBase: EntityId[],
-    personality: any
+    personality: any,
+    credits: number = 0
 ): void {
     const hasFactory = buildings.some(b => b.key === 'factory');
     const hasBarracks = buildings.some(b => b.key === 'barracks');
@@ -446,7 +455,16 @@ function updateStrategy(
             aiState.strategy = 'defend';
             aiState.lastStrategyChange = tick;
         }
+        // Reset peace counter when under threat
+        aiState.peaceTicks = 0;
         return;
+    }
+
+    // Track peace time with surplus resources
+    if (credits >= SURPLUS_CREDIT_THRESHOLD && aiState.threatLevel === 0) {
+        aiState.peaceTicks += 30; // Increment by AI tick interval
+    } else {
+        aiState.peaceTicks = 0;
     }
 
     // Other strategy changes have cooldown
@@ -461,6 +479,25 @@ function updateStrategy(
             aiState.attackGroup = combatUnits.map(u => u.id);
         }
         return;
+    }
+
+    // Priority 2.5: PEACE BREAK - Force attack when wealthy and peaceful for too long
+    // Even with a smaller army, break the peace lock with a random chance
+    const peaceBreakArmyThreshold = Math.max(3, attackThreshold - 2); // Lower threshold
+    if (aiState.peaceTicks >= PEACE_BREAK_TICKS &&
+        credits >= SURPLUS_CREDIT_THRESHOLD &&
+        armySize >= peaceBreakArmyThreshold &&
+        hasFactory &&
+        enemies.length > 0) {
+        // Random chance to break peace (increases with more credits)
+        const peaceBreakChance = Math.min(0.5, (credits - SURPLUS_CREDIT_THRESHOLD) / 10000);
+        if (Math.random() < peaceBreakChance || credits >= SURPLUS_CREDIT_THRESHOLD * 2) {
+            aiState.strategy = 'attack';
+            aiState.lastStrategyChange = tick;
+            aiState.attackGroup = combatUnits.map(u => u.id);
+            aiState.peaceTicks = 0; // Reset peace counter
+            return;
+        }
     }
 
     // Priority 3: Harass if we have some units but not enough for full attack
@@ -671,6 +708,56 @@ function handleEconomy(
                 player.credits >= refineryData.cost + peacetimeRefineryThreshold) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
                 return actions; // Prioritize refinery expansion
+            }
+        }
+    }
+
+    // ===== SURPLUS DEFENSE BUILDING =====
+    // When wealthy with no immediate threat, fortify the base with defensive buildings
+    if (player.credits >= SURPLUS_DEFENSE_THRESHOLD && aiState.threatLevel === 0 && buildingQueueEmpty) {
+        const existingTurrets = buildings.filter(b => {
+            const bData = RULES.buildings[b.key];
+            return bData?.isDefense && !b.dead;
+        }).length;
+
+        // Build more defenses if we have surplus and not too many already
+        if (existingTurrets < MAX_SURPLUS_TURRETS) {
+            const hasBarracks = buildings.some(b => b.key === 'barracks');
+            const turretData = RULES.buildings['turret'];
+
+            if (hasBarracks && turretData && player.credits >= turretData.cost) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
+                // Don't return - allow unit production to continue
+            }
+        }
+    }
+
+    // ===== SURPLUS PRODUCTION BUILDINGS =====
+    // When very wealthy, build extra production buildings to speed up unit production
+    const SURPLUS_PRODUCTION_THRESHOLD = 6000; // Higher threshold for production buildings
+    const MAX_SURPLUS_BARRACKS = 3;
+    const MAX_SURPLUS_FACTORIES = 3;
+
+    if (player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
+        const existingBarracks = buildings.filter(b => b.key === 'barracks' && !b.dead).length;
+        const existingFactories = buildings.filter(b => b.key === 'factory' && !b.dead).length;
+
+        // Prefer factories over barracks (vehicles are stronger)
+        if (existingFactories < MAX_SURPLUS_FACTORIES) {
+            const factoryData = RULES.buildings['factory'];
+            const factoryReqsMet = (factoryData?.req || []).every((r: string) =>
+                buildings.some(b => b.key === r)
+            );
+            if (factoryData && factoryReqsMet && player.credits >= factoryData.cost + 2000) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'factory', playerId } });
+            }
+        } else if (existingBarracks < MAX_SURPLUS_BARRACKS) {
+            const barracksData = RULES.buildings['barracks'];
+            const barracksReqsMet = (barracksData?.req || []).every((r: string) =>
+                buildings.some(b => b.key === r)
+            );
+            if (barracksData && barracksReqsMet && player.credits >= barracksData.cost + 2000) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
             }
         }
     }
