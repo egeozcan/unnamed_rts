@@ -1,5 +1,6 @@
 import rules from '../data/rules.json';
 import { GameState, Entity } from '../engine/types.js';
+import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai.js';
 
 const RULES = rules as any;
 
@@ -341,7 +342,7 @@ export function updateDebugUI(state: GameState) {
     // Only create the structure once, then update dynamic content
     if (!debugOverlayInitialized) {
         let html = '<h2>DEBUG MODE (PAUSED)</h2>';
-        html += '<p id="debug-tick">Tick: 0</p>';
+        html += '<div id="debug-game-info" class="debug-section"></div>';
 
         // Save/Load buttons section (static, created once)
         html += '<div class="debug-save-load-section">';
@@ -367,33 +368,213 @@ export function updateDebugUI(state: GameState) {
         debugOverlayInitialized = true;
     }
 
-    // Update dynamic content only
-    const tickEl = document.getElementById('debug-tick');
-    if (tickEl) {
-        tickEl.textContent = `Tick: ${state.tick}`;
+    // Update game info section
+    const gameInfoEl = document.getElementById('debug-game-info');
+    if (gameInfoEl) {
+        const entityCounts = {
+            units: Object.values(state.entities).filter(e => e.type === 'UNIT' && !e.dead).length,
+            buildings: Object.values(state.entities).filter(e => e.type === 'BUILDING' && !e.dead).length,
+            resources: Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead).length,
+            projectiles: state.projectiles.length,
+            particles: state.particles.length
+        };
+        gameInfoEl.innerHTML = `
+            <p><strong>Tick:</strong> ${state.tick} (${(state.tick / 60).toFixed(1)}s)</p>
+            <p><strong>Entities:</strong> ${entityCounts.units} units, ${entityCounts.buildings} buildings, ${entityCounts.resources} resources</p>
+            <p><strong>Projectiles:</strong> ${entityCounts.projectiles} | <strong>Particles:</strong> ${entityCounts.particles}</p>
+            <p><strong>Map:</strong> ${state.config.width}x${state.config.height}</p>
+        `;
     }
 
-    // Update player stats
+    // Update player stats with AI information
     const statsContainer = document.getElementById('debug-stats-container');
     if (statsContainer) {
         let statsHtml = '';
         for (const pid in state.players) {
             const player = state.players[pid];
-            const entities = Object.values(state.entities).filter(e => e.owner === player.id);
-            const buildings = entities.filter(e => e.type === 'BUILDING').length;
-            const units = entities.filter(e => e.type === 'UNIT').length;
+            const playerId = parseInt(pid);
+            const entities = Object.values(state.entities).filter(e => e.owner === playerId && !e.dead);
+            const buildings = entities.filter(e => e.type === 'BUILDING');
+            const units = entities.filter(e => e.type === 'UNIT');
+            const harvesters = units.filter(u => u.key === 'harvester');
+            const combatUnits = units.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
+
+            let aiHtml = '';
+            if (player.isAi) {
+                try {
+                    const aiState = getAIState(playerId);
+                    aiHtml = buildAIStateHTML(aiState, state, playerId);
+                } catch (e) {
+                    aiHtml = '<p class="debug-warning">AI state unavailable</p>';
+                }
+            }
 
             statsHtml += `
                 <div class="player-debug-stat" style="border-left: 4px solid ${player.color}">
-                    <h3>Player ${player.id} ${player.isAi ? '(AI)' : '(Human)'}</h3>
-                    <p>Credits: $${Math.floor(player.credits)}</p>
-                    <p>Buildings: ${buildings}</p>
-                    <p>Units: ${units}</p>
+                    <h3>Player ${player.id} ${player.isAi ? `(AI - ${player.difficulty})` : '(Human)'}</h3>
+                    <div class="debug-stat-row">
+                        <span>💰 Credits:</span>
+                        <span class="debug-value">$${Math.floor(player.credits)}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>⚡ Power:</span>
+                        <span class="debug-value ${player.usedPower > player.maxPower ? 'debug-warning' : ''}">${player.maxPower - player.usedPower} / ${player.maxPower}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>🏗️ Buildings:</span>
+                        <span class="debug-value">${buildings.length}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>⚔️ Combat Units:</span>
+                        <span class="debug-value">${combatUnits.length}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>🚜 Harvesters:</span>
+                        <span class="debug-value">${harvesters.length}</span>
+                    </div>
+                    ${aiHtml}
                 </div>
             `;
         }
         statsContainer.innerHTML = statsHtml;
     }
+}
+
+function buildAIStateHTML(aiState: AIPlayerState, state: GameState, _playerId: number): string {
+    const strategyColors: Record<AIStrategy, string> = {
+        'buildup': '#4af',
+        'attack': '#f44',
+        'defend': '#ff4',
+        'harass': '#f84'
+    };
+
+    const priorityColors: Record<InvestmentPriority, string> = {
+        'economy': '#4f4',
+        'warfare': '#f44',
+        'defense': '#ff4',
+        'balanced': '#aaa'
+    };
+
+    const strategyColor = strategyColors[aiState.strategy] || '#fff';
+    const priorityColor = priorityColors[aiState.investmentPriority] || '#fff';
+
+    // Get threat level color
+    const threatColor = aiState.threatLevel > 70 ? '#f44' :
+        aiState.threatLevel > 40 ? '#fa4' :
+            aiState.threatLevel > 20 ? '#ff4' : '#4f4';
+
+    // Get economy score color
+    const econColor = aiState.economyScore > 70 ? '#4f4' :
+        aiState.economyScore > 40 ? '#ff4' : '#f44';
+
+    // Build vengeance info
+    let vengeanceHtml = '';
+    const vengeanceEntries = Object.entries(aiState.vengeanceScores);
+    if (vengeanceEntries.length > 0) {
+        const topVengeance = vengeanceEntries
+            .map(([pid, score]) => ({ pid: parseInt(pid), score: score as number }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3);
+
+        vengeanceHtml = topVengeance.map(v => {
+            const targetPlayer = state.players[v.pid];
+            const color = targetPlayer?.color || '#888';
+            return `<span class="debug-vengeance-badge" style="border-color: ${color}">P${v.pid}: ${v.score.toFixed(0)}</span>`;
+        }).join(' ');
+    } else {
+        vengeanceHtml = '<span class="debug-muted">None</span>';
+    }
+
+    // Build enemy intelligence info
+    const intel = aiState.enemyIntelligence;
+    const totalEnemyUnits = Object.values(intel.unitCounts).reduce((a, b) => a + (b as number), 0);
+    const topEnemyUnits = Object.entries(intel.unitCounts)
+        .sort((a, b) => (b[1] as number) - (a[1] as number))
+        .slice(0, 3)
+        .map(([key, count]) => `${key}: ${count}`)
+        .join(', ');
+
+    // Expansion target info
+    const expansionInfo = aiState.expansionTarget
+        ? `(${Math.round(aiState.expansionTarget.x)}, ${Math.round(aiState.expansionTarget.y)})`
+        : '<span class="debug-muted">None</span>';
+
+    // Enemy base location
+    const enemyBaseInfo = aiState.enemyBaseLocation
+        ? `(${Math.round(aiState.enemyBaseLocation.x)}, ${Math.round(aiState.enemyBaseLocation.y)})`
+        : '<span class="debug-muted">Unknown</span>';
+
+    return `
+        <div class="debug-ai-section">
+            <h4>🤖 AI State</h4>
+            <div class="debug-stat-row">
+                <span>Strategy:</span>
+                <span class="debug-badge" style="background: ${strategyColor}">${aiState.strategy.toUpperCase()}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Priority:</span>
+                <span class="debug-badge" style="background: ${priorityColor}">${aiState.investmentPriority.toUpperCase()}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Threat Level:</span>
+                <span class="debug-value" style="color: ${threatColor}">${aiState.threatLevel.toFixed(0)}%</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Economy Score:</span>
+                <span class="debug-value" style="color: ${econColor}">${aiState.economyScore.toFixed(0)}%</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Peace Ticks:</span>
+                <span class="debug-value">${aiState.peaceTicks} (${(aiState.peaceTicks / 60).toFixed(1)}s)</span>
+            </div>
+            
+            <h4>👥 Groups</h4>
+            <div class="debug-stat-row">
+                <span>Attack Group:</span>
+                <span class="debug-value">${aiState.attackGroup.length} units</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Defense Group:</span>
+                <span class="debug-value">${aiState.defenseGroup.length} units</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Harass Group:</span>
+                <span class="debug-value">${aiState.harassGroup.length} units</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Threats Near Base:</span>
+                <span class="debug-value ${aiState.threatsNearBase.length > 0 ? 'debug-warning' : ''}">${aiState.threatsNearBase.length}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Harvesters Attacked:</span>
+                <span class="debug-value ${aiState.harvestersUnderAttack.length > 0 ? 'debug-warning' : ''}">${aiState.harvestersUnderAttack.length}</span>
+            </div>
+            
+            <h4>🎯 Targeting</h4>
+            <div class="debug-stat-row">
+                <span>Enemy Base:</span>
+                <span class="debug-value">${enemyBaseInfo}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Expansion Target:</span>
+                <span class="debug-value">${expansionInfo}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Vengeance:</span>
+                <span class="debug-value">${vengeanceHtml}</span>
+            </div>
+            
+            <h4>🔍 Enemy Intel</h4>
+            <div class="debug-stat-row">
+                <span>Dominant Armor:</span>
+                <span class="debug-value">${intel.dominantArmor}</span>
+            </div>
+            <div class="debug-stat-row">
+                <span>Enemy Units (${totalEnemyUnits}):</span>
+                <span class="debug-value debug-small">${topEnemyUnits || 'None'}</span>
+            </div>
+        </div>
+    `;
 }
 
 // Get the current debug state (used by button handlers)

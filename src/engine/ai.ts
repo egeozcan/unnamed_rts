@@ -55,7 +55,7 @@ export interface AIPlayerState {
 // Store AI states (keyed by playerId)
 const aiStates: Record<number, AIPlayerState> = {};
 
-function getAIState(playerId: number): AIPlayerState {
+export function getAIState(playerId: number): AIPlayerState {
     if (!aiStates[playerId]) {
         aiStates[playerId] = {
             strategy: 'buildup',
