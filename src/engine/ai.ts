@@ -541,7 +541,35 @@ function handleEconomy(
     const buildingQueueEmpty = !player.queues.building.current;
     const vehicleQueueEmpty = !player.queues.vehicle.current;
 
-    if (aiState.investmentPriority === 'economy') {
+    // Detect Panic Mode
+    const isPanic = aiState.threatLevel > 75 || (aiState.threatLevel > 50 && player.credits < 1000);
+
+    // PANIC DEFENSE: Prioritize defensive structures over everything else if in panic
+    if (isPanic && buildingQueueEmpty) {
+        const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret/Pillbox req
+
+        // Try to build defensive structures if we have funds
+        if (canBuildTurret) {
+            const turretData = RULES.buildings['turret'];
+            const pillboxData = RULES.buildings['pillbox'];
+
+            // Prefer Pillbox if very low funds, otherwise Turret
+            // But actually Turret is generally better vs Tanks which are the main threat
+
+            let defToBuild = 'turret';
+            if (player.credits < (turretData?.cost || 800) && player.credits >= (pillboxData?.cost || 400)) {
+                defToBuild = 'pillbox';
+            }
+
+            const data = RULES.buildings[defToBuild];
+            if (data && player.credits >= data.cost) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: defToBuild, playerId } });
+                // Don't return, let unit production happen too
+            }
+        }
+    }
+
+    if (aiState.investmentPriority === 'economy' && !isPanic) {
         // ECONOMY PRIORITY: Build harvesters and expand toward ore
 
         // 1. Build harvesters if we have too few (need 2 per refinery)
@@ -785,15 +813,22 @@ function handleEconomy(
     // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
 
+    // Detect Panic Mode
+    // High threat OR (Significant threat AND Low Economy/Credits)
+    // const isPanic = ... (Already defined above)
+
     // Strategy-based credit thresholds
-    // - Attack mode: lower threshold (500) to maximize army size
-    // - Buildup mode: higher threshold (800) to save for buildings
-    // - Defense mode: medium threshold (600) for quick response
-    const creditThreshold = aiState.strategy === 'attack' ? 500 :
+    let creditThreshold = aiState.strategy === 'attack' ? 500 :
         aiState.strategy === 'defend' ? 600 : 800;
 
     // Reserve buffer - never drop below this
-    const creditBuffer = aiState.strategy === 'attack' ? 300 : 500;
+    let creditBuffer = aiState.strategy === 'attack' ? 300 : 500;
+
+    // Override for Panic Mode
+    if (isPanic) {
+        creditThreshold = 0; // Spend everything
+        creditBuffer = 0;    // No reserves
+    }
 
     const hasBarracks = buildings.some(b => b.key === 'barracks');
     const infantryQueueEmpty = !player.queues.infantry.current;
@@ -806,25 +841,36 @@ function handleEconomy(
         let buildInfantry = false;
         let buildVehicle = false;
 
-        if (hasBarracks && infantryQueueEmpty && hasFactory && vehicleQueueEmpty) {
-            // Both available - alternate based on last production
-            if (aiState.lastProductionType === 'infantry') {
-                buildVehicle = true;
-            } else if (aiState.lastProductionType === 'vehicle') {
+        if (isPanic) {
+            // PANIC: Build EVERYTHING possible
+            if (hasBarracks && infantryQueueEmpty) buildInfantry = true;
+            if (hasFactory && vehicleQueueEmpty) buildVehicle = true;
+        } else {
+            // NORMAL: Staggered
+            if (hasBarracks && infantryQueueEmpty && hasFactory && vehicleQueueEmpty) {
+                // Both available - alternate based on last production
+                if (aiState.lastProductionType === 'infantry') {
+                    buildVehicle = true;
+                } else if (aiState.lastProductionType === 'vehicle') {
+                    buildInfantry = true;
+                } else {
+                    buildVehicle = true; // Default to vehicle
+                }
+            } else if (hasBarracks && infantryQueueEmpty) {
                 buildInfantry = true;
-            } else {
-                // First production - prefer vehicles (stronger)
+            } else if (hasFactory && vehicleQueueEmpty) {
                 buildVehicle = true;
             }
-        } else if (hasBarracks && infantryQueueEmpty) {
-            buildInfantry = true;
-        } else if (hasFactory && vehicleQueueEmpty) {
-            buildVehicle = true;
         }
 
         // Execute infantry production
-        if (buildInfantry && prefs) {
-            const list = prefs.infantry || ['rifle'];
+        if (buildInfantry) {
+            // Panic preference: Cheap & Fast (Rifle, Rocket)
+            // Normal preference: AI Config
+            const list = isPanic
+                ? ['rocket', 'rifle'] // Panic: Rocket/Rifle
+                : (prefs?.infantry || ['rifle']);
+
             for (const key of list) {
                 const data = RULES.units[key];
                 const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
@@ -833,14 +879,20 @@ function handleEconomy(
                 if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key, playerId } });
                     aiState.lastProductionType = 'infantry';
+                    player.credits -= cost; // Deduct temporarily for next check in this loop
                     break;
                 }
             }
         }
 
         // Execute vehicle production
-        if (buildVehicle && prefs) {
-            const list = prefs.vehicle || ['light'];
+        if (buildVehicle) {
+            // Panic preference: Cheap & Versatile (Light Tank, Jeep/Ranger)
+            // Normal preference: AI Config
+            const list = isPanic
+                ? ['light', 'jeep']
+                : (prefs?.vehicle || ['light']);
+
             for (const key of list) {
                 const data = RULES.units[key];
                 const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
@@ -850,24 +902,6 @@ function handleEconomy(
                     actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key, playerId } });
                     aiState.lastProductionType = 'vehicle';
                     break;
-                }
-            }
-        }
-
-        // Fallback if no preferences defined
-        if (!prefs) {
-            if (buildInfantry) {
-                const cost = RULES.units.rifle?.cost || 100;
-                if ((player.credits - cost) >= creditBuffer) {
-                    actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId } });
-                    aiState.lastProductionType = 'infantry';
-                }
-            }
-            if (buildVehicle) {
-                const cost = RULES.units.light?.cost || 500;
-                if ((player.credits - cost) >= creditBuffer) {
-                    actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId } });
-                    aiState.lastProductionType = 'vehicle';
                 }
             }
         }
@@ -2399,6 +2433,12 @@ function handleBuildingRepair(
 
         // Check if building needs repair and isn't already being repaired
         if (hpRatio < repairConfig.threshold && !building.isRepairing) {
+
+            // Skip non-essential refineries (far from ore)
+            if (building.key === 'refinery' && !isRefineryUseful(building, _state)) {
+                continue;
+            }
+
             damagedBuildings.push({
                 entity: building,
                 priority: repairConfig.priority,
@@ -2533,6 +2573,22 @@ function handleEmergencySell(
         }
     }
 
+    // Condition D: Sell Useless Refineries Under Attack
+    // If a refinery is far from ore and damaged, sell it to recover funds
+    // This takes precedence over generic panic selling (Condition A) because it's "safe" to sell waste
+    if (!shouldSell) {
+        const uselessDamagedRefinery = buildings.find(b =>
+            b.key === 'refinery' &&
+            b.hp < b.maxHp &&
+            !isRefineryUseful(b, _state)
+        );
+
+        if (uselessDamagedRefinery) {
+            shouldSell = true;
+            candidates = [uselessDamagedRefinery];
+        }
+    }
+
     // Condition A: Critical Low Funds (Classic Emergency)
     const criticalLow = player.credits <= 200;
     const underAttack = aiState.threatsNearBase.length > 0 || aiState.harvestersUnderAttack.length > 0;
@@ -2572,6 +2628,8 @@ function handleEmergencySell(
     }
 
 
+
+
     if (shouldSell && candidates.length > 0) {
         const toSell = candidates[0];
         actions.push({
@@ -2584,6 +2642,19 @@ function handleEmergencySell(
     }
 
     return actions;
+}
+
+function isRefineryUseful(refinery: Entity, state: GameState): boolean {
+    // A refinery is useful if it has ore within reasonable distance
+    const USEFUL_ORE_DISTANCE = 600;
+    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+
+    for (const ore of allOre) {
+        if (refinery.pos.dist(ore.pos) < USEFUL_ORE_DISTANCE) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function getPriorityIndex(key: string, priorityList: string[]): number {

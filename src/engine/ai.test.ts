@@ -988,4 +988,199 @@ describe('AI System', () => {
             }
         });
     });
+
+    describe('AI Panic Behavior', () => {
+        it('should trigger panic unit production when threat is very high', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI Base under siege
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 1100, 1000);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 900, 1000);
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 1000, 900);
+
+            // Many enemies right next to the base
+            for (let i = 0; i < 5; i++) {
+                entities[`enemy${i}`] = createEntity(`enemy${i}`, 0, 'UNIT', 'heavy', 1050, 1050);
+            }
+
+            let state = createTestState(entities);
+            // Give AI credits to spend
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 2000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const buildActions = actions.filter(a => a.type === 'START_BUILD');
+            expect(buildActions.length).toBeGreaterThan(0);
+
+            const infantryBuild = buildActions.find(a => a.payload.category === 'infantry');
+            const vehicleBuild = buildActions.find(a => a.payload.category === 'vehicle');
+
+            // Should try to build both (panic mode ignores staggering logic)
+            expect(infantryBuild).toBeDefined();
+            expect(vehicleBuild).toBeDefined();
+
+            // Should default to cheap units
+            if (infantryBuild) expect(['rifle', 'rocket']).toContain(infantryBuild.payload.key);
+            if (vehicleBuild) expect(['light', 'jeep']).toContain(vehicleBuild.payload.key);
+        });
+
+        it('should prioritize defenses in panic mode', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 1100, 1000); // Needed for turrets
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 1000, 900);
+
+            // Enemies near base
+            for (let i = 0; i < 3; i++) {
+                entities[`enemy${i}`] = createEntity(`enemy${i}`, 0, 'UNIT', 'heavy', 1050, 1050);
+            }
+
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 2000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const buildDef = actions.find(a =>
+                a.type === 'START_BUILD' &&
+                a.payload.category === 'building' &&
+                ['turret', 'pillbox'].includes(a.payload.key)
+            );
+
+            expect(buildDef).toBeDefined();
+        });
+    });
+
+    describe('Smart Repair & Sell Logic', () => {
+        it('should NOT repair refinery that is far from resources', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Refinery far from any ore (Ore at 0,0, Refinery at 1000, 1000)
+            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 500, maxHp: 1000 });
+            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 500, maxHp: 1000 });
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
+
+            // Give player lots of credits so they certainly CAN repair
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 5000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            // Find repair actions
+            const repairActions = actions.filter(a => a.type === 'START_REPAIR');
+            const repairedIds = repairActions.map(a => a.payload.buildingId);
+
+            expect(repairedIds).toContain('useful_ref');
+            expect(repairedIds).not.toContain('useless_ref');
+        });
+
+        it('should SELL non-essential refinery when under attack', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Useless refinery taking damage (under attack)
+            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 400, maxHp: 1000 });
+            // Useful refinery safe
+            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 1000, maxHp: 1000 });
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
+
+            // Under attack threat
+            entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 1050, 1050);
+
+            let state = createTestState(entities);
+            // Low credits to simulate need? Or normal credits? The logic should work regardless for "useless" buildings if damaged.
+            // But let's set it lowish (200) to match the previous separate test environment
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+
+            expect(sellAction).toBeDefined();
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('useless_ref');
+            }
+        });
+        it('should sell buildings to afford a refinery if it is missing', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Critical Conyard
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100);
+            // Power Plant
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100);
+            // Expensive Factory (Cost 2000, Sell 1000)
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 300, 100);
+            // Turret (Cost 800, Sell 400)
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100);
+            // Barracks (Cost 500, Sell 250)
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 500, 100);
+
+            let state = createTestState(entities);
+            // Credits 500. Refinery cost 2000. Needs 1500 more.
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
+
+            const actions = computeAiActions(state, 1);
+            const hasSell = actions.some(a => a.type === 'SELL_BUILDING');
+            expect(hasSell).toBe(true);
+        });
+    });
+
+    describe('Stalemate Logic', () => {
+        it('should sell buildings in a stalemate (low funds, no income) to fund units', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100);
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 300, 100);
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100);
+
+            // Stalemate: 0 credits, no income (no refinery/harvesters)
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeDefined();
+            // Priority is Turret > Power > Conyard
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('turret');
+            }
+        });
+
+        it('should NOT sell the last production building (Factory) in a stalemate', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
+
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeUndefined();
+        });
+
+        it('should sell Conyard if Factory exists in stalemate', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100);
+
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeDefined();
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('conyard');
+            }
+        });
+    });
 });
