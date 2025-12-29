@@ -129,11 +129,18 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     const myEntities = Object.values(state.entities).filter(e => e.owner === playerId && !e.dead);
     const myBuildings = myEntities.filter(e => e.type === 'BUILDING');
     const myUnits = myEntities.filter(e => e.type === 'UNIT');
+    const myMCVs = myUnits.filter(u => u.key === 'mcv');
     const myHarvesters = myUnits.filter(u => u.key === 'harvester');
     const myCombatUnits = myUnits.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
     const enemies = Object.values(state.entities).filter(e => e.owner !== playerId && e.owner !== -1 && !e.dead);
     const enemyBuildings = enemies.filter(e => e.type === 'BUILDING');
     const enemyUnits = enemies.filter(e => e.type === 'UNIT');
+
+    // EARLY EXIT: Player is eliminated if they have no buildings AND no MCVs
+    // Don't run any AI logic for eliminated players - they can't do anything useful
+    if (myBuildings.length === 0 && myMCVs.length === 0) {
+        return actions;
+    }
 
     // Find base center (conyard or average of buildings)
     const baseCenter = findBaseCenter(myBuildings);
@@ -643,6 +650,11 @@ function handleEconomy(
     const actions: Action[] = [];
     const buildOrder = personality.build_order_priority;
 
+    // ===== CORE CAPABILITY CHECK =====
+    // A conyard (deployed MCV) is required to build new buildings
+    // Without a conyard, the player cannot queue any building construction
+    const hasConyard = buildings.some(b => b.key === 'conyard');
+
     // ===== INVESTMENT PRIORITY HANDLING =====
 
     // Count current harvesters and refineries
@@ -659,7 +671,8 @@ function handleEconomy(
     const isInCombat = aiState.strategy === 'attack' || aiState.strategy === 'defend';
 
     // PANIC DEFENSE: Prioritize defensive structures over everything else if in panic
-    if (isPanic && buildingQueueEmpty) {
+    // NOTE: Can only queue buildings if we have a conyard
+    if (hasConyard && isPanic && buildingQueueEmpty) {
         const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret/Pillbox req
 
         // Try to build defensive structures if we have funds
@@ -699,7 +712,8 @@ function handleEconomy(
         }
 
         // 2. Build refinery near distant ore if we have an expansion target
-        if (aiState.expansionTarget && buildingQueueEmpty) {
+        // NOTE: Requires conyard to queue buildings
+        if (hasConyard && aiState.expansionTarget && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = buildings.some(b => b.key === 'factory'); // Refinery req
 
@@ -739,7 +753,8 @@ function handleEconomy(
         // 3. Build refinery near accessible unclaimed ore (when expansionTarget is null)
         // This happens when findDistantOre returns null because there's ore within build range
         // that doesn't have a refinery nearby
-        if (!aiState.expansionTarget && buildingQueueEmpty) {
+        // NOTE: Requires conyard to queue buildings
+        if (hasConyard && !aiState.expansionTarget && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = buildings.some(b => b.key === 'factory');
             const BUILD_RADIUS = 400;
@@ -778,7 +793,8 @@ function handleEconomy(
         }
     } else if (aiState.investmentPriority === 'defense') {
         // DEFENSE PRIORITY: Build turrets
-        if (buildingQueueEmpty) {
+        // NOTE: Requires conyard to queue buildings
+        if (hasConyard && buildingQueueEmpty) {
             const turretData = RULES.buildings['turret'];
             const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret req
             if (canBuildTurret && turretData && player.credits >= turretData.cost) {
@@ -811,7 +827,8 @@ function handleEconomy(
         }
 
         // 2. Build additional refinery if we have accessible ore without refinery coverage
-        if (buildingQueueEmpty) {
+        // NOTE: Requires conyard to queue buildings
+        if (hasConyard && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = buildings.some(b => b.key === 'factory');
             const BUILD_RADIUS = 400;
@@ -856,7 +873,8 @@ function handleEconomy(
 
     // ===== SURPLUS DEFENSE BUILDING =====
     // When wealthy with no immediate threat, fortify the base with defensive buildings
-    if (player.credits >= SURPLUS_DEFENSE_THRESHOLD && aiState.threatLevel === 0 && buildingQueueEmpty) {
+    // NOTE: Requires conyard to queue buildings
+    if (hasConyard && player.credits >= SURPLUS_DEFENSE_THRESHOLD && aiState.threatLevel === 0 && buildingQueueEmpty) {
         const existingTurrets = buildings.filter(b => {
             const bData = RULES.buildings[b.key];
             return bData?.isDefense && !b.dead;
@@ -876,11 +894,12 @@ function handleEconomy(
 
     // ===== SURPLUS PRODUCTION BUILDINGS =====
     // When very wealthy, build extra production buildings to speed up unit production
+    // NOTE: Requires conyard to queue buildings
     const SURPLUS_PRODUCTION_THRESHOLD = 6000; // Higher threshold for production buildings
     const MAX_SURPLUS_BARRACKS = 3;
     const MAX_SURPLUS_FACTORIES = 3;
 
-    if (player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
+    if (hasConyard && player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
         const existingBarracks = buildings.filter(b => b.key === 'barracks' && !b.dead).length;
         const existingFactories = buildings.filter(b => b.key === 'factory' && !b.dead).length;
 
@@ -905,9 +924,12 @@ function handleEconomy(
     }
 
     // ===== STANDARD BUILD ORDER =====
+    // NOTE: Can only queue buildings if we have a conyard
 
-    // Build order fulfillment
-    for (const item of buildOrder) {
+    // Build order fulfillment - only if we have a conyard
+    if (!hasConyard) {
+        // No conyard = cannot build buildings, skip to unit production
+    } else for (const item of buildOrder) {
         // Skip economic buildings during active combat (Issue #12)
         if (isInCombat && ['power', 'refinery'].includes(item) && player.credits < 3000) {
             continue;
@@ -2301,6 +2323,20 @@ function handleBuildingPlacement(
 
     const buildingData = RULES.buildings[key];
     if (!buildingData) {
+        actions.push({ type: 'CANCEL_BUILD', payload: { category: 'building', playerId } });
+        return actions;
+    }
+
+    // EARLY CHECK: Cancel build if player has no non-defense buildings
+    // Defense buildings (turrets, pillboxes) don't extend build radius
+    // If player only has defense buildings (or no buildings), they can't place anything
+    const nonDefenseBuildings = buildings.filter(b => {
+        const bData = RULES.buildings[b.key];
+        return !bData?.isDefense;
+    });
+
+    if (nonDefenseBuildings.length === 0) {
+        // Cancel the build - no valid placement is possible
         actions.push({ type: 'CANCEL_BUILD', payload: { category: 'building', playerId } });
         return actions;
     }

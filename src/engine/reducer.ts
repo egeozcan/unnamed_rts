@@ -264,9 +264,36 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
     let nextPlayer = { ...player, queues: { ...player.queues } };
     let createdEntities: Entity[] = [];
 
+    // Check if player is eliminated (no buildings AND no MCV)
+    // This matches the win condition check in tick()
+    // Eliminated players cannot produce anything
+    const playerBuildings = Object.values(entities).filter(e =>
+        e.owner === player.id && e.type === 'BUILDING' && !e.dead
+    );
+    const hasMCV = Object.values(entities).some(e =>
+        e.owner === player.id && e.key === 'mcv' && !e.dead
+    );
+
+    // If player is eliminated (no buildings AND no MCV), cancel all their production queues
+    if (playerBuildings.length === 0 && !hasMCV) {
+        // Cancel any pending builds silently (no refund since player is eliminated)
+        nextPlayer = {
+            ...nextPlayer,
+            queues: {
+                building: { current: null, progress: 0 },
+                infantry: { current: null, progress: 0 },
+                vehicle: { current: null, progress: 0 },
+                air: { current: null, progress: 0 }
+            },
+            readyToPlace: null
+        };
+        return { player: nextPlayer, createdEntities };
+    }
+
     // Calculate power
     const power = calculatePower(player.id, entities);
     const speedFactor = (power.out < power.in) ? 0.25 : 1.0;
+
 
     for (const key in nextPlayer.queues) {
         const cat = key as keyof typeof nextPlayer.queues;
