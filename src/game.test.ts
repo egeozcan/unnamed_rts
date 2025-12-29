@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { getStartingPositions, reconstructVectors, calculatePower, generateMap } from './game-utils';
-import { Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES, DENSITY_SETTINGS } from './engine/types';
+import { Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES } from './engine/types';
 
 describe('Game Logic', () => {
     describe('getStartingPositions', () => {

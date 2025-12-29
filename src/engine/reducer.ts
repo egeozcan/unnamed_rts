@@ -228,15 +228,19 @@ function tick(state: GameState): GameState {
             .map(Number)
             .filter(pid => buildingCounts[pid] > 0 || mcvCounts[pid] > 0);
 
+        // Kill units of any eliminated players immediately
+        // (those with 0 buildings AND 0 MCVs)
+        const eliminatedPlayers = Object.keys(nextPlayers)
+            .map(Number)
+            .filter(pid => buildingCounts[pid] === 0 && mcvCounts[pid] === 0);
+
+        for (const eliminatedId of eliminatedPlayers) {
+            finalEntities = killPlayerEntities(finalEntities, eliminatedId);
+        }
+
         if (alivePlayers.length === 1) {
             nextWinner = alivePlayers[0];
             nextRunning = false; // Stop game on win
-
-            // Kill loser's entities
-            const losers = Object.keys(nextPlayers).map(Number).filter(id => id !== nextWinner);
-            for (const loserId of losers) {
-                finalEntities = killPlayerEntities(finalEntities, loserId);
-            }
 
         } else if (alivePlayers.length === 0 && Object.keys(nextPlayers).length > 0) {
             // Draw or everyone destroyed?
