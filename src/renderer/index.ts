@@ -35,7 +35,7 @@ export class Renderer {
         return { width: this.canvas.width, height: this.canvas.height };
     }
 
-    render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }) {
+    render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null) {
         const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
 
@@ -51,7 +51,7 @@ export class Renderer {
         // Draw entities
         for (const entity of sortedEntities) {
             if (entity.dead) continue;
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
         }
 
         // Draw projectiles
@@ -67,7 +67,7 @@ export class Renderer {
 
         // Building placement preview
         if (state.mode !== 'demo' && placingBuilding && mousePos.x < this.canvas.width) {
-            this.drawPlacementPreview(placingBuilding, mousePos, camera, zoom, Object.values(entities));
+            this.drawPlacementPreview(placingBuilding, mousePos, camera, zoom, Object.values(entities), localPlayerId);
         }
 
 
@@ -78,7 +78,7 @@ export class Renderer {
         }
 
         // Draw tooltips
-        this.drawTooltip(mousePos, sortedEntities, camera, zoom);
+        this.drawTooltip(mousePos, sortedEntities, camera, zoom, localPlayerId);
 
         ctx.restore();
     }
@@ -90,7 +90,7 @@ export class Renderer {
         };
     }
 
-    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number) {
+    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null) {
         const ctx = this.ctx;
         const sc = this.worldToScreen(entity.pos, camera, zoom);
 
@@ -114,7 +114,7 @@ export class Renderer {
                 ctx.stroke();
 
                 // MCV deploy hint
-                if (entity.key === 'mcv' && entity.owner === 0 && mode !== 'demo') {
+                if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
                     ctx.fillStyle = '#fff';
                     ctx.font = '10px Arial';
                     ctx.fillText('Deploy (D)', -25, entity.radius + 20);
@@ -334,20 +334,22 @@ export class Renderer {
         mousePos: { x: number; y: number },
         camera: { x: number; y: number },
         zoom: number,
-        entities: Entity[]
+        entities: Entity[],
+        localPlayerId: number | null
     ) {
         const ctx = this.ctx;
         const mx = (mousePos.x / zoom) + camera.x;
         const my = (mousePos.y / zoom) + camera.y;
 
-        const valid = this.isValidBuildLocation(mx, my, 0, entities);
+        const playerId = localPlayerId ?? 0;
+        const valid = this.isValidBuildLocation(mx, my, playerId, entities);
         const b = RULES.buildings[buildingKey];
         if (!b) return;
 
         // Draw build radius indicators for player buildings
         ctx.save();
         for (const e of entities) {
-            if (e.owner === 0 && e.type === 'BUILDING' && !e.dead) {
+            if (e.owner === playerId && e.type === 'BUILDING' && !e.dead) {
                 const s = this.worldToScreen(e.pos, camera, zoom);
                 ctx.strokeStyle = 'rgba(255,255,255,0.2)';
                 ctx.beginPath();
@@ -388,7 +390,8 @@ export class Renderer {
         mousePos: { x: number; y: number },
         entities: Entity[],
         camera: { x: number; y: number },
-        zoom: number
+        zoom: number,
+        localPlayerId: number | null
     ) {
         const ctx = this.ctx;
 
@@ -429,7 +432,7 @@ export class Renderer {
                     const finalY = Math.min(y, this.canvas.height - h - 10);
 
                     // Background
-                    const isEnemy = entity.owner !== 0; // Assuming 0 is local player
+                    const isEnemy = localPlayerId !== null ? entity.owner !== localPlayerId : entity.owner !== -1;
                     ctx.fillStyle = 'rgba(20, 30, 40, 0.9)';
                     ctx.strokeStyle = isEnemy ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 200, 255, 0.5)';
                     ctx.lineWidth = 1;

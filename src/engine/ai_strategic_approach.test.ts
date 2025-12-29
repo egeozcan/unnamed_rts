@@ -103,8 +103,8 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            // Refresh collision and danger grids
-            refreshCollisionGrid(entities);
+            // Refresh collision and danger grids - pass both player IDs
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             // Find path for player 1's unit
             const path = findPath(start, goal, 14, 1);
@@ -154,7 +154,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             // Find path from unit position to enemy base
             const path = findPath(unitPos, enemyBase, 14, 1);
@@ -185,7 +185,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             // Check that player 1's danger grid has danger marked around the turret
             // Turret is at (500, 500), range 250
@@ -338,7 +338,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             const start = new Vector(800, 500);
             const goal = new Vector(200, 500);
@@ -382,7 +382,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             const start = new Vector(800, 500);
             const goal = new Vector(200, 500);
@@ -416,7 +416,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             const tankPos = new Vector(600, 200);
             const turretPos = new Vector(200, 400);
@@ -467,7 +467,7 @@ describe('AI Strategic Approach', () => {
                 })
             };
 
-            refreshCollisionGrid(entities);
+            refreshCollisionGrid(entities, undefined, [0, 1]);
 
             const tankPos = new Vector(800, 350);
             const turretPos = new Vector(300, 500);

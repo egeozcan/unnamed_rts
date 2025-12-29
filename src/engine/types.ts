@@ -140,7 +140,7 @@ export interface SkirmishConfig {
         type: PlayerType;
         color: string;
     }>;
-    readonly mapSize: 'small' | 'medium' | 'large';
+    readonly mapSize: 'small' | 'medium' | 'large' | 'huge';
     readonly resourceDensity: 'low' | 'medium' | 'high';
     readonly rockDensity: 'low' | 'medium' | 'high';
 }
@@ -230,14 +230,27 @@ export const GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
 export const GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
 export const BUILD_RADIUS = 350;
 
-// Player colors for up to 4 players
-export const PLAYER_COLORS = ['#4488ff', '#ff4444', '#44ff88', '#ffcc44'];
+// Maximum players supported
+export const MAX_PLAYERS = 8;
+
+// Player colors for up to 8 players
+export const PLAYER_COLORS = [
+    '#4488ff', // Blue
+    '#ff4444', // Red
+    '#44ff88', // Green
+    '#ffcc44', // Yellow
+    '#ff44ff', // Magenta
+    '#44ffff', // Cyan
+    '#ff8844', // Orange
+    '#8844ff', // Purple
+];
 
 // Map size presets
 export const MAP_SIZES = {
-    small: { width: 2000, height: 2000 },
-    medium: { width: 3000, height: 3000 },
-    large: { width: 4000, height: 4000 }
+    small: { width: 2000, height: 2000 },      // 2 players
+    medium: { width: 3000, height: 3000 },     // 2-4 players
+    large: { width: 4000, height: 4000 },      // 4-6 players
+    huge: { width: 5000, height: 5000 }        // 6-8 players
 };
 
 // Density settings

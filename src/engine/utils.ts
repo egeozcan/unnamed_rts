@@ -16,10 +16,7 @@ class GridManager {
 
     constructor() {
         this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
-        this._dangerGrids = {
-            0: new Uint8Array(this._gridW * this._gridH),
-            1: new Uint8Array(this._gridW * this._gridH)
-        };
+        this._dangerGrids = {}; // Danger grids created on-demand for each player
     }
 
     get gridW(): number { return this._gridW; }
@@ -36,17 +33,28 @@ class GridManager {
             this._gridW = newGridW;
             this._gridH = newGridH;
             this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
-            this._dangerGrids = {
-                0: new Uint8Array(this._gridW * this._gridH),
-                1: new Uint8Array(this._gridW * this._gridH)
-            };
+            // Recreate danger grids for all existing players
+            const existingPlayerIds = Object.keys(this._dangerGrids).map(Number);
+            this._dangerGrids = {};
+            for (const pid of existingPlayerIds) {
+                this._dangerGrids[pid] = new Uint8Array(this._gridW * this._gridH);
+            }
         }
     }
 
     clear(): void {
         this._collisionGrid.fill(0);
-        this._dangerGrids[0].fill(0);
-        this._dangerGrids[1].fill(0);
+        // Clear all existing danger grids
+        for (const playerId in this._dangerGrids) {
+            this._dangerGrids[playerId].fill(0);
+        }
+    }
+
+    // Ensure danger grid exists for a player
+    ensureDangerGrid(playerId: number): void {
+        if (!this._dangerGrids[playerId]) {
+            this._dangerGrids[playerId] = new Uint8Array(this._gridW * this._gridH);
+        }
     }
 
     markGrid(x: number, y: number, w: number, h: number, blocked: boolean): void {
@@ -65,6 +73,9 @@ class GridManager {
     }
 
     markDanger(playerId: number, x: number, y: number, radius: number): void {
+        // Ensure the danger grid exists for this player
+        this.ensureDangerGrid(playerId);
+
         const gx = Math.floor(x / TILE_SIZE);
         const gy = Math.floor(y / TILE_SIZE);
         const gr = Math.ceil(radius / TILE_SIZE);
@@ -120,13 +131,20 @@ export function markDanger(playerId: number, x: number, y: number, radius: numbe
 }
 
 
-export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[], mapConfig?: { width: number, height: number }): void {
+export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[], mapConfig?: { width: number, height: number }, playerIds?: number[]): void {
     // Resize grids if map config is provided and different from current
     if (mapConfig) {
         gridManager.ensureSize(mapConfig.width, mapConfig.height);
     }
 
     gridManager.clear();
+
+    // Collect all player IDs from entities if not provided
+    const allPlayerIds = playerIds || [...new Set(
+        (Array.isArray(entities) ? entities : Object.values(entities))
+            .filter(e => e.owner >= 0)
+            .map(e => e.owner)
+    )];
 
     const list = Array.isArray(entities) ? entities : Object.values(entities);
     for (const e of list) {
@@ -136,17 +154,15 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
             // Mark danger if it's a defensive building
             const data = RULES.buildings[e.key];
             if (data && data.isDefense && e.owner !== -1) {
-                // Mark danger on the ENEMY's danger map
+                // Mark danger on ALL enemy player danger maps
                 const range = (data.range || 200);
-                // If I am P0, I create danger for P1.
-                // If I am P1, I create danger for P0.
-                if (e.owner === 0) markDanger(1, e.pos.x, e.pos.y, range);
-                if (e.owner === 1) markDanger(0, e.pos.x, e.pos.y, range);
+                for (const pid of allPlayerIds) {
+                    if (pid !== e.owner) {
+                        markDanger(pid, e.pos.x, e.pos.y, range);
+                    }
+                }
             }
         }
-        // Optional: Mark resources as blocked? 
-        // Ore is small, maybe walkable? 
-        // Trees?
     }
 }
 
@@ -252,13 +268,14 @@ export function hasBuilding(key: string, owner: number, entities: Entity[]): boo
 }
 
 export function calculatePower(entities: Entity[]): Record<number, { in: number; out: number }> {
-    const power: Record<number, { in: number; out: number }> = {
-        0: { in: 0, out: 0 },
-        1: { in: 0, out: 0 }
-    };
+    const power: Record<number, { in: number; out: number }> = {};
 
     for (const e of entities) {
         if (e.type === 'BUILDING' && !e.dead && e.owner >= 0) {
+            // Ensure power entry exists for this owner
+            if (!power[e.owner]) {
+                power[e.owner] = { in: 0, out: 0 };
+            }
             const data = RULES.buildings[e.key];
             if (data) {
                 if ('power' in data) power[e.owner].out += data.power;

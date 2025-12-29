@@ -451,8 +451,8 @@ describe('Renderer Logic', () => {
     });
 
     describe('Player color handling', () => {
-        it('should have 4 player colors defined', () => {
-            expect(PLAYER_COLORS.length).toBe(4);
+        it('should have 8 player colors defined', () => {
+            expect(PLAYER_COLORS.length).toBe(8);
         });
 
         it('should have blue as first player color', () => {

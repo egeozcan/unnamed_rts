@@ -77,7 +77,7 @@ function getSkirmishConfig(): SkirmishConfig {
         }
     });
 
-    const mapSize = (document.getElementById('map-size') as HTMLSelectElement).value as 'small' | 'medium' | 'large';
+    const mapSize = (document.getElementById('map-size') as HTMLSelectElement).value as 'small' | 'medium' | 'large' | 'huge';
     const resourceDensity = (document.getElementById('resource-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
     const rockDensity = (document.getElementById('rock-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
 
@@ -87,11 +87,19 @@ function getSkirmishConfig(): SkirmishConfig {
 // Get starting positions for players based on map size
 function getStartingPositions(mapWidth: number, mapHeight: number, numPlayers: number): Vector[] {
     const margin = 350; // Distance from edge
+    const centerX = mapWidth / 2;
+    const centerY = mapHeight / 2;
+
+    // 8 positions: corners + mid-edges for maximum spacing
     const positions = [
-        new Vector(margin, margin),                          // Top-left
-        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right
-        new Vector(mapWidth - margin, margin),               // Top-right
-        new Vector(margin, mapHeight - margin)               // Bottom-left
+        new Vector(margin, margin),                          // Top-left (0)
+        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right (1)
+        new Vector(mapWidth - margin, margin),               // Top-right (2)
+        new Vector(margin, mapHeight - margin),              // Bottom-left (3)
+        new Vector(centerX, margin),                         // Top-center (4)
+        new Vector(centerX, mapHeight - margin),             // Bottom-center (5)
+        new Vector(margin, centerY),                         // Left-center (6)
+        new Vector(mapWidth - margin, centerY)               // Right-center (7)
     ];
     return positions.slice(0, numPlayers);
 }
@@ -358,15 +366,16 @@ function startGameWithConfig(config: SkirmishConfig) {
 
 function handleBuildClick(category: string, key: string) {
     if (currentState.mode === 'demo') return;
+    if (humanPlayerId === null) return;
 
     if (category === 'building') {
-        if (currentState.players[0].readyToPlace === key) {
+        if (currentState.players[humanPlayerId].readyToPlace === key) {
             currentState = { ...currentState, placingBuilding: key };
         } else {
-            currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: 0 } });
+            currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: humanPlayerId } });
         }
     } else {
-        currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: 0 } });
+        currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: humanPlayerId } });
     }
 
     updateButtonsUI();
@@ -389,14 +398,15 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
 
     // Sell Mode
     if (currentState.sellMode) {
+        if (humanPlayerId === null) return;
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && e.owner === 0 && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead && e.owner === humanPlayerId && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
             currentState = update(currentState, {
                 type: 'SELL_BUILDING',
-                payload: { buildingId: clicked.id, playerId: 0 }
+                payload: { buildingId: clicked.id, playerId: humanPlayerId }
             });
             updateButtonsUI();
         }
@@ -405,21 +415,22 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
 
     // Repair Mode
     if (currentState.repairMode) {
+        if (humanPlayerId === null) return;
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && e.owner === 0 && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead && e.owner === humanPlayerId && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
             // Toggle repair on/off for this building
             if (clicked.isRepairing) {
                 currentState = update(currentState, {
                     type: 'STOP_REPAIR',
-                    payload: { buildingId: clicked.id, playerId: 0 }
+                    payload: { buildingId: clicked.id, playerId: humanPlayerId }
                 });
             } else {
                 currentState = update(currentState, {
                     type: 'START_REPAIR',
-                    payload: { buildingId: clicked.id, playerId: 0 }
+                    payload: { buildingId: clicked.id, playerId: humanPlayerId }
                 });
             }
             updateButtonsUI();
@@ -429,9 +440,10 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
 
     // Building placement
     if (currentState.placingBuilding) {
+        if (humanPlayerId === null) return;
         currentState = update(currentState, {
             type: 'PLACE_BUILDING',
-            payload: { key: currentState.placingBuilding, x: wx, y: wy, playerId: 0 }
+            payload: { key: currentState.placingBuilding, x: wx, y: wy, playerId: humanPlayerId }
         });
         updateButtonsUI();
         return;
@@ -443,7 +455,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     if (isDrag && dragRect) {
         for (const id in currentState.entities) {
             const e = currentState.entities[id];
-            if (e.owner === 0 && e.type === 'UNIT' && !e.dead &&
+            if (humanPlayerId !== null && e.owner === humanPlayerId && e.type === 'UNIT' && !e.dead &&
                 e.pos.x > dragRect.x1 && e.pos.x < dragRect.x2 &&
                 e.pos.y > dragRect.y1 && e.pos.y < dragRect.y2) {
                 newSelection.push(e.id);
@@ -452,7 +464,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     } else {
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && e.owner === 0 && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead && humanPlayerId !== null && e.owner === humanPlayerId && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
             newSelection.push(clicked.id);
@@ -482,9 +494,10 @@ function handleRightClick(wx: number, wy: number) {
 
     // Cancel placement
     if (currentState.placingBuilding) {
+        if (humanPlayerId === null) return;
         currentState = update(currentState, {
             type: 'CANCEL_BUILD',
-            payload: { category: 'building', playerId: 0 }
+            payload: { category: 'building', playerId: humanPlayerId }
         });
         updateButtonsUI();
         return;
@@ -622,7 +635,7 @@ function gameLoop() {
     currentState = { ...currentState, camera: newCamera };
 
     // Render
-    renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y });
+    renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId);
 
     // Minimap
     const size = renderer.getSize();
@@ -673,15 +686,23 @@ function checkWinCondition() {
         const endTitle = document.getElementById('end-title');
         if (endScreen && endTitle) {
             endScreen.classList.add('visible');
-            if (currentState.winner === 0) {
+            if (currentState.winner === -1) {
+                // Draw
+                endTitle.textContent = 'DRAW';
+                endTitle.style.color = '#ffffff';
+            } else if (humanPlayerId !== null && currentState.winner === humanPlayerId) {
+                // Human player won
                 endTitle.textContent = 'MISSION ACCOMPLISHED';
                 endTitle.style.color = '#44ff88';
-            } else if (currentState.winner === 1) {
+            } else if (humanPlayerId !== null) {
+                // Human player lost (another player won)
                 endTitle.textContent = 'MISSION FAILED';
                 endTitle.style.color = '#ff4444';
             } else {
-                endTitle.textContent = 'DRAW';
-                endTitle.style.color = '#ffffff';
+                // Observer mode - show which player won
+                const winnerColor = PLAYER_COLORS[currentState.winner] || '#ffffff';
+                endTitle.textContent = `PLAYER ${currentState.winner + 1} WINS`;
+                endTitle.style.color = winnerColor;
             }
         }
     }
@@ -689,3 +710,10 @@ function checkWinCondition() {
 
 (window as any).startGame = startGameWithConfig;
 
+// Export pure functions for testing
+export const _testUtils = {
+    getStartingPositions,
+    reconstructVectors,
+    calculatePower,
+    generateMap
+};
