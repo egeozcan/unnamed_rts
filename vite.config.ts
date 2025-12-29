@@ -9,6 +9,10 @@ export default defineConfig({
             reportsDirectory: './coverage',
             include: ['src/**/*.ts'],
             exclude: ['src/**/*.test.ts', 'src/**/*.d.ts']
-        }
+        },
+        // Use jsdom for renderer tests that need DOM APIs
+        environmentMatchGlobs: [
+            ['src/renderer/**/*.test.ts', 'jsdom']
+        ]
     }
 })
