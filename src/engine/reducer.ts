@@ -16,23 +16,13 @@ function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
 
 /**
  * Check if a player has the required production building for a category.
- * - buildings: requires conyard
- * - infantry: requires barracks
- * - vehicle: requires factory
+ * Production building requirements are defined in RULES.productionBuildings.
+ * Each category can have multiple valid production buildings (for faction support).
  */
 function hasProductionBuilding(category: string, playerBuildings: Entity[]): boolean {
-    switch (category) {
-        case 'building':
-            return playerBuildings.some(b => b.key === 'conyard' && !b.dead);
-        case 'infantry':
-            return playerBuildings.some(b => b.key === 'barracks' && !b.dead);
-        case 'vehicle':
-            return playerBuildings.some(b => b.key === 'factory' && !b.dead);
-        case 'air':
-            return playerBuildings.some(b => b.key === 'tech' && !b.dead);
-        default:
-            return false;
-    }
+    const validBuildings: string[] = RULES.productionBuildings?.[category] || [];
+    if (validBuildings.length === 0) return false;
+    return playerBuildings.some(b => validBuildings.includes(b.key) && !b.dead);
 }
 
 /**

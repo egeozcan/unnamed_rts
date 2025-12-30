@@ -25,6 +25,12 @@
             ]
         }
     },
+    "productionBuildings": {
+        "building": ["conyard"],
+        "infantry": ["barracks"],
+        "vehicle": ["factory"],
+        "air": ["tech"]
+    },
     "prerequisites": {
         "power": [
             "conyard"
