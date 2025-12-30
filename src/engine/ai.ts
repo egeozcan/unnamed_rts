@@ -1417,7 +1417,7 @@ function handleHarvesterSafety(
         // Helper: Check if entity was damaged recently (within RECENT_DAMAGE_WINDOW ticks)
         const wasRecentlyDamaged = (entity: Entity) => {
             return entity.lastDamageTick !== undefined &&
-                   (state.tick - entity.lastDamageTick) < RECENT_DAMAGE_WINDOW;
+                (state.tick - entity.lastDamageTick) < RECENT_DAMAGE_WINDOW;
         };
 
         // Check if harvester itself was damaged recently - this is a DIRECT attack
@@ -1647,6 +1647,52 @@ function handleHarvesterSafety(
                         });
                         enemiesTargeted.add(nearestThreat.id);
                     }
+                }
+            }
+        } else {
+            // Harvester is safe from immediate threats.
+            // Check if it's idle and stuck in manual mode (e.g. stopped after fleeing)
+            // Note: manualMode is undefined (truthy default) or explicitly true
+            const isManual = harv.manualMode !== false;
+            const isIdle = !harv.moveTarget && !harv.baseTargetId && !harv.resourceTargetId;
+
+            if (isManual && isIdle) {
+                // Resume harvesting: COMMAND_ATTACK on ore resets manualMode to false
+                // Find nearest safe ore
+                const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+                let bestOre: Entity | null = null;
+                let bestScore = -Infinity;
+
+                for (const ore of allOre) {
+                    const dist = harv.pos.dist(ore.pos);
+
+                    // Check if ore is near enemies (don't send harvester back into danger)
+                    let oreExposed = false;
+                    for (const enemy of enemies) {
+                        if (enemy.type === 'UNIT' && enemy.pos.dist(ore.pos) < 300) {
+                            oreExposed = true;
+                            break;
+                        }
+                    }
+
+                    // Heavily penalize exposed ore, but don't strictly exclude it (fallback)
+                    let score = -dist;
+                    if (oreExposed) score -= 5000;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestOre = ore;
+                    }
+                }
+
+                if (bestOre) {
+                    actions.push({
+                        type: 'COMMAND_ATTACK',
+                        payload: {
+                            unitIds: [harv.id],
+                            targetId: bestOre.id
+                        }
+                    });
                 }
             }
         }
