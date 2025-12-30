@@ -541,7 +541,7 @@ function updateButtonsUI() {
     if (!player) return;
 
     updateButtons(
-        Object.values(currentState.entities),
+        currentState.entities,
         player.queues,
         player.readyToPlace,
         currentState.placingBuilding

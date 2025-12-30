@@ -42,8 +42,19 @@ function createTestEntity(id: string, owner: number, type: 'BUILDING' | 'UNIT', 
 
 describe('Reducer', () => {
     it('should handle START_BUILD', () => {
+        // Need a conyard to build buildings (prerequisite check)
+        let state = getInitialState();
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any
+            }
+        };
+
         const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as any;
-        const state = update(getInitialState(), action);
+        state = update(state, action);
         expect(state.players[0].queues.building.current).toBe('power');
         // Initial state credit check. Since we use getInitialState(), credits are consistently reset.
         expect(state.players[0].credits).toBe(getInitialState().players[0].credits);
@@ -144,5 +155,237 @@ describe('Reducer', () => {
         expect(nextState.players[0].queues.infantry.current).toBeNull();
         expect(nextState.players[0].queues.infantry.progress).toBe(0);
         expect(nextState.players[0].readyToPlace).toBeNull();
+    });
+
+    it('should NOT allow infantry production without barracks', () => {
+        let state = getInitialState();
+        // Add conyard only - no barracks
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any
+            }
+        };
+
+        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be rejected - infantry queue should remain empty
+        expect(nextState.players[0].queues.infantry.current).toBeNull();
+    });
+
+    it('should allow infantry production WITH barracks', () => {
+        let state = getInitialState();
+        // Add conyard and barracks
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any
+            }
+        };
+
+        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be allowed
+        expect(nextState.players[0].queues.infantry.current).toBe('rifle');
+    });
+
+    it('should NOT allow vehicle production without factory', () => {
+        let state = getInitialState();
+        // Add conyard and barracks, but no factory
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any
+            }
+        };
+
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be rejected
+        expect(nextState.players[0].queues.vehicle.current).toBeNull();
+    });
+
+    it('should allow vehicle production WITH factory', () => {
+        let state = getInitialState();
+        // Add conyard, barracks, refinery, and factory (factory requires barracks and refinery)
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
+        const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any,
+                [refinery.id]: refinery as any,
+                [factory.id]: factory as any
+            }
+        };
+
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be allowed
+        expect(nextState.players[0].queues.vehicle.current).toBe('light');
+    });
+
+    it('should NOT allow building production without conyard', () => {
+        let state = getInitialState();
+        // No buildings at all
+
+        const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be rejected
+        expect(nextState.players[0].queues.building.current).toBeNull();
+    });
+
+    it('should NOT allow advanced units without tech center', () => {
+        let state = getInitialState();
+        // Add full base but no tech center
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
+        const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any,
+                [refinery.id]: refinery as any,
+                [factory.id]: factory as any
+            }
+        };
+
+        // Mammoth tank requires tech center
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be rejected - mammoth requires tech center
+        expect(nextState.players[0].queues.vehicle.current).toBeNull();
+    });
+
+    it('should allow advanced units WITH tech center', () => {
+        let state = getInitialState();
+        // Add full base with tech center
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
+        const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
+        const tech = createTestEntity('tech_test', 0, 'BUILDING', 'tech', 900, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any,
+                [refinery.id]: refinery as any,
+                [factory.id]: factory as any,
+                [tech.id]: tech as any
+            }
+        };
+
+        // Mammoth tank requires tech center
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as any;
+        const nextState = update(state, action);
+
+        // Should be allowed now
+        expect(nextState.players[0].queues.vehicle.current).toBe('mammoth');
+    });
+
+    it('should cancel infantry production and refund if barracks is destroyed mid-production', () => {
+        let state = { ...getInitialState(), running: true };
+        // Add conyard and barracks
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any
+            }
+        };
+
+        // Start infantry production
+        state = update(state, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any);
+        expect(state.players[0].queues.infantry.current).toBe('rifle');
+
+        // Simulate some ticks to invest credits
+        for (let i = 0; i < 10; i++) {
+            state = update(state, { type: 'TICK' } as any);
+        }
+        const investedCredits = state.players[0].queues.infantry.invested;
+        const creditsBeforeDestruction = state.players[0].credits;
+        expect(investedCredits).toBeGreaterThan(0);
+
+        // Destroy the barracks
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [barracks.id]: { ...state.entities[barracks.id], dead: true }
+            }
+        };
+
+        // Next tick should cancel production and refund
+        state = update(state, { type: 'TICK' } as any);
+
+        expect(state.players[0].queues.infantry.current).toBeNull();
+        expect(state.players[0].queues.infantry.progress).toBe(0);
+        // Credits should be refunded
+        expect(state.players[0].credits).toBeGreaterThan(creditsBeforeDestruction);
+    });
+
+    it('should cancel vehicle production if factory is destroyed mid-production', () => {
+        let state = { ...getInitialState(), running: true };
+        // Add full base
+        const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
+        const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
+        const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
+        const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [conyard.id]: conyard as any,
+                [barracks.id]: barracks as any,
+                [refinery.id]: refinery as any,
+                [factory.id]: factory as any
+            }
+        };
+
+        // Start vehicle production
+        state = update(state, { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any);
+        expect(state.players[0].queues.vehicle.current).toBe('light');
+
+        // Destroy the factory
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                [factory.id]: { ...state.entities[factory.id], dead: true }
+            }
+        };
+
+        // Next tick should cancel production
+        state = update(state, { type: 'TICK' } as any);
+
+        expect(state.players[0].queues.vehicle.current).toBeNull();
     });
 });

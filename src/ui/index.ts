@@ -1,6 +1,7 @@
 import rules from '../data/rules.json';
-import { GameState, Entity } from '../engine/types.js';
+import { GameState, Entity, EntityId } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai.js';
+import { canBuild } from '../engine/reducer.js';
 
 const RULES = rules as any;
 
@@ -112,40 +113,40 @@ export function hasBuilding(key: string, owner: number, entities: Entity[]): boo
 }
 
 export function updateButtons(
-    entities: Entity[],
+    entities: Record<EntityId, Entity>,
     queues: Record<string, { current: string | null; progress: number }>,
     readyToPlace: string | null,
     placingBuilding: string | null
 ) {
     const owner = 0;
 
-    // Update prerequisites
-    const check = (list: string[], isBuilding: boolean) => {
-        for (const k of list) {
-            const el = document.getElementById('btn-' + k);
-            if (!el) continue;
+    // Update prerequisites using canBuild from reducer
+    // Buildings
+    for (const k of Object.keys(RULES.buildings)) {
+        const el = document.getElementById('btn-' + k);
+        if (!el) continue;
 
-            const data = isBuilding
-                ? RULES.buildings[k]
-                : RULES.units[k];
-
-            let met = true;
-            if (data?.req) {
-                for (const r of data.req) {
-                    if (!hasBuilding(r, owner, entities)) met = false;
-                }
-            }
-
-            if (met) {
-                el.classList.remove('disabled');
-            } else {
-                el.classList.add('disabled');
-            }
+        if (canBuild(k, 'building', owner, entities)) {
+            el.classList.remove('disabled');
+        } else {
+            el.classList.add('disabled');
         }
-    };
+    }
 
-    check(Object.keys(RULES.buildings), true);
-    check(Object.keys(RULES.units), false);
+    // Units (infantry and vehicles)
+    for (const k of Object.keys(RULES.units)) {
+        const el = document.getElementById('btn-' + k);
+        if (!el) continue;
+
+        const unitData = RULES.units[k];
+        const category = unitData.type === 'infantry' ? 'infantry' : 'vehicle';
+
+        if (canBuild(k, category, owner, entities)) {
+            el.classList.remove('disabled');
+        } else {
+            el.classList.add('disabled');
+        }
+    }
 
     // Update production states
     const categories = ['building', 'infantry', 'vehicle'] as const;

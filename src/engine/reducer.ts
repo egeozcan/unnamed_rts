@@ -5,6 +5,53 @@ import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH } fro
 // Type assertions for JSON data
 const RULES = rules as any;
 
+/**
+ * Check if prerequisites are met for a building or unit.
+ * Prerequisites are defined in RULES.prerequisites.
+ */
+function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
+    const prereqs = RULES.prerequisites[key] || [];
+    return prereqs.every((req: string) => playerBuildings.some(b => b.key === req && !b.dead));
+}
+
+/**
+ * Check if a player has the required production building for a category.
+ * - buildings: requires conyard
+ * - infantry: requires barracks
+ * - vehicle: requires factory
+ */
+function hasProductionBuilding(category: string, playerBuildings: Entity[]): boolean {
+    switch (category) {
+        case 'building':
+            return playerBuildings.some(b => b.key === 'conyard' && !b.dead);
+        case 'infantry':
+            return playerBuildings.some(b => b.key === 'barracks' && !b.dead);
+        case 'vehicle':
+            return playerBuildings.some(b => b.key === 'factory' && !b.dead);
+        case 'air':
+            return playerBuildings.some(b => b.key === 'tech' && !b.dead);
+        default:
+            return false;
+    }
+}
+
+/**
+ * Check if a player can build a specific item (has prerequisites and production building).
+ */
+export function canBuild(key: string, category: string, playerId: number, entities: Record<EntityId, Entity>): boolean {
+    const playerBuildings = Object.values(entities).filter(
+        e => e.owner === playerId && e.type === 'BUILDING' && !e.dead
+    );
+
+    // Check production building requirement
+    if (!hasProductionBuilding(category, playerBuildings)) {
+        return false;
+    }
+
+    // Check prerequisites
+    return checkPrerequisites(key, playerBuildings);
+}
+
 export const INITIAL_STATE: GameState = {
     running: false,
     mode: 'menu',
@@ -303,6 +350,20 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
         const data = getRuleData(q.current);
         if (!data) continue;
 
+        // Check if player still has the required production building for this category
+        // If not, cancel production and refund invested credits
+        if (!canBuild(q.current, cat, player.id, entities)) {
+            nextPlayer = {
+                ...nextPlayer,
+                credits: nextPlayer.credits + (q.invested || 0),
+                queues: {
+                    ...nextPlayer.queues,
+                    [cat]: { current: null, progress: 0, invested: 0 }
+                }
+            };
+            continue;
+        }
+
         const totalCost = data.cost;
 
         // Calculate production speed multiplier based on number of production buildings
@@ -430,6 +491,11 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
         if (!RULES.buildings[key]) return state;
     } else {
         if (!RULES.units[key]) return state;
+    }
+
+    // Check prerequisites and production building requirements
+    if (!canBuild(key, category, playerId, state.entities)) {
+        return state;
     }
 
     return {
