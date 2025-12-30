@@ -118,13 +118,15 @@ const MAX_SURPLUS_TURRETS = 4; // Maximum turrets to build from surplus
 
 /**
  * Check if prerequisites are met for a building or unit.
- * Prerequisites are defined in RULES.prerequisites, NOT on the item's data object.
+ * Prerequisites are defined on the unit/building data objects.
  * @param key The building or unit key
  * @param playerBuildings Array of buildings the player owns
  * @returns true if all prerequisites are met
  */
 function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
-    const prereqs = RULES.prerequisites[key] || [];
+    const unitData = RULES.units[key];
+    const buildingData = RULES.buildings[key];
+    const prereqs = unitData?.prerequisites || buildingData?.prerequisites || [];
     return prereqs.every((req: string) => playerBuildings.some(b => b.key === req));
 }
 

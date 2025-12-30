@@ -8,10 +8,12 @@ const RULES = rules as any;
 
 /**
  * Check if prerequisites are met for a building or unit.
- * Prerequisites are defined in RULES.prerequisites.
+ * Prerequisites are defined on the unit/building data objects.
  */
 function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
-    const prereqs = RULES.prerequisites[key] || [];
+    const unitData = RULES.units[key];
+    const buildingData = RULES.buildings[key];
+    const prereqs = unitData?.prerequisites || buildingData?.prerequisites || [];
     return prereqs.every((req: string) => playerBuildings.some(b => b.key === req && !b.dead));
 }
 
@@ -1412,10 +1414,21 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             }
         }
     } else if (nextEntity.moveTarget) {
-        // Manual move override for harvester
+        // Manual move override for harvester (flee commands, player commands)
         nextEntity = moveToward(nextEntity, nextEntity.moveTarget, entityList);
-        if (nextEntity.pos.dist(nextEntity.moveTarget!) < 10) {
-            nextEntity = { ...nextEntity, moveTarget: null };
+
+        // Harvesters can clear moveTarget at a larger distance (30 units) than regular units (10 units)
+        // This prevents the circling bug where multiple harvesters flee to the same area
+        // and collide, unable to reach within 10 units of their target
+        const clearDistance = 30;
+
+        // Also check if harvester has been stuck trying to reach this moveTarget for too long
+        // If stuck for more than 40 ticks, give up and resume normal harvesting behavior
+        const harvesterFleeTimeout = 40;
+        const isStuckOnFlee = (nextEntity.stuckTimer || 0) > harvesterFleeTimeout;
+
+        if (nextEntity.pos.dist(nextEntity.moveTarget!) < clearDistance || isStuckOnFlee) {
+            nextEntity = { ...nextEntity, moveTarget: null, path: null, pathIdx: 0, stuckTimer: 0 };
         }
     }
 

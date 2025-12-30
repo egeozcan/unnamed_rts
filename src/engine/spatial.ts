@@ -34,15 +34,6 @@ export class SpatialGrid {
     }
 
     /**
-     * Get the cell key for a position.
-     */
-    private getCellKey(x: number, y: number): string {
-        const cx = Math.floor(x / this.cellSize);
-        const cy = Math.floor(y / this.cellSize);
-        return `${cx},${cy}`;
-    }
-
-    /**
      * Get all cell keys that an entity occupies (based on its radius).
      */
     private getEntityCellKeys(entity: Entity): string[] {

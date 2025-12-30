@@ -31,111 +31,6 @@
         "vehicle": ["factory"],
         "air": ["tech"]
     },
-    "prerequisites": {
-        "power": [
-            "conyard"
-        ],
-        "refinery": [
-            "conyard",
-            "power"
-        ],
-        "barracks": [
-            "conyard",
-            "power"
-        ],
-        "factory": [
-            "conyard",
-            "refinery",
-            "barracks"
-        ],
-        "turret": [
-            "conyard",
-            "barracks"
-        ],
-        "tech": [
-            "conyard",
-            "factory"
-        ],
-        "rifle": [
-            "barracks"
-        ],
-        "rocket": [
-            "barracks"
-        ],
-        "engineer": [
-            "barracks"
-        ],
-        "medic": [
-            "barracks"
-        ],
-        "sniper": [
-            "barracks",
-            "tech"
-        ],
-        "flamer": [
-            "barracks"
-        ],
-        "grenadier": [
-            "barracks"
-        ],
-        "commando": [
-            "barracks",
-            "tech"
-        ],
-        "harvester": [
-            "refinery",
-            "factory"
-        ],
-        "jeep": [
-            "factory"
-        ],
-        "apc": [
-            "factory"
-        ],
-        "light": [
-            "factory"
-        ],
-        "heavy": [
-            "factory"
-        ],
-        "flame_tank": [
-            "factory"
-        ],
-        "stealth": [
-            "factory",
-            "tech"
-        ],
-        "artillery": [
-            "factory",
-            "tech"
-        ],
-        "mlrs": [
-            "factory",
-            "tech"
-        ],
-        "mammoth": [
-            "factory",
-            "tech"
-        ],
-        "heli": [
-            "tech"
-        ],
-        "mcv": [
-            "factory"
-        ],
-        "sam_site": [
-            "conyard",
-            "barracks"
-        ],
-        "pillbox": [
-            "conyard",
-            "barracks"
-        ],
-        "obelisk": [
-            "conyard",
-            "tech"
-        ]
-    },
     "buildings": {
         "conyard": {
             "name": "Con. Yard",
@@ -147,7 +42,8 @@
             "drain": 0,
             "hidden": true,
             "marker": "conyard",
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": []
         },
         "power": {
             "name": "Power Plant",
@@ -157,7 +53,8 @@
             "h": 60,
             "power": 200,
             "drain": 0,
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": ["conyard"]
         },
         "refinery": {
             "name": "Refinery",
@@ -167,7 +64,8 @@
             "h": 80,
             "drain": 30,
             "provides": "harvester",
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": ["conyard", "power"]
         },
         "barracks": {
             "name": "Barracks",
@@ -177,7 +75,8 @@
             "h": 80,
             "drain": 10,
             "provides": "infantry",
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": ["conyard", "power"]
         },
         "factory": {
             "name": "War Factory",
@@ -187,7 +86,8 @@
             "h": 100,
             "drain": 20,
             "provides": "vehicles",
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": ["conyard", "refinery", "barracks"]
         },
         "turret": {
             "name": "Gun Turret",
@@ -201,7 +101,8 @@
             "rate": 20,
             "isDefense": true,
             "armor": "building",
-            "weaponType": "cannon"
+            "weaponType": "cannon",
+            "prerequisites": ["conyard", "barracks"]
         },
         "sam_site": {
             "name": "SAM Site",
@@ -215,7 +116,8 @@
             "rate": 60,
             "isDefense": true,
             "armor": "building",
-            "weaponType": "missile"
+            "weaponType": "missile",
+            "prerequisites": ["conyard", "barracks"]
         },
         "pillbox": {
             "name": "Pillbox",
@@ -229,7 +131,8 @@
             "rate": 8,
             "isDefense": true,
             "armor": "building",
-            "weaponType": "bullet"
+            "weaponType": "bullet",
+            "prerequisites": ["conyard", "barracks"]
         },
         "obelisk": {
             "name": "Obelisk",
@@ -243,7 +146,8 @@
             "rate": 120,
             "isDefense": true,
             "armor": "building",
-            "weaponType": "laser"
+            "weaponType": "laser",
+            "prerequisites": ["conyard", "tech"]
         },
         "tech": {
             "name": "Tech Center",
@@ -252,7 +156,8 @@
             "w": 80,
             "h": 80,
             "drain": 50,
-            "armor": "building"
+            "armor": "building",
+            "prerequisites": ["conyard", "factory"]
         }
     },
     "units": {
@@ -267,7 +172,8 @@
             "rate": 30,
             "w": 15,
             "armor": "infantry",
-            "weaponType": "bullet"
+            "weaponType": "bullet",
+            "prerequisites": ["barracks"]
         },
         "rocket": {
             "name": "Rocket",
@@ -281,7 +187,8 @@
             "w": 15,
             "splash": 25,
             "armor": "infantry",
-            "weaponType": "rocket"
+            "weaponType": "rocket",
+            "prerequisites": ["barracks"]
         },
         "engineer": {
             "name": "Engineer",
@@ -295,7 +202,8 @@
             "w": 15,
             "armor": "infantry",
             "canCaptureEnemyBuildings": true,
-            "canRepairFriendlyBuildings": true
+            "canRepairFriendlyBuildings": true,
+            "prerequisites": ["barracks"]
         },
         "medic": {
             "name": "Medic",
@@ -308,7 +216,8 @@
             "rate": 50,
             "w": 15,
             "armor": "infantry",
-            "weaponType": "heal"
+            "weaponType": "heal",
+            "prerequisites": ["barracks"]
         },
         "sniper": {
             "name": "Sniper",
@@ -321,7 +230,8 @@
             "rate": 150,
             "w": 15,
             "armor": "infantry",
-            "weaponType": "sniper"
+            "weaponType": "sniper",
+            "prerequisites": ["barracks", "tech"]
         },
         "flamer": {
             "name": "Flamethrower",
@@ -335,7 +245,8 @@
             "w": 15,
             "splash": 30,
             "armor": "infantry",
-            "weaponType": "flame"
+            "weaponType": "flame",
+            "prerequisites": ["barracks"]
         },
         "grenadier": {
             "name": "Grenadier",
@@ -349,7 +260,8 @@
             "w": 15,
             "splash": 35,
             "armor": "infantry",
-            "weaponType": "grenade"
+            "weaponType": "grenade",
+            "prerequisites": ["barracks"]
         },
         "commando": {
             "name": "Commando",
@@ -362,7 +274,8 @@
             "rate": 25,
             "w": 15,
             "armor": "infantry",
-            "weaponType": "ap_bullet"
+            "weaponType": "ap_bullet",
+            "prerequisites": ["barracks", "tech"]
         },
         "harvester": {
             "name": "Harvester",
@@ -374,7 +287,8 @@
             "damage": 0,
             "w": 35,
             "capacity": 500,
-            "armor": "heavy"
+            "armor": "heavy",
+            "prerequisites": ["refinery", "factory"]
         },
         "jeep": {
             "name": "Ranger",
@@ -387,7 +301,8 @@
             "rate": 15,
             "w": 22,
             "armor": "light",
-            "weaponType": "bullet"
+            "weaponType": "bullet",
+            "prerequisites": ["factory"]
         },
         "apc": {
             "name": "APC",
@@ -400,7 +315,8 @@
             "rate": 12,
             "w": 25,
             "armor": "light",
-            "weaponType": "ap_bullet"
+            "weaponType": "ap_bullet",
+            "prerequisites": ["factory"]
         },
         "light": {
             "name": "Light Tank",
@@ -413,7 +329,8 @@
             "rate": 55,
             "w": 28,
             "armor": "medium",
-            "weaponType": "cannon"
+            "weaponType": "cannon",
+            "prerequisites": ["factory"]
         },
         "heavy": {
             "name": "Heavy Tank",
@@ -426,7 +343,8 @@
             "rate": 75,
             "w": 34,
             "armor": "heavy",
-            "weaponType": "cannon"
+            "weaponType": "cannon",
+            "prerequisites": ["factory"]
         },
         "flame_tank": {
             "name": "Flame Tank",
@@ -440,7 +358,8 @@
             "w": 30,
             "splash": 50,
             "armor": "medium",
-            "weaponType": "flame"
+            "weaponType": "flame",
+            "prerequisites": ["factory"]
         },
         "stealth": {
             "name": "Stealth Tank",
@@ -453,7 +372,8 @@
             "rate": 50,
             "w": 28,
             "armor": "medium",
-            "weaponType": "missile"
+            "weaponType": "missile",
+            "prerequisites": ["factory", "tech"]
         },
         "artillery": {
             "name": "Artillery",
@@ -467,7 +387,8 @@
             "w": 30,
             "splash": 60,
             "armor": "light",
-            "weaponType": "heavy_cannon"
+            "weaponType": "heavy_cannon",
+            "prerequisites": ["factory", "tech"]
         },
         "mlrs": {
             "name": "MLRS",
@@ -481,7 +402,8 @@
             "w": 30,
             "splash": 80,
             "armor": "light",
-            "weaponType": "missile"
+            "weaponType": "missile",
+            "prerequisites": ["factory", "tech"]
         },
         "mammoth": {
             "name": "Mammoth Tank",
@@ -494,7 +416,8 @@
             "rate": 90,
             "w": 40,
             "armor": "heavy",
-            "weaponType": "heavy_cannon"
+            "weaponType": "heavy_cannon",
+            "prerequisites": ["factory", "tech"]
         },
         "heli": {
             "name": "Helicopter",
@@ -508,7 +431,8 @@
             "w": 20,
             "fly": true,
             "armor": "light",
-            "weaponType": "rocket"
+            "weaponType": "rocket",
+            "prerequisites": ["tech"]
         },
         "mcv": {
             "name": "MCV",
@@ -519,7 +443,8 @@
             "range": 0,
             "damage": 0,
             "w": 45,
-            "armor": "heavy"
+            "armor": "heavy",
+            "prerequisites": ["factory"]
         }
     },
     "armorTypes": {
