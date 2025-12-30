@@ -572,6 +572,8 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
     let extraEntities: Record<EntityId, Entity> = {};
     if (key === 'refinery') {
         const harv = createEntity(x, y + 50, playerId, 'UNIT', 'harvester', state);
+        // Harvesters spawned by refineries should auto-harvest immediately
+        (harv as any).manualMode = false;
         extraEntities[harv.id] = harv;
     }
 
@@ -749,10 +751,12 @@ function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number
                 path: null
             };
 
-            // If it's a harvester, clear its harvesting targets so manual move overrides everything
+            // If it's a harvester, clear its harvesting targets and enable manual mode
+            // Harvesters in manual mode won't auto-acquire resources until explicitly tasked
             if (entity.key === 'harvester') {
                 (updates as any).resourceTargetId = null;
                 (updates as any).baseTargetId = null;
+                (updates as any).manualMode = true; // Stop auto-harvesting
             }
 
             nextEntities[id] = {
@@ -766,17 +770,52 @@ function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number
 
 function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetId: EntityId }): GameState {
     const { unitIds, targetId } = payload;
+    const target = state.entities[targetId];
 
     let nextEntities = { ...state.entities };
     for (const id of unitIds) {
         const entity = nextEntities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
-            nextEntities[id] = {
-                ...entity,
-                targetId: targetId,
-                moveTarget: null,
-                path: null
-            };
+            // Special handling for harvesters: right-clicking on resources or refineries
+            // enables auto-harvesting mode
+            if (entity.key === 'harvester' && target) {
+                if (target.type === 'RESOURCE') {
+                    // Right-click on ore: enable auto-harvesting and set resource target
+                    nextEntities[id] = {
+                        ...entity,
+                        resourceTargetId: targetId,
+                        baseTargetId: null,
+                        moveTarget: null,
+                        path: null,
+                        manualMode: false  // Enable auto-harvesting
+                    } as Entity;
+                } else if (target.key === 'refinery' && target.owner === entity.owner) {
+                    // Right-click on own refinery: enable auto-harvesting and go dock
+                    nextEntities[id] = {
+                        ...entity,
+                        baseTargetId: targetId,
+                        moveTarget: null,
+                        path: null,
+                        manualMode: false  // Enable auto-harvesting
+                    } as Entity;
+                } else {
+                    // Harvesters can't attack other things, treat as move
+                    nextEntities[id] = {
+                        ...entity,
+                        moveTarget: target.pos,
+                        targetId: null,
+                        path: null
+                    };
+                }
+            } else {
+                // Normal combat unit attack behavior
+                nextEntities[id] = {
+                    ...entity,
+                    targetId: targetId,
+                    moveTarget: null,
+                    path: null
+                };
+            }
         }
     }
     return { ...state, entities: nextEntities };
@@ -1092,7 +1131,11 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         }
         // 2. If valid resource target, go gather
         else {
-            if (!harvester.resourceTargetId) {
+            // Only auto-acquire resources if NOT in manual mode
+            // Harvesters start in manual mode by default (manualMode is undefined or true)
+            // They enter auto mode (manualMode = false) when right-clicking ore/refinery
+            const isManualMode = (harvester as any).manualMode !== false;
+            if (!harvester.resourceTargetId && !isManualMode) {
                 // Find best ore considering:
                 // 1. Distance (prefer closer)
                 // 2. Congestion (prefer ores with fewer harvesters, max 2 per ore)
@@ -1330,7 +1373,9 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         const isHealer = data.damage < 0;
         const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
 
-        if (!nextEntity.targetId && (data.damage || isEngineer)) {
+        // Only auto-acquire targets if unit doesn't have a pending move command
+        // This allows players to retreat units that are auto-attacking
+        if (!nextEntity.targetId && !nextEntity.moveTarget && (data.damage || isEngineer)) {
             const range = (data.range || 100) + (isHealer ? 100 : 50);
             let bestTargetId: EntityId | null = null;
             let bestDist = range;

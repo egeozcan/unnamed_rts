@@ -85,6 +85,7 @@ export interface Entity {
     readonly baseTargetId: EntityId | null; // Changed to ID
     readonly dockPos?: Vector;
     readonly avgVel?: Vector;
+    readonly manualMode?: boolean; // If true, harvester won't auto-acquire resources
 
     // Specialized unit flags
     readonly captureTargetId?: EntityId | null;

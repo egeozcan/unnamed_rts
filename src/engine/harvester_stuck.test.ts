@@ -115,12 +115,13 @@ describe('Harvester Stuck at Ore', () => {
         state = spawnUnit(state, 430, 550, 'h2', 1, 'harvester'); // Coming from below-left
 
         // Set both harvesters to have empty cargo and target the same ore
+        // manualMode: false to enable auto-harvesting
         state = {
             ...state,
             entities: {
                 ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'ore1' },
-                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: 'ore1' }
+                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'ore1', manualMode: false },
+                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: 'ore1', manualMode: false }
             }
         };
 
@@ -196,13 +197,13 @@ describe('Harvester Stuck at Ore', () => {
         state = spawnUnit(state, 510, 460, 'h1', 1, 'harvester');
         state = spawnUnit(state, 490, 460, 'h2', 1, 'harvester');
 
-        // Both have empty cargo and target ore
+        // Both have empty cargo and target ore, with manualMode: false for auto-harvesting
         state = {
             ...state,
             entities: {
                 ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'ore1' },
-                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: 'ore1' }
+                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'ore1', manualMode: false },
+                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: 'ore1', manualMode: false }
             }
         };
 
@@ -239,13 +240,13 @@ describe('Harvester Stuck at Ore', () => {
         // Spawn a refinery for the harvester
         state = spawnBuilding(state, 500, 300, 100, 80, 'ref1', 1, 'refinery');
 
-        // Spawn harvester and target the blocked ore
+        // Spawn harvester and target the blocked ore, with manualMode: false for auto behavior
         state = spawnUnit(state, 400, 400, 'h1', 1, 'harvester');
         state = {
             ...state,
             entities: {
                 ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'blocked_ore' }
+                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: 'blocked_ore', manualMode: false }
             }
         };
 
@@ -305,7 +306,7 @@ describe('Harvester Stuck at Ore', () => {
         // Wall blocking direct path (use valid building key)
         state = spawnBuilding(state, 300, 300, 100, 20, 'wall', 1, 'power');
 
-        // Spawn harvester
+        // Spawn harvester with manualMode: false and force direct movement
         state = spawnUnit(state, 250, 250, 'h_direct', 1, 'harvester');
         state = {
             ...state,
@@ -316,6 +317,7 @@ describe('Harvester Stuck at Ore', () => {
                     id: 'h_direct',
                     cargo: 0,
                     resourceTargetId: 'ore_direct',
+                    manualMode: false,
                     path: null, // Force direct movement
                     finalDest: new Vector(500, 500)
                 }
@@ -358,15 +360,15 @@ describe('Harvester Stuck at Ore', () => {
         state = spawnUnit(state, 400, 410, 'h3', 1, 'harvester');
         state = spawnUnit(state, 410, 410, 'h4', 1, 'harvester');
 
-        // All start with no resourceTargetId - they need to find ore
+        // All start with no resourceTargetId but manualMode: false so they can find ore
         state = {
             ...state,
             entities: {
                 ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: null },
-                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: null },
-                h3: { ...state.entities['h3'], cargo: 0, resourceTargetId: null },
-                h4: { ...state.entities['h4'], cargo: 0, resourceTargetId: null }
+                h1: { ...state.entities['h1'], cargo: 0, resourceTargetId: null, manualMode: false },
+                h2: { ...state.entities['h2'], cargo: 0, resourceTargetId: null, manualMode: false },
+                h3: { ...state.entities['h3'], cargo: 0, resourceTargetId: null, manualMode: false },
+                h4: { ...state.entities['h4'], cargo: 0, resourceTargetId: null, manualMode: false }
             }
         };
 

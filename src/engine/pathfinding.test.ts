@@ -318,12 +318,12 @@ describe('Pathfinding Issues', () => {
             // Ore is 400 pixels away
             state = spawnResource(state, 700, 400, 'ore1');
 
-            // Set harvester to look for ore
+            // Set harvester to look for ore with manualMode: false for auto-harvesting
             state = {
                 ...state,
                 entities: {
                     ...state.entities,
-                    harv1: { ...state.entities['harv1'], resourceTargetId: 'ore1' }
+                    harv1: { ...state.entities['harv1'], resourceTargetId: 'ore1', manualMode: false }
                 }
             };
 
@@ -366,13 +366,13 @@ describe('Pathfinding Issues', () => {
             state = spawnUnit(state, 350, 550, 'h3', 0, 'harvester');
             state = spawnUnit(state, 400, 500, 'h4', 0, 'harvester');
 
-            // All target same ore
+            // All target same ore with manualMode: false
             for (const id of ['h1', 'h2', 'h3', 'h4']) {
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [id]: { ...state.entities[id], resourceTargetId: 'ore1' }
+                        [id]: { ...state.entities[id], resourceTargetId: 'ore1', manualMode: false }
                     }
                 };
             }
@@ -405,6 +405,14 @@ describe('Pathfinding Issues', () => {
             state = spawnBuilding(state, 300, 500, 100, 80, 'refinery1', 0, 'refinery');
             state = spawnResource(state, 600, 500, 'ore1');
             state = spawnUnit(state, 350, 560, 'harv1', 0, 'harvester');
+            // Enable auto-harvesting for this harvester
+            state = {
+                ...state,
+                entities: {
+                    ...state.entities,
+                    harv1: { ...state.entities['harv1'], manualMode: false }
+                }
+            };
 
             // Track complete harvest cycles (go to ore, fill up, return, unload)
             let cycles = 0;
