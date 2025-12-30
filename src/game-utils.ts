@@ -4,9 +4,7 @@
  */
 
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS } from './engine/types.js';
-import rules from './data/rules.json';
-
-const RULES = rules as any;
+import { RULES } from './data/schemas/index.js';
 
 /**
  * Get starting positions for players based on map size.

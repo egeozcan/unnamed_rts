@@ -1,7 +1,5 @@
 import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from './types.js';
-import rules from '../data/rules.json';
-
-const RULES = rules as any;
+import { RULES } from '../data/schemas/index.js';
 
 // Default grid dimensions based on default map size
 const DEFAULT_GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
@@ -278,8 +276,8 @@ export function calculatePower(entities: Entity[]): Record<number, { in: number;
             }
             const data = RULES.buildings[e.key];
             if (data) {
-                if ('power' in data) power[e.owner].out += data.power;
-                if ('drain' in data) power[e.owner].in += data.drain;
+                if (data.power !== undefined) power[e.owner].out += data.power;
+                if (data.drain !== undefined) power[e.owner].in += data.drain;
             }
         }
     }

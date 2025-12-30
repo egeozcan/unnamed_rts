@@ -1,10 +1,6 @@
 import { GameState, Action, Entity, EntityId, Vector } from './types.js';
-import aiConfig from '../data/ai.json';
-import rules from '../data/rules.json';
+import { RULES, AI_CONFIG } from '../data/schemas/index.js';
 import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from './perf.js';
-
-const RULES = rules as any;
-const AI_CONFIG = aiConfig as any;
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass';

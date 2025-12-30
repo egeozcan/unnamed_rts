@@ -1,10 +1,7 @@
 import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS } from './types.js';
-import rules from '../data/rules.json';
+import { RULES } from '../data/schemas/index.js';
 import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH } from './utils.js';
 import { rebuildSpatialGrid } from './spatial.js';
-
-// Type assertions for JSON data
-const RULES = rules as any;
 
 /**
  * Check if prerequisites are met for a building or unit.

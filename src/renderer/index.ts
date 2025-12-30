@@ -1,8 +1,6 @@
 import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS } from '../engine/types.js';
 import { getAsset, initGraphics } from './assets.js';
-import rules from '../data/rules.json';
-
-const RULES = rules as any;
+import { RULES } from '../data/schemas/index.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;

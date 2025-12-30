@@ -6,9 +6,7 @@ import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellMo
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
-import rules from './data/rules.json';
-
-const RULES = rules as any;
+import { RULES } from './data/schemas/index.js';
 
 // Get canvas
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;

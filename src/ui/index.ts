@@ -1,9 +1,7 @@
-import rules from '../data/rules.json';
+import { RULES } from '../data/schemas/index.js';
 import { GameState, Entity, EntityId, Vector } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai.js';
 import { canBuild } from '../engine/reducer.js';
-
-const RULES = rules as any;
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string) => void) | null = null;
