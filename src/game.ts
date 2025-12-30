@@ -2,7 +2,7 @@ import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
@@ -314,6 +314,12 @@ function startGameWithConfig(config: SkirmishConfig) {
     setLoadGameStateCallback((loadedState) => {
         // Reconstruct Vector objects from plain {x, y} objects
         currentState = reconstructVectors(loadedState);
+        updateButtonsUI();
+    });
+
+    // Set up callback for closing debug UI (same as pressing F3)
+    setCloseDebugCallback(() => {
+        currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
         updateButtonsUI();
     });
 

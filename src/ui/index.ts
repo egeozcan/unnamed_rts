@@ -1,5 +1,5 @@
 import rules from '../data/rules.json';
-import { GameState, Entity, EntityId } from '../engine/types.js';
+import { GameState, Entity, EntityId, Vector } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai.js';
 import { canBuild } from '../engine/reducer.js';
 
@@ -314,11 +314,22 @@ export function setObserverMode(isObserver: boolean) {
 
 // Callback for loading game state
 let onLoadGameState: ((state: GameState) => void) | null = null;
+let onCloseDebug: (() => void) | null = null;
 let debugOverlayInitialized = false;
+let debugContentRendered = false;
 let currentDebugState: GameState | null = null;
 
 export function setLoadGameStateCallback(callback: (state: GameState) => void) {
     onLoadGameState = callback;
+}
+
+export function setCloseDebugCallback(callback: () => void) {
+    onCloseDebug = callback;
+}
+
+// Call this to force a re-render of debug content (e.g., after loading state)
+export function refreshDebugUI() {
+    debugContentRendered = false;
 }
 
 export function updateDebugUI(state: GameState) {
@@ -328,6 +339,12 @@ export function updateDebugUI(state: GameState) {
     if (!state.debugMode) {
         if (debugOverlay) debugOverlay.style.display = 'none';
         debugOverlayInitialized = false;
+        debugContentRendered = false;
+        return;
+    }
+
+    // Game is paused in debug mode - only render content once
+    if (debugContentRendered) {
         return;
     }
 
@@ -342,23 +359,41 @@ export function updateDebugUI(state: GameState) {
 
     // Only create the structure once, then update dynamic content
     if (!debugOverlayInitialized) {
-        let html = '<h2>DEBUG MODE (PAUSED)</h2>';
-        html += '<div id="debug-game-info" class="debug-section"></div>';
+        let html = `
+            <div class="debug-header">
+                <h2>DEBUG MODE (PAUSED)</h2>
+                <div class="debug-header-actions">
+                    <button id="debug-collapse-all" class="debug-icon-btn" title="Expand All">&#9654;</button>
+                    <button id="debug-close-btn" class="debug-icon-btn debug-close-btn" title="Close (F3)">&times;</button>
+                </div>
+            </div>
+        `;
 
-        // Save/Load buttons section (static, created once)
-        html += '<div class="debug-save-load-section">';
-        html += '<h3>Save / Load State</h3>';
-        html += '<div class="debug-btn-row">';
-        html += '<button id="debug-save-clipboard" class="debug-btn">📋 Copy to Clipboard</button>';
-        html += '<button id="debug-save-file" class="debug-btn">💾 Download JSON</button>';
-        html += '</div>';
-        html += '<div class="debug-btn-row">';
-        html += '<button id="debug-load-clipboard" class="debug-btn">📋 Paste from Clipboard</button>';
-        html += '<button id="debug-load-file" class="debug-btn">📂 Load JSON File</button>';
-        html += '</div>';
-        html += '<input type="file" id="debug-file-input" accept=".json" style="display: none;" />';
-        html += '<p id="debug-status" class="debug-status"></p>';
-        html += '</div>';
+        // Game Info section (collapsible)
+        html += `
+            <details class="debug-details">
+                <summary>Game Info</summary>
+                <div id="debug-game-info" class="debug-section"></div>
+            </details>
+        `;
+
+        // Save/Load buttons section (collapsible)
+        html += `
+            <details class="debug-details">
+                <summary>Save / Load State</summary>
+                <div class="debug-section">
+                    <div class="debug-btn-row">
+                        <button id="debug-save-clipboard" class="debug-btn">Copy to Clipboard</button>
+                        <button id="debug-save-file" class="debug-btn">Download JSON</button>
+                    </div>
+                    <div class="debug-btn-row">
+                        <button id="debug-load-clipboard" class="debug-btn">Paste from Clipboard</button>
+                        <button id="debug-load-file" class="debug-btn">Load JSON File</button>
+                    </div>
+                    <input type="file" id="debug-file-input" accept=".json" style="display: none;" />
+                </div>
+            </details>
+        `;
 
         html += '<div id="debug-stats-container" class="debug-stats-container"></div>';
 
@@ -366,6 +401,7 @@ export function updateDebugUI(state: GameState) {
 
         // Attach event listeners ONCE
         setupDebugSaveLoadHandlers();
+        setupDebugHeaderHandlers();
         debugOverlayInitialized = true;
     }
 
@@ -390,6 +426,13 @@ export function updateDebugUI(state: GameState) {
     // Update player stats with AI information
     const statsContainer = document.getElementById('debug-stats-container');
     if (statsContainer) {
+        // Preserve open/closed state of all details elements before updating
+        const openState: Record<string, boolean> = {};
+        statsContainer.querySelectorAll('details[data-id]').forEach(el => {
+            const id = el.getAttribute('data-id');
+            if (id) openState[id] = el.hasAttribute('open');
+        });
+
         let statsHtml = '';
         for (const pid in state.players) {
             const player = state.players[pid];
@@ -404,44 +447,49 @@ export function updateDebugUI(state: GameState) {
             if (player.isAi) {
                 try {
                     const aiState = getAIState(playerId);
-                    aiHtml = buildAIStateHTML(aiState, state, playerId);
+                    aiHtml = buildAIStateHTML(aiState, state, playerId, openState);
                 } catch (e) {
                     aiHtml = '<p class="debug-warning">AI state unavailable</p>';
                 }
             }
 
+            const playerOpen = openState[`player-${playerId}`] ? 'open' : '';
             statsHtml += `
-                <div class="player-debug-stat" style="border-left: 4px solid ${player.color}">
-                    <h3>Player ${player.id} ${player.isAi ? `(AI - ${player.difficulty})` : '(Human)'}</h3>
-                    <div class="debug-stat-row">
-                        <span>💰 Credits:</span>
-                        <span class="debug-value">$${Math.floor(player.credits)}</span>
+                <details ${playerOpen} class="debug-details player-debug-stat" data-id="player-${playerId}" style="border-left: 4px solid ${player.color}">
+                    <summary>Player ${player.id} ${player.isAi ? `(AI - ${player.difficulty})` : '(Human)'}</summary>
+                    <div class="debug-section">
+                        <div class="debug-stat-row">
+                            <span>Credits:</span>
+                            <span class="debug-value">$${Math.floor(player.credits)}</span>
+                        </div>
+                        <div class="debug-stat-row">
+                            <span>Power:</span>
+                            <span class="debug-value ${player.usedPower > player.maxPower ? 'debug-warning' : ''}">${player.maxPower - player.usedPower} / ${player.maxPower}</span>
+                        </div>
+                        <div class="debug-stat-row">
+                            <span>Buildings:</span>
+                            <span class="debug-value">${buildings.length}</span>
+                        </div>
+                        <div class="debug-stat-row">
+                            <span>Combat Units:</span>
+                            <span class="debug-value">${combatUnits.length}</span>
+                        </div>
+                        <div class="debug-stat-row">
+                            <span>Harvesters:</span>
+                            <span class="debug-value">${harvesters.length}</span>
+                        </div>
+                        ${aiHtml}
                     </div>
-                    <div class="debug-stat-row">
-                        <span>⚡ Power:</span>
-                        <span class="debug-value ${player.usedPower > player.maxPower ? 'debug-warning' : ''}">${player.maxPower - player.usedPower} / ${player.maxPower}</span>
-                    </div>
-                    <div class="debug-stat-row">
-                        <span>🏗️ Buildings:</span>
-                        <span class="debug-value">${buildings.length}</span>
-                    </div>
-                    <div class="debug-stat-row">
-                        <span>⚔️ Combat Units:</span>
-                        <span class="debug-value">${combatUnits.length}</span>
-                    </div>
-                    <div class="debug-stat-row">
-                        <span>🚜 Harvesters:</span>
-                        <span class="debug-value">${harvesters.length}</span>
-                    </div>
-                    ${aiHtml}
-                </div>
+                </details>
             `;
         }
         statsContainer.innerHTML = statsHtml;
     }
+
+    debugContentRendered = true;
 }
 
-function buildAIStateHTML(aiState: AIPlayerState, state: GameState, _playerId: number): string {
+function buildAIStateHTML(aiState: AIPlayerState, state: GameState, playerId: number, openState: Record<string, boolean>): string {
     const strategyColors: Record<AIStrategy, string> = {
         'buildup': '#4af',
         'attack': '#f44',
@@ -505,75 +553,97 @@ function buildAIStateHTML(aiState: AIPlayerState, state: GameState, _playerId: n
         ? `(${Math.round(aiState.enemyBaseLocation.x)}, ${Math.round(aiState.enemyBaseLocation.y)})`
         : '<span class="debug-muted">Unknown</span>';
 
+    // Preserve open state for AI subsections
+    const aiStateOpen = openState[`ai-state-${playerId}`] ? 'open' : '';
+    const groupsOpen = openState[`ai-groups-${playerId}`] ? 'open' : '';
+    const targetingOpen = openState[`ai-targeting-${playerId}`] ? 'open' : '';
+    const intelOpen = openState[`ai-intel-${playerId}`] ? 'open' : '';
+
     return `
         <div class="debug-ai-section">
-            <h4>🤖 AI State</h4>
-            <div class="debug-stat-row">
-                <span>Strategy:</span>
-                <span class="debug-badge" style="background: ${strategyColor}">${aiState.strategy.toUpperCase()}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Priority:</span>
-                <span class="debug-badge" style="background: ${priorityColor}">${aiState.investmentPriority.toUpperCase()}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Threat Level:</span>
-                <span class="debug-value" style="color: ${threatColor}">${aiState.threatLevel.toFixed(0)}%</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Economy Score:</span>
-                <span class="debug-value" style="color: ${econColor}">${aiState.economyScore.toFixed(0)}%</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Peace Ticks:</span>
-                <span class="debug-value">${aiState.peaceTicks} (${(aiState.peaceTicks / 60).toFixed(1)}s)</span>
-            </div>
-            
-            <h4>👥 Groups</h4>
-            <div class="debug-stat-row">
-                <span>Attack Group:</span>
-                <span class="debug-value">${aiState.attackGroup.length} units</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Defense Group:</span>
-                <span class="debug-value">${aiState.defenseGroup.length} units</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Harass Group:</span>
-                <span class="debug-value">${aiState.harassGroup.length} units</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Threats Near Base:</span>
-                <span class="debug-value ${aiState.threatsNearBase.length > 0 ? 'debug-warning' : ''}">${aiState.threatsNearBase.length}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Harvesters Attacked:</span>
-                <span class="debug-value ${aiState.harvestersUnderAttack.length > 0 ? 'debug-warning' : ''}">${aiState.harvestersUnderAttack.length}</span>
-            </div>
-            
-            <h4>🎯 Targeting</h4>
-            <div class="debug-stat-row">
-                <span>Enemy Base:</span>
-                <span class="debug-value">${enemyBaseInfo}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Expansion Target:</span>
-                <span class="debug-value">${expansionInfo}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Vengeance:</span>
-                <span class="debug-value">${vengeanceHtml}</span>
-            </div>
-            
-            <h4>🔍 Enemy Intel</h4>
-            <div class="debug-stat-row">
-                <span>Dominant Armor:</span>
-                <span class="debug-value">${intel.dominantArmor}</span>
-            </div>
-            <div class="debug-stat-row">
-                <span>Enemy Units (${totalEnemyUnits}):</span>
-                <span class="debug-value debug-small">${topEnemyUnits || 'None'}</span>
-            </div>
+            <details ${aiStateOpen} class="debug-details debug-ai-subsection" data-id="ai-state-${playerId}">
+                <summary>AI State</summary>
+                <div class="debug-section">
+                    <div class="debug-stat-row">
+                        <span>Strategy:</span>
+                        <span class="debug-badge" style="background: ${strategyColor}">${aiState.strategy.toUpperCase()}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Priority:</span>
+                        <span class="debug-badge" style="background: ${priorityColor}">${aiState.investmentPriority.toUpperCase()}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Threat Level:</span>
+                        <span class="debug-value" style="color: ${threatColor}">${aiState.threatLevel.toFixed(0)}%</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Economy Score:</span>
+                        <span class="debug-value" style="color: ${econColor}">${aiState.economyScore.toFixed(0)}%</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Peace Ticks:</span>
+                        <span class="debug-value">${aiState.peaceTicks} (${(aiState.peaceTicks / 60).toFixed(1)}s)</span>
+                    </div>
+                </div>
+            </details>
+
+            <details ${groupsOpen} class="debug-details debug-ai-subsection" data-id="ai-groups-${playerId}">
+                <summary>Groups</summary>
+                <div class="debug-section">
+                    <div class="debug-stat-row">
+                        <span>Attack Group:</span>
+                        <span class="debug-value">${aiState.attackGroup.length} units</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Defense Group:</span>
+                        <span class="debug-value">${aiState.defenseGroup.length} units</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Harass Group:</span>
+                        <span class="debug-value">${aiState.harassGroup.length} units</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Threats Near Base:</span>
+                        <span class="debug-value ${aiState.threatsNearBase.length > 0 ? 'debug-warning' : ''}">${aiState.threatsNearBase.length}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Harvesters Attacked:</span>
+                        <span class="debug-value ${aiState.harvestersUnderAttack.length > 0 ? 'debug-warning' : ''}">${aiState.harvestersUnderAttack.length}</span>
+                    </div>
+                </div>
+            </details>
+
+            <details ${targetingOpen} class="debug-details debug-ai-subsection" data-id="ai-targeting-${playerId}">
+                <summary>Targeting</summary>
+                <div class="debug-section">
+                    <div class="debug-stat-row">
+                        <span>Enemy Base:</span>
+                        <span class="debug-value">${enemyBaseInfo}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Expansion Target:</span>
+                        <span class="debug-value">${expansionInfo}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Vengeance:</span>
+                        <span class="debug-value">${vengeanceHtml}</span>
+                    </div>
+                </div>
+            </details>
+
+            <details ${intelOpen} class="debug-details debug-ai-subsection" data-id="ai-intel-${playerId}">
+                <summary>Enemy Intel</summary>
+                <div class="debug-section">
+                    <div class="debug-stat-row">
+                        <span>Dominant Armor:</span>
+                        <span class="debug-value">${intel.dominantArmor}</span>
+                    </div>
+                    <div class="debug-stat-row">
+                        <span>Enemy Units (${totalEnemyUnits}):</span>
+                        <span class="debug-value debug-small">${topEnemyUnits || 'None'}</span>
+                    </div>
+                </div>
+            </details>
         </div>
     `;
 }
@@ -585,12 +655,7 @@ function getCurrentDebugState(): GameState | null {
 
 function setupDebugSaveLoadHandlers() {
     const showStatus = (msg: string, isError = false) => {
-        const statusEl = document.getElementById('debug-status');
-        if (statusEl) {
-            statusEl.textContent = msg;
-            statusEl.style.color = isError ? '#f66' : '#6f6';
-            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-        }
+        showToast(msg, isError ? 'error' : 'success');
     };
 
     // Helper to serialize state with Vector objects as plain objects
@@ -652,6 +717,7 @@ function setupDebugSaveLoadHandlers() {
                 const loadedState = parseGameState(text);
                 if (loadedState && onLoadGameState) {
                     onLoadGameState(loadedState);
+                    refreshDebugUI(); // Re-render with new state
                     showStatus('✓ State loaded from clipboard!');
                 } else if (!onLoadGameState) {
                     showStatus('✗ Load callback not set', true);
@@ -678,6 +744,7 @@ function setupDebugSaveLoadHandlers() {
                     const loadedState = parseGameState(text);
                     if (loadedState && onLoadGameState) {
                         onLoadGameState(loadedState);
+                        refreshDebugUI(); // Re-render with new state
                         showStatus('✓ State loaded from file!');
                     } else if (!onLoadGameState) {
                         showStatus('✗ Load callback not set', true);
@@ -692,14 +759,101 @@ function setupDebugSaveLoadHandlers() {
     }
 }
 
+function setupDebugHeaderHandlers() {
+    // Close button - toggle debug mode off (same as pressing F3)
+    const closeBtn = document.getElementById('debug-close-btn');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            if (onCloseDebug) {
+                onCloseDebug();
+            }
+        };
+    }
+
+    // Collapse all toggle
+    const collapseAllBtn = document.getElementById('debug-collapse-all');
+    if (collapseAllBtn) {
+        collapseAllBtn.onclick = () => {
+            const overlay = document.getElementById('debug-overlay');
+            if (!overlay) return;
+
+            const allDetails = overlay.querySelectorAll('details');
+            const someOpen = Array.from(allDetails).some(d => d.hasAttribute('open'));
+
+            allDetails.forEach(d => {
+                if (someOpen) {
+                    d.removeAttribute('open');
+                } else {
+                    d.setAttribute('open', '');
+                }
+            });
+
+            // Update button icon
+            collapseAllBtn.innerHTML = someOpen ? '&#9654;' : '&#9660;';
+        };
+    }
+}
+
+// Toast notification system
+function showToast(message: string, type: 'success' | 'error' = 'success') {
+    let container = document.getElementById('debug-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'debug-toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `debug-toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Convert plain {x, y} object to Vector instance
+function toVector(v: { x: number; y: number } | null | undefined): Vector | null {
+    if (!v || typeof v.x !== 'number' || typeof v.y !== 'number') return null;
+    return new Vector(v.x, v.y);
+}
+
 // Parse and reconstruct game state from JSON, restoring Vector objects
 function parseGameState(json: string): GameState | null {
     try {
         const data = JSON.parse(json);
 
-        // Import Vector dynamically to reconstruct
-        // Since we can't import here, we'll use a simple object check
-        // The game engine should handle plain {x, y} objects  
+        // Reconstruct Vector objects in entities
+        if (data.entities) {
+            for (const id of Object.keys(data.entities)) {
+                const e = data.entities[id];
+                if (e.pos) e.pos = new Vector(e.pos.x, e.pos.y);
+                if (e.prevPos) e.prevPos = new Vector(e.prevPos.x, e.prevPos.y);
+                if (e.vel) e.vel = new Vector(e.vel.x, e.vel.y);
+                e.moveTarget = toVector(e.moveTarget);
+                e.finalDest = toVector(e.finalDest);
+                e.unstuckDir = toVector(e.unstuckDir);
+                e.dockPos = toVector(e.dockPos);
+                e.avgVel = toVector(e.avgVel);
+                if (e.path && Array.isArray(e.path)) {
+                    e.path = e.path.map((p: { x: number; y: number }) => new Vector(p.x, p.y));
+                }
+            }
+        }
+
+        // Reconstruct Vector objects in projectiles
+        if (data.projectiles && Array.isArray(data.projectiles)) {
+            for (const p of data.projectiles) {
+                if (p.pos) p.pos = new Vector(p.pos.x, p.pos.y);
+                if (p.vel) p.vel = new Vector(p.vel.x, p.vel.y);
+            }
+        }
+
+        // Reconstruct Vector objects in particles
+        if (data.particles && Array.isArray(data.particles)) {
+            for (const p of data.particles) {
+                if (p.pos) p.pos = new Vector(p.pos.x, p.pos.y);
+                if (p.vel) p.vel = new Vector(p.vel.x, p.vel.y);
+            }
+        }
+
         return data as GameState;
     } catch (e) {
         console.error('Failed to parse game state:', e);

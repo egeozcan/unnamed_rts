@@ -110,6 +110,12 @@ function setupEventListeners() {
 
     // Mouse down
     window.addEventListener('mousedown', e => {
+        // Ignore clicks inside the debug overlay
+        const debugOverlay = document.getElementById('debug-overlay');
+        if (debugOverlay && debugOverlay.style.display !== 'none' && debugOverlay.contains(e.target as Node)) {
+            return;
+        }
+
         const worldMouse = screenToWorld(inputState.mouse.x, inputState.mouse.y);
         inputState.mouse.wx = worldMouse.x;
         inputState.mouse.wy = worldMouse.y;
@@ -127,6 +133,12 @@ function setupEventListeners() {
 
     // Mouse up
     window.addEventListener('mouseup', e => {
+        // Ignore clicks inside the debug overlay
+        const debugOverlay = document.getElementById('debug-overlay');
+        if (debugOverlay && debugOverlay.style.display !== 'none' && debugOverlay.contains(e.target as Node)) {
+            return;
+        }
+
         if (e.button === 0 && inputState.dragStart) {
             const zoom = getZoom?.() || 1;
 
@@ -164,6 +176,12 @@ function setupEventListeners() {
 
     // Zoom & Scroll
     window.addEventListener('wheel', e => {
+        // Allow scrolling within the debug overlay
+        const debugOverlay = document.getElementById('debug-overlay');
+        if (debugOverlay && debugOverlay.contains(e.target as Node)) {
+            return; // Let normal scroll behavior happen
+        }
+
         e.preventDefault();
         if (e.ctrlKey) {
             // Pinch to zoom (Mac touchpad)
