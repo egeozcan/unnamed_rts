@@ -123,10 +123,10 @@ describe('Harvester Economic Pressure', () => {
                     maxPower: 100,
                     usedPower: 0,
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: null
                 }
@@ -196,10 +196,10 @@ describe('Harvester Economic Pressure', () => {
                     maxPower: 100,
                     usedPower: 0,
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: null
                 }
@@ -265,10 +265,10 @@ describe('Harvester Economic Pressure', () => {
                     maxPower: 100,
                     usedPower: 0,
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: null
                 }
@@ -333,10 +333,10 @@ describe('Harvester Economic Pressure', () => {
                     maxPower: 100,
                     usedPower: 0,
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: null
                 }

@@ -121,6 +121,7 @@ export interface Particle {
 export interface ProductionQueue {
     readonly current: string | null;
     readonly progress: number;
+    readonly invested: number;  // Credits already spent on this item
 }
 
 export interface Camera {

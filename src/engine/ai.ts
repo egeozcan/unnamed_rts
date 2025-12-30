@@ -115,6 +115,18 @@ const PEACE_BREAK_TICKS = 600; // 10 seconds of peace before considering attack
 const SURPLUS_DEFENSE_THRESHOLD = 5000; // Credits to trigger extra defense building
 const MAX_SURPLUS_TURRETS = 4; // Maximum turrets to build from surplus
 
+/**
+ * Check if prerequisites are met for a building or unit.
+ * Prerequisites are defined in RULES.prerequisites, NOT on the item's data object.
+ * @param key The building or unit key
+ * @param playerBuildings Array of buildings the player owns
+ * @returns true if all prerequisites are met
+ */
+function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
+    const prereqs = RULES.prerequisites[key] || [];
+    return prereqs.every((req: string) => playerBuildings.some(b => b.key === req));
+}
+
 
 export function computeAiActions(state: GameState, playerId: number): Action[] {
     const actions: Action[] = [];
@@ -704,7 +716,7 @@ function handleEconomy(
         const canBuildHarvester = refineries.length > 0; // Need refinery for harvesters
         if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
             const harvData = RULES.units['harvester'];
-            const harvReqsMet = (harvData?.req || []).every((r: string) => buildings.some(b => b.key === r));
+            const harvReqsMet = checkPrerequisites('harvester', buildings);
             if (harvData && harvReqsMet && player.credits >= harvData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
                 return actions; // Focus on harvesters
@@ -817,7 +829,7 @@ function handleEconomy(
 
         if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
             const harvData = RULES.units['harvester'];
-            const harvReqsMet = (harvData?.req || []).every((r: string) => buildings.some(b => b.key === r));
+            const harvReqsMet = checkPrerequisites('harvester', buildings);
             // Use a higher credit threshold for peacetime - only spend surplus
             const peacetimeCreditThreshold = 800;
             if (harvData && harvReqsMet && player.credits >= harvData.cost + peacetimeCreditThreshold) {
@@ -906,17 +918,13 @@ function handleEconomy(
         // Prefer factories over barracks (vehicles are stronger)
         if (existingFactories < MAX_SURPLUS_FACTORIES) {
             const factoryData = RULES.buildings['factory'];
-            const factoryReqsMet = (factoryData?.req || []).every((r: string) =>
-                buildings.some(b => b.key === r)
-            );
+            const factoryReqsMet = checkPrerequisites('factory', buildings);
             if (factoryData && factoryReqsMet && player.credits >= factoryData.cost + 2000) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'factory', playerId } });
             }
         } else if (existingBarracks < MAX_SURPLUS_BARRACKS) {
             const barracksData = RULES.buildings['barracks'];
-            const barracksReqsMet = (barracksData?.req || []).every((r: string) =>
-                buildings.some(b => b.key === r)
-            );
+            const barracksReqsMet = checkPrerequisites('barracks', buildings);
             if (barracksData && barracksReqsMet && player.credits >= barracksData.cost + 2000) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
             }
@@ -942,7 +950,7 @@ function handleEconomy(
         if (!having && !building) {
             const data = RULES.buildings[item];
             if (data) {
-                const reqsMet = (data.req || []).every((r: string) => buildings.some(b => b.key === r));
+                const reqsMet = checkPrerequisites(item, buildings);
                 if (reqsMet && player.credits >= data.cost) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'building', key: item, playerId } });
                     break;
@@ -1033,7 +1041,7 @@ function handleEconomy(
 
             for (const key of list) {
                 const data = RULES.units[key];
-                const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
+                const reqsMet = checkPrerequisites(key, buildings);
                 const cost = data?.cost || 0;
                 // Check against buffer
                 if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
@@ -1046,6 +1054,7 @@ function handleEconomy(
         }
 
         // Execute vehicle production with counter-building
+        let vehicleBuilt = false;
         if (buildVehicle) {
             const list = isPanic
                 ? ['light', 'jeep']
@@ -1053,12 +1062,29 @@ function handleEconomy(
 
             for (const key of list) {
                 const data = RULES.units[key];
-                const reqsMet = (data?.req || []).every((r: string) => buildings.some(b => b.key === r));
+                const reqsMet = checkPrerequisites(key, buildings);
                 const cost = data?.cost || 0;
                 // Check against buffer
                 if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key, playerId } });
                     aiState.lastProductionType = 'vehicle';
+                    vehicleBuilt = true;
+                    break;
+                }
+            }
+        }
+
+        // FALLBACK: If vehicle production was desired but failed (can't afford any vehicles),
+        // try infantry production instead. This prevents AI stalling when low on credits.
+        if (buildVehicle && !vehicleBuilt && hasBarracks && infantryQueueEmpty) {
+            const list = counterInfantry;
+            for (const key of list) {
+                const data = RULES.units[key];
+                const reqsMet = checkPrerequisites(key, buildings);
+                const cost = data?.cost || 0;
+                if (reqsMet && player.credits >= cost && (player.credits - cost) >= creditBuffer) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key, playerId } });
+                    aiState.lastProductionType = 'infantry';
                     break;
                 }
             }

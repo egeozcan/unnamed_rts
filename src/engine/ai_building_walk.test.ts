@@ -6,7 +6,7 @@ const { getAIState } = _testUtils;
 
 // Helper to create a minimal game state
 function createMinimalState(overrides: Partial<GameState> = {}): GameState {
-    const defaultQueue: ProductionQueue = { current: null, progress: 0 };
+    const defaultQueue: ProductionQueue = { current: null, progress: 0, invested: 0 };
     const defaultPlayer: Partial<PlayerState> = {
         credits: 2000,
         readyToPlace: null,
@@ -115,7 +115,7 @@ function createResource(id: string, pos: Vector, hp: number = 1000): Entity {
 }
 
 function createDefaultPlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
-    const defaultQueue: ProductionQueue = { current: null, progress: 0 };
+    const defaultQueue: ProductionQueue = { current: null, progress: 0, invested: 0 };
     return {
         id: 0,
         isAi: true,

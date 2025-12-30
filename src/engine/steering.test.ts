@@ -116,4 +116,34 @@ describe('Unit Steering & Smoothing', () => {
         // If it's zigzagging constantly, this will be high
         expect(totalDirectionChanges).toBeLessThan(50);
     });
+
+    it('should keep rotation normalized within [-PI, PI] after many movements', () => {
+        const unit = createEntity(100, 100, 1, 'UNIT', 'light', state);
+        state.entities[unit.id] = unit;
+
+        // Move in a circle to accumulate many rotation changes
+        const destinations = [
+            { x: 500, y: 100 },  // East
+            { x: 500, y: 500 },  // South
+            { x: 100, y: 500 },  // West
+            { x: 100, y: 100 },  // North
+        ];
+
+        for (let round = 0; round < 5; round++) {
+            for (const dest of destinations) {
+                state = update(state, { type: 'COMMAND_MOVE', payload: { unitIds: [unit.id], x: dest.x, y: dest.y } });
+
+                // Run for a bit
+                for (let i = 0; i < 50; i++) {
+                    state = update(state, { type: 'TICK' });
+                }
+            }
+        }
+
+        const finalUnit = state.entities[unit.id];
+
+        // Rotation should be normalized to [-PI, PI]
+        expect(finalUnit.rotation).toBeGreaterThanOrEqual(-Math.PI);
+        expect(finalUnit.rotation).toBeLessThanOrEqual(Math.PI);
+    });
 });

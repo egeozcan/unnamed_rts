@@ -39,10 +39,10 @@ export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' 
         maxPower: 0,
         usedPower: 0,
         queues: {
-            building: { current: null, progress: 0 },
-            infantry: { current: null, progress: 0 },
-            vehicle: { current: null, progress: 0 },
-            air: { current: null, progress: 0 }
+            building: { current: null, progress: 0, invested: 0 },
+            infantry: { current: null, progress: 0, invested: 0 },
+            vehicle: { current: null, progress: 0, invested: 0 },
+            air: { current: null, progress: 0, invested: 0 }
         },
         readyToPlace: null
     };
@@ -280,10 +280,10 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
         nextPlayer = {
             ...nextPlayer,
             queues: {
-                building: { current: null, progress: 0 },
-                infantry: { current: null, progress: 0 },
-                vehicle: { current: null, progress: 0 },
-                air: { current: null, progress: 0 }
+                building: { current: null, progress: 0, invested: 0 },
+                infantry: { current: null, progress: 0, invested: 0 },
+                vehicle: { current: null, progress: 0, invested: 0 },
+                air: { current: null, progress: 0, invested: 0 }
             },
             readyToPlace: null
         };
@@ -322,15 +322,19 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
 
         const costPerTick = (totalCost / 600) * speedMult * speedFactor;
 
-        if (nextPlayer.credits >= costPerTick) {
+        // Linear cost deduction: spend only what we can afford
+        const affordableCost = Math.min(costPerTick, nextPlayer.credits);
+
+        if (affordableCost > 0) {
             nextPlayer = {
                 ...nextPlayer,
-                credits: nextPlayer.credits - costPerTick,
+                credits: nextPlayer.credits - affordableCost,
                 queues: {
                     ...nextPlayer.queues,
                     [cat]: {
                         ...q,
-                        progress: q.progress + (costPerTick / totalCost) * 100
+                        progress: q.progress + (affordableCost / totalCost) * 100,
+                        invested: (q.invested || 0) + affordableCost
                     }
                 }
             };
@@ -342,7 +346,7 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
                         readyToPlace: q.current,
                         queues: {
                             ...nextPlayer.queues,
-                            [cat]: { current: null, progress: 0 }
+                            [cat]: { current: null, progress: 0, invested: 0 }
                         }
                     };
                 } else {
@@ -380,12 +384,13 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
                         ...nextPlayer,
                         queues: {
                             ...nextPlayer.queues,
-                            [cat]: { current: null, progress: 0 }
+                            [cat]: { current: null, progress: 0, invested: 0 }
                         }
                     };
                 }
             }
         }
+        // When credits are 0, production simply pauses (no change to queue)
     }
     return { player: nextPlayer, createdEntities };
 }
@@ -420,22 +425,11 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
     if (q.current) return state;
     if (category === 'building' && player.readyToPlace) return state;
 
-    // === CREDIT VALIDATION ===
-    // Reject build if player can't afford it
-    let cost = 0;
+    // Validate the key exists in rules (no credit check - costs are deducted linearly during production)
     if (category === 'building') {
-        const data = RULES.buildings[key];
-        if (!data) return state;
-        cost = data.cost || 0;
+        if (!RULES.buildings[key]) return state;
     } else {
-        const data = RULES.units[key];
-        if (!data) return state;
-        cost = data.cost || 0;
-    }
-
-    if (player.credits < cost) {
-        // Player can't afford this - silently reject
-        return state;
+        if (!RULES.units[key]) return state;
     }
 
     return {
@@ -446,7 +440,7 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
                 ...player,
                 queues: {
                     ...player.queues,
-                    [category]: { current: key, progress: 0 }
+                    [category]: { current: key, progress: 0, invested: 0 }
                 }
             }
         }
@@ -469,10 +463,10 @@ function cancelBuild(state: GameState, payload: { category: string; playerId: nu
     } else if (newQueue.current) {
         const data = getRuleData(newQueue.current);
         if (data) {
-            const paid = data.cost * (newQueue.progress / 100);
-            refund = paid;
+            // Refund the actual invested credits
+            refund = newQueue.invested || 0;
         }
-        newQueue = { current: null, progress: 0 };
+        newQueue = { current: null, progress: 0, invested: 0 };
     }
 
     return {
@@ -812,7 +806,11 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 // Faster turn if moving fast? Or constant turn rate?
                 // 0.2 is good for responsiveness without jitter
-                ent = { ...ent, rotation: ent.rotation + diff * 0.2 };
+                let newRotation = ent.rotation + diff * 0.2;
+                // Normalize rotation to [-PI, PI] to prevent unbounded growth
+                while (newRotation > Math.PI) newRotation -= Math.PI * 2;
+                while (newRotation < -Math.PI) newRotation += Math.PI * 2;
+                ent = { ...ent, rotation: newRotation };
             }
             ent = { ...ent, vel: new Vector(0, 0) };
             nextEntities[id] = ent;

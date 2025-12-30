@@ -82,7 +82,7 @@ describe('Reducer', () => {
         };
         const p0 = state.players[0] as any; // Cast to allow writing to readonly
         // Directly set progress to near completion
-        p0.queues.building = { current: 'power', progress: 99.9 };
+        p0.queues.building = { current: 'power', progress: 99.9, invested: 300 };
 
         const nextState = update(state, { type: 'TICK' } as any);
 
@@ -111,7 +111,8 @@ describe('Reducer', () => {
     it('should CANCEL_BUILD and refund', () => {
         let state = { ...getInitialState(), running: true };
         const p0 = state.players[0] as any;
-        p0.queues.building = { current: 'power', progress: 50 };
+        // Set invested amount to simulate credits already spent (refunds are based on invested, not progress)
+        p0.queues.building = { current: 'power', progress: 50, invested: 150 }; // Power costs 300, so 50% = 150
         const initialCredits = state.players[0].credits;
 
         const action = { type: 'CANCEL_BUILD', payload: { category: 'building', playerId: 0 } } as any;
@@ -127,9 +128,9 @@ describe('Reducer', () => {
         // Player 0 has no buildings and no MCVs (eliminated)
         // But has production in queues (this shouldn't happen normally, but edge case)
         const p0 = state.players[0] as any;
-        p0.queues.building = { current: 'barracks', progress: 50 };
-        p0.queues.vehicle = { current: 'light', progress: 75 };
-        p0.queues.infantry = { current: 'rifle', progress: 25 };
+        p0.queues.building = { current: 'barracks', progress: 50, invested: 250 };
+        p0.queues.vehicle = { current: 'light', progress: 75, invested: 600 };
+        p0.queues.infantry = { current: 'rifle', progress: 25, invested: 25 };
         p0.readyToPlace = 'power';
 
         // Tick should cancel all production for eliminated player

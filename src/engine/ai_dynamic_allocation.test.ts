@@ -204,7 +204,7 @@ describe('Power Plant Limits', () => {
                     ...state.players[1],
                     queues: {
                         ...state.players[1].queues,
-                        building: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 }
                     }
                 }
             }

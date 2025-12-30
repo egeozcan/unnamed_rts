@@ -90,10 +90,10 @@ describe('AI Stuck Placement Bug', () => {
                     isAi: true,
                     credits: 5000, // Lot of credits but no way to use them
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: 'barracks' // Even has a building ready
                 }
@@ -255,10 +255,10 @@ describe('AI Stuck Placement Bug', () => {
                     isAi: true,
                     credits: 10000, // Lots of credits
                     queues: {
-                        building: { current: null, progress: 0 },
-                        infantry: { current: null, progress: 0 },
-                        vehicle: { current: null, progress: 0 },
-                        air: { current: null, progress: 0 }
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
                     },
                     readyToPlace: null
                 }
