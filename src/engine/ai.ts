@@ -127,6 +127,38 @@ function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {
     return prereqs.every((req: string) => playerBuildings.some(b => b.key === req));
 }
 
+/**
+ * Check if player has a production building for a given category.
+ * Production buildings are defined in RULES.productionBuildings.
+ * @param category The production category ('building', 'infantry', 'vehicle', 'air')
+ * @param playerBuildings Array of buildings the player owns
+ * @returns true if player has at least one valid production building
+ */
+function hasProductionBuildingFor(category: string, playerBuildings: Entity[]): boolean {
+    const validBuildings: string[] = RULES.productionBuildings?.[category] || [];
+    return playerBuildings.some(b => validBuildings.includes(b.key) && !b.dead);
+}
+
+/**
+ * Count how many production buildings a player has for a given category.
+ * @param category The production category ('building', 'infantry', 'vehicle', 'air')
+ * @param playerBuildings Array of buildings the player owns
+ * @returns Number of production buildings
+ */
+function countProductionBuildings(category: string, playerBuildings: Entity[]): number {
+    const validBuildings: string[] = RULES.productionBuildings?.[category] || [];
+    return playerBuildings.filter(b => validBuildings.includes(b.key) && !b.dead).length;
+}
+
+/**
+ * Get the list of buildings that enable production for a category.
+ * Used for AI planning to know what to build to unlock unit production.
+ * @param category The production category ('building', 'infantry', 'vehicle', 'air')
+ * @returns Array of building keys that enable this production category
+ */
+function getProductionBuildingsFor(category: string): string[] {
+    return RULES.productionBuildings?.[category] || [];
+}
 
 export function computeAiActions(state: GameState, playerId: number): Action[] {
     const actions: Action[] = [];
@@ -569,8 +601,8 @@ function updateStrategy(
     personality: any,
     credits: number = 0
 ): void {
-    const hasFactory = buildings.some(b => b.key === 'factory');
-    const hasBarracks = buildings.some(b => b.key === 'barracks');
+    const hasFactory = hasProductionBuildingFor('vehicle', buildings);
+    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
     const armySize = combatUnits.length;
     const attackThreshold = personality.attack_threshold || ATTACK_GROUP_MIN_SIZE;
     const harassThreshold = personality.harass_threshold || HARASS_GROUP_SIZE;
@@ -665,7 +697,7 @@ function handleEconomy(
     // ===== CORE CAPABILITY CHECK =====
     // A conyard (deployed MCV) is required to build new buildings
     // Without a conyard, the player cannot queue any building construction
-    const hasConyard = buildings.some(b => b.key === 'conyard');
+    const hasConyard = hasProductionBuildingFor('building', buildings);
 
     // ===== INVESTMENT PRIORITY HANDLING =====
 
@@ -674,7 +706,7 @@ function handleEconomy(
         e.owner === playerId && e.type === 'UNIT' && e.key === 'harvester' && !e.dead
     );
     const refineries = buildings.filter(b => b.key === 'refinery' && !b.dead);
-    const hasFactory = buildings.some(b => b.key === 'factory');
+    const hasFactory = hasProductionBuildingFor('vehicle', buildings);
     const buildingQueueEmpty = !player.queues.building.current;
     const vehicleQueueEmpty = !player.queues.vehicle.current;
 
@@ -685,7 +717,7 @@ function handleEconomy(
     // PANIC DEFENSE: Prioritize defensive structures over everything else if in panic
     // NOTE: Can only queue buildings if we have a conyard
     if (hasConyard && isPanic && buildingQueueEmpty) {
-        const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret/Pillbox req
+        const canBuildTurret = checkPrerequisites('turret', buildings);
 
         // Try to build defensive structures if we have funds
         if (canBuildTurret) {
@@ -727,7 +759,7 @@ function handleEconomy(
         // NOTE: Requires conyard to queue buildings
         if (hasConyard && aiState.expansionTarget && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
-            const canBuildRefinery = buildings.some(b => b.key === 'factory'); // Refinery req
+            const canBuildRefinery = checkPrerequisites('refinery', buildings);
 
             // Check if we can reach the expansion target with current build range
             const BUILD_RADIUS = 400;
@@ -768,7 +800,7 @@ function handleEconomy(
         // NOTE: Requires conyard to queue buildings
         if (hasConyard && !aiState.expansionTarget && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
-            const canBuildRefinery = buildings.some(b => b.key === 'factory');
+            const canBuildRefinery = checkPrerequisites('refinery', buildings);
             const BUILD_RADIUS = 400;
 
             // Check for accessible ore without a refinery
@@ -808,7 +840,7 @@ function handleEconomy(
         // NOTE: Requires conyard to queue buildings
         if (hasConyard && buildingQueueEmpty) {
             const turretData = RULES.buildings['turret'];
-            const canBuildTurret = buildings.some(b => b.key === 'barracks'); // Turret req
+            const canBuildTurret = checkPrerequisites('turret', buildings);
             if (canBuildTurret && turretData && player.credits >= turretData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
                 // Don't return - continue with unit production for defense
@@ -842,7 +874,7 @@ function handleEconomy(
         // NOTE: Requires conyard to queue buildings
         if (hasConyard && buildingQueueEmpty) {
             const refineryData = RULES.buildings['refinery'];
-            const canBuildRefinery = buildings.some(b => b.key === 'factory');
+            const canBuildRefinery = checkPrerequisites('refinery', buildings);
             const BUILD_RADIUS = 400;
 
             // Find ore patches within build range that don't have a nearby refinery
@@ -894,10 +926,10 @@ function handleEconomy(
 
         // Build more defenses if we have surplus and not too many already
         if (existingTurrets < MAX_SURPLUS_TURRETS) {
-            const hasBarracks = buildings.some(b => b.key === 'barracks');
+            const canBuildTurret = checkPrerequisites('turret', buildings);
             const turretData = RULES.buildings['turret'];
 
-            if (hasBarracks && turretData && player.credits >= turretData.cost) {
+            if (canBuildTurret && turretData && player.credits >= turretData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
                 // Don't return - allow unit production to continue
             }
@@ -912,8 +944,8 @@ function handleEconomy(
     const MAX_SURPLUS_FACTORIES = 3;
 
     if (hasConyard && player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
-        const existingBarracks = buildings.filter(b => b.key === 'barracks' && !b.dead).length;
-        const existingFactories = buildings.filter(b => b.key === 'factory' && !b.dead).length;
+        const existingBarracks = countProductionBuildings('infantry', buildings);
+        const existingFactories = countProductionBuildings('vehicle', buildings);
 
         // Prefer factories over barracks (vehicles are stronger)
         if (existingFactories < MAX_SURPLUS_FACTORIES) {
@@ -937,23 +969,62 @@ function handleEconomy(
     // Build order fulfillment - only if we have a conyard
     if (!hasConyard) {
         // No conyard = cannot build buildings, skip to unit production
-    } else for (const item of buildOrder) {
-        // Skip economic buildings during active combat (Issue #12)
-        if (isInCombat && ['power', 'refinery'].includes(item) && player.credits < 3000) {
-            continue;
+    } else {
+        const q = player.queues.building;
+
+        // ===== DYNAMIC PRODUCTION BUILDING PRIORITY =====
+        // If we can't produce infantry/vehicles, prioritize building the required production building
+        // This ensures AI adapts even if build order doesn't include production buildings early
+        if (!q.current && buildingQueueEmpty) {
+            const canProduceInfantry = hasProductionBuildingFor('infantry', buildings);
+            const canProduceVehicles = hasProductionBuildingFor('vehicle', buildings);
+            const needsInfantryProduction = !canProduceInfantry && player.credits >= 500;
+            const needsVehicleProduction = !canProduceVehicles && player.credits >= 2000;
+
+            // Prioritize getting infantry production first (cheaper, faster)
+            if (needsInfantryProduction) {
+                const infantryBuildings = getProductionBuildingsFor('infantry');
+                for (const bKey of infantryBuildings) {
+                    const data = RULES.buildings[bKey];
+                    if (data && checkPrerequisites(bKey, buildings) && player.credits >= data.cost) {
+                        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: bKey, playerId } });
+                        break;
+                    }
+                }
+            }
+            // Then vehicle production (only if we already have infantry production)
+            else if (needsVehicleProduction && canProduceInfantry) {
+                const vehicleBuildings = getProductionBuildingsFor('vehicle');
+                for (const bKey of vehicleBuildings) {
+                    const data = RULES.buildings[bKey];
+                    if (data && checkPrerequisites(bKey, buildings) && player.credits >= data.cost) {
+                        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: bKey, playerId } });
+                        break;
+                    }
+                }
+            }
         }
 
-        const having = buildings.some(b => b.key === item);
-        const q = player.queues.building;
-        const building = q.current === item;
+        // Standard build order fulfillment (if no dynamic priority triggered)
+        if (actions.length === 0) {
+            for (const item of buildOrder) {
+                // Skip economic buildings during active combat (Issue #12)
+                if (isInCombat && ['power', 'refinery'].includes(item) && player.credits < 3000) {
+                    continue;
+                }
 
-        if (!having && !building) {
-            const data = RULES.buildings[item];
-            if (data) {
-                const reqsMet = checkPrerequisites(item, buildings);
-                if (reqsMet && player.credits >= data.cost) {
-                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: item, playerId } });
-                    break;
+                const having = buildings.some(b => b.key === item);
+                const building = q.current === item;
+
+                if (!having && !building) {
+                    const data = RULES.buildings[item];
+                    if (data) {
+                        const reqsMet = checkPrerequisites(item, buildings);
+                        if (reqsMet && player.credits >= data.cost) {
+                            actions.push({ type: 'START_BUILD', payload: { category: 'building', key: item, playerId } });
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -975,7 +1046,7 @@ function handleEconomy(
         creditBuffer = 0;    // No reserves
     }
 
-    const hasBarracks = buildings.some(b => b.key === 'barracks');
+    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
     const infantryQueueEmpty = !player.queues.infantry.current;
 
     // ===== COUNTER-BUILDING LOGIC =====
@@ -2902,9 +2973,9 @@ function handleEmergencySell(
 
     // 1. Identify Critical Needs
     const hasRefinery = buildings.some(b => b.key === 'refinery');
-    const hasConyard = buildings.some(b => b.key === 'conyard');
-    const hasFactory = buildings.some(b => b.key === 'factory');
-    const hasBarracks = buildings.some(b => b.key === 'barracks');
+    const hasConyard = hasProductionBuildingFor('building', buildings);
+    const hasFactory = hasProductionBuildingFor('vehicle', buildings);
+    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
 
     // Check for "Stalemate / Fire Sale" condition
     const harvesters = Object.values(_state.entities).filter(e =>

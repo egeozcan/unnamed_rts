@@ -358,18 +358,12 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
 
         // Calculate production speed multiplier based on number of production buildings
         // Each additional production building of the relevant type adds 50% speed
-        let productionBuildingCount = 1;
-        if (cat === 'infantry') {
-            productionBuildingCount = Object.values(entities).filter(e =>
-                e.owner === player.id && e.key === 'barracks' && !e.dead
-            ).length;
-        } else if (cat === 'vehicle') {
-            productionBuildingCount = Object.values(entities).filter(e =>
-                e.owner === player.id && e.key === 'factory' && !e.dead
-            ).length;
-        }
+        const validBuildings: string[] = RULES.productionBuildings?.[cat] || [];
+        const productionBuildingCount = Object.values(entities).filter(e =>
+            e.owner === player.id && validBuildings.includes(e.key) && !e.dead
+        ).length || 1;
         // Speed multiplier: 1.0 for 1 building, 1.5 for 2, 2.0 for 3, etc.
-        let speedMult = 1 + (productionBuildingCount - 1) * 0.5;
+        const speedMult = 1 + (productionBuildingCount - 1) * 0.5;
 
         const costPerTick = (totalCost / 600) * speedMult * speedFactor;
 
