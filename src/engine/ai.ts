@@ -1,6 +1,7 @@
 import { GameState, Action, Entity, EntityId, Vector } from './types.js';
 import aiConfig from '../data/ai.json';
 import rules from '../data/rules.json';
+import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from './perf.js';
 
 const RULES = rules as any;
 const AI_CONFIG = aiConfig as any;
@@ -170,15 +171,19 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     if (!player) return actions;
 
     const aiState = getAIState(playerId);
-    const myEntities = Object.values(state.entities).filter(e => e.owner === playerId && !e.dead);
-    const myBuildings = myEntities.filter(e => e.type === 'BUILDING');
-    const myUnits = myEntities.filter(e => e.type === 'UNIT');
+
+    // PERFORMANCE: Create EntityCache once and use pre-computed lists
+    // This avoids 10+ Object.values().filter() calls per AI tick
+    const cache = createEntityCache(state.entities);
+    const myBuildings = getBuildingsForOwner(cache, playerId);
+    const myUnits = getUnitsForOwner(cache, playerId);
     const myMCVs = myUnits.filter(u => u.key === 'mcv');
     const myHarvesters = myUnits.filter(u => u.key === 'harvester');
     const myCombatUnits = myUnits.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
-    const enemies = Object.values(state.entities).filter(e => e.owner !== playerId && e.owner !== -1 && !e.dead);
+    const enemies = getEnemiesOf(cache, playerId);
     const enemyBuildings = enemies.filter(e => e.type === 'BUILDING');
     const enemyUnits = enemies.filter(e => e.type === 'UNIT');
+    const myEntities = [...myBuildings, ...myUnits]; // For vengeance tracking
 
     // EARLY EXIT: Player is eliminated if they have no buildings AND no MCVs
     // Don't run any AI logic for eliminated players - they can't do anything useful

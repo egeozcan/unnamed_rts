@@ -1,6 +1,7 @@
 import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS } from './types.js';
 import rules from '../data/rules.json';
 import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH } from './utils.js';
+import { rebuildSpatialGrid } from './spatial.js';
 
 // Type assertions for JSON data
 const RULES = rules as any;
@@ -790,6 +791,9 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
 
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
     refreshCollisionGrid(state.entities, state.config);
+
+    // PERFORMANCE: Rebuild spatial grid for O(1) neighbor lookups
+    rebuildSpatialGrid(state.entities);
 
     const entityList = Object.values(state.entities);
 
