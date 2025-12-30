@@ -628,8 +628,12 @@ function updateStrategy(
         aiState.peaceTicks = 0;
     }
 
-    // Other strategy changes have cooldown
-    if (tick - aiState.lastStrategyChange < STRATEGY_COOLDOWN) return;
+    // Check if we need to abort an offensive strategy immediately due to army loss
+    const abortOffense = (aiState.strategy === 'attack' && armySize < attackThreshold) ||
+        (aiState.strategy === 'harass' && armySize < harassThreshold);
+
+    // Other strategy changes have cooldown (unless aborting offense)
+    if (!abortOffense && tick - aiState.lastStrategyChange < STRATEGY_COOLDOWN) return;
 
     // Priority 2: Full attack if we have a strong army
     if (armySize >= attackThreshold && hasFactory && enemies.length > 0) {
@@ -667,13 +671,13 @@ function updateStrategy(
     }
 
     // Priority 3: Harass if we have some units but not enough for full attack
-    if (armySize >= harassThreshold && (hasFactory || hasBarracks) && enemies.length > 0) {
+    const harassCapableUnits = combatUnits.filter(u => u.key === 'rifle' || u.key === 'light');
+    if (harassCapableUnits.length >= harassThreshold && (hasFactory || hasBarracks) && enemies.length > 0) {
         if (aiState.strategy !== 'harass') {
             aiState.strategy = 'harass';
             aiState.lastStrategyChange = tick;
             // Form harass group from fastest/lightest units
-            const lightUnits = combatUnits.filter(u => u.key === 'rifle' || u.key === 'light');
-            aiState.harassGroup = lightUnits.slice(0, HARASS_GROUP_SIZE).map(u => u.id);
+            aiState.harassGroup = harassCapableUnits.slice(0, HARASS_GROUP_SIZE).map(u => u.id);
         }
         return;
     }
@@ -682,6 +686,10 @@ function updateStrategy(
     if (aiState.strategy !== 'buildup') {
         aiState.strategy = 'buildup';
         aiState.lastStrategyChange = tick;
+        // Clear offensive groups so units are free to rally
+        aiState.attackGroup = [];
+        aiState.harassGroup = [];
+        aiState.offensiveGroups = [];
     }
 }
 
@@ -1675,9 +1683,12 @@ function handleRally(
     // Move idle units to rally point
     // BUT exclude units that are part of an active offensive group
     const activeUnitIds = new Set<EntityId>();
-    aiState.offensiveGroups.forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
-    aiState.attackGroup.forEach(id => activeUnitIds.add(id));
-    aiState.harassGroup.forEach(id => activeUnitIds.add(id));
+    // But ONLY if we are not in buildup mode (in buildup, we want everyone to come home)
+    if (aiState.strategy !== 'buildup') {
+        aiState.offensiveGroups.forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
+        aiState.attackGroup.forEach(id => activeUnitIds.add(id));
+        aiState.harassGroup.forEach(id => activeUnitIds.add(id));
+    }
 
     const idleUnits = combatUnits.filter(u =>
         !activeUnitIds.has(u.id) && // Not in an active group
@@ -1837,7 +1848,13 @@ function handleAttack(
     }
 
     // Only attack with a group of minimum size
-    if (aiState.attackGroup.length < ATTACK_GROUP_MIN_SIZE) return actions;
+    // Only attack with a group of minimum size
+    if (aiState.attackGroup.length < ATTACK_GROUP_MIN_SIZE) {
+        // Disband group if too small so units can be rallied/used elsewhere
+        aiState.attackGroup = [];
+        aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
+        return actions;
+    }
 
     // Get group center
     const groupCenter = getGroupCenter(aiState.attackGroup, state.entities);
