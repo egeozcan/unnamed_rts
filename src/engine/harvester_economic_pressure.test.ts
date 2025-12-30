@@ -399,4 +399,258 @@ describe('Harvester Economic Pressure', () => {
         // There should be flee commands issued
         expect(fleeActions.length).toBeGreaterThan(0);
     });
+
+    it('should NOT flee from infantry at medium distance when not being damaged', () => {
+        // This is the key fix: a single infantry hanging around shouldn't cripple harvesters
+        let state: GameState = { ...INITIAL_STATE, running: true, mode: 'game' as const, tick: 90, entities: {} as Record<EntityId, Entity> };
+
+        state = {
+            ...state,
+            players: {
+                ...state.players,
+                1: {
+                    id: 1,
+                    isAi: true,
+                    difficulty: 'medium' as const,
+                    color: '#ff4444',
+                    credits: 2000,
+                    maxPower: 100,
+                    usedPower: 0,
+                    queues: {
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
+                    },
+                    readyToPlace: null
+                }
+            }
+        };
+
+        state = spawnBuilding(state, 500, 500, 90, 90, 'cy_p1', 1, 'conyard');
+        state = spawnBuilding(state, 600, 500, 100, 80, 'ref_p1', 1, 'refinery');
+        state = spawnResource(state, 700, 500, 'ore1');
+
+        // Create harvester at ore - NOT recently damaged
+        state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                'harv_p1': {
+                    ...state.entities['harv_p1'],
+                    cargo: 100,
+                    resourceTargetId: 'ore1' as EntityId,
+                    lastDamageTick: undefined // NOT recently damaged
+                }
+            } as any
+        };
+
+        // Create infantry at 150 pixels away (within old flee distance, but not minimum safe distance)
+        state = spawnUnit(state, 830, 500, 'enemy_infantry', 2, 'rifle'); // 150 pixels away
+
+        const aiActions = computeAiActions(state, 1);
+
+        const fleeActions = aiActions.filter(a =>
+            a.type === 'COMMAND_MOVE' &&
+            (a.payload as any).unitIds?.includes('harv_p1')
+        );
+
+        // Should NOT flee - infantry is just hanging around, not attacking
+        expect(fleeActions.length).toBe(0);
+    });
+
+    it('should flee when harvester was recently damaged', () => {
+        let state: GameState = { ...INITIAL_STATE, running: true, mode: 'game' as const, tick: 90, entities: {} as Record<EntityId, Entity> };
+
+        state = {
+            ...state,
+            players: {
+                ...state.players,
+                1: {
+                    id: 1,
+                    isAi: true,
+                    difficulty: 'medium' as const,
+                    color: '#ff4444',
+                    credits: 2000,
+                    maxPower: 100,
+                    usedPower: 0,
+                    queues: {
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
+                    },
+                    readyToPlace: null
+                }
+            }
+        };
+
+        state = spawnBuilding(state, 500, 500, 90, 90, 'cy_p1', 1, 'conyard');
+        state = spawnBuilding(state, 600, 500, 100, 80, 'ref_p1', 1, 'refinery');
+        state = spawnResource(state, 700, 500, 'ore1');
+
+        // Create enemy at medium distance
+        state = spawnUnit(state, 830, 500, 'enemy_unit', 2, 'rifle'); // 150 pixels away
+
+        // Create harvester that WAS recently damaged (within 60 ticks)
+        state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                'harv_p1': {
+                    ...state.entities['harv_p1'],
+                    cargo: 100,
+                    resourceTargetId: 'ore1' as EntityId,
+                    lastAttackerId: 'enemy_unit',
+                    lastDamageTick: 85 // 5 ticks ago - recent damage!
+                }
+            } as any
+        };
+
+        const aiActions = computeAiActions(state, 1);
+
+        const fleeActions = aiActions.filter(a =>
+            a.type === 'COMMAND_MOVE' &&
+            (a.payload as any).unitIds?.includes('harv_p1')
+        );
+
+        // Should flee - harvester was just damaged
+        expect(fleeActions.length).toBeGreaterThan(0);
+    });
+
+    it('should flee when nearby ally was recently damaged', () => {
+        let state: GameState = { ...INITIAL_STATE, running: true, mode: 'game' as const, tick: 90, entities: {} as Record<EntityId, Entity> };
+
+        state = {
+            ...state,
+            players: {
+                ...state.players,
+                1: {
+                    id: 1,
+                    isAi: true,
+                    difficulty: 'medium' as const,
+                    color: '#ff4444',
+                    credits: 2000,
+                    maxPower: 100,
+                    usedPower: 0,
+                    queues: {
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
+                    },
+                    readyToPlace: null
+                }
+            }
+        };
+
+        state = spawnBuilding(state, 500, 500, 90, 90, 'cy_p1', 1, 'conyard');
+        state = spawnBuilding(state, 600, 500, 100, 80, 'ref_p1', 1, 'refinery');
+        state = spawnResource(state, 700, 500, 'ore1');
+
+        // Create enemy at medium distance
+        state = spawnUnit(state, 830, 500, 'enemy_unit', 2, 'rifle'); // 150 pixels away from harvester
+
+        // Create an allied unit NEAR the harvester that was recently damaged
+        state = spawnUnit(state, 700, 500, 'ally_tank', 1, 'tank');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                'ally_tank': {
+                    ...state.entities['ally_tank'],
+                    lastAttackerId: 'enemy_unit',
+                    lastDamageTick: 85 // Ally was just damaged!
+                }
+            } as any
+        };
+
+        // Create harvester that was NOT damaged itself
+        state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                'harv_p1': {
+                    ...state.entities['harv_p1'],
+                    cargo: 100,
+                    resourceTargetId: 'ore1' as EntityId,
+                    lastDamageTick: undefined // NOT recently damaged itself
+                }
+            } as any
+        };
+
+        const aiActions = computeAiActions(state, 1);
+
+        const fleeActions = aiActions.filter(a =>
+            a.type === 'COMMAND_MOVE' &&
+            (a.payload as any).unitIds?.includes('harv_p1')
+        );
+
+        // Should flee - nearby ally (within 120 pixels) was just damaged, indicating danger
+        expect(fleeActions.length).toBeGreaterThan(0);
+    });
+
+    it('should risk delivery when under economic pressure (credits < 300) and enemy not very close', () => {
+        let state: GameState = { ...INITIAL_STATE, running: true, mode: 'game' as const, tick: 90, entities: {} as Record<EntityId, Entity> };
+
+        // AI with moderate economic pressure (< 300 credits)
+        state = {
+            ...state,
+            players: {
+                ...state.players,
+                1: {
+                    id: 1,
+                    isAi: true,
+                    difficulty: 'medium' as const,
+                    color: '#ff4444',
+                    credits: 250, // Under 300 - economic pressure
+                    maxPower: 100,
+                    usedPower: 0,
+                    queues: {
+                        building: { current: null, progress: 0, invested: 0 },
+                        infantry: { current: null, progress: 0, invested: 0 },
+                        vehicle: { current: null, progress: 0, invested: 0 },
+                        air: { current: null, progress: 0, invested: 0 }
+                    },
+                    readyToPlace: null
+                }
+            }
+        };
+
+        state = spawnBuilding(state, 500, 500, 90, 90, 'cy_p1', 1, 'conyard');
+        state = spawnBuilding(state, 600, 500, 100, 80, 'ref_p1', 1, 'refinery');
+        state = spawnResource(state, 700, 500, 'ore1');
+
+        // Create enemy at medium distance - would normally trigger flee
+        state = spawnUnit(state, 830, 500, 'enemy_unit', 2, 'rifle'); // 150 pixels away
+
+        // Create harvester with significant cargo, recently damaged
+        state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        state = {
+            ...state,
+            entities: {
+                ...state.entities,
+                'harv_p1': {
+                    ...state.entities['harv_p1'],
+                    cargo: 300, // Significant cargo to deliver
+                    resourceTargetId: null,
+                    baseTargetId: 'ref_p1', // Heading to refinery
+                    lastDamageTick: undefined // NOT recently damaged - enemy just passing by
+                }
+            } as any
+        };
+
+        const aiActions = computeAiActions(state, 1);
+
+        const fleeActions = aiActions.filter(a =>
+            a.type === 'COMMAND_MOVE' &&
+            (a.payload as any).unitIds?.includes('harv_p1')
+        );
+
+        // Should NOT flee - under economic pressure and not actually being hit
+        expect(fleeActions.length).toBe(0);
+    });
 });

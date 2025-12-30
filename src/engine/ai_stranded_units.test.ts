@@ -405,5 +405,77 @@ describe('AI Stranded Units', () => {
 
             expect(strandedUnitsGetCommands).toBe(true);
         });
+
+        it('should trigger all_in (desperation attack) when stuck in buildup with low funds', () => {
+            const aiPlayerId = 1;
+            const basePos = new Vector(350, 350);
+            const enemyBasePos = new Vector(2500, 2500);
+
+            // 1 combat unit, barely any money
+            const tank1 = createTestEntity({
+                id: 'tank1',
+                owner: aiPlayerId,
+                key: 'tank',
+                pos: basePos.add(new Vector(100, 100)),
+            });
+
+            const conyard = createTestEntity({
+                id: 'cy_p1',
+                owner: aiPlayerId,
+                type: 'BUILDING',
+                key: 'conyard',
+                pos: basePos,
+            });
+
+            const enemyConyard = createTestEntity({
+                id: 'cy_p0',
+                owner: 0,
+                type: 'BUILDING',
+                key: 'conyard',
+                pos: enemyBasePos,
+            });
+
+            const state: GameState = {
+                running: true,
+                mode: 'game',
+                difficulty: 'hard',
+                tick: 5010, // Must be divisible by 30 for AI strategy update
+                camera: { x: 0, y: 0 },
+                zoom: 1,
+                entities: {
+                    [tank1.id]: tank1,
+                    [conyard.id]: conyard,
+                    [enemyConyard.id]: enemyConyard
+                },
+                projectiles: [],
+                particles: [],
+                selection: [],
+                placingBuilding: null,
+                sellMode: false,
+                repairMode: false,
+                players: {
+                    [aiPlayerId]: createPlayer(aiPlayerId, { credits: 100 }), // Very low credits
+                    0: createPlayer(0, { isAi: false })
+                },
+                winner: null,
+                config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
+                debugMode: false,
+                showMinimap: true
+            };
+
+            const aiState = getAIState(aiPlayerId);
+            aiState.strategy = 'buildup';
+            aiState.lastStrategyChange = 0; // Changed a long time ago (5000 ticks > 4500 limit)
+
+            // Run AI
+            const actions = computeAiActions(state, aiPlayerId);
+
+            // Should switch to all_in
+            expect(aiState.strategy).toBe('all_in');
+
+            // Should issue attack commands despite small army
+            const attackCommands = actions.filter(a => a.type === 'COMMAND_ATTACK');
+            expect(attackCommands.length).toBeGreaterThan(0);
+        });
     });
 });

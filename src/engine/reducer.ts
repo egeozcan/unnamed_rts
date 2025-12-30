@@ -175,7 +175,8 @@ function tick(state: GameState): GameState {
                 hp: nextHp,
                 dead: nextHp <= 0,
                 flash: 5,
-                lastAttackerId: d.attackerId
+                lastAttackerId: d.attackerId,
+                lastDamageTick: state.tick
             };
         }
     }

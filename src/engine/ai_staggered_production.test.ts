@@ -188,13 +188,24 @@ describe('Staggered Unit Production', () => {
             const entities: Record<EntityId, Entity> = {};
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
             entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 600, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 700, 500);
+            // Add refinery and harvester so economy score isn't 0 (which triggers economy priority)
+            entities['refinery'] = createEntity('refinery', 1, 'BUILDING', 'refinery', 800, 500);
+            entities['harvester'] = createEntity('harvester', 1, 'UNIT', 'harvester', 850, 500);
+            // Add combat units to meet attack threshold
+            for (let i = 0; i < 6; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'rifle', 600 + i * 20, 600);
+            }
+            // Add enemy so attack strategy is maintained
+            entities['enemy'] = createEntity('enemy', 0, 'UNIT', 'rifle', 2000, 2000);
 
             // Attack mode: threshold 500, buffer 300
             // Rifle costs ~100, so with 600 credits, 600-100=500 > 300 buffer
             const state = createTestState(entities, 600);
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
-            aiState.lastProductionType = null;
+            aiState.lastStrategyChange = 0; // Prevent immediate strategy re-evaluation
+            aiState.lastProductionType = 'vehicle'; // Set to vehicle so next should be infantry
 
             const actions = computeAiActions(state, 1);
 

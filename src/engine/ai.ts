@@ -3,7 +3,7 @@ import { RULES, AI_CONFIG } from '../data/schemas/index.js';
 import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from './perf.js';
 
 // AI Strategy Types
-export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass';
+export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';
 
 // Offensive Group - manages a coordinated attack force
 export interface OffensiveGroup {
@@ -105,6 +105,8 @@ const STRATEGY_COOLDOWN = 300; // 5 seconds at 60 ticks/sec
 const RALLY_DISTANCE = 150; // Distance from target to rally before attack
 const RALLY_TIMEOUT = 300; // 5 seconds to wait for stragglers
 const SCOUT_INTERVAL = 600; // 10 seconds between scout attempts
+const RECENT_DAMAGE_WINDOW = 60; // 1 second at 60fps - time window to consider "under fire"
+const ALLY_DANGER_RADIUS = 120; // Distance to check for allies under fire (~3 tiles)
 
 // Peace-break constants - triggers aggressive behavior when wealthy and peaceful
 const SURPLUS_CREDIT_THRESHOLD = 4000; // Credits considered "surplus"
@@ -241,6 +243,8 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     if (threatsNearBase.length === 0) {
         if (aiState.strategy === 'attack') {
             actions.push(...handleAttack(state, playerId, aiState, myCombatUnits, enemies, baseCenter, personality));
+        } else if (aiState.strategy === 'all_in') {
+            actions.push(...handleAttack(state, playerId, aiState, myCombatUnits, enemies, baseCenter, personality, true));
         } else if (aiState.strategy === 'harass') {
             actions.push(...handleHarass(state, playerId, aiState, myCombatUnits, enemyUnits, enemies, baseCenter));
         } else if (aiState.strategy === 'buildup') {
@@ -682,6 +686,30 @@ function updateStrategy(
         return;
     }
 
+    // Priority 4: All-In / Desperation
+    // If we have been stuck in buildup for a long time (75s) and are broke, just attack with what we have
+    // This prevents indefinite stalling when economy is dead
+    const STALL_TIMEOUT = 4500; // 75 seconds
+    const LOW_FUNDS = 1000;
+
+    if (aiState.strategy === 'buildup' &&
+        tick - aiState.lastStrategyChange > STALL_TIMEOUT &&
+        credits < LOW_FUNDS &&
+        armySize > 0) {
+
+        aiState.strategy = 'all_in';
+        aiState.lastStrategyChange = tick;
+        aiState.attackGroup = combatUnits.map(u => u.id);
+        return;
+    }
+
+    // Persist All-In until we recover or die
+    if (aiState.strategy === 'all_in') {
+        // If we still have low funds, keep attacking
+        if (credits < 2000) return;
+        // If we have funds, fall through to switch to buildup/re-evaluate
+    }
+
     // Default: Build up
     if (aiState.strategy !== 'buildup') {
         aiState.strategy = 'buildup';
@@ -722,8 +750,8 @@ function handleEconomy(
     const vehicleQueueEmpty = !player.queues.vehicle.current;
 
     // Detect Panic Mode and Combat Mode
-    const isPanic = aiState.threatLevel > 75 || (aiState.threatLevel > 50 && player.credits < 1000);
-    const isInCombat = aiState.strategy === 'attack' || aiState.strategy === 'defend';
+    const isPanic = aiState.threatLevel > 75 || (aiState.threatLevel > 50 && player.credits < 1000) || aiState.strategy === 'all_in';
+    const isInCombat = aiState.strategy === 'attack' || aiState.strategy === 'defend' || aiState.strategy === 'all_in';
 
     // PANIC DEFENSE: Prioritize defensive structures over everything else if in panic
     // NOTE: Can only queue buildings if we have a conyard
@@ -1378,42 +1406,65 @@ function handleHarvesterSafety(
     for (const harv of harvesters) {
         // Check economic pressure per-harvester based on cargo
         const hasSignificantCargo = harv.cargo > 200;
-        const isCriticallyBroke = player && player.credits < 100;
+        const isCriticallyBroke = player && player.credits < 300;
         const isUnderEconomicPressure = isCriticallyBroke && hasSignificantCargo;
-
-        // Reduced flee distance when not directly attacked - be less jumpy
-        const PASSIVE_FLEE_DISTANCE = 150;
 
         // Check if harvester is under threat
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
         let isDirectAttack = false; // Was this harvester directly attacked?
 
-        // Prioritize the last attacker - this is a DIRECT attack, always flee
-        if (harv.lastAttackerId) {
+        // Helper: Check if entity was damaged recently (within RECENT_DAMAGE_WINDOW ticks)
+        const wasRecentlyDamaged = (entity: Entity) => {
+            return entity.lastDamageTick !== undefined &&
+                   (state.tick - entity.lastDamageTick) < RECENT_DAMAGE_WINDOW;
+        };
+
+        // Check if harvester itself was damaged recently - this is a DIRECT attack
+        const harvesterUnderFire = wasRecentlyDamaged(harv);
+
+        // Check if any nearby ally (within ALLY_DANGER_RADIUS) was damaged recently
+        // This indicates the area is dangerous even if the harvester itself wasn't hit
+        const alliedUnits = Object.values(state.entities).filter(
+            e => e.owner === harv.owner && e.type === 'UNIT' && !e.dead && e.id !== harv.id
+        );
+        const allyNearbyUnderFire = alliedUnits.some(ally => {
+            const dist = ally.pos.dist(harv.pos);
+            return dist < ALLY_DANGER_RADIUS && wasRecentlyDamaged(ally);
+        });
+
+        // If harvester was damaged recently, identify the attacker as threat
+        // (use larger radius since they actually hit us)
+        if (harvesterUnderFire && harv.lastAttackerId) {
             const attacker = state.entities[harv.lastAttackerId];
-            if (attacker && !attacker.dead) {
-                // Verify distance - if they ran away, maybe stop worrying
-                if (attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
-                    nearestThreat = attacker;
-                    nearestDist = attacker.pos.dist(harv.pos);
-                    isDirectAttack = true;
+            if (attacker && !attacker.dead && attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
+                nearestThreat = attacker;
+                nearestDist = attacker.pos.dist(harv.pos);
+                isDirectAttack = true;
+            }
+        }
+
+        // Find nearest enemy within flee distance (for proximity check)
+        if (!nearestThreat) {
+            for (const enemy of enemies) {
+                if (enemy.type !== 'UNIT') continue;
+                const dist = enemy.pos.dist(harv.pos);
+                if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestThreat = enemy;
                 }
             }
         }
 
-        // Scan for nearby unit threats if no direct attacker yet
-        // Use reduced distance for passive detection when under economic pressure
-        if (!nearestThreat) {
-            const fleeDistance = isUnderEconomicPressure ? PASSIVE_FLEE_DISTANCE : HARVESTER_FLEE_DISTANCE;
-
-            for (const enemy of enemies) {
-                if (enemy.type !== 'UNIT') continue;
-                const dist = enemy.pos.dist(harv.pos);
-                if (dist < fleeDistance && dist < nearestDist) {
-                    nearestDist = dist;
-                    nearestThreat = enemy;
-                }
+        // Determine if we should actually flee based on:
+        // 1. Harvester was damaged recently (direct attack) - already handled above
+        // 2. Nearby ally was damaged recently (area is dangerous)
+        // 3. Enemy is VERY close (within MINIMUM_SAFE_DISTANCE)
+        if (nearestThreat && !isDirectAttack) {
+            const shouldFlee = allyNearbyUnderFire || nearestDist < MINIMUM_SAFE_DISTANCE;
+            if (!shouldFlee) {
+                // Enemy is nearby but no actual danger indicators, don't panic
+                nearestThreat = null;
             }
         }
 
@@ -1683,11 +1734,18 @@ function handleRally(
     // Move idle units to rally point
     // BUT exclude units that are part of an active offensive group
     const activeUnitIds = new Set<EntityId>();
-    // But ONLY if we are not in buildup mode (in buildup, we want everyone to come home)
+    // During buildup, still exclude units in ACTIVELY ATTACKING groups (status === 'attacking')
+    // Only recall units from groups that are rallying or idle
     if (aiState.strategy !== 'buildup') {
+        // Not buildup - exclude all active groups
         aiState.offensiveGroups.forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
         aiState.attackGroup.forEach(id => activeUnitIds.add(id));
         aiState.harassGroup.forEach(id => activeUnitIds.add(id));
+    } else {
+        // Buildup - only exclude groups that are actively attacking
+        aiState.offensiveGroups
+            .filter(g => g.status === 'attacking')
+            .forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
     }
 
     const idleUnits = combatUnits.filter(u =>
@@ -1828,7 +1886,8 @@ function handleAttack(
     combatUnits: Entity[],
     enemies: Entity[],
     baseCenter: Vector,
-    _personality: any
+    _personality: any,
+    ignoreSizeLimit: boolean = false
 ): Action[] {
     const actions: Action[] = [];
 
@@ -1849,7 +1908,8 @@ function handleAttack(
 
     // Only attack with a group of minimum size
     // Only attack with a group of minimum size
-    if (aiState.attackGroup.length < ATTACK_GROUP_MIN_SIZE) {
+    // Unless we are ignoring size limit (All-In / Desperation)
+    if (!ignoreSizeLimit && aiState.attackGroup.length < ATTACK_GROUP_MIN_SIZE) {
         // Disband group if too small so units can be rallied/used elsewhere
         aiState.attackGroup = [];
         aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
@@ -1877,7 +1937,7 @@ function handleAttack(
             const u = state.entities[id];
             return u && !u.dead;
         });
-        if (aliveUnits.length < ATTACK_GROUP_MIN_SIZE) {
+        if (!ignoreSizeLimit && aliveUnits.length < ATTACK_GROUP_MIN_SIZE) {
             // Reset the group for a new wave
             aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
             mainGroup = undefined;
@@ -1890,7 +1950,7 @@ function handleAttack(
             unitIds: [...aiState.attackGroup],
             target: null,
             rallyPoint: null,
-            status: 'forming',
+            status: ignoreSizeLimit ? 'attacking' : 'forming',
             lastOrderTick: state.tick
         };
         aiState.offensiveGroups.push(mainGroup);

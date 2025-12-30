@@ -568,9 +568,10 @@ describe('AI System', () => {
             // AI base
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
 
-            // AI harvester that was recently attacked
+            // AI harvester that was recently attacked (damaged within last 60 ticks)
             entities['harvester'] = createEntity('harvester', 1, 'UNIT', 'harvester', 1000, 1000, {
-                lastAttackerId: 'sneaky_attacker'
+                lastAttackerId: 'sneaky_attacker',
+                lastDamageTick: 25 // Recent damage (tick 30 - 25 = 5 ticks ago, within 60-tick window)
             });
 
             // The attacker is somewhat far but was attacking

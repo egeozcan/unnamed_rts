@@ -75,6 +75,7 @@ export interface Entity {
     // Combat
     readonly targetId: EntityId | null; // Changed to ID for serializability check
     readonly lastAttackerId: EntityId | null; // Changed to ID
+    readonly lastDamageTick?: number; // Tick when entity last took damage
     readonly cooldown: number;
     readonly flash: number;
     readonly turretAngle: number; // Angle the turret is facing (for tanks/defensive buildings)

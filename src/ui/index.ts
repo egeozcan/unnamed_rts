@@ -492,7 +492,8 @@ function buildAIStateHTML(aiState: AIPlayerState, state: GameState, playerId: nu
         'buildup': '#4af',
         'attack': '#f44',
         'defend': '#ff4',
-        'harass': '#f84'
+        'harass': '#f84',
+        'all_in': '#f00'
     };
 
     const priorityColors: Record<InvestmentPriority, string> = {

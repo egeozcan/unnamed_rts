@@ -208,6 +208,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         unstuckTimer: 0,
         targetId: null,
         lastAttackerId: null,
+        lastDamageTick: undefined,
         cooldown: 0,
         flash: 0,
         turretAngle: 0,
