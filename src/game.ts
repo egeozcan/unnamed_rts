@@ -16,6 +16,31 @@ const renderer = new Renderer(canvas);
 let currentState: GameState = INITIAL_STATE;
 let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
 
+// Frame rate limiting
+const TARGET_FPS = 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
+let lastFrameTime = 0;
+
+// Game speed setting (1 = slow, 2 = medium, 3 = fast)
+type GameSpeed = 1 | 2 | 3;
+let gameSpeed: GameSpeed = 2;
+let slowTickCounter = 0; // Used for slow speed (skip every other tick)
+
+function setGameSpeed(speed: GameSpeed) {
+    gameSpeed = speed;
+    slowTickCounter = 0;
+    updateSpeedIndicator();
+}
+
+function updateSpeedIndicator() {
+    const indicator = document.getElementById('speed-indicator');
+    if (indicator) {
+        const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST' };
+        indicator.textContent = labels[gameSpeed];
+        indicator.className = `speed-${gameSpeed}`;
+    }
+}
+
 // Setup Skirmish UI logic
 function setupSkirmishUI() {
     const playerSlots = document.querySelectorAll('.player-slot');
@@ -343,6 +368,9 @@ function startGameWithConfig(config: SkirmishConfig) {
                 currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
             }
         },
+        onSetSpeed: (speed: 1 | 2 | 3) => {
+            setGameSpeed(speed);
+        },
         getZoom: () => currentState.zoom,
         getCamera: () => currentState.camera
     });
@@ -554,7 +582,15 @@ function updateButtonsUI() {
     updateRepairModeUI(currentState);
 }
 
-function gameLoop() {
+function gameLoop(timestamp: number = 0) {
+    // Frame rate limiting - skip if not enough time has passed
+    const elapsed = timestamp - lastFrameTime;
+    if (elapsed < FRAME_TIME) {
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    lastFrameTime = timestamp - (elapsed % FRAME_TIME);
+
     if (!currentState.running) {
         checkWinCondition();
         return;
@@ -563,22 +599,35 @@ function gameLoop() {
     if (currentState.debugMode) {
         // Just render, don't update
     } else {
-        // AI Logic - iterate over ALL AI players
-        let aiActions: any[] = [];
-        for (const pidStr in currentState.players) {
-            const pid = parseInt(pidStr);
-            const player = currentState.players[pid];
-            if (player.isAi) {
-                const actions = computeAiActions(currentState, pid);
-                aiActions.push(...actions);
+        // Determine how many ticks to run based on speed setting
+        let ticksToRun = 1;
+        if (gameSpeed === 1) {
+            // Slow: run tick every other frame
+            slowTickCounter++;
+            ticksToRun = slowTickCounter % 2 === 0 ? 1 : 0;
+        } else if (gameSpeed === 3) {
+            // Fast: run 2 ticks per frame
+            ticksToRun = 2;
+        }
+
+        for (let t = 0; t < ticksToRun; t++) {
+            // AI Logic - iterate over ALL AI players
+            let aiActions: any[] = [];
+            for (const pidStr in currentState.players) {
+                const pid = parseInt(pidStr);
+                const player = currentState.players[pid];
+                if (player.isAi) {
+                    const actions = computeAiActions(currentState, pid);
+                    aiActions.push(...actions);
+                }
             }
-        }
 
-        for (const action of aiActions) {
-            currentState = update(currentState, action);
-        }
+            for (const action of aiActions) {
+                currentState = update(currentState, action);
+            }
 
-        currentState = update(currentState, { type: 'TICK' });
+            currentState = update(currentState, { type: 'TICK' });
+        }
     }
 
     // Update UI - use human player's data, or first player if observer

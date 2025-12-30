@@ -1,6 +1,7 @@
 import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS } from '../engine/types.js';
 import { getAsset, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
+import { getSpatialGrid } from '../engine/spatial.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -43,12 +44,30 @@ export class Renderer {
 
         ctx.save();
 
-        // Sort entities by Y for proper layering
-        const sortedEntities = Object.values(entities).sort((a, b) => a.pos.y - b.pos.y);
+        // Calculate visible world bounds with buffer for large entities
+        const buffer = 150;
+        const viewLeft = camera.x - buffer / zoom;
+        const viewRight = camera.x + (this.canvas.width + buffer) / zoom;
+        const viewTop = camera.y - buffer / zoom;
+        const viewBottom = camera.y + (this.canvas.height + buffer) / zoom;
+
+        // Use spatial grid to get only visible entities
+        const viewCenterX = (viewLeft + viewRight) / 2;
+        const viewCenterY = (viewTop + viewBottom) / 2;
+        const viewWidth = viewRight - viewLeft;
+        const viewHeight = viewBottom - viewTop;
+        // Query radius = half diagonal of view to cover the entire visible area
+        const queryRadius = Math.sqrt(viewWidth * viewWidth + viewHeight * viewHeight) / 2;
+
+        const visibleEntities = getSpatialGrid().queryRadius(viewCenterX, viewCenterY, queryRadius);
+
+        // Sort only visible entities by Y for proper layering
+        const sortedEntities = visibleEntities
+            .filter(e => !e.dead)
+            .sort((a, b) => a.pos.y - b.pos.y);
 
         // Draw entities
         for (const entity of sortedEntities) {
-            if (entity.dead) continue;
             this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
         }
 
@@ -386,17 +405,24 @@ export class Renderer {
 
     private drawTooltip(
         mousePos: { x: number; y: number },
-        entities: Entity[],
+        _entities: Entity[],
         camera: { x: number; y: number },
         zoom: number,
         localPlayerId: number | null
     ) {
         const ctx = this.ctx;
 
-        // Iterate backwards to find the top-most entity
-        for (let i = entities.length - 1; i >= 0; i--) {
-            const entity = entities[i];
+        // Convert mouse position to world coordinates
+        const worldX = camera.x + mousePos.x / zoom;
+        const worldY = camera.y + mousePos.y / zoom;
 
+        // Use spatial grid to find only nearby entities (50 pixel radius covers most entities)
+        const nearbyEntities = getSpatialGrid().queryRadius(worldX, worldY, 60);
+
+        // Sort by Y (descending) to find top-most entity first
+        nearbyEntities.sort((a, b) => b.pos.y - a.pos.y);
+
+        for (const entity of nearbyEntities) {
             // Only show tooltips for units and buildings
             if (entity.dead) continue;
             if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;

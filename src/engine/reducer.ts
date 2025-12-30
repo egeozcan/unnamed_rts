@@ -1,7 +1,11 @@
 import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS } from './types.js';
 import { RULES } from '../data/schemas/index.js';
-import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH } from './utils.js';
-import { rebuildSpatialGrid } from './spatial.js';
+import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH, setPathCacheTick } from './utils.js';
+import { rebuildSpatialGrid, getSpatialGrid } from './spatial.js';
+
+// Power calculation cache - keyed by tick to auto-invalidate
+let powerCache: Map<number, { in: number, out: number }> = new Map();
+let powerCacheTick = -1;
 
 /**
  * Check if prerequisites are met for a building or unit.
@@ -124,6 +128,10 @@ function tick(state: GameState): GameState {
     if (!state.running) return state;
 
     const nextTick = state.tick + 1;
+
+    // Update path cache tick for proper cache invalidation
+    setPathCacheTick(nextTick);
+
     let nextEntities = { ...state.entities };
     let nextPlayers = { ...state.players };
 
@@ -328,8 +336,8 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
         return { player: nextPlayer, createdEntities };
     }
 
-    // Calculate power
-    const power = calculatePower(player.id, entities);
+    // Calculate power (cached per tick)
+    const power = calculatePower(player.id, entities, state.tick);
     const speedFactor = (power.out < power.in) ? 0.25 : 1.0;
 
 
@@ -441,7 +449,20 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
     return { player: nextPlayer, createdEntities };
 }
 
-function calculatePower(playerId: number, entities: Record<EntityId, Entity>): { in: number, out: number } {
+function calculatePower(playerId: number, entities: Record<EntityId, Entity>, tick?: number): { in: number, out: number } {
+    // Use cache if available for current tick
+    if (tick !== undefined) {
+        if (tick !== powerCacheTick) {
+            // New tick - clear cache
+            powerCache.clear();
+            powerCacheTick = tick;
+        }
+        const cached = powerCache.get(playerId);
+        if (cached) {
+            return cached;
+        }
+    }
+
     let p = { in: 0, out: 0 };
     for (const id in entities) {
         const e = entities[id];
@@ -453,6 +474,12 @@ function calculatePower(playerId: number, entities: Record<EntityId, Entity>): {
             }
         }
     }
+
+    // Cache the result if tick is provided
+    if (tick !== undefined) {
+        powerCache.set(playerId, p);
+    }
+
     return p;
 }
 
@@ -939,25 +966,50 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
     return { entities: nextEntities, projectiles: newProjectiles, particles: newParticles, creditsEarned };
 }
 
+// Mutable version of Entity for collision resolution (allows position updates)
+type MutableEntity = { -readonly [K in keyof Entity]: Entity[K] };
+
 function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId, Entity> {
-    const ids = Object.keys(entities);
-    // Create a mutable list of working copies
-    const workingEntities = ids.map(id => ({ ...entities[id] }));
+    // Create a mutable lookup for working copies
+    const workingEntities: Record<EntityId, MutableEntity> = {};
+    const units: MutableEntity[] = [];
+
+    for (const id in entities) {
+        const e: MutableEntity = { ...entities[id] };
+        workingEntities[id] = e;
+        if (e.type === 'UNIT' && !e.dead) {
+            units.push(e);
+        }
+    }
+
+    // Early exit if no units
+    if (units.length === 0) return workingEntities;
+
     const iterations = 4; // Run a few passes for stability
+    const spatialGrid = getSpatialGrid();
+
+    // Max collision check radius (max unit radius ~45 + max other radius ~45 + buffer)
+    const MAX_CHECK_RADIUS = 100;
 
     for (let k = 0; k < iterations; k++) {
-        for (let i = 0; i < workingEntities.length; i++) {
-            const a = workingEntities[i];
+        // Only iterate units (at least one entity must be a unit for collision to matter)
+        for (const a of units) {
             if (a.dead) continue;
 
-            for (let j = i + 1; j < workingEntities.length; j++) {
-                const b = workingEntities[j];
-                if (b.dead) continue;
+            // Use spatial grid to find nearby entities instead of checking all
+            const nearby = spatialGrid.queryRadius(a.pos.x, a.pos.y, MAX_CHECK_RADIUS);
 
-                const isUnitA = a.type === 'UNIT';
+            for (const nearbyEntity of nearby) {
+                // Skip self and already processed pairs (use id comparison to avoid duplicates)
+                if (nearbyEntity.id <= a.id) continue;
+
+                // Get the working copy (with potentially updated position)
+                const b = workingEntities[nearbyEntity.id];
+                if (!b || b.dead) continue;
+
                 const isUnitB = b.type === 'UNIT';
-
-                if (!isUnitA && !isUnitB) continue; // Static vs Static
+                // a is always a unit, skip if b is not a unit and not a building/resource that matters
+                if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') continue;
 
                 const dist = a.pos.dist(b.pos);
                 // Allow slight soft overlap to reduce jittering
@@ -968,31 +1020,24 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                     const overlap = minDist - dist;
                     const dir = b.pos.sub(a.pos).norm();
 
-                    if (isUnitA && isUnitB) {
+                    if (isUnitB) {
                         // Determine which unit is moving vs stationary
                         const aMoving = a.moveTarget !== null || a.targetId !== null || (a.vel && a.vel.mag() > 0.5);
                         const bMoving = b.moveTarget !== null || b.targetId !== null || (b.vel && b.vel.mag() > 0.5);
-
-                        let ratioA = 0.5;
-                        let ratioB = 0.5;
 
                         // Use stronger push to counteract movement speed
                         const pushScale = Math.min(overlap, 2.5);
 
                         if (aMoving && !bMoving) {
                             // A is moving, B is stationary - A yields more
-                            ratioA = 0.8;
-                            ratioB = 0.2;
                             const push = dir.scale(pushScale);
-                            a.pos = a.pos.sub(push.scale(ratioA));
-                            b.pos = b.pos.add(push.scale(ratioB));
+                            a.pos = a.pos.sub(push.scale(0.8));
+                            b.pos = b.pos.add(push.scale(0.2));
                         } else if (bMoving && !aMoving) {
                             // B is moving, A is stationary - B yields more
-                            ratioA = 0.2;
-                            ratioB = 0.8;
                             const push = dir.scale(pushScale);
-                            a.pos = a.pos.sub(push.scale(ratioA));
-                            b.pos = b.pos.add(push.scale(ratioB));
+                            a.pos = a.pos.sub(push.scale(0.2));
+                            b.pos = b.pos.add(push.scale(0.8));
                         } else if (aMoving && bMoving) {
                             // BOTH moving - use both radial push and perpendicular slide
                             const push = dir.scale(pushScale * 0.5);
@@ -1007,30 +1052,22 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                         } else {
                             // Both stationary - minimal push
                             const totalR = a.radius + b.radius;
-                            ratioA = b.radius / totalR;
-                            ratioB = a.radius / totalR;
+                            const ratioA = b.radius / totalR;
+                            const ratioB = a.radius / totalR;
                             const push = dir.scale(pushScale * 0.5); // Half strength for stationary
                             a.pos = a.pos.sub(push.scale(ratioA));
                             b.pos = b.pos.add(push.scale(ratioB));
                         }
-                    } else if (isUnitA) {
-                        // A is unit, B is building/resource - A yields completely
+                    } else {
+                        // A is unit, B is building/rock - A yields completely
                         a.pos = a.pos.sub(dir.scale(overlap));
-                    } else if (isUnitB) {
-                        // B is unit, A is building/resource - B yields completely
-                        b.pos = b.pos.add(dir.scale(overlap));
                     }
                 }
             }
         }
     }
 
-    // Reconstruct lookup
-    const result: Record<EntityId, Entity> = {};
-    workingEntities.forEach(e => {
-        result[e.id] = e;
-    });
-    return result;
+    return workingEntities;
 }
 
 
@@ -1063,15 +1100,23 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         else if (harvester.cargo >= capacity) {
             harvester.resourceTargetId = null; // Forget resource
             if (!harvester.baseTargetId) {
-                // Find nearest refinery
-                let bestRef: Entity | null = null;
-                let minDst = Infinity;
-                for (const other of entityList) {
-                    if (other.owner === harvester.owner && other.key === 'refinery' && !other.dead) {
-                        const d = harvester.pos.dist(other.pos);
-                        if (d < minDst) {
-                            minDst = d;
-                            bestRef = other;
+                // Find nearest refinery using spatial query (search within reasonable range first)
+                const spatialGrid = getSpatialGrid();
+                const searchRadius = 1500; // Start with nearby search
+                let bestRef = spatialGrid.findNearest(
+                    harvester.pos.x, harvester.pos.y, searchRadius,
+                    (e) => e.owner === harvester.owner && e.key === 'refinery' && !e.dead
+                );
+                // Fallback to global search if nothing nearby
+                if (!bestRef) {
+                    let minDst = Infinity;
+                    for (const other of entityList) {
+                        if (other.owner === harvester.owner && other.key === 'refinery' && !other.dead) {
+                            const d = harvester.pos.dist(other.pos);
+                            if (d < minDst) {
+                                minDst = d;
+                                bestRef = other;
+                            }
                         }
                     }
                 }
@@ -1143,7 +1188,7 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                 const blockedOreId = (harvester as any).blockedOreId;
                 const MAX_HARVESTERS_PER_ORE = 2;
 
-                // First, count harvesters per ore
+                // First, count harvesters per ore (only friendly harvesters)
                 const harvestersPerOre: Record<string, number> = {};
                 for (const other of entityList) {
                     if (other.key === 'harvester' &&
@@ -1158,35 +1203,59 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                 let bestOre: Entity | null = null;
                 let bestScore = -Infinity;
 
-                for (const other of entityList) {
-                    if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
-                        const dist = harvester.pos.dist(other.pos);
-                        const harvestersAtOre = harvestersPerOre[other.id] || 0;
+                // Use spatial query to find nearby ore first (800px radius)
+                const spatialGrid = getSpatialGrid();
+                const nearbyOre = spatialGrid.queryRadiusByType(harvester.pos.x, harvester.pos.y, 800, 'RESOURCE');
 
-                        // Skip if already at max capacity
-                        if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
+                for (const other of nearbyOre) {
+                    if (other.dead || other.id === blockedOreId) continue;
+                    const dist = harvester.pos.dist(other.pos);
+                    const harvestersAtOre = harvestersPerOre[other.id] || 0;
 
-                        // Score: closer is better, fewer harvesters is better
-                        // Congestion penalty: each existing harvester is like 100 extra distance
-                        const effectiveDist = dist + harvestersAtOre * 100;
-                        const score = -effectiveDist; // Higher is better (less distance = higher score)
+                    // Skip if already at max capacity
+                    if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
 
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestOre = other;
-                        }
+                    // Score: closer is better, fewer harvesters is better
+                    // Congestion penalty: each existing harvester is like 100 extra distance
+                    const effectiveDist = dist + harvestersAtOre * 100;
+                    const score = -effectiveDist; // Higher is better (less distance = higher score)
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestOre = other;
                     }
                 }
 
-                // Fallback: if all ore is congested, still pick the nearest one
+                // Fallback to global search if no nearby ore found
                 if (!bestOre) {
-                    let minDst = Infinity;
                     for (const other of entityList) {
                         if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
-                            const d = harvester.pos.dist(other.pos);
-                            if (d < minDst) {
-                                minDst = d;
+                            const dist = harvester.pos.dist(other.pos);
+                            const harvestersAtOre = harvestersPerOre[other.id] || 0;
+
+                            // Skip if already at max capacity
+                            if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
+
+                            const effectiveDist = dist + harvestersAtOre * 100;
+                            const score = -effectiveDist;
+
+                            if (score > bestScore) {
+                                bestScore = score;
                                 bestOre = other;
+                            }
+                        }
+                    }
+
+                    // Last resort: pick nearest ore even if congested
+                    if (!bestOre) {
+                        let minDst = Infinity;
+                        for (const other of entityList) {
+                            if (other.type === 'RESOURCE' && !other.dead && other.id !== blockedOreId) {
+                                const d = harvester.pos.dist(other.pos);
+                                if (d < minDst) {
+                                    minDst = d;
+                                    bestOre = other;
+                                }
                             }
                         }
                     }
@@ -1561,7 +1630,7 @@ function updateProjectile(proj: any, entities: Record<EntityId, Entity>): { proj
     return { proj: nextProj, damage: damageEvent };
 }
 
-function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Entity {
+function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Entity {
     const distToTarget = entity.pos.dist(target);
     if (distToTarget < 2) return { ...entity, vel: new Vector(0, 0), path: null, pathIdx: 0 };
 
@@ -1663,8 +1732,10 @@ function moveToward(entity: Entity, target: Vector, allEntities: Entity[]): Enti
     let separation = new Vector(0, 0);
     let entityCount = 0;
 
-    // Entity Separation - reduced force, only from very close entities
-    for (const other of allEntities) {
+    // Entity Separation - use spatial grid for O(k) instead of O(n) lookup
+    // Query radius covers entity.radius + max_other_radius + 3, using 60 as conservative max
+    const nearbyEntities = getSpatialGrid().queryRadius(entity.pos.x, entity.pos.y, 60);
+    for (const other of nearbyEntities) {
         if (other.id === entity.id || other.dead || other.type === 'RESOURCE') continue;
         const d = entity.pos.dist(other.pos);
         const minDist = entity.radius + other.radius;

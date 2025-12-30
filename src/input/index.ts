@@ -60,6 +60,7 @@ export function initInput(
         onDeployMCV: () => void;
         onToggleDebug: () => void;
         onToggleMinimap: () => void;
+        onSetSpeed: (speed: 1 | 2 | 3) => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -70,6 +71,7 @@ export function initInput(
     onDeployMCV = callbacks.onDeployMCV;
     (inputState as any).onToggleDebug = callbacks.onToggleDebug;
     (inputState as any).onToggleMinimap = callbacks.onToggleMinimap;
+    (inputState as any).onSetSpeed = callbacks.onSetSpeed;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -92,6 +94,16 @@ function setupEventListeners() {
         }
         if (e.key === 'm' || e.key === 'M') {
             (inputState as any).onToggleMinimap?.();
+        }
+        // Game speed controls (1 = slow, 2 = normal, 3 = fast)
+        if (e.key === '1') {
+            (inputState as any).onSetSpeed?.(1);
+        }
+        if (e.key === '2') {
+            (inputState as any).onSetSpeed?.(2);
+        }
+        if (e.key === '3') {
+            (inputState as any).onSetSpeed?.(3);
         }
     });
 

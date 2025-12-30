@@ -5,6 +5,25 @@ import { RULES } from '../data/schemas/index.js';
 const DEFAULT_GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
 const DEFAULT_GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
 
+// Path cache for A* results
+interface PathCacheEntry {
+    path: Vector[] | null;
+    tick: number;
+}
+const pathCache = new Map<string, PathCacheEntry>();
+const PATH_CACHE_TTL = 60; // Valid for 60 ticks (1 second at 60 FPS)
+const PATH_CACHE_MAX_SIZE = 200;
+let currentPathTick = 0;
+
+// Update the current tick for path caching (call from game loop)
+export function setPathCacheTick(tick: number): void {
+    currentPathTick = tick;
+}
+
+function getPathCacheKey(startGx: number, startGy: number, goalGx: number, goalGy: number, ownerId?: number): string {
+    return `${startGx},${startGy}->${goalGx},${goalGy}:${ownerId ?? -1}`;
+}
+
 // Dynamic Grid Manager - allows resizing based on map config
 class GridManager {
     private _gridW: number = DEFAULT_GRID_W;
@@ -370,6 +389,14 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
     const goalGx = Math.floor(goal.x / TILE_SIZE);
     const goalGy = Math.floor(goal.y / TILE_SIZE);
 
+    // Check path cache first
+    const cacheKey = getPathCacheKey(startGx, startGy, goalGx, goalGy, ownerId);
+    const cachedEntry = pathCache.get(cacheKey);
+    if (cachedEntry && (currentPathTick - cachedEntry.tick) < PATH_CACHE_TTL) {
+        // Return a copy of cached path (since paths get modified during use)
+        return cachedEntry.path ? cachedEntry.path.map(v => new Vector(v.x, v.y)) : null;
+    }
+
     // Check if goal is blocked - if so, find nearest unblocked tile
     let actualGoalGx = goalGx;
     let actualGoalGy = goalGy;
@@ -469,7 +496,17 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
             // NOTE: Smoothing might cut through danger zones if not careful.
             // For now, keep smoothing but maybe basic hasLineOfSight should check danger?
             // If I omit danger check in LoS, units might smooth "across" a danger zone.
-            return smoothPath(path, entityRadius, ownerId);
+            const smoothedPath = smoothPath(path, entityRadius, ownerId);
+
+            // Cache the result
+            if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
+                // Remove oldest entry (simple eviction - first entry)
+                const firstKey = pathCache.keys().next().value;
+                if (firstKey) pathCache.delete(firstKey);
+            }
+            pathCache.set(cacheKey, { path: smoothedPath, tick: currentPathTick });
+
+            return smoothedPath;
         }
 
         closedSet.add(currentKey);
@@ -524,7 +561,13 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
         }
     }
 
-    // No path found
+    // No path found - cache the negative result too
+    if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
+        const firstKey = pathCache.keys().next().value;
+        if (firstKey) pathCache.delete(firstKey);
+    }
+    pathCache.set(cacheKey, { path: null, tick: currentPathTick });
+
     return null;
 }
 
