@@ -2119,96 +2119,105 @@ function updateWells(
 
         const well = entity as WellEntity;
 
-        // Count current ore within radius
-        let oreInRadius = 0;
+        // Group nearby ores
+        const nearbyOres: ResourceEntity[] = [];
+        const fillableOres: ResourceEntity[] = [];
+
         for (const otherId in nextEntities) {
             const other = nextEntities[otherId];
             if (other.type === 'RESOURCE' && !other.dead) {
                 if (well.pos.dist(other.pos) <= wellConfig.oreSpawnRadius) {
-                    oreInRadius++;
-                }
-            }
-        }
-
-        // Check if should spawn new ore
-        const shouldSpawn = tick >= well.well.nextSpawnTick &&
-                           oreInRadius < wellConfig.maxOrePerWell;
-
-        if (shouldSpawn) {
-            // Find valid spawn position (random scatter within radius)
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 30 + Math.random() * (wellConfig.oreSpawnRadius - 30);
-            const spawnX = well.pos.x + Math.cos(angle) * dist;
-            const spawnY = well.pos.y + Math.sin(angle) * dist;
-
-            // Clamp to map bounds
-            const finalX = Math.max(50, Math.min(config.width - 50, spawnX));
-            const finalY = Math.max(50, Math.min(config.height - 50, spawnY));
-
-            // Create new ore entity
-            const oreId = `ore_well_${id}_${tick}`;
-            const newOre: ResourceEntity = {
-                id: oreId,
-                owner: -1,
-                type: 'RESOURCE',
-                key: 'ore',
-                pos: new Vector(finalX, finalY),
-                prevPos: new Vector(finalX, finalY),
-                hp: wellConfig.initialOreAmount,
-                maxHp: wellConfig.maxOreAmount,
-                w: 25,
-                h: 25,
-                radius: 12,
-                dead: false
-            };
-            nextEntities[oreId] = newOre;
-
-            // Calculate next spawn tick (random interval)
-            const nextSpawnDelay = wellConfig.spawnRateTicksMin +
-                Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
-
-            // Update well state
-            nextEntities[id] = {
-                ...well,
-                well: {
-                    ...well.well,
-                    nextSpawnTick: tick + nextSpawnDelay,
-                    currentOreCount: oreInRadius + 1,
-                    totalSpawned: well.well.totalSpawned + 1
-                }
-            };
-        } else {
-            // Just update ore count tracking
-            nextEntities[id] = {
-                ...well,
-                well: {
-                    ...well.well,
-                    currentOreCount: oreInRadius
-                }
-            };
-        }
-    }
-
-    // Ore growth: ore near wells grows over time
-    for (const id in nextEntities) {
-        const entity = nextEntities[id];
-        if (entity.type === 'RESOURCE' && !entity.dead && entity.hp < entity.maxHp) {
-            // Check if near a well (well-spawned ore grows)
-            let nearWell = false;
-            for (const otherId in nextEntities) {
-                const other = nextEntities[otherId];
-                if (other.type === 'WELL' && !other.dead) {
-                    if (entity.pos.dist(other.pos) <= wellConfig.oreSpawnRadius) {
-                        nearWell = true;
-                        break;
+                    nearbyOres.push(other as ResourceEntity);
+                    if (other.hp < other.maxHp) {
+                        fillableOres.push(other as ResourceEntity);
                     }
                 }
             }
+        }
 
-            if (nearWell) {
+        // Logic: Grow one fillable ore if exists, otherwise try to spawn
+        if (fillableOres.length > 0) {
+            // Pick one to grow (first one found)
+            const targetOre = fillableOres[0];
+
+            // Only update if we haven't already updated this ore this tick (e.g. from another well)
+            // But nextEntities is a copy, so updating it here is fine. 
+            // If an ore is near two wells, it might get updated twice. 
+            // Let's accept that rare double-growth for now as "bonus".
+            // However, since we are iterating `nextEntities` (which is a copy), 
+            // if we modify `nextEntities[targetOre.id]`, the next well will see the MODIFIED ore.
+            // If the next well also picks it, it will grow again. This is acceptable.
+
+            nextEntities[targetOre.id] = {
+                ...targetOre,
+                hp: Math.min(targetOre.maxHp, targetOre.hp + wellConfig.oreGrowthRate)
+            };
+
+            // Update well tracking
+            nextEntities[id] = {
+                ...well,
+                well: {
+                    ...well.well,
+                    currentOreCount: nearbyOres.length
+                }
+            };
+
+        } else {
+            // Check if should spawn new ore
+            const shouldSpawn = tick >= well.well.nextSpawnTick &&
+                nearbyOres.length < wellConfig.maxOrePerWell;
+
+            if (shouldSpawn) {
+                // Find valid spawn position (random scatter within radius)
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 30 + Math.random() * (wellConfig.oreSpawnRadius - 30);
+                const spawnX = well.pos.x + Math.cos(angle) * dist;
+                const spawnY = well.pos.y + Math.sin(angle) * dist;
+
+                // Clamp to map bounds
+                const finalX = Math.max(50, Math.min(config.width - 50, spawnX));
+                const finalY = Math.max(50, Math.min(config.height - 50, spawnY));
+
+                // Create new ore entity
+                const oreId = `ore_well_${id}_${tick}`;
+                const newOre: ResourceEntity = {
+                    id: oreId,
+                    owner: -1,
+                    type: 'RESOURCE',
+                    key: 'ore',
+                    pos: new Vector(finalX, finalY),
+                    prevPos: new Vector(finalX, finalY),
+                    hp: wellConfig.initialOreAmount,
+                    maxHp: wellConfig.maxOreAmount,
+                    w: 25,
+                    h: 25,
+                    radius: 12,
+                    dead: false
+                };
+                nextEntities[oreId] = newOre;
+
+                // Calculate next spawn tick (random interval)
+                const nextSpawnDelay = wellConfig.spawnRateTicksMin +
+                    Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
+
+                // Update well state
                 nextEntities[id] = {
-                    ...entity,
-                    hp: Math.min(entity.maxHp, entity.hp + wellConfig.oreGrowthRate)
+                    ...well,
+                    well: {
+                        ...well.well,
+                        nextSpawnTick: tick + nextSpawnDelay,
+                        currentOreCount: nearbyOres.length + 1,
+                        totalSpawned: well.well.totalSpawned + 1
+                    }
+                };
+            } else {
+                // Just update ore count tracking
+                nextEntities[id] = {
+                    ...well,
+                    well: {
+                        ...well.well,
+                        currentOreCount: nearbyOres.length
+                    }
                 };
             }
         }
