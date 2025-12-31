@@ -1253,7 +1253,7 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                 if (ref && !ref.dead) {
                     // Target "Docking Point" (bottom of refinery)
                     // Clamp dock position to map bounds to prevent pathfinding issues
-                    const rawDockPos = ref.pos.add(new Vector(0, 60));
+                    const rawDockPos = ref.pos.add(new Vector(0, 100));
                     const dockPos = new Vector(
                         Math.max(0, Math.min(mapConfig.width - 1, rawDockPos.x)),
                         Math.max(0, Math.min(mapConfig.height - 1, rawDockPos.y))

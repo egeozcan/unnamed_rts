@@ -6,15 +6,23 @@ export const turrets: Record<string, string> = {
         ${SHARED_DEFS}
         <g filter="url(#shadow)">
             <!-- Rotating Platform -->
-            <circle cx="50" cy="50" r="22" fill="url(#metalGrad)" stroke="#111"/>
-            <circle cx="50" cy="50" r="18" fill="COL_PRIMARY"/>
+            <circle cx="50" cy="50" r="24" fill="url(#metalGrad)" stroke="#111"/>
+            <circle cx="50" cy="50" r="20" fill="COL_PRIMARY" opacity="0.8"/>
             
-            <!-- Gun Housing -->
-            <rect x="42" y="10" width="16" height="40" fill="#111" stroke="#000"/>
-            <rect x="44" y="5" width="12" height="45" fill="#222"/>
+            <!-- Recoil Mechanism / Mantlet -->
+            <rect x="40" y="30" width="20" height="20" rx="2" fill="#222" stroke="#000"/>
+            
+            <!-- Main Gun Housing -->
+            <rect x="42" y="10" width="16" height="40" fill="#222" stroke="#000"/>
+            <rect x="44" y="5" width="12" height="45" fill="#333"/>
             
             <!-- Barrel Detail -->
-            <rect x="46" y="2" width="8" height="10" fill="#000"/>
+            <rect x="46" y="0" width="8" height="15" fill="#111"/> 
+            <rect x="45" y="0" width="10" height="3" fill="#000"/> <!-- Muzzle Brake -->
+            
+            <!-- Vents/Bolts -->
+            <circle cx="45" cy="40" r="1" fill="#555"/>
+            <circle cx="55" cy="40" r="1" fill="#555"/>
         </g>
     </svg>`,
 
@@ -23,17 +31,26 @@ export const turrets: Record<string, string> = {
         <g filter="url(#shadow)">
             <!-- Rotating Mount -->
             <rect x="30" y="35" width="40" height="40" rx="4" fill="COL_PRIMARY" stroke="#000"/>
+            <rect x="35" y="40" width="30" height="30" fill="#222" opacity="0.5"/>
             
-            <!-- Missile Pods -->
-            <rect x="20" y="45" width="20" height="30" fill="#eee" stroke="#222"/> <!-- Left Pod -->
-            <rect x="60" y="45" width="20" height="30" fill="#eee" stroke="#222"/> <!-- Right Pod -->
+            <!-- Missile Pods (Angled) -->
+            <path d="M20 45 L40 45 L40 75 L15 75 Z" fill="#eee" stroke="#222"/> <!-- Left Pod -->
+            <path d="M60 45 L80 45 L85 75 L60 75 Z" fill="#eee" stroke="#222"/> <!-- Right Pod -->
             
-            <!-- Missiles -->
-            <path d="M25 50 L35 50 L30 20 Z" fill="#fff" stroke="#000"/>
-            <path d="M65 50 L75 50 L70 20 Z" fill="#fff" stroke="#000"/>
+            <!-- Missiles inside pods -->
+            <circle cx="28" cy="50" r="3" fill="#fff" stroke="#000"/>
+            <circle cx="28" cy="60" r="3" fill="#fff" stroke="#000"/>
+            <circle cx="28" cy="70" r="3" fill="#fff" stroke="#000"/>
+            
+            <circle cx="72" cy="50" r="3" fill="#fff" stroke="#000"/>
+            <circle cx="72" cy="60" r="3" fill="#fff" stroke="#000"/>
+            <circle cx="72" cy="70" r="3" fill="#fff" stroke="#000"/>
+            
+            <!-- Radar Disk on Mount -->
+            <ellipse cx="50" cy="55" rx="10" ry="4" fill="#33c" stroke="#111"/>
             
             <!-- Warning strip -->
-            <rect x="35" y="65" width="30" height="5" fill="url(#caution)"/>
+            <rect x="35" y="70" width="30" height="4" fill="url(#caution)"/>
         </g>
     </svg>`,
 
