@@ -98,6 +98,21 @@ export type ArmorTypeDefinition = z.infer<typeof ArmorTypeDefinitionSchema>;
 export const DamageModifierSchema = z.record(z.string(), z.number());
 export type DamageModifier = z.infer<typeof DamageModifierSchema>;
 
+// Well definition (ore generator)
+export const WellSchema = z.object({
+  name: z.string(),
+  w: z.number().positive(),
+  h: z.number().positive(),
+  spawnRateTicksMin: z.number().positive(),
+  spawnRateTicksMax: z.number().positive(),
+  maxOrePerWell: z.number().positive(),
+  oreSpawnRadius: z.number().positive(),
+  initialOreAmount: z.number().positive(),
+  oreGrowthRate: z.number().positive(),
+  maxOreAmount: z.number().positive(),
+});
+export type Well = z.infer<typeof WellSchema>;
+
 // Complete Rules schema
 export const RulesSchema = z.object({
   economy: EconomySchema,
@@ -107,6 +122,7 @@ export const RulesSchema = z.object({
   units: z.record(z.string(), UnitSchema),
   armorTypes: z.record(z.string(), ArmorTypeDefinitionSchema),
   damageModifiers: z.record(z.string(), DamageModifierSchema),
+  wells: z.record(z.string(), WellSchema).optional(),
 });
 export type Rules = z.infer<typeof RulesSchema>;
 

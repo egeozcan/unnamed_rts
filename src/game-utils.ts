@@ -3,7 +3,8 @@
  * These are separated from game.ts to enable unit testing without DOM dependencies.
  */
 
-import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, WellEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS } from './engine/types.js';
+import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import { RULES } from './data/schemas/index.js';
 
 /**
@@ -202,6 +203,57 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
         };
         entities[id] = rock;
         rocksPlaced++;
+    }
+
+    // Generate ore wells (neutral resource generators)
+    const wellCount = WELL_DENSITY_SETTINGS[config.resourceDensity]; // Use resource density for wells
+    let wellsPlaced = 0;
+    let wellAttempts = 0;
+    const maxWellAttempts = wellCount * 20;
+
+    while (wellsPlaced < wellCount && wellAttempts < maxWellAttempts) {
+        wellAttempts++;
+
+        // Place wells in middle area of map (600px from edges)
+        const x = 600 + Math.random() * (mapWidth - 1200);
+        const y = 600 + Math.random() * (mapHeight - 1200);
+
+        // Skip if too close to a spawn zone
+        if (isNearSpawnZone(x, y)) {
+            continue;
+        }
+
+        // Check not too close to existing wells (min 400px apart)
+        let tooClose = false;
+        for (const id in entities) {
+            const e = entities[id];
+            if (e.type === 'WELL') {
+                if (new Vector(x, y).dist(e.pos) < 400) {
+                    tooClose = true;
+                    break;
+                }
+            }
+        }
+        if (tooClose) continue;
+
+        const id = 'well_' + wellsPlaced;
+        const well: WellEntity = {
+            id,
+            owner: -1,
+            type: 'WELL',
+            key: 'well',
+            pos: new Vector(x, y),
+            prevPos: new Vector(x, y),
+            hp: 9999,
+            maxHp: 9999,
+            w: 50,
+            h: 50,
+            radius: 25,
+            dead: false,
+            well: createDefaultWellComponent()
+        };
+        entities[id] = well;
+        wellsPlaced++;
     }
 
     return { entities, mapWidth, mapHeight };

@@ -1,5 +1,6 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, BuildingEntity, HarvesterUnit, UnitEntity } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, UnitEntity } from './engine/types.js';
+import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback } from './ui/index.js';
@@ -218,6 +219,57 @@ function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entit
         };
         entities[id] = rockEntity;
         rocksPlaced++;
+    }
+
+    // Generate ore wells (neutral resource generators)
+    const wellCount = WELL_DENSITY_SETTINGS[config.resourceDensity];
+    let wellsPlaced = 0;
+    let wellAttempts = 0;
+    const maxWellAttempts = wellCount * 20;
+
+    while (wellsPlaced < wellCount && wellAttempts < maxWellAttempts) {
+        wellAttempts++;
+
+        // Place wells in middle area of map (600px from edges)
+        const x = 600 + Math.random() * (mapWidth - 1200);
+        const y = 600 + Math.random() * (mapHeight - 1200);
+
+        // Skip if too close to a spawn zone
+        if (isNearSpawnZone(x, y)) {
+            continue;
+        }
+
+        // Check not too close to existing wells (min 400px apart)
+        let tooClose = false;
+        for (const id in entities) {
+            const e = entities[id];
+            if (e.type === 'WELL') {
+                if (new Vector(x, y).dist(e.pos) < 400) {
+                    tooClose = true;
+                    break;
+                }
+            }
+        }
+        if (tooClose) continue;
+
+        const id = 'well_' + wellsPlaced;
+        const wellEntity: WellEntity = {
+            id,
+            owner: -1,
+            type: 'WELL',
+            key: 'well',
+            pos: new Vector(x, y),
+            prevPos: new Vector(x, y),
+            hp: 9999,
+            maxHp: 9999,
+            w: 50,
+            h: 50,
+            radius: 25,
+            dead: false,
+            well: createDefaultWellComponent()
+        };
+        entities[id] = wellEntity;
+        wellsPlaced++;
     }
 
     return { entities, mapWidth, mapHeight };

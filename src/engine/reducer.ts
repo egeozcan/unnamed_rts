@@ -1,8 +1,8 @@
 import {
     Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS,
     Projectile, Particle,
-    UnitEntity, BuildingEntity, HarvesterUnit, CombatUnit,
-    UnitKey, BuildingKey
+    UnitEntity, BuildingEntity, HarvesterUnit, CombatUnit, ResourceEntity, WellEntity,
+    UnitKey, BuildingKey, MapConfig
 } from './types.js';
 import { RULES, Building, Unit, isBuildingData, isUnitData } from '../data/schemas/index.js';
 import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH, setPathCacheTick } from './utils.js';
@@ -149,6 +149,9 @@ function tick(state: GameState): GameState {
             nextEntities[e.id] = e;
         });
     }
+
+    // Update Wells - spawn new ore and grow existing ore near wells
+    nextEntities = updateWells(nextEntities, nextTick, state.config);
 
     // Entity Updates
     const updateState = { ...state, players: nextPlayers, entities: nextEntities };
@@ -2094,6 +2097,124 @@ function createProjectile(source: Entity, target: Entity): Projectile {
         weaponType: weaponType,
         dead: false
     };
+}
+
+/**
+ * Update ore wells - spawn new ore around wells and grow existing ore.
+ */
+function updateWells(
+    entities: Record<EntityId, Entity>,
+    tick: number,
+    config: MapConfig
+): Record<EntityId, Entity> {
+    const wellConfig = RULES.wells?.well;
+    if (!wellConfig) return entities;
+
+    let nextEntities = { ...entities };
+
+    // Process each well
+    for (const id in nextEntities) {
+        const entity = nextEntities[id];
+        if (entity.type !== 'WELL' || entity.dead) continue;
+
+        const well = entity as WellEntity;
+
+        // Count current ore within radius
+        let oreInRadius = 0;
+        for (const otherId in nextEntities) {
+            const other = nextEntities[otherId];
+            if (other.type === 'RESOURCE' && !other.dead) {
+                if (well.pos.dist(other.pos) <= wellConfig.oreSpawnRadius) {
+                    oreInRadius++;
+                }
+            }
+        }
+
+        // Check if should spawn new ore
+        const shouldSpawn = tick >= well.well.nextSpawnTick &&
+                           oreInRadius < wellConfig.maxOrePerWell;
+
+        if (shouldSpawn) {
+            // Find valid spawn position (random scatter within radius)
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 30 + Math.random() * (wellConfig.oreSpawnRadius - 30);
+            const spawnX = well.pos.x + Math.cos(angle) * dist;
+            const spawnY = well.pos.y + Math.sin(angle) * dist;
+
+            // Clamp to map bounds
+            const finalX = Math.max(50, Math.min(config.width - 50, spawnX));
+            const finalY = Math.max(50, Math.min(config.height - 50, spawnY));
+
+            // Create new ore entity
+            const oreId = `ore_well_${id}_${tick}`;
+            const newOre: ResourceEntity = {
+                id: oreId,
+                owner: -1,
+                type: 'RESOURCE',
+                key: 'ore',
+                pos: new Vector(finalX, finalY),
+                prevPos: new Vector(finalX, finalY),
+                hp: wellConfig.initialOreAmount,
+                maxHp: wellConfig.maxOreAmount,
+                w: 25,
+                h: 25,
+                radius: 12,
+                dead: false
+            };
+            nextEntities[oreId] = newOre;
+
+            // Calculate next spawn tick (random interval)
+            const nextSpawnDelay = wellConfig.spawnRateTicksMin +
+                Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
+
+            // Update well state
+            nextEntities[id] = {
+                ...well,
+                well: {
+                    ...well.well,
+                    nextSpawnTick: tick + nextSpawnDelay,
+                    currentOreCount: oreInRadius + 1,
+                    totalSpawned: well.well.totalSpawned + 1
+                }
+            };
+        } else {
+            // Just update ore count tracking
+            nextEntities[id] = {
+                ...well,
+                well: {
+                    ...well.well,
+                    currentOreCount: oreInRadius
+                }
+            };
+        }
+    }
+
+    // Ore growth: ore near wells grows over time
+    for (const id in nextEntities) {
+        const entity = nextEntities[id];
+        if (entity.type === 'RESOURCE' && !entity.dead && entity.hp < entity.maxHp) {
+            // Check if near a well (well-spawned ore grows)
+            let nearWell = false;
+            for (const otherId in nextEntities) {
+                const other = nextEntities[otherId];
+                if (other.type === 'WELL' && !other.dead) {
+                    if (entity.pos.dist(other.pos) <= wellConfig.oreSpawnRadius) {
+                        nearWell = true;
+                        break;
+                    }
+                }
+            }
+
+            if (nearWell) {
+                nextEntities[id] = {
+                    ...entity,
+                    hp: Math.min(entity.maxHp, entity.hp + wellConfig.oreGrowthRate)
+                };
+            }
+        }
+    }
+
+    return nextEntities;
 }
 
 export function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, state: GameState): Entity {

@@ -4,6 +4,7 @@ import {
     BuildingEntity,
     ResourceEntity,
     RockEntity,
+    WellEntity,
     CombatUnit,
     HarvesterUnit,
     CombatComponent
@@ -25,6 +26,10 @@ export function isResource(entity: Entity): entity is ResourceEntity {
 
 export function isRock(entity: Entity): entity is RockEntity {
     return entity.type === 'ROCK';
+}
+
+export function isWell(entity: Entity): entity is WellEntity {
+    return entity.type === 'WELL';
 }
 
 // ============ UNIT SUBTYPE GUARDS ============

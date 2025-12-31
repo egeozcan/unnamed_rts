@@ -6,7 +6,8 @@ import {
     MovementComponent,
     CombatComponent,
     HarvesterComponent,
-    BuildingStateComponent
+    BuildingStateComponent,
+    WellComponent
 } from './types.js';
 
 // ============ COMPONENT DEFAULTS ============
@@ -56,6 +57,14 @@ export function createDefaultBuildingState(): BuildingStateComponent {
     return {
         isRepairing: undefined,
         placedTick: undefined
+    };
+}
+
+export function createDefaultWellComponent(): WellComponent {
+    return {
+        nextSpawnTick: 0,
+        currentOreCount: 0,
+        totalSpawned: 0
     };
 }
 

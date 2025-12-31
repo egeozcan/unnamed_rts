@@ -103,6 +103,8 @@ function renderToContext(
             ctx.fillStyle = PLAYER_COLORS[e.owner];
         } else if (e.type === 'ROCK') {
             ctx.fillStyle = '#555';
+        } else if (e.type === 'WELL') {
+            ctx.fillStyle = '#ffd700'; // Gold color for wells
         } else {
             ctx.fillStyle = '#aa0';
         }

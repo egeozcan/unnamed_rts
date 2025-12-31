@@ -5,6 +5,7 @@ import {
     BuildingEntity,
     ResourceEntity,
     RockEntity,
+    WellEntity,
     HarvesterUnit,
     CombatUnit,
     UnitKey,
@@ -15,7 +16,8 @@ import {
     createDefaultMovement,
     createDefaultCombat,
     createDefaultHarvester,
-    createDefaultBuildingState
+    createDefaultBuildingState,
+    createDefaultWellComponent
 } from './entity-helpers.js';
 
 // ============ TEST ENTITY ID GENERATION ============
@@ -231,6 +233,7 @@ export interface ResourceOptions {
     x?: number;
     y?: number;
     hp?: number;
+    maxHp?: number;
 }
 
 export function createTestResource(options: ResourceOptions = {}): ResourceEntity {
@@ -238,6 +241,7 @@ export function createTestResource(options: ResourceOptions = {}): ResourceEntit
     const x = options.x ?? 500;
     const y = options.y ?? 500;
     const hp = options.hp ?? 1000;
+    const maxHp = options.maxHp ?? Math.max(hp, 1000); // Default to 1000 or hp, whichever is larger
 
     return {
         id,
@@ -247,7 +251,7 @@ export function createTestResource(options: ResourceOptions = {}): ResourceEntit
         pos: new Vector(x, y),
         prevPos: new Vector(x, y),
         hp,
-        maxHp: hp,
+        maxHp,
         w: 25,
         h: 25,
         radius: 12,
@@ -286,6 +290,44 @@ export function createTestRock(options: RockOptions = {}): RockEntity {
     };
 }
 
+// ============ WELL BUILDER ============
+
+export interface WellOptions {
+    id?: EntityId;
+    x?: number;
+    y?: number;
+    nextSpawnTick?: number;
+    currentOreCount?: number;
+    totalSpawned?: number;
+}
+
+export function createTestWell(options: WellOptions = {}): WellEntity {
+    const id = options.id ?? createTestId('well');
+    const x = options.x ?? 500;
+    const y = options.y ?? 500;
+
+    return {
+        id,
+        owner: -1,
+        type: 'WELL',
+        key: 'well',
+        pos: new Vector(x, y),
+        prevPos: new Vector(x, y),
+        hp: 9999,
+        maxHp: 9999,
+        w: 50,
+        h: 50,
+        radius: 25,
+        dead: false,
+        well: {
+            ...createDefaultWellComponent(),
+            nextSpawnTick: options.nextSpawnTick ?? 0,
+            currentOreCount: options.currentOreCount ?? 0,
+            totalSpawned: options.totalSpawned ?? 0
+        }
+    };
+}
+
 // ============ STATE HELPERS ============
 
 export function addEntityToState(state: GameState, entity: Entity): GameState {
@@ -315,7 +357,7 @@ export function addEntitiesToState(state: GameState, entities: Entity[]): GameSt
 export interface GenericEntityOptions {
     id?: EntityId;
     owner?: number;
-    type: 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK';
+    type: 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK' | 'WELL';
     key: string;
     x?: number;
     y?: number;
@@ -385,6 +427,12 @@ export function createTestEntity(options: GenericEntityOptions): Entity {
             });
         case 'ROCK':
             return createTestRock({
+                id: options.id,
+                x: options.x,
+                y: options.y
+            });
+        case 'WELL':
+            return createTestWell({
                 id: options.id,
                 x: options.x,
                 y: options.y

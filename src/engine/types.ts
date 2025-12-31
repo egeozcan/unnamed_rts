@@ -3,7 +3,8 @@ import {
     CombatComponent,
     HarvesterComponent,
     EngineerComponent,
-    BuildingStateComponent
+    BuildingStateComponent,
+    WellComponent
 } from './components.js';
 
 export type PlayerId = string;
@@ -68,8 +69,9 @@ export type BuildingKey =
 
 export type ResourceKey = 'ore';
 export type RockKey = 'rock';
+export type WellKey = 'well';
 
-export type EntityType = 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK';
+export type EntityType = 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK' | 'WELL';
 
 // ============ BASE ENTITY ============
 // Properties shared by all entity types
@@ -130,9 +132,15 @@ export interface RockEntity extends BaseEntity {
     readonly key: RockKey;
 }
 
+export interface WellEntity extends BaseEntity {
+    readonly type: 'WELL';
+    readonly key: WellKey;
+    readonly well: WellComponent;
+}
+
 // ============ DISCRIMINATED UNION ============
 
-export type Entity = UnitEntity | BuildingEntity | ResourceEntity | RockEntity;
+export type Entity = UnitEntity | BuildingEntity | ResourceEntity | RockEntity | WellEntity;
 
 // Re-export component types for convenience
 export type {
@@ -140,7 +148,8 @@ export type {
     CombatComponent,
     HarvesterComponent,
     EngineerComponent,
-    BuildingStateComponent
+    BuildingStateComponent,
+    WellComponent
 } from './components.js';
 
 export interface Projectile {
@@ -312,6 +321,14 @@ export const DENSITY_SETTINGS = {
     low: { resources: 80, rocks: 15 },
     medium: { resources: 150, rocks: 30 },
     high: { resources: 250, rocks: 50 }
+};
+
+// Well density settings
+export const WELL_DENSITY_SETTINGS = {
+    none: 0,
+    low: 2,
+    medium: 4,
+    high: 6
 };
 
 // Legacy colors for backwards compatibility

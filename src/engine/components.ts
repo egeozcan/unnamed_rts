@@ -59,3 +59,12 @@ export interface BuildingStateComponent {
     readonly isRepairing?: boolean;
     readonly placedTick?: number;
 }
+
+// ============ WELL COMPONENT ============
+// Properties specific to ore wells (neutral resource generators)
+
+export interface WellComponent {
+    readonly nextSpawnTick: number;      // When to spawn next ore
+    readonly currentOreCount: number;    // Ore entities within radius
+    readonly totalSpawned: number;       // Lifetime counter
+}

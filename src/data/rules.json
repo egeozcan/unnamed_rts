@@ -3,6 +3,20 @@
         "sellBuildingReturnPercentage": 0.5,
         "repairCostPercentage": 0.3
     },
+    "wells": {
+        "well": {
+            "name": "Ore Well",
+            "w": 50,
+            "h": 50,
+            "spawnRateTicksMin": 900,
+            "spawnRateTicksMax": 1500,
+            "maxOrePerWell": 4,
+            "oreSpawnRadius": 120,
+            "initialOreAmount": 200,
+            "oreGrowthRate": 0.5,
+            "maxOreAmount": 1000
+        }
+    },
     "meta": {
         "version": "1.0",
         "factions": [

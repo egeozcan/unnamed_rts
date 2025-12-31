@@ -217,6 +217,39 @@ export class Renderer {
             ctx.beginPath();
             ctx.arc(-r * 0.3, -r * 0.2, r * 0.15, 0, Math.PI * 2);
             ctx.fill();
+        } else if (entity.type === 'WELL') {
+            // Draw ore well as a glowing golden pool
+            const pulsePhase = (tick % 60) / 60;
+            const pulseScale = 1 + Math.sin(pulsePhase * Math.PI * 2) * 0.05;
+
+            // Outer glow
+            ctx.fillStyle = 'rgba(212, 175, 55, 0.3)';
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius * 1.5 * pulseScale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main pool with gradient
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
+            gradient.addColorStop(0, '#ffd700');
+            gradient.addColorStop(0.6, '#b8860b');
+            gradient.addColorStop(1, '#8b6914');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius * pulseScale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner highlight
+            ctx.fillStyle = 'rgba(255, 255, 200, 0.4)';
+            ctx.beginPath();
+            ctx.arc(-5, -5, entity.radius * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Border
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);
+            ctx.stroke();
         } else {
             // Get rotation from movement component for units, 0 for buildings
             const rotation = isUnit(entity) ? entity.movement.rotation : 0;
