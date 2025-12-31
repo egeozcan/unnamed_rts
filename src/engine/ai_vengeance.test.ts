@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE } from './reducer';
 import { GameState, Vector, Entity, EntityId } from './types';
+import { AI_CONFIG } from '../data/schemas/index';
 
 const {
     getAIState,
@@ -228,7 +229,7 @@ describe('AI Vengeance System', () => {
             const combatUnits = Object.values(state.entities).filter(e => e.owner === 1 && e.type === 'UNIT');
             const baseCenter = new Vector(500, 500);
 
-            const actions = handleAttack(state, 1, aiState, combatUnits, enemies, baseCenter, {});
+            const actions = handleAttack(state, 1, aiState, combatUnits, enemies, baseCenter, AI_CONFIG.personalities.balanced);
 
             const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
             expect(attackAction).toBeDefined();

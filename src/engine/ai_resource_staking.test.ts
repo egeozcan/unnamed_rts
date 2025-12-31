@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector } from './types';
+import { GameState, Vector, isActionType } from './types';
 import { computeAiActions } from './ai';
 import { INITIAL_STATE } from './reducer';
 
@@ -58,10 +58,10 @@ describe('AI Resource Staking', () => {
         // Since readyToPlace is set, handleBuildingPlacement is called
         const actions = computeAiActions(state, aiId);
 
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'refinery');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'refinery');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const placePos = new Vector(placeAction.payload.x, placeAction.payload.y);
             const distToA = placePos.dist(resA.pos);
             const distToB = placePos.dist(resB.pos);

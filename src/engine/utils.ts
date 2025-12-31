@@ -1,4 +1,4 @@
-import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from './types.js';
+import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle } from './types.js';
 import { RULES } from '../data/schemas/index.js';
 
 // Default grid dimensions based on default map size
@@ -190,6 +190,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
     const isBuilding = type === 'BUILDING';
     const isResource = type === 'RESOURCE';
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let data: any;
     if (isBuilding) {
         data = RULES.buildings[statsKey];
@@ -262,7 +263,7 @@ export function findOpenSpot(x: number, y: number, radius: number, entities: Ent
     return new Vector(x, y + radius);
 }
 
-export function spawnParticle(particles: any[], x: number, y: number, color: string, speed: number): void {
+export function spawnParticle(particles: Particle[], x: number, y: number, color: string, speed: number): void {
     particles.push({
         pos: new Vector(x, y),
         vel: new Vector((Math.random() - 0.5) * speed, (Math.random() - 0.5) * speed),
@@ -271,7 +272,7 @@ export function spawnParticle(particles: any[], x: number, y: number, color: str
     });
 }
 
-export function spawnFloater(particles: any[], x: number, y: number, text: string, color: string): void {
+export function spawnFloater(particles: Particle[], x: number, y: number, text: string, color: string): void {
     particles.push({
         pos: new Vector(x, y),
         vel: new Vector(0, -1),

@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector } from './types';
+import { GameState, Vector, isActionType } from './types';
 import { computeAiActions } from './ai';
 import { INITIAL_STATE } from './reducer';
 
@@ -72,13 +72,13 @@ describe('AI Harvester Fleeing', () => {
         // Specifically, it should ideally target Resource 2 or Refinery 2 area.
 
         const moveAction = actions.find(a =>
-            a.type === 'COMMAND_MOVE' &&
+            isActionType(a, 'COMMAND_MOVE') &&
             a.payload.unitIds.includes(harv.id)
         );
 
         expect(moveAction).toBeDefined();
 
-        if (moveAction) {
+        if (moveAction && isActionType(moveAction, 'COMMAND_MOVE')) {
             const dest = new Vector(moveAction.payload.x, moveAction.payload.y);
             const distToSafe = dest.dist(resource2Pos);
             const distToUnsafe = dest.dist(resource1Pos);

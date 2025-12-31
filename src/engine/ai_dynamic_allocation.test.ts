@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, isActionType } from './types';
 
 const { getAIState } = _testUtils;
 
@@ -239,10 +239,10 @@ describe('Refinery Placement Near Ore', () => {
         };
 
         const actions = computeAiActions(state, 1);
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'refinery');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'refinery');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const { x, y } = placeAction.payload;
             const distToOre = new Vector(x, y).dist(new Vector(700, 500));
             const distToBase = new Vector(x, y).dist(new Vector(500, 500));
@@ -276,10 +276,10 @@ describe('Refinery Placement Near Ore', () => {
         };
 
         const actions = computeAiActions(state, 1);
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'refinery');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'refinery');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const { x, y } = placeAction.payload;
             const distToOre = new Vector(x, y).dist(new Vector(1200, 500));
 
@@ -315,10 +315,10 @@ describe('Defensive Building Placement', () => {
         };
 
         const actions = computeAiActions(state, 1);
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'turret');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'turret');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const { x } = placeAction.payload;
             // Turret should be placed toward the enemy (x > base center)
             expect(x).toBeGreaterThan(500);
@@ -345,10 +345,10 @@ describe('Defensive Building Placement', () => {
         };
 
         const actions = computeAiActions(state, 1);
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'turret');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'turret');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const { x, y } = placeAction.payload;
             const distToRefinery = new Vector(x, y).dist(new Vector(800, 700));
 
@@ -374,10 +374,10 @@ describe('Defensive Building Placement', () => {
         };
 
         const actions = computeAiActions(state, 1);
-        const placeAction = actions.find(a => a.type === 'PLACE_BUILDING' && a.payload.key === 'turret');
+        const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'turret');
 
         expect(placeAction).toBeDefined();
-        if (placeAction) {
+        if (placeAction && isActionType(placeAction, 'PLACE_BUILDING')) {
             const { x, y } = placeAction.payload;
             const distToExistingTurret = new Vector(x, y).dist(new Vector(600, 500));
 

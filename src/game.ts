@@ -1,5 +1,5 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS, Action } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback } from './ui/index.js';
@@ -612,7 +612,7 @@ function gameLoop(timestamp: number = 0) {
 
         for (let t = 0; t < ticksToRun; t++) {
             // AI Logic - iterate over ALL AI players
-            let aiActions: any[] = [];
+            let aiActions: Action[] = [];
             for (const pidStr in currentState.players) {
                 const pid = parseInt(pidStr);
                 const player = currentState.players[pid];

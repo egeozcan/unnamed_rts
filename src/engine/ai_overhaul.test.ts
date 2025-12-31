@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, isActionType } from './types';
 
 const { getAIState, handleEmergencySell, updateEnemyIntelligence, handleMCVOperations } = _testUtils;
 
@@ -181,7 +181,10 @@ describe('AI Overhaul Tests', () => {
 
             // Should sell the useless refinery
             expect(actions.length).toBe(1);
-            expect(actions[0].payload.buildingId).toBe('ref_useless');
+            const sellAction = actions[0];
+            if (isActionType(sellAction, 'SELL_BUILDING')) {
+                expect(sellAction.payload.buildingId).toBe('ref_useless');
+            }
         });
 
         it('should NOT sell the only refinery even if useless', () => {

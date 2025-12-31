@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity } from './types.js';
+import { GameState, Vector, Entity, isActionType } from './types.js';
 import { _testUtils as aiTestUtils, resetAIState } from './ai';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
@@ -95,7 +95,10 @@ describe('AI Emergency Selling', () => {
 
         expect(actions.length).toBe(1);
         expect(actions[0].type).toBe('SELL_BUILDING');
-        expect(actions[0].payload.buildingId).toBe('b_ai');
+        const sellAction = actions[0];
+        if (isActionType(sellAction, 'SELL_BUILDING')) {
+            expect(sellAction.payload.buildingId).toBe('b_ai');
+        }
     });
 
     it('should NOT sell buildings when credits are healthy', () => {

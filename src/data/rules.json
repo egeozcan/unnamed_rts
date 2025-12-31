@@ -283,11 +283,13 @@
             "hp": 1000,
             "cost": 1400,
             "speed": 1.5,
-            "range": 0,
-            "damage": 0,
+            "range": 60,
+            "damage": 8,
+            "rate": 30,
             "w": 35,
             "capacity": 500,
             "armor": "heavy",
+            "weaponType": "bullet",
             "prerequisites": ["refinery", "factory"]
         },
         "jeep": {

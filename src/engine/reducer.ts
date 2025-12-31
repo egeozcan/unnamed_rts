@@ -1,4 +1,4 @@
-import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS } from './types.js';
+import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS, Projectile, Particle } from './types.js';
 import { RULES } from '../data/schemas/index.js';
 import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH, setPathCacheTick } from './utils.js';
 import { rebuildSpatialGrid, getSpatialGrid } from './spatial.js';
@@ -160,8 +160,8 @@ function tick(state: GameState): GameState {
     }
 
     // Projectile Updates
-    let nextProjectiles: any[] = [];
-    let damageEvents: any[] = [];
+    let nextProjectiles: Projectile[] = [];
+    let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
 
     [...state.projectiles, ...newProjs].forEach(p => {
         const res = updateProjectile(p, updatedEntities);
@@ -483,6 +483,8 @@ function calculatePower(playerId: number, entities: Record<EntityId, Entity>, ti
     return p;
 }
 
+// Returns rule data for a building or unit key.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getRuleData(key: string): any {
     if (RULES.buildings[key]) return RULES.buildings[key];
     if (RULES.units[key]) return RULES.units[key];
@@ -849,10 +851,10 @@ function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetI
     return { ...state, entities: nextEntities };
 }
 
-function updateEntities(state: GameState): { entities: Record<EntityId, Entity>, projectiles: any[], particles: any[], creditsEarned: Record<number, number> } {
+function updateEntities(state: GameState): { entities: Record<EntityId, Entity>, projectiles: Projectile[], particles: Particle[], creditsEarned: Record<number, number> } {
     let nextEntities = { ...state.entities };
-    let newProjectiles: any[] = [];
-    let newParticles: any[] = [];
+    let newProjectiles: Projectile[] = [];
+    let newParticles: Particle[] = [];
     let creditsEarned: Record<number, number> = {};
 
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
@@ -1071,7 +1073,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 }
 
 
-function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: Entity, projectile?: any, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
+function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: Entity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
     let nextEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
@@ -1084,7 +1086,34 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         const harvester = nextEntity;
         const capacity = 500;
 
-        // 0. If manual move (flee/player command), skip automated logic
+        // 0a. Harvester auto-attack: Fire at enemies in range (before harvesting)
+        // This runs first so harvesters will shoot nearby enemies even while harvesting
+        if (harvester.cooldown <= 0 && !harvester.moveTarget) {
+            const harvData = getRuleData('harvester');
+            const harvRange = harvData.range || 60;
+
+            // Find closest enemy in range
+            let closestEnemy: Entity | null = null;
+            let closestDist = harvRange;
+
+            for (const other of entityList) {
+                if (other.dead || other.owner === -1 || other.owner === harvester.owner) continue;
+
+                const d = harvester.pos.dist(other.pos);
+                if (d < closestDist) {
+                    closestDist = d;
+                    closestEnemy = other;
+                }
+            }
+
+            // Fire at enemy without setting targetId (no chasing)
+            if (closestEnemy) {
+                projectile = createProjectile(harvester, closestEnemy);
+                nextEntity = { ...harvester, cooldown: harvData.rate || 30 };
+            }
+        }
+
+        // 0b. If manual move (flee/player command), skip automated logic
         // BUT: If harvester has full cargo, ALWAYS clear moveTarget so it can go unload
         // This fixes the "dancing" bug where harvesters flee to safety but then can't return
         // to base because they keep trying to reach the flee destination
@@ -1525,6 +1554,29 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                 nextEntity = { ...nextEntity, moveTarget: null };
             }
         }
+    } else if (nextEntity.key === 'harvester' && nextEntity.targetId) {
+        // Manual attack command for harvester - active attack mode (chasing)
+        const target = allEntities[nextEntity.targetId];
+        if (target && !target.dead) {
+            const harvData = getRuleData('harvester');
+            const dist = nextEntity.pos.dist(target.pos);
+            const range = harvData.range || 60;
+
+            if (dist <= range) {
+                // In range - fire!
+                nextEntity = { ...nextEntity, moveTarget: null };
+                if (nextEntity.cooldown <= 0) {
+                    projectile = createProjectile(nextEntity, target);
+                    nextEntity = { ...nextEntity, cooldown: harvData.rate || 30 };
+                }
+            } else {
+                // Chase the target
+                nextEntity = moveToward(nextEntity, target.pos, entityList);
+            }
+        } else {
+            // Target dead or gone - clear it and resume normal behavior
+            nextEntity = { ...nextEntity, targetId: null };
+        }
     } else if (nextEntity.moveTarget) {
         // Manual move override for harvester (flee commands, player commands)
         nextEntity = moveToward(nextEntity, nextEntity.moveTarget, entityList);
@@ -1547,7 +1599,7 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
     return { entity: nextEntity, projectile, creditsEarned, resourceDamage };
 }
 
-function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: any } {
+function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: Projectile | null } {
     let nextEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
@@ -1600,7 +1652,7 @@ function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, e
     return { entity: nextEntity, projectile };
 }
 
-function updateProjectile(proj: any, entities: Record<EntityId, Entity>): { proj: any, damage?: { targetId: EntityId, amount: number, attackerId: number } } {
+function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId } } {
     const nextPos = proj.pos.add(proj.vel);
     let nextProj = { ...proj, pos: nextPos };
     let damageEvent = undefined;
@@ -1811,7 +1863,7 @@ function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Ent
 }
 
 
-function createProjectile(source: Entity, target: Entity) {
+function createProjectile(source: Entity, target: Entity): Projectile {
     const data = getRuleData(source.key);
     const weaponType = data?.weaponType || 'bullet';
     const isRocket = weaponType === 'rocket' || weaponType === 'missile' || weaponType === 'heavy_cannon';

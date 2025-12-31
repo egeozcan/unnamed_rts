@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, isActionType } from './types';
 
 const {
     findBaseCenter,
@@ -9,6 +9,8 @@ const {
     getAIState,
 
     updateEnemyBaseLocation,
+    getPersonalityForPlayer,
+    DIFFICULTY_TO_PERSONALITY,
     ATTACK_GROUP_MIN_SIZE,
     HARASS_GROUP_SIZE
 } = _testUtils;
@@ -90,6 +92,38 @@ describe('AI System', () => {
             const center = findBaseCenter(buildings);
             expect(center.x).toBe(200);
             expect(center.y).toBe(200);
+        });
+    });
+
+    describe('Difficulty to Personality Mapping', () => {
+        it('should map easy difficulty to turtle personality', () => {
+            const player = { difficulty: 'easy' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Turtle has lower aggression (0.5) and higher retreat threshold (0.5)
+            expect(personality.aggression_bias).toBe(0.5);
+            expect(personality.retreat_threshold).toBe(0.5);
+        });
+
+        it('should map medium difficulty to balanced personality', () => {
+            const player = { difficulty: 'medium' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Balanced has moderate aggression (1.0) and mid retreat threshold (0.3)
+            expect(personality.aggression_bias).toBe(1.0);
+            expect(personality.retreat_threshold).toBe(0.3);
+        });
+
+        it('should map hard difficulty to rusher personality', () => {
+            const player = { difficulty: 'hard' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Rusher has high aggression (1.5) and low retreat threshold (0.1)
+            expect(personality.aggression_bias).toBe(1.5);
+            expect(personality.retreat_threshold).toBe(0.1);
+        });
+
+        it('should have correct difficulty to personality mapping', () => {
+            expect(DIFFICULTY_TO_PERSONALITY['easy']).toBe('turtle');
+            expect(DIFFICULTY_TO_PERSONALITY['medium']).toBe('balanced');
+            expect(DIFFICULTY_TO_PERSONALITY['hard']).toBe('rusher');
         });
     });
 
@@ -548,7 +582,7 @@ describe('AI System', () => {
             const actions = computeAiActions(state, 1);
 
             const moveAction = actions.find(a =>
-                a.type === 'COMMAND_MOVE' &&
+                isActionType(a, 'COMMAND_MOVE') &&
                 a.payload.unitIds.includes('harvester')
             );
             expect(moveAction).toBeDefined();
@@ -556,7 +590,7 @@ describe('AI System', () => {
             // Should be fleeing toward base (x,y should be less than harvester's position)
             // Base is at 500,500, harvester at 800,800, enemy at 850,850
             // Flee direction should be toward base, so target coords should decrease
-            if (moveAction) {
+            if (moveAction && isActionType(moveAction, 'COMMAND_MOVE')) {
                 expect(moveAction.payload.x).toBeLessThan(800);
                 expect(moveAction.payload.y).toBeLessThan(800);
             }

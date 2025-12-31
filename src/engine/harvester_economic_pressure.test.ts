@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, isActionType } from './types';
 import { createEntity } from './utils';
 import { computeAiActions, resetAIState } from './ai';
 
@@ -385,15 +385,15 @@ describe('Harvester Economic Pressure', () => {
 
         // Check the flee commands
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.some((id: string) => id.startsWith('harv'))
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.some((id: string) => id.startsWith('harv'))
         );
 
         console.log('Flee actions:', fleeActions.length);
-        console.log('Flee destinations:', fleeActions.map(a => ({
-            units: (a.payload as any).unitIds,
-            x: Math.round((a.payload as any).x),
-            y: Math.round((a.payload as any).y)
+        console.log('Flee destinations:', fleeActions.filter(a => isActionType(a, 'COMMAND_MOVE')).map(a => ({
+            units: a.payload.unitIds,
+            x: Math.round(a.payload.x),
+            y: Math.round(a.payload.y)
         })));
 
         // There should be flee commands issued

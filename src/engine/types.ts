@@ -204,25 +204,32 @@ export interface GameState {
     readonly showMinimap: boolean;
 }
 
-export type ActionType =
-    | 'TICK'
-    | 'COMMAND_MOVE'
-    | 'COMMAND_ATTACK'
-    | 'START_BUILD'
-    | 'PLACE_BUILDING'
-    | 'CANCEL_BUILD'
-    | 'SELECT_UNITS'
-    | 'SELL_BUILDING'
-    | 'TOGGLE_SELL_MODE'
-    | 'TOGGLE_REPAIR_MODE'
-    | 'START_REPAIR'
-    | 'STOP_REPAIR'
-    | 'TOGGLE_DEBUG'
-    | 'TOGGLE_MINIMAP';
+// Discriminated union for all game actions
+export type Action =
+    | { type: 'TICK' }
+    | { type: 'COMMAND_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
+    | { type: 'COMMAND_ATTACK'; payload: { unitIds: EntityId[]; targetId: EntityId } }
+    | { type: 'START_BUILD'; payload: { category: string; key: string; playerId: number } }
+    | { type: 'PLACE_BUILDING'; payload: { key: string; x: number; y: number; playerId: number } }
+    | { type: 'CANCEL_BUILD'; payload: { category: string; playerId: number } }
+    | { type: 'SELECT_UNITS'; payload: EntityId[] }
+    | { type: 'SELL_BUILDING'; payload: { buildingId: EntityId; playerId: number } }
+    | { type: 'TOGGLE_SELL_MODE' }
+    | { type: 'TOGGLE_REPAIR_MODE' }
+    | { type: 'START_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
+    | { type: 'STOP_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
+    | { type: 'TOGGLE_DEBUG' }
+    | { type: 'TOGGLE_MINIMAP' };
 
-export interface Action {
-    type: ActionType;
-    payload?: any;
+// Helper type to extract action type strings
+export type ActionType = Action['type'];
+
+// Helper type to extract payload from a specific action type
+export type ActionPayload<T extends ActionType> = Extract<Action, { type: T }> extends { payload: infer P } ? P : never;
+
+// Type guard to narrow action type and access payload safely
+export function isActionType<T extends ActionType>(action: Action, type: T): action is Extract<Action, { type: T }> {
+    return action.type === type;
 }
 
 // Constants
