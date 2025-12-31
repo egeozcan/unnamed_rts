@@ -1325,16 +1325,18 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                 const blockedOreId = harvester.harvester.blockedOreId;
                 const MAX_HARVESTERS_PER_ORE = 2;
 
-                // First, count harvesters per ore (only friendly harvesters)
+                // First, count harvesters per ore (all harvesters, including enemies)
                 const harvestersPerOre: Record<string, number> = {};
                 for (const other of entityList) {
                     if (other.type === 'UNIT' &&
                         other.key === 'harvester' &&
-                        other.owner === harvester.owner &&
                         !other.dead &&
                         other.id !== harvester.id) {
                         const otherHarv = other as HarvesterUnit;
+                        // For queue/congestion, we care about active harvesting
                         if (otherHarv.harvester.resourceTargetId) {
+                            // If it's an enemy, count it as congestion but maybe flag it?
+                            // Currently we just count.
                             harvestersPerOre[otherHarv.harvester.resourceTargetId] = (harvestersPerOre[otherHarv.harvester.resourceTargetId] || 0) + 1;
                         }
                     }
@@ -1356,8 +1358,9 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                     if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
 
                     // Score: closer is better, fewer harvesters is better
-                    // Congestion penalty: each existing harvester is like 100 extra distance
-                    const effectiveDist = dist + harvestersAtOre * 100;
+                    // Congestion penalty: each existing harvester is like 500 extra distance (was 100)
+                    // This strongly discourages sharing unless the alternative is very far (> 500px diff)
+                    const effectiveDist = dist + harvestersAtOre * 500;
                     const score = -effectiveDist; // Higher is better (less distance = higher score)
 
                     if (score > bestScore) {
@@ -1376,7 +1379,7 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                             // Skip if already at max capacity
                             if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
 
-                            const effectiveDist = dist + harvestersAtOre * 100;
+                            const effectiveDist = dist + harvestersAtOre * 500;
                             const score = -effectiveDist;
 
                             if (score > bestScore) {
@@ -1465,14 +1468,13 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                         // Track minimum distance ever achieved
                         const newBestDist = Math.min(bestDistToOre, distToOre);
 
-                        // Check for congestion - is another friendly harvester closer to this ore?
+                        // Check for congestion - is another harvester closer to this ore?
                         let positionInQueue = 0;
-                        let blockedByFriendly = false;
+                        let blockedByHarvester = false;
                         for (const other of entityList) {
                             if (other.id !== harvester.id &&
                                 other.type === 'UNIT' &&
                                 other.key === 'harvester' &&
-                                other.owner === harvester.owner &&
                                 !other.dead) {
                                 const otherHarv = other as HarvesterUnit;
                                 if (otherHarv.harvester.resourceTargetId === ore.id) {
@@ -1482,15 +1484,15 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                         // Check if this other harvester is very close to us (blocking)
                                         const distToOther = harvester.pos.dist(other.pos);
                                         if (distToOther < 50) {
-                                            blockedByFriendly = true;
+                                            blockedByHarvester = true;
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // If blocked by a friendly harvester and not making progress, switch to different ore
-                        if (blockedByFriendly && harvestAttemptTicks > 15) {
+                        // If blocked by a harvester and not making progress, switch to different ore
+                        if (blockedByHarvester && harvestAttemptTicks > 15) {
                             // Find a different ore with less congestion
                             const MAX_HARVESTERS_PER_ORE = 2;
                             let altOre: Entity | null = null;
@@ -1502,7 +1504,7 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                     // Count harvesters at this ore
                                     let harvestersAtOre = 0;
                                     for (const h of entityList) {
-                                        if (h.type === 'UNIT' && h.key === 'harvester' && h.owner === harvester.owner && !h.dead) {
+                                        if (h.type === 'UNIT' && h.key === 'harvester' && !h.dead) {
                                             const hHarv = h as HarvesterUnit;
                                             if (hHarv.harvester.resourceTargetId === other.id) {
                                                 harvestersAtOre++;
