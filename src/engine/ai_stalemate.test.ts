@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Entity, EntityId, UnitKey, BuildingKey } from './types';
+import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource } from './test-utils';
 
 const { getAIState } = _testUtils;
 
-// Helper functions
+// Helper function that delegates to test-utils builders
 function createEntity(
     id: string,
     owner: number,
@@ -13,23 +14,47 @@ function createEntity(
     key: string,
     x: number,
     y: number,
-    overrides?: Partial<Entity>
+    overrides?: { hp?: number; maxHp?: number }
 ): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        hp: 100,
-        maxHp: 100,
-        size: 20,
-        velocity: new Vector(0, 0),
-        dead: false,
-        visible: true,
-        turretAngle: 0,
-        ...overrides
-    } as Entity;
+    if (type === 'UNIT') {
+        if (key === 'harvester') {
+            return createTestHarvester({
+                id,
+                owner,
+                x,
+                y,
+                hp: overrides?.hp
+            });
+        } else {
+            return createTestCombatUnit({
+                id,
+                owner,
+                key: key as Exclude<UnitKey, 'harvester'>,
+                x,
+                y,
+                hp: overrides?.hp,
+                maxHp: overrides?.maxHp
+            });
+        }
+    } else if (type === 'BUILDING') {
+        return createTestBuilding({
+            id,
+            owner,
+            key: key as BuildingKey,
+            x,
+            y,
+            hp: overrides?.hp,
+            maxHp: overrides?.maxHp
+        });
+    } else {
+        // RESOURCE
+        return createTestResource({
+            id,
+            x,
+            y,
+            hp: overrides?.hp
+        });
+    }
 }
 
 function createTestState(entities: Record<EntityId, Entity>, tick: number, aiCredits: number = 500): GameState {

@@ -1,48 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Entity, EntityId, BuildingKey } from './types';
+import { createTestBuilding } from './test-utils';
 
 function createEntity(
     id: string,
     owner: number,
-    type: 'UNIT' | 'BUILDING' | 'RESOURCE',
+    _type: 'UNIT' | 'BUILDING' | 'RESOURCE',
     key: string,
     x: number,
-    y: number,
-    overrides?: Partial<Entity>
+    y: number
 ): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 1000,
-        maxHp: 1000,
-        w: 50,
-        h: 50,
-        radius: 25,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        dead: false,
-        ...overrides
-    } as Entity;
+    // This test only uses buildings
+    return createTestBuilding({ id, owner, key: key as BuildingKey, x, y });
 }
 
 function createTestState(entities: Record<EntityId, Entity>, credits: number = 5000): GameState {

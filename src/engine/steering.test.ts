@@ -1,7 +1,6 @@
-
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createEntity } from './reducer'; // Ensure this is exported
-import { GameState, Vector } from './types';
+import { createEntity } from './reducer';
+import { GameState, Vector, UnitEntity } from './types';
 import { INITIAL_STATE, update } from './reducer';
 
 describe('Unit Steering & Smoothing', () => {
@@ -25,16 +24,15 @@ describe('Unit Steering & Smoothing', () => {
         // Run for a bit
         for (let i = 0; i < 30; i++) {
             state = update(state, { type: 'TICK' });
-            const u = state.entities[unit.id];
-            if (u.vel.mag() > 0.1) {
-                const navDir = u.vel.norm();
+            const u = state.entities[unit.id] as UnitEntity;
+            if (u.movement.vel.mag() > 0.1) {
+                const navDir = u.movement.vel.norm();
                 if (prevVelStart.mag() > 0.1) {
                     // Check angle change
                     const dot = navDir.x * prevVelStart.x + navDir.y * prevVelStart.y;
                     // If dot < 0.9, significant direction change
                     if (dot < 0.98) { // Strict check for straight line
                         directionChanges++;
-                        // console.log(`Tick ${i}: Direction changed. Dot: ${dot}`);
                     }
                 }
                 prevVelStart = navDir;
@@ -60,16 +58,15 @@ describe('Unit Steering & Smoothing', () => {
 
         for (let i = 0; i < 100; i++) {
             state = update(state, { type: 'TICK' });
-            const u = state.entities[unit.id];
+            const u = state.entities[unit.id] as UnitEntity;
 
             // Check for y-velocity flips (zigzagging up and down)
-            if (u.vel.mag() > 0.5) {
-                const currentDir = u.vel.norm();
+            if (u.movement.vel.mag() > 0.5) {
+                const currentDir = u.movement.vel.norm();
 
                 // Detect sign flip in Y component (crossing x-axis repeatedly)
                 if (Math.sign(currentDir.y) !== Math.sign(prevDir.y) && Math.abs(currentDir.y) > 0.1) {
                     zigzags++;
-                    // console.log(`Tick ${i}: Zigzag detected. Y flipped from ${prevDir.y} to ${currentDir.y}`);
                 }
                 prevDir = currentDir;
             }
@@ -99,9 +96,9 @@ describe('Unit Steering & Smoothing', () => {
             state = update(state, { type: 'TICK' });
 
             for (const id of units) {
-                const u = state.entities[id];
-                if (u && u.vel.mag() > 0.1) {
-                    const dir = u.vel.norm();
+                const u = state.entities[id] as UnitEntity;
+                if (u && u.movement.vel.mag() > 0.1) {
+                    const dir = u.movement.vel.norm();
                     if (prevDirs[id]) {
                         const dot = dir.dot(prevDirs[id]);
                         if (dot < 0.6) totalDirectionChanges++; // Sudden turn
@@ -140,10 +137,10 @@ describe('Unit Steering & Smoothing', () => {
             }
         }
 
-        const finalUnit = state.entities[unit.id];
+        const finalUnit = state.entities[unit.id] as UnitEntity;
 
         // Rotation should be normalized to [-PI, PI]
-        expect(finalUnit.rotation).toBeGreaterThanOrEqual(-Math.PI);
-        expect(finalUnit.rotation).toBeLessThanOrEqual(Math.PI);
+        expect(finalUnit.movement.rotation).toBeGreaterThanOrEqual(-Math.PI);
+        expect(finalUnit.movement.rotation).toBeLessThanOrEqual(Math.PI);
     });
 });

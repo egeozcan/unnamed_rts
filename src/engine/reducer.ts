@@ -1,7 +1,13 @@
-import { Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS, Projectile, Particle } from './types.js';
-import { RULES } from '../data/schemas/index.js';
+import {
+    Action, GameState, Entity, EntityId, PlayerState, Vector, TILE_SIZE, PLAYER_COLORS,
+    Projectile, Particle,
+    UnitEntity, BuildingEntity, HarvesterUnit, CombatUnit,
+    UnitKey, BuildingKey
+} from './types.js';
+import { RULES, Building, Unit, isBuildingData, isUnitData } from '../data/schemas/index.js';
 import { collisionGrid, refreshCollisionGrid, findPath, getGridW, getGridH, setPathCacheTick } from './utils.js';
 import { rebuildSpatialGrid, getSpatialGrid } from './spatial.js';
+import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState } from './entity-helpers.js';
 
 // Power calculation cache - keyed by tick to auto-invalidate
 let powerCache: Map<number, { in: number, out: number }> = new Map();
@@ -178,14 +184,40 @@ function tick(state: GameState): GameState {
         if (updatedEntities[d.targetId]) {
             const ent = updatedEntities[d.targetId];
             const nextHp = Math.max(0, ent.hp - d.amount);
-            updatedEntities[d.targetId] = {
-                ...ent,
-                hp: nextHp,
-                dead: nextHp <= 0,
-                flash: 5,
-                lastAttackerId: d.attackerId,
-                lastDamageTick: state.tick
-            };
+
+            // Update combat component for units and buildings with combat
+            if (ent.type === 'UNIT') {
+                updatedEntities[d.targetId] = {
+                    ...ent,
+                    hp: nextHp,
+                    dead: nextHp <= 0,
+                    combat: {
+                        ...ent.combat,
+                        flash: 5,
+                        lastAttackerId: d.attackerId,
+                        lastDamageTick: state.tick
+                    }
+                };
+            } else if (ent.type === 'BUILDING' && ent.combat) {
+                updatedEntities[d.targetId] = {
+                    ...ent,
+                    hp: nextHp,
+                    dead: nextHp <= 0,
+                    combat: {
+                        ...ent.combat,
+                        flash: 5,
+                        lastAttackerId: d.attackerId,
+                        lastDamageTick: state.tick
+                    }
+                };
+            } else {
+                // Resources, rocks, or buildings without combat
+                updatedEntities[d.targetId] = {
+                    ...ent,
+                    hp: nextHp,
+                    dead: nextHp <= 0
+                };
+            }
         }
     }
 
@@ -195,7 +227,7 @@ function tick(state: GameState): GameState {
 
     for (const id in updatedEntities) {
         const ent = updatedEntities[id];
-        if (ent.type === 'BUILDING' && ent.isRepairing && !ent.dead) {
+        if (ent.type === 'BUILDING' && ent.building.isRepairing && !ent.dead) {
             const buildingData = RULES.buildings[ent.key];
             if (!buildingData) continue;
 
@@ -219,21 +251,21 @@ function tick(state: GameState): GameState {
                     credits: nextPlayers[ent.owner].credits - actualCost
                 };
 
-                // Heal building
+                // Heal building - flash goes to combat component if defense building
                 const newHp = Math.min(ent.maxHp, ent.hp + hpToHeal);
                 const isFullHp = newHp >= ent.maxHp;
 
                 updatedEntities[id] = {
                     ...ent,
                     hp: newHp,
-                    flash: 3, // Flash while repairing
-                    isRepairing: !isFullHp // Auto-stop when full
+                    combat: ent.combat ? { ...ent.combat, flash: 3 } : undefined,
+                    building: { ...ent.building, isRepairing: !isFullHp }
                 };
             } else {
                 // No credits - stop repairing
                 updatedEntities[id] = {
                     ...ent,
-                    isRepairing: false
+                    building: { ...ent.building, isRepairing: false }
                 };
             }
         }
@@ -484,8 +516,7 @@ function calculatePower(playerId: number, entities: Record<EntityId, Entity>, ti
 }
 
 // Returns rule data for a building or unit key.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getRuleData(key: string): any {
+function getRuleData(key: string): Building | Unit | null {
     if (RULES.buildings[key]) return RULES.buildings[key];
     if (RULES.units[key]) return RULES.units[key];
     return null;
@@ -601,10 +632,12 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
 
     let extraEntities: Record<EntityId, Entity> = {};
     if (key === 'refinery') {
-        const harv = createEntity(x, y + 50, playerId, 'UNIT', 'harvester', state);
+        const harv = createEntity(x, y + 50, playerId, 'UNIT', 'harvester', state) as HarvesterUnit;
         // Harvesters spawned by refineries should auto-harvest immediately
-        (harv as any).manualMode = false;
-        extraEntities[harv.id] = harv;
+        extraEntities[harv.id] = {
+            ...harv,
+            harvester: { ...harv.harvester, manualMode: false }
+        };
     }
 
     return {
@@ -719,7 +752,7 @@ function startRepair(state: GameState, payload: { buildingId: EntityId; playerId
     }
 
     // Can't repair if already repairing (toggle off instead)
-    if (building.isRepairing) {
+    if (building.building.isRepairing) {
         return stopRepair(state, payload);
     }
 
@@ -737,7 +770,7 @@ function startRepair(state: GameState, payload: { buildingId: EntityId; playerId
             ...state.entities,
             [buildingId]: {
                 ...building,
-                isRepairing: true
+                building: { ...building.building, isRepairing: true }
             }
         }
     };
@@ -751,7 +784,7 @@ function stopRepair(state: GameState, payload: { buildingId: EntityId; playerId:
         return state;
     }
 
-    if (!building.isRepairing) {
+    if (!building.building.isRepairing) {
         return state;
     }
 
@@ -761,7 +794,7 @@ function stopRepair(state: GameState, payload: { buildingId: EntityId; playerId:
             ...state.entities,
             [buildingId]: {
                 ...building,
-                isRepairing: false
+                building: { ...building.building, isRepairing: false }
             }
         }
     };
@@ -775,24 +808,22 @@ function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number
     for (const id of unitIds) {
         const entity = nextEntities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
-            const updates: Partial<Entity> = {
-                moveTarget: target,
-                targetId: null,
-                path: null
-            };
-
-            // If it's a harvester, clear its harvesting targets and enable manual mode
-            // Harvesters in manual mode won't auto-acquire resources until explicitly tasked
             if (entity.key === 'harvester') {
-                (updates as any).resourceTargetId = null;
-                (updates as any).baseTargetId = null;
-                (updates as any).manualMode = true; // Stop auto-harvesting
+                // Harvester: clear harvesting targets and enable manual mode
+                nextEntities[id] = {
+                    ...entity,
+                    movement: { ...entity.movement, moveTarget: target, path: null },
+                    combat: { ...entity.combat, targetId: null },
+                    harvester: { ...entity.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
+                };
+            } else {
+                // Combat unit
+                nextEntities[id] = {
+                    ...entity,
+                    movement: { ...entity.movement, moveTarget: target, path: null },
+                    combat: { ...entity.combat, targetId: null }
+                };
             }
-
-            nextEntities[id] = {
-                ...entity,
-                ...updates
-            } as Entity;
         }
     }
     return { ...state, entities: nextEntities };
@@ -813,37 +844,39 @@ function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetI
                     // Right-click on ore: enable auto-harvesting and set resource target
                     nextEntities[id] = {
                         ...entity,
-                        resourceTargetId: targetId,
-                        baseTargetId: null,
-                        moveTarget: null,
-                        path: null,
-                        manualMode: false  // Enable auto-harvesting
-                    } as Entity;
+                        movement: { ...entity.movement, moveTarget: null, path: null },
+                        harvester: {
+                            ...entity.harvester,
+                            resourceTargetId: targetId,
+                            baseTargetId: null,
+                            manualMode: false
+                        }
+                    };
                 } else if (target.key === 'refinery' && target.owner === entity.owner) {
                     // Right-click on own refinery: enable auto-harvesting and go dock
                     nextEntities[id] = {
                         ...entity,
-                        baseTargetId: targetId,
-                        moveTarget: null,
-                        path: null,
-                        manualMode: false  // Enable auto-harvesting
-                    } as Entity;
+                        movement: { ...entity.movement, moveTarget: null, path: null },
+                        harvester: {
+                            ...entity.harvester,
+                            baseTargetId: targetId,
+                            manualMode: false
+                        }
+                    };
                 } else {
                     // Harvesters can't attack other things, treat as move
                     nextEntities[id] = {
                         ...entity,
-                        moveTarget: target.pos,
-                        targetId: null,
-                        path: null
+                        movement: { ...entity.movement, moveTarget: target.pos, path: null },
+                        combat: { ...entity.combat, targetId: null }
                     };
                 }
             } else {
                 // Normal combat unit attack behavior
                 nextEntities[id] = {
                     ...entity,
-                    targetId: targetId,
-                    moveTarget: null,
-                    path: null
+                    movement: { ...entity.movement, moveTarget: null, path: null },
+                    combat: { ...entity.combat, targetId: targetId }
                 };
             }
         }
@@ -889,25 +922,37 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
             }
 
             // Handle Engineer Capture/Repair
-            const ent = nextEntities[id];
-            if ((ent as any).captureTargetId) {
-                const targetId = (ent as any).captureTargetId;
-                const target = nextEntities[targetId];
-                if (target && target.type === 'BUILDING') {
-                    nextEntities[targetId] = { ...target, owner: ent.owner, flash: 30 };
-                    nextEntities[id] = { ...ent, dead: true, captureTargetId: null };
-                }
-            } else if ((ent as any).repairTargetId) {
-                const targetId = (ent as any).repairTargetId;
-                const target = nextEntities[targetId];
-                if (target && target.type === 'BUILDING' && target.hp < target.maxHp) {
-                    const repairAmount = 20; // Repair strength
-                    nextEntities[targetId] = {
-                        ...target,
-                        hp: Math.min(target.maxHp, target.hp + repairAmount),
-                        flash: 5
+            const ent = nextEntities[id] as UnitEntity;
+            if (ent.key !== 'harvester' && ent.engineer?.captureTargetId) {
+                const engTargetId = ent.engineer.captureTargetId;
+                const engTarget = nextEntities[engTargetId];
+                if (engTarget && engTarget.type === 'BUILDING') {
+                    // Flash the captured building
+                    nextEntities[engTargetId] = {
+                        ...engTarget,
+                        owner: ent.owner,
+                        combat: engTarget.combat ? { ...engTarget.combat, flash: 30 } : undefined
                     };
-                    nextEntities[id] = { ...ent, repairTargetId: null };
+                    nextEntities[id] = {
+                        ...ent,
+                        dead: true,
+                        engineer: { ...ent.engineer, captureTargetId: null }
+                    };
+                }
+            } else if (ent.key !== 'harvester' && ent.engineer?.repairTargetId) {
+                const engTargetId = ent.engineer.repairTargetId;
+                const engTarget = nextEntities[engTargetId];
+                if (engTarget && engTarget.type === 'BUILDING' && engTarget.hp < engTarget.maxHp) {
+                    const repairAmount = 20; // Repair strength
+                    nextEntities[engTargetId] = {
+                        ...engTarget,
+                        hp: Math.min(engTarget.maxHp, engTarget.hp + repairAmount),
+                        combat: engTarget.combat ? { ...engTarget.combat, flash: 5 } : undefined
+                    };
+                    nextEntities[id] = {
+                        ...ent,
+                        engineer: { ...ent.engineer, repairTargetId: null }
+                    };
                 }
             }
         } else if (entity.type === 'BUILDING') {
@@ -916,48 +961,78 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
             if (res.projectile) newProjectiles.push(res.projectile);
         }
 
-        let ent = nextEntities[id];
-        if (ent.vel.mag() > 0) {
-            ent = { ...ent, prevPos: ent.pos, pos: ent.pos.add(ent.vel) };
-            const data = getRuleData(ent.key);
-            if (data && !data.fly) {
-                // Smooth rotation
-                const targetRot = Math.atan2(ent.vel.y, ent.vel.x);
-                let diff = targetRot - ent.rotation;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                // Faster turn if moving fast? Or constant turn rate?
-                // 0.2 is good for responsiveness without jitter
-                let newRotation = ent.rotation + diff * 0.2;
-                // Normalize rotation to [-PI, PI] to prevent unbounded growth
-                while (newRotation > Math.PI) newRotation -= Math.PI * 2;
-                while (newRotation < -Math.PI) newRotation += Math.PI * 2;
-                ent = { ...ent, rotation: newRotation };
+        // Movement, rotation, cooldown, flash, turret updates (units only)
+        let currentEnt = nextEntities[id];
+        if (currentEnt.type === 'UNIT') {
+            const vel = currentEnt.movement.vel;
+            if (vel.mag() > 0) {
+                currentEnt = { ...currentEnt, prevPos: currentEnt.pos, pos: currentEnt.pos.add(vel) };
+                const data = getRuleData(currentEnt.key);
+                const canFly = data && isUnitData(data) && data.fly;
+                if (data && !canFly) {
+                    // Smooth rotation
+                    const targetRot = Math.atan2(vel.y, vel.x);
+                    let diff = targetRot - currentEnt.movement.rotation;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    let newRotation = currentEnt.movement.rotation + diff * 0.2;
+                    while (newRotation > Math.PI) newRotation -= Math.PI * 2;
+                    while (newRotation < -Math.PI) newRotation += Math.PI * 2;
+                    currentEnt = {
+                        ...currentEnt,
+                        movement: { ...currentEnt.movement, rotation: newRotation }
+                    };
+                }
+                currentEnt = {
+                    ...currentEnt,
+                    movement: { ...currentEnt.movement, vel: new Vector(0, 0) }
+                };
+                nextEntities[id] = currentEnt;
             }
-            ent = { ...ent, vel: new Vector(0, 0) };
-            nextEntities[id] = ent;
-        }
 
-        if (ent.cooldown > 0) nextEntities[id] = { ...ent, cooldown: ent.cooldown - 1 };
-        if (ent.flash > 0) nextEntities[id] = { ...ent, flash: ent.flash - 1 };
+            // Update cooldown and flash in combat component
+            if (currentEnt.combat.cooldown > 0 || currentEnt.combat.flash > 0) {
+                nextEntities[id] = {
+                    ...currentEnt,
+                    combat: {
+                        ...currentEnt.combat,
+                        cooldown: Math.max(0, currentEnt.combat.cooldown - 1),
+                        flash: Math.max(0, currentEnt.combat.flash - 1)
+                    }
+                };
+                currentEnt = nextEntities[id] as UnitEntity;
+            }
 
-        // Update turret angle to track target
-        ent = nextEntities[id];
-        if (ent.targetId) {
-            const target = nextEntities[ent.targetId];
-            if (target && !target.dead) {
-                const deltaX = target.pos.x - ent.pos.x;
-                const deltaY = target.pos.y - ent.pos.y;
-                const targetTurretAngle = Math.atan2(deltaY, deltaX);
+            // Update turret angle to track target
+            if (currentEnt.combat.targetId) {
+                const target = nextEntities[currentEnt.combat.targetId];
+                if (target && !target.dead) {
+                    const deltaX = target.pos.x - currentEnt.pos.x;
+                    const deltaY = target.pos.y - currentEnt.pos.y;
+                    const targetTurretAngle = Math.atan2(deltaY, deltaX);
 
-                // Smooth turret rotation (faster than body rotation for responsive aiming)
-                let angleDiff = targetTurretAngle - ent.turretAngle;
-                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                    let angleDiff = targetTurretAngle - currentEnt.combat.turretAngle;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-                // Turret turn speed (0.25 = responsive but smooth)
-                const newTurretAngle = ent.turretAngle + angleDiff * 0.25;
-                nextEntities[id] = { ...ent, turretAngle: newTurretAngle };
+                    const newTurretAngle = currentEnt.combat.turretAngle + angleDiff * 0.25;
+                    nextEntities[id] = {
+                        ...currentEnt,
+                        combat: { ...currentEnt.combat, turretAngle: newTurretAngle }
+                    };
+                }
+            }
+        } else if (currentEnt.type === 'BUILDING' && currentEnt.combat) {
+            // Update cooldown and flash for defense buildings
+            if (currentEnt.combat.cooldown > 0 || currentEnt.combat.flash > 0) {
+                nextEntities[id] = {
+                    ...currentEnt,
+                    combat: {
+                        ...currentEnt.combat,
+                        cooldown: Math.max(0, currentEnt.combat.cooldown - 1),
+                        flash: Math.max(0, currentEnt.combat.flash - 1)
+                    }
+                };
             }
         }
     }
@@ -985,7 +1060,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     }
 
     // Early exit if no units
-    if (units.length === 0) return workingEntities;
+    if (units.length === 0) return workingEntities as Record<EntityId, Entity>;
 
     const iterations = 4; // Run a few passes for stability
     const spatialGrid = getSpatialGrid();
@@ -1024,8 +1099,10 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 
                     if (isUnitB) {
                         // Determine which unit is moving vs stationary
-                        const aMoving = a.moveTarget !== null || a.targetId !== null || (a.vel && a.vel.mag() > 0.5);
-                        const bMoving = b.moveTarget !== null || b.targetId !== null || (b.vel && b.vel.mag() > 0.5);
+                        const aUnit = a as unknown as UnitEntity;
+                        const bUnit = b as unknown as UnitEntity;
+                        const aMoving = aUnit.movement.moveTarget !== null || aUnit.combat.targetId !== null || (aUnit.movement.vel && aUnit.movement.vel.mag() > 0.5);
+                        const bMoving = bUnit.movement.moveTarget !== null || bUnit.combat.targetId !== null || (bUnit.movement.vel && bUnit.movement.vel.mag() > 0.5);
 
                         // Use stronger push to counteract movement speed
                         const pushScale = Math.min(overlap, 2.5);
@@ -1069,12 +1146,12 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         }
     }
 
-    return workingEntities;
+    return workingEntities as Record<EntityId, Entity>;
 }
 
 
-function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: Entity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
-    let nextEntity = { ...entity };
+function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
+    let nextEntity: UnitEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
     let creditsEarned = 0;
@@ -1083,14 +1160,14 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
 
     // Harvester Logic
     if (nextEntity.key === 'harvester') {
-        const harvester = nextEntity;
+        let harvester = nextEntity as HarvesterUnit;
         const capacity = 500;
 
         // 0a. Harvester auto-attack: Fire at enemies in range (before harvesting)
         // This runs first so harvesters will shoot nearby enemies even while harvesting
-        if (harvester.cooldown <= 0 && !harvester.moveTarget) {
+        if (harvester.combat.cooldown <= 0 && !harvester.movement.moveTarget) {
             const harvData = getRuleData('harvester');
-            const harvRange = harvData.range || 60;
+            const harvRange = harvData?.range ?? 60;
 
             // Find closest enemy in range
             let closestEnemy: Entity | null = null;
@@ -1109,7 +1186,11 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             // Fire at enemy without setting targetId (no chasing)
             if (closestEnemy) {
                 projectile = createProjectile(harvester, closestEnemy);
-                nextEntity = { ...harvester, cooldown: harvData.rate || 30 };
+                harvester = {
+                    ...harvester,
+                    combat: { ...harvester.combat, cooldown: harvData?.rate ?? 30 }
+                };
+                nextEntity = harvester;
             }
         }
 
@@ -1117,18 +1198,25 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
         // BUT: If harvester has full cargo, ALWAYS clear moveTarget so it can go unload
         // This fixes the "dancing" bug where harvesters flee to safety but then can't return
         // to base because they keep trying to reach the flee destination
-        if (harvester.moveTarget) {
-            if (harvester.cargo >= capacity) {
+        if (harvester.movement.moveTarget) {
+            if (harvester.harvester.cargo >= capacity) {
                 // Full cargo - clear flee target immediately so harvester can go unload
                 // Don't wait for stuckTimer - harvesters with full cargo should prioritize unloading
-                nextEntity = { ...harvester, moveTarget: null, path: null, pathIdx: 0 };
+                harvester = {
+                    ...harvester,
+                    movement: { ...harvester.movement, moveTarget: null, path: null, pathIdx: 0 }
+                };
+                nextEntity = harvester;
             }
             // Otherwise, fall through to generic move logic (allow fleeing with low cargo)
         }
         // 1. If full, return to refinery
-        else if (harvester.cargo >= capacity) {
-            harvester.resourceTargetId = null; // Forget resource
-            if (!harvester.baseTargetId) {
+        else if (harvester.harvester.cargo >= capacity) {
+            harvester = {
+                ...harvester,
+                harvester: { ...harvester.harvester, resourceTargetId: null }
+            };
+            if (!harvester.harvester.baseTargetId) {
                 // Find nearest refinery using spatial query (search within reasonable range first)
                 const spatialGrid = getSpatialGrid();
                 const searchRadius = 1500; // Start with nearby search
@@ -1149,11 +1237,16 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                         }
                     }
                 }
-                if (bestRef) harvester.baseTargetId = bestRef.id;
+                if (bestRef) {
+                    harvester = {
+                        ...harvester,
+                        harvester: { ...harvester.harvester, baseTargetId: bestRef.id }
+                    };
+                }
             }
 
-            if (harvester.baseTargetId) {
-                const ref = allEntities[harvester.baseTargetId];
+            if (harvester.harvester.baseTargetId) {
+                const ref = allEntities[harvester.harvester.baseTargetId];
                 if (ref && !ref.dead) {
                     // Target "Docking Point" (bottom of refinery)
                     // Clamp dock position to map bounds to prevent pathfinding issues
@@ -1168,16 +1261,19 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                     let positionInQueue = 0; // 0 = first in line
                     for (const other of entityList) {
                         if (other.id !== harvester.id &&
+                            other.type === 'UNIT' &&
                             other.key === 'harvester' &&
                             other.owner === harvester.owner &&
-                            !other.dead &&
-                            (other as any).cargo > 0 && // Only count harvesters with cargo (wanting to dock)
-                            (other as any).baseTargetId === harvester.baseTargetId && // Only count harvesters targeting SAME refinery
-                            other.moveTarget === null) { // Ignore harvesters with player move override
-                            const otherDist = other.pos.dist(dockPos);
-                            // If another harvester is closer to the dock
-                            if (otherDist < ourDist) {
-                                positionInQueue++;
+                            !other.dead) {
+                            const otherHarv = other as HarvesterUnit;
+                            if (otherHarv.harvester.cargo > 0 && // Only count harvesters with cargo (wanting to dock)
+                                otherHarv.harvester.baseTargetId === harvester.harvester.baseTargetId && // Only count harvesters targeting SAME refinery
+                                otherHarv.movement.moveTarget === null) { // Ignore harvesters with player move override
+                                const otherDist = other.pos.dist(dockPos);
+                                // If another harvester is closer to the dock
+                                if (otherDist < ourDist) {
+                                    positionInQueue++;
+                                }
                             }
                         }
                     }
@@ -1185,22 +1281,34 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
 
                     if (ourDist < 20 && positionInQueue === 0) {
                         // We're at dock and first in line - Unload
-                        nextEntity = { ...harvester, cargo: 0, baseTargetId: null };
+                        nextEntity = {
+                            ...harvester,
+                            harvester: { ...harvester.harvester, cargo: 0, baseTargetId: null }
+                        };
                         creditsEarned = 500;
                     } else if (positionInQueue > 0 && ourDist < 80) {
                         // Someone is ahead of us and we're near dock - wait stationary
                         // Explicitly set velocity to zero
-                        nextEntity = { ...harvester, vel: new Vector(0, 0) };
+                        nextEntity = {
+                            ...harvester,
+                            movement: { ...harvester.movement, vel: new Vector(0, 0) }
+                        };
                     } else if (positionInQueue > 2 && ourDist < 200) {
                         // Far back in queue (3rd or later) and getting close - slow down/wait
                         // This prevents traffic jams from harvesters all rushing to the same waypoint
-                        nextEntity = { ...harvester, vel: new Vector(0, 0) };
+                        nextEntity = {
+                            ...harvester,
+                            movement: { ...harvester.movement, vel: new Vector(0, 0) }
+                        };
                     } else {
                         // Move toward dock
-                        nextEntity = moveToward(harvester, dockPos, entityList);
+                        nextEntity = moveToward(harvester, dockPos, entityList) as HarvesterUnit;
                     }
                 } else {
-                    nextEntity = { ...harvester, baseTargetId: null }; // Refinery died
+                    nextEntity = {
+                        ...harvester,
+                        harvester: { ...harvester.harvester, baseTargetId: null }
+                    }; // Refinery died
                 }
             }
         }
@@ -1209,23 +1317,26 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             // Only auto-acquire resources if NOT in manual mode
             // Harvesters start in manual mode by default (manualMode is undefined or true)
             // They enter auto mode (manualMode = false) when right-clicking ore/refinery
-            const isManualMode = (harvester as any).manualMode !== false;
-            if (!harvester.resourceTargetId && !isManualMode) {
+            const isManualMode = harvester.harvester.manualMode !== false;
+            if (!harvester.harvester.resourceTargetId && !isManualMode) {
                 // Find best ore considering:
                 // 1. Distance (prefer closer)
                 // 2. Congestion (prefer ores with fewer harvesters, max 2 per ore)
-                const blockedOreId = (harvester as any).blockedOreId;
+                const blockedOreId = harvester.harvester.blockedOreId;
                 const MAX_HARVESTERS_PER_ORE = 2;
 
                 // First, count harvesters per ore (only friendly harvesters)
                 const harvestersPerOre: Record<string, number> = {};
                 for (const other of entityList) {
-                    if (other.key === 'harvester' &&
+                    if (other.type === 'UNIT' &&
+                        other.key === 'harvester' &&
                         other.owner === harvester.owner &&
                         !other.dead &&
-                        other.id !== harvester.id &&
-                        other.resourceTargetId) {
-                        harvestersPerOre[other.resourceTargetId] = (harvestersPerOre[other.resourceTargetId] || 0) + 1;
+                        other.id !== harvester.id) {
+                        const otherHarv = other as HarvesterUnit;
+                        if (otherHarv.harvester.resourceTargetId) {
+                            harvestersPerOre[otherHarv.harvester.resourceTargetId] = (harvestersPerOre[otherHarv.harvester.resourceTargetId] || 0) + 1;
+                        }
                     }
                 }
 
@@ -1290,47 +1401,63 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                     }
                 }
 
-                if (bestOre) harvester.resourceTargetId = bestOre.id;
+                if (bestOre) {
+                    harvester = {
+                        ...harvester,
+                        harvester: { ...harvester.harvester, resourceTargetId: bestOre.id }
+                    };
+                }
             }
 
-            if (harvester.resourceTargetId) {
-                const ore = allEntities[harvester.resourceTargetId];
+            if (harvester.harvester.resourceTargetId) {
+                const ore = allEntities[harvester.harvester.resourceTargetId];
                 if (ore && !ore.dead) {
                     const distToOre = harvester.pos.dist(ore.pos);
 
                     // Track how long we've been trying to reach this ore
-                    const harvestAttemptTicks = (harvester as any).harvestAttemptTicks || 0;
+                    const harvestAttemptTicks = harvester.harvester.harvestAttemptTicks || 0;
 
                     // Decay blocked ore timer
-                    const blockedOreTimer = ((harvester as any).blockedOreTimer || 0);
+                    const blockedOreTimer = harvester.harvester.blockedOreTimer || 0;
                     if (blockedOreTimer > 0) {
-                        nextEntity = { ...harvester, blockedOreTimer: blockedOreTimer - 1 } as any;
+                        harvester = {
+                            ...harvester,
+                            harvester: { ...harvester.harvester, blockedOreTimer: blockedOreTimer - 1 }
+                        };
+                        nextEntity = harvester;
                         if (blockedOreTimer <= 1) {
                             // Clear blocked ore after timer expires (allow retry)
-                            nextEntity = { ...nextEntity, blockedOreId: null } as any;
+                            harvester = {
+                                ...harvester,
+                                harvester: { ...harvester.harvester, blockedOreId: null }
+                            };
+                            nextEntity = harvester;
                         }
                     }
 
                     if (distToOre < 40) {
                         // Harvest
-                        if (harvester.cooldown <= 0) {
+                        if (harvester.combat.cooldown <= 0) {
                             const harvestAmount = 25;
                             // Check if ore has enough
                             const actualHarvest = Math.min(harvestAmount, ore.hp);
 
                             nextEntity = {
                                 ...harvester,
-                                cargo: harvester.cargo + actualHarvest,
-                                cooldown: 30,
-                                harvestAttemptTicks: 0 // Reset on successful harvest
-                            } as any;
+                                combat: { ...harvester.combat, cooldown: 30 },
+                                harvester: {
+                                    ...harvester.harvester,
+                                    cargo: harvester.harvester.cargo + actualHarvest,
+                                    harvestAttemptTicks: 0
+                                }
+                            };
                             resourceDamage = { id: ore.id, amount: actualHarvest };
                         }
                     } else {
                         // Still far from ore - track progress toward it
-                        const prevLastDist = (harvester as any).lastDistToOre;
+                        const prevLastDist = harvester.harvester.lastDistToOre;
                         const lastDistToOre = prevLastDist ?? distToOre;
-                        const prevBestDist = (harvester as any).bestDistToOre;
+                        const prevBestDist = harvester.harvester.bestDistToOre;
                         const bestDistToOre = prevBestDist ?? distToOre;
 
                         // First tick = initialize, else check for 10px progress from LAST tracking point
@@ -1343,17 +1470,20 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                         let blockedByFriendly = false;
                         for (const other of entityList) {
                             if (other.id !== harvester.id &&
+                                other.type === 'UNIT' &&
                                 other.key === 'harvester' &&
                                 other.owner === harvester.owner &&
-                                !other.dead &&
-                                other.resourceTargetId === ore.id) {
-                                const otherDistToOre = other.pos.dist(ore.pos);
-                                if (otherDistToOre < distToOre) {
-                                    positionInQueue++;
-                                    // Check if this other harvester is very close to us (blocking)
-                                    const distToOther = harvester.pos.dist(other.pos);
-                                    if (distToOther < 50) {
-                                        blockedByFriendly = true;
+                                !other.dead) {
+                                const otherHarv = other as HarvesterUnit;
+                                if (otherHarv.harvester.resourceTargetId === ore.id) {
+                                    const otherDistToOre = other.pos.dist(ore.pos);
+                                    if (otherDistToOre < distToOre) {
+                                        positionInQueue++;
+                                        // Check if this other harvester is very close to us (blocking)
+                                        const distToOther = harvester.pos.dist(other.pos);
+                                        if (distToOther < 50) {
+                                            blockedByFriendly = true;
+                                        }
                                     }
                                 }
                             }
@@ -1372,8 +1502,11 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                                     // Count harvesters at this ore
                                     let harvestersAtOre = 0;
                                     for (const h of entityList) {
-                                        if (h.key === 'harvester' && h.owner === harvester.owner && !h.dead && h.resourceTargetId === other.id) {
-                                            harvestersAtOre++;
+                                        if (h.type === 'UNIT' && h.key === 'harvester' && h.owner === harvester.owner && !h.dead) {
+                                            const hHarv = h as HarvesterUnit;
+                                            if (hHarv.harvester.resourceTargetId === other.id) {
+                                                harvestersAtOre++;
+                                            }
                                         }
                                     }
                                     // Skip if already at max capacity
@@ -1392,16 +1525,21 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                             if (altOre) {
                                 nextEntity = {
                                     ...harvester,
-                                    resourceTargetId: altOre.id,
-                                    path: null,
-                                    pathIdx: 0,
-                                    harvestAttemptTicks: 0,
-                                    lastDistToOre: null,
-                                    bestDistToOre: null
-                                } as any;
+                                    movement: { ...harvester.movement, path: null, pathIdx: 0 },
+                                    harvester: {
+                                        ...harvester.harvester,
+                                        resourceTargetId: altOre.id,
+                                        harvestAttemptTicks: 0,
+                                        lastDistToOre: null,
+                                        bestDistToOre: null
+                                    }
+                                };
                             } else {
                                 // No alternative ore - wait in queue
-                                nextEntity = { ...harvester, vel: new Vector(0, 0) };
+                                nextEntity = {
+                                    ...harvester,
+                                    movement: { ...harvester.movement, vel: new Vector(0, 0) }
+                                };
                             }
                         } else if (harvestAttemptTicks > 30 && distToOre > 43) {
                             // Give up on this ore after being stuck
@@ -1410,41 +1548,51 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
                             const isBlocked = newBestDist > 55;
                             nextEntity = {
                                 ...harvester,
-                                resourceTargetId: null,
-                                stuckTimer: 0,
-                                path: null,
-                                pathIdx: 0,
-                                harvestAttemptTicks: 0,
-                                lastDistToOre: null,
-                                bestDistToOre: null,
-                                blockedOreId: isBlocked ? ore.id : (harvester as any).blockedOreId,
-                                blockedOreTimer: isBlocked ? 500 : (harvester as any).blockedOreTimer
-                            } as any;
+                                movement: { ...harvester.movement, stuckTimer: 0, path: null, pathIdx: 0 },
+                                harvester: {
+                                    ...harvester.harvester,
+                                    resourceTargetId: null,
+                                    harvestAttemptTicks: 0,
+                                    lastDistToOre: null,
+                                    bestDistToOre: null,
+                                    blockedOreId: isBlocked ? ore.id : harvester.harvester.blockedOreId,
+                                    blockedOreTimer: isBlocked ? 500 : harvester.harvester.blockedOreTimer
+                                }
+                            };
                         } else {
                             // Keep trying - move toward ore
-                            nextEntity = moveToward(harvester, ore.pos, entityList);
+                            nextEntity = moveToward(harvester, ore.pos, entityList) as HarvesterUnit;
 
                             if (madeProgress) {
                                 // Making progress - reset counter, update tracking points
                                 nextEntity = {
                                     ...nextEntity,
-                                    harvestAttemptTicks: 0,
-                                    lastDistToOre: distToOre,
-                                    bestDistToOre: newBestDist
-                                } as any;
+                                    harvester: {
+                                        ...(nextEntity as HarvesterUnit).harvester,
+                                        harvestAttemptTicks: 0,
+                                        lastDistToOre: distToOre,
+                                        bestDistToOre: newBestDist
+                                    }
+                                } as HarvesterUnit;
                             } else {
                                 // Not making progress - increment counter, preserve lastDistToOre
                                 nextEntity = {
                                     ...nextEntity,
-                                    harvestAttemptTicks: harvestAttemptTicks + 1,
-                                    lastDistToOre: lastDistToOre,  // Preserve the last tracking point
-                                    bestDistToOre: newBestDist
-                                } as any;
+                                    harvester: {
+                                        ...(nextEntity as HarvesterUnit).harvester,
+                                        harvestAttemptTicks: harvestAttemptTicks + 1,
+                                        lastDistToOre: lastDistToOre,  // Preserve the last tracking point
+                                        bestDistToOre: newBestDist
+                                    }
+                                } as HarvesterUnit;
                             }
                         }
                     }
                 } else {
-                    nextEntity = { ...harvester, resourceTargetId: null, harvestAttemptTicks: 0 } as any;
+                    nextEntity = {
+                        ...harvester,
+                        harvester: { ...harvester.harvester, resourceTargetId: null, harvestAttemptTicks: 0 }
+                    };
                 }
             }
         }
@@ -1455,26 +1603,22 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
     // For now simple overwrite: If we did harvester logic and moved/acted, skip generic?
     // Or merge.
     // If harvester has `moveTarget` (manual command), that overrides harvest logic.
-    if (!nextEntity.moveTarget && nextEntity.key === 'harvester') {
+    if (nextEntity.key !== 'harvester' || !nextEntity.movement.moveTarget) {
         // Skip generic combat/move logic if doing harvest things
         // But we want it to react to attacks?
         // Let's keep generic logic for `moveTarget` override.
-    } else {
-        // ... generic logic ...
-        // We need to duplicate the generic logic block here or wrap it.
-        // It's cleaner to keep the generic logic below, but `nextEntity` might have changed.
-        // I will Paste the generic logic here too, but modified to check for harvester override.
     }
 
     // Original generic logic follows...
     // Generic logic calling block
-    if (nextEntity.key !== 'harvester') {
+    if (nextEntity.key !== 'harvester' && data && isUnitData(data)) {
+        let combatUnit = nextEntity as CombatUnit;
         const isHealer = data.damage < 0;
         const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
 
         // Only auto-acquire targets if unit doesn't have a pending move command
         // This allows players to retreat units that are auto-attacking
-        if (!nextEntity.targetId && !nextEntity.moveTarget && (data.damage || isEngineer)) {
+        if (!combatUnit.combat.targetId && !combatUnit.movement.moveTarget && (data.damage || isEngineer)) {
             const range = (data.range || 100) + (isHealer ? 100 : 50);
             let bestTargetId: EntityId | null = null;
             let bestDist = range;
@@ -1482,130 +1626,176 @@ function updateUnit(entity: Entity, allEntities: Record<EntityId, Entity>, entit
             for (const other of entityList) {
                 if (other.dead || other.owner === -1) continue;
 
-                const d = nextEntity.pos.dist(other.pos);
+                const d = combatUnit.pos.dist(other.pos);
                 if (d < bestDist) {
                     if (isHealer) {
                         // Medic/Healer targets friendlies that need help
-                        if (other.owner === nextEntity.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== nextEntity.id) {
+                        if (other.owner === combatUnit.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== combatUnit.id) {
                             bestDist = d;
                             bestTargetId = other.id;
                         }
                     } else if (isEngineer) {
                         // Engineer targets buildings
                         if (other.type === 'BUILDING') {
-                            if (other.owner !== nextEntity.owner && data.canCaptureEnemyBuildings) {
+                            if (other.owner !== combatUnit.owner && data.canCaptureEnemyBuildings) {
                                 bestDist = d;
                                 bestTargetId = other.id;
-                            } else if (other.owner === nextEntity.owner && other.hp < other.maxHp && data.canRepairFriendlyBuildings) {
+                            } else if (other.owner === combatUnit.owner && other.hp < other.maxHp && data.canRepairFriendlyBuildings) {
                                 bestDist = d;
                                 bestTargetId = other.id;
                             }
                         }
                     } else {
                         // Normal combat targets enemies
-                        if (other.owner !== nextEntity.owner) {
+                        if (other.owner !== combatUnit.owner) {
                             bestDist = d;
                             bestTargetId = other.id;
                         }
                     }
                 }
             }
-            if (bestTargetId) nextEntity = { ...nextEntity, targetId: bestTargetId };
+            if (bestTargetId) {
+                combatUnit = {
+                    ...combatUnit,
+                    combat: { ...combatUnit.combat, targetId: bestTargetId }
+                };
+                nextEntity = combatUnit;
+            }
         }
 
-        if (nextEntity.targetId) {
-            const target = allEntities[nextEntity.targetId];
+        if (combatUnit.combat.targetId) {
+            const target = allEntities[combatUnit.combat.targetId];
             if (target && !target.dead) {
-                const dist = nextEntity.pos.dist(target.pos);
+                const dist = combatUnit.pos.dist(target.pos);
                 const range = data.range || 100;
 
                 if (isEngineer && target.type === 'BUILDING') {
                     if (dist < 40) {
-                        nextEntity = { ...nextEntity, moveTarget: null };
-                        if (target.owner !== nextEntity.owner && data.canCaptureEnemyBuildings) {
+                        combatUnit = {
+                            ...combatUnit,
+                            movement: { ...combatUnit.movement, moveTarget: null }
+                        };
+                        if (target.owner !== combatUnit.owner && data.canCaptureEnemyBuildings) {
                             // CAPTURE: Engineer consumed, building ownership transfers
-                            (nextEntity as any).dead = true;
-                            (nextEntity as any).captureTargetId = target.id;
-                        } else if (target.owner === nextEntity.owner && data.canRepairFriendlyBuildings) {
+                            combatUnit = {
+                                ...combatUnit,
+                                dead: true,
+                                engineer: { ...combatUnit.engineer, captureTargetId: target.id }
+                            };
+                        } else if (target.owner === combatUnit.owner && data.canRepairFriendlyBuildings) {
                             // REPAIR: Engineer heals building over time
-                            if (nextEntity.cooldown <= 0) {
-                                (nextEntity as any).repairTargetId = target.id;
-                                nextEntity = { ...nextEntity, cooldown: data.rate || 30 };
+                            if (combatUnit.combat.cooldown <= 0) {
+                                combatUnit = {
+                                    ...combatUnit,
+                                    combat: { ...combatUnit.combat, cooldown: data.rate || 30 },
+                                    engineer: { ...combatUnit.engineer, repairTargetId: target.id }
+                                };
                             }
                         }
+                        nextEntity = combatUnit;
                     } else {
-                        nextEntity = moveToward(nextEntity, target.pos, entityList);
+                        nextEntity = moveToward(combatUnit, target.pos, entityList) as CombatUnit;
                     }
                 } else if (dist <= range) {
-                    nextEntity = { ...nextEntity, moveTarget: null };
-                    if (nextEntity.cooldown <= 0) {
-                        projectile = createProjectile(nextEntity, target);
-                        nextEntity = { ...nextEntity, cooldown: data.rate || 30 };
+                    combatUnit = {
+                        ...combatUnit,
+                        movement: { ...combatUnit.movement, moveTarget: null }
+                    };
+                    if (combatUnit.combat.cooldown <= 0) {
+                        projectile = createProjectile(combatUnit, target);
+                        combatUnit = {
+                            ...combatUnit,
+                            combat: { ...combatUnit.combat, cooldown: data.rate || 30 }
+                        };
                     }
+                    nextEntity = combatUnit;
                 } else {
-                    nextEntity = moveToward(nextEntity, target.pos, entityList);
+                    nextEntity = moveToward(combatUnit, target.pos, entityList) as CombatUnit;
                 }
             } else {
-                nextEntity = { ...nextEntity, targetId: null };
+                nextEntity = {
+                    ...combatUnit,
+                    combat: { ...combatUnit.combat, targetId: null }
+                };
             }
-        } else if (nextEntity.moveTarget) {
-            nextEntity = moveToward(nextEntity, nextEntity.moveTarget, entityList);
-            if (nextEntity.pos.dist(nextEntity.moveTarget!) < 10) {
-                nextEntity = { ...nextEntity, moveTarget: null };
+        } else if (combatUnit.movement.moveTarget) {
+            nextEntity = moveToward(combatUnit, combatUnit.movement.moveTarget, entityList) as CombatUnit;
+            if (nextEntity.pos.dist(combatUnit.movement.moveTarget!) < 10) {
+                nextEntity = {
+                    ...nextEntity,
+                    movement: { ...(nextEntity as CombatUnit).movement, moveTarget: null }
+                };
             }
         }
-    } else if (nextEntity.key === 'harvester' && nextEntity.targetId) {
-        // Manual attack command for harvester - active attack mode (chasing)
-        const target = allEntities[nextEntity.targetId];
-        if (target && !target.dead) {
-            const harvData = getRuleData('harvester');
-            const dist = nextEntity.pos.dist(target.pos);
-            const range = harvData.range || 60;
+    } else if (nextEntity.key === 'harvester') {
+        const harvesterUnit = nextEntity as HarvesterUnit;
+        if (harvesterUnit.combat.targetId) {
+            // Manual attack command for harvester - active attack mode (chasing)
+            const target = allEntities[harvesterUnit.combat.targetId];
+            if (target && !target.dead) {
+                const harvData = getRuleData('harvester');
+                const dist = harvesterUnit.pos.dist(target.pos);
+                const range = harvData?.range ?? 60;
 
-            if (dist <= range) {
-                // In range - fire!
-                nextEntity = { ...nextEntity, moveTarget: null };
-                if (nextEntity.cooldown <= 0) {
-                    projectile = createProjectile(nextEntity, target);
-                    nextEntity = { ...nextEntity, cooldown: harvData.rate || 30 };
+                if (dist <= range) {
+                    // In range - fire!
+                    let updatedHarv: HarvesterUnit = {
+                        ...harvesterUnit,
+                        movement: { ...harvesterUnit.movement, moveTarget: null }
+                    };
+                    if (harvesterUnit.combat.cooldown <= 0) {
+                        projectile = createProjectile(harvesterUnit, target);
+                        updatedHarv = {
+                            ...updatedHarv,
+                            combat: { ...updatedHarv.combat, cooldown: harvData?.rate ?? 30 }
+                        };
+                    }
+                    nextEntity = updatedHarv;
+                } else {
+                    // Chase the target
+                    nextEntity = moveToward(harvesterUnit, target.pos, entityList) as HarvesterUnit;
                 }
             } else {
-                // Chase the target
-                nextEntity = moveToward(nextEntity, target.pos, entityList);
+                // Target dead or gone - clear it and resume normal behavior
+                nextEntity = {
+                    ...harvesterUnit,
+                    combat: { ...harvesterUnit.combat, targetId: null }
+                };
             }
-        } else {
-            // Target dead or gone - clear it and resume normal behavior
-            nextEntity = { ...nextEntity, targetId: null };
-        }
-    } else if (nextEntity.moveTarget) {
-        // Manual move override for harvester (flee commands, player commands)
-        nextEntity = moveToward(nextEntity, nextEntity.moveTarget, entityList);
+        } else if (harvesterUnit.movement.moveTarget) {
+            // Manual move override for harvester (flee commands, player commands)
+            nextEntity = moveToward(harvesterUnit, harvesterUnit.movement.moveTarget, entityList) as HarvesterUnit;
 
-        // Harvesters can clear moveTarget at a larger distance (30 units) than regular units (10 units)
-        // This prevents the circling bug where multiple harvesters flee to the same area
-        // and collide, unable to reach within 10 units of their target
-        const clearDistance = 30;
+            // Harvesters can clear moveTarget at a larger distance (30 units) than regular units (10 units)
+            // This prevents the circling bug where multiple harvesters flee to the same area
+            // and collide, unable to reach within 10 units of their target
+            const clearDistance = 30;
 
-        // Also check if harvester has been stuck trying to reach this moveTarget for too long
-        // If stuck for more than 40 ticks, give up and resume normal harvesting behavior
-        const harvesterFleeTimeout = 40;
-        const isStuckOnFlee = (nextEntity.stuckTimer || 0) > harvesterFleeTimeout;
+            // Also check if harvester has been stuck trying to reach this moveTarget for too long
+            // If stuck for more than 40 ticks, give up and resume normal harvesting behavior
+            const harvesterFleeTimeout = 40;
+            const isStuckOnFlee = ((nextEntity as HarvesterUnit).movement.stuckTimer || 0) > harvesterFleeTimeout;
 
-        if (nextEntity.pos.dist(nextEntity.moveTarget!) < clearDistance || isStuckOnFlee) {
-            nextEntity = { ...nextEntity, moveTarget: null, path: null, pathIdx: 0, stuckTimer: 0 };
+            if (nextEntity.pos.dist(harvesterUnit.movement.moveTarget!) < clearDistance || isStuckOnFlee) {
+                nextEntity = {
+                    ...nextEntity,
+                    movement: { ...(nextEntity as HarvesterUnit).movement, moveTarget: null, path: null, pathIdx: 0, stuckTimer: 0 }
+                };
+            }
         }
     }
 
     return { entity: nextEntity, projectile, creditsEarned, resourceDamage };
 }
 
-function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: Entity, projectile?: Projectile | null } {
-    let nextEntity = { ...entity };
+function updateBuilding(entity: BuildingEntity, allEntities: Record<EntityId, Entity>, entityList: Entity[]): { entity: BuildingEntity, projectile?: Projectile | null } {
+    let nextEntity: BuildingEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
 
-    if (data.isDefense) {
-        if (!nextEntity.targetId) {
+    // Only process defense buildings (buildings with isDefense flag and combat component)
+    if (data && isBuildingData(data) && data.isDefense && nextEntity.combat) {
+        if (!nextEntity.combat.targetId) {
             const range = data.range || 200;
             let bestTargetId: EntityId | null = null;
             let targetIsAir = false;
@@ -1614,7 +1804,7 @@ function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, e
                 if (other.owner !== entity.owner && other.owner !== -1 && !other.dead) {
                     if (entity.pos.dist(other.pos) < range) {
                         const otherData = getRuleData(other.key);
-                        const isAir = otherData?.fly === true;
+                        const isAir = otherData && isUnitData(otherData) && otherData.fly === true;
 
                         if (nextEntity.key === 'sam_site') {
                             if (isAir && !targetIsAir) {
@@ -1632,19 +1822,28 @@ function updateBuilding(entity: Entity, allEntities: Record<EntityId, Entity>, e
                 }
             }
             if (bestTargetId) {
-                nextEntity = { ...nextEntity, targetId: bestTargetId };
+                nextEntity = {
+                    ...nextEntity,
+                    combat: { ...nextEntity.combat!, targetId: bestTargetId }
+                };
             }
         }
 
-        if (nextEntity.targetId) {
-            const target = allEntities[nextEntity.targetId];
+        if (nextEntity.combat!.targetId) {
+            const target = allEntities[nextEntity.combat!.targetId];
             if (target && !target.dead && entity.pos.dist(target.pos) <= (data.range || 200)) {
-                if (nextEntity.cooldown <= 0) {
+                if (nextEntity.combat!.cooldown <= 0) {
                     projectile = createProjectile(nextEntity, target);
-                    nextEntity = { ...nextEntity, cooldown: data.rate || 30 };
+                    nextEntity = {
+                        ...nextEntity,
+                        combat: { ...nextEntity.combat!, cooldown: data.rate || 30 }
+                    };
                 }
             } else {
-                nextEntity = { ...nextEntity, targetId: null };
+                nextEntity = {
+                    ...nextEntity,
+                    combat: { ...nextEntity.combat!, targetId: null }
+                };
             }
         }
     }
@@ -1682,23 +1881,29 @@ function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>):
     return { proj: nextProj, damage: damageEvent };
 }
 
-function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Entity {
+function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[]): UnitEntity {
     const distToTarget = entity.pos.dist(target);
-    if (distToTarget < 2) return { ...entity, vel: new Vector(0, 0), path: null, pathIdx: 0 };
+    if (distToTarget < 2) {
+        return {
+            ...entity,
+            movement: { ...entity.movement, vel: new Vector(0, 0), path: null, pathIdx: 0 }
+        };
+    }
 
-    const speed = getRuleData(entity.key)?.speed || 1;
+    const unitData = getRuleData(entity.key);
+    const speed = (unitData && isUnitData(unitData)) ? unitData.speed : 1;
 
     // Average velocity tracking for stuck detection
-    let avgVel = entity.avgVel || new Vector(0, 0);
+    let avgVel = entity.movement.avgVel || new Vector(0, 0);
     const effectiveVel = entity.pos.sub(entity.prevPos);
     avgVel = avgVel.scale(0.9).add(effectiveVel.scale(0.1));
 
-    let stuckTimer = entity.stuckTimer || 0;
-    let unstuckDir = entity.unstuckDir;
-    let unstuckTimer = entity.unstuckTimer || 0;
-    let path = entity.path;
-    let pathIdx = entity.pathIdx || 0;
-    let finalDest = entity.finalDest;
+    let stuckTimer = entity.movement.stuckTimer || 0;
+    let unstuckDir = entity.movement.unstuckDir;
+    let unstuckTimer = entity.movement.unstuckTimer || 0;
+    let path = entity.movement.path;
+    let pathIdx = entity.movement.pathIdx || 0;
+    let finalDest = entity.movement.finalDest;
 
     // Check if we need a new path
     const needNewPath = !path || path.length === 0 ||
@@ -1768,14 +1973,17 @@ function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Ent
     if (unstuckTimer > 0 && unstuckDir) {
         return {
             ...entity,
-            vel: unstuckDir.scale(speed * 0.8),
-            stuckTimer: 0,
-            unstuckTimer: unstuckTimer - 1,
-            unstuckDir: unstuckDir,
-            avgVel: avgVel,
-            path: null, // Clear path during unstuck
-            pathIdx: 0,
-            finalDest
+            movement: {
+                ...entity.movement,
+                vel: unstuckDir.scale(speed * 0.8),
+                stuckTimer: 0,
+                unstuckTimer: unstuckTimer - 1,
+                unstuckDir: unstuckDir,
+                avgVel: avgVel,
+                path: null, // Clear path during unstuck
+                pathIdx: 0,
+                finalDest
+            }
         };
     }
 
@@ -1842,8 +2050,8 @@ function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Ent
     // Blend with previous velocity to prevent jitter (zigzagging)
     // 0.6 old + 0.4 new provides good responsiveness while damping high-frequency oscillation
     let newVel = finalDir.scale(speed);
-    if (entity.vel.mag() > 0.1 && newVel.mag() > 0.1) {
-        const blended = entity.vel.scale(0.6).add(newVel.scale(0.4));
+    if (entity.movement.vel.mag() > 0.1 && newVel.mag() > 0.1) {
+        const blended = entity.movement.vel.scale(0.6).add(newVel.scale(0.4));
         if (blended.mag() > 0.01) {
             newVel = blended.norm().scale(speed);
         }
@@ -1851,14 +2059,17 @@ function moveToward(entity: Entity, target: Vector, _allEntities: Entity[]): Ent
 
     return {
         ...entity,
-        vel: newVel,
-        stuckTimer,
-        unstuckTimer: 0,
-        unstuckDir: null,
-        avgVel,
-        path,
-        pathIdx,
-        finalDest
+        movement: {
+            ...entity.movement,
+            vel: newVel,
+            stuckTimer,
+            unstuckTimer: 0,
+            unstuckDir: null,
+            avgVel,
+            path,
+            pathIdx,
+            finalDest
+        }
     };
 }
 
@@ -1876,7 +2087,7 @@ function createProjectile(source: Entity, target: Entity): Projectile {
         targetId: target.id,
         speed: speed,
         damage: data?.damage || 10,
-        splash: data?.splash || 0,
+        splash: (data && isUnitData(data)) ? (data.splash || 0) : 0,
         type: weaponType,
         weaponType: weaponType,
         dead: false
@@ -1886,49 +2097,91 @@ function createProjectile(source: Entity, target: Entity): Projectile {
 export function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, state: GameState): Entity {
     const id = 'e_' + state.tick + '_' + Math.floor(Math.random() * 100000);
 
-    let data = getRuleData(key);
-    if (type === 'RESOURCE') data = { hp: 1000, w: 25 };
+    const data = getRuleData(key);
+    const isResource = type === 'RESOURCE';
 
-    return {
+    // Resource entities have fixed stats, others use rules data
+    const hp = isResource ? 1000 : (data?.hp || 100);
+    const w = isResource ? 25 : (data?.w || 20);
+    const h = isResource ? 25 : ((data && isBuildingData(data)) ? data.h : (data?.w || 20));
+
+    const baseProps = {
         id,
         owner,
-        type,
-        key,
         pos: new Vector(x, y),
         prevPos: new Vector(x, y),
-        hp: data?.hp || 100,
-        maxHp: data?.hp || 100,
-        w: data?.w || 20,
-        h: data?.h || data?.w || 20,
-        radius: (data?.w || 20) / 2,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        dockPos: undefined,
-        placedTick: type === 'BUILDING' ? state.tick : undefined
+        hp,
+        maxHp: hp,
+        w,
+        h,
+        radius: w / 2,
+        dead: false
     };
+
+    if (type === 'UNIT') {
+        if (key === 'harvester') {
+            return {
+                ...baseProps,
+                type: 'UNIT' as const,
+                key: 'harvester' as const,
+                movement: createDefaultMovement(),
+                combat: createDefaultCombat(),
+                harvester: createDefaultHarvester()
+            };
+        } else {
+            return {
+                ...baseProps,
+                type: 'UNIT' as const,
+                key: key as Exclude<UnitKey, 'harvester'>,
+                movement: createDefaultMovement(),
+                combat: createDefaultCombat(),
+                engineer: key === 'engineer' ? { captureTargetId: null, repairTargetId: null } : undefined
+            };
+        }
+    } else if (type === 'BUILDING') {
+        const isDefense = ['turret', 'sam_site', 'pillbox', 'obelisk'].includes(key);
+        return {
+            ...baseProps,
+            type: 'BUILDING' as const,
+            key: key as BuildingKey,
+            combat: isDefense ? createDefaultCombat() : undefined,
+            building: {
+                ...createDefaultBuildingState(),
+                placedTick: state.tick
+            }
+        };
+    } else {
+        // RESOURCE
+        return {
+            ...baseProps,
+            type: 'RESOURCE' as const,
+            key: 'ore' as const
+        };
+    }
 }
 
 function killPlayerEntities(entities: Record<EntityId, Entity>, playerId: number): Record<EntityId, Entity> {
     const nextEntities = { ...entities };
     for (const id in nextEntities) {
-        if (nextEntities[id].owner === playerId && !nextEntities[id].dead) {
-            nextEntities[id] = { ...nextEntities[id], dead: true, hp: 0, flash: 10 };
+        const ent = nextEntities[id];
+        if (ent.owner === playerId && !ent.dead) {
+            if (ent.type === 'UNIT') {
+                nextEntities[id] = {
+                    ...ent,
+                    dead: true,
+                    hp: 0,
+                    combat: { ...ent.combat, flash: 10 }
+                };
+            } else if (ent.type === 'BUILDING' && ent.combat) {
+                nextEntities[id] = {
+                    ...ent,
+                    dead: true,
+                    hp: 0,
+                    combat: { ...ent.combat, flash: 10 }
+                };
+            } else {
+                nextEntities[id] = { ...ent, dead: true, hp: 0 };
+            }
         }
     }
     return nextEntities;

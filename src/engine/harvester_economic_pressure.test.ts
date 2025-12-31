@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity, EntityId, isActionType } from './types';
-import { createEntity } from './utils';
+import { GameState, Vector, Entity, EntityId, isActionType, HarvesterUnit, CombatUnit, BuildingKey, UnitKey } from './types';
+import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource, addEntityToState } from './test-utils';
 import { computeAiActions, resetAIState } from './ai';
 
 describe('Harvester Economic Pressure', () => {
@@ -11,98 +11,25 @@ describe('Harvester Economic Pressure', () => {
 
     // Helper to spawn units
     function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
-        const unit = createEntity(x, y, owner, 'UNIT', key);
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: { ...unit, id }
-            } as Record<EntityId, Entity>
-        };
+        if (key === 'harvester') {
+            const unit = createTestHarvester({ id, owner, x, y });
+            return addEntityToState(state, unit);
+        } else {
+            const unit = createTestCombatUnit({ id, owner, x, y, key: key as Exclude<UnitKey, 'harvester'> });
+            return addEntityToState(state, unit);
+        }
     }
 
     // Helper to spawn buildings
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building: Entity = {
-            id,
-            owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: key === 'conyard' ? 3000 : 1200,
-            maxHp: key === 'conyard' ? 3000 : 1200,
-            w,
-            h,
-            radius: Math.min(w, h) / 2,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: building
-            } as Record<EntityId, Entity>
-        };
+        const building = createTestBuilding({ id, owner, x, y, w, h, key: key as BuildingKey });
+        return addEntityToState(state, building);
     }
 
     // Helper to spawn resources
     function spawnResource(state: GameState, x: number, y: number, id: string): GameState {
-        const resource: Entity = {
-            id,
-            owner: -1,
-            type: 'RESOURCE',
-            key: 'ore',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w: 25,
-            h: 25,
-            radius: 12,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: resource
-            } as Record<EntityId, Entity>
-        };
+        const resource = createTestResource({ id, x, y });
+        return addEntityToState(state, resource);
     }
 
     it('should NOT flee when under economic pressure (low credits)', () => {
@@ -144,18 +71,25 @@ describe('Harvester Economic Pressure', () => {
 
         // Create a harvester actively harvesting with SIGNIFICANT cargo (>200 required for economic pressure)
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 300, // Significant cargo - economic pressure activates
-                    resourceTargetId: 'ore1' as EntityId,
-                    baseTargetId: null,
-                    avgVel: new Vector(0, 0)
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 300, // Significant cargo - economic pressure activates
+                        resourceTargetId: 'ore1' as EntityId,
+                        baseTargetId: null
+                    },
+                    movement: {
+                        ...harv.movement,
+                        avgVel: new Vector(0, 0)
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         // Create an enemy unit - not too close but within flee distance (HARVESTER_FLEE_DISTANCE = 300)
@@ -173,7 +107,7 @@ describe('Harvester Economic Pressure', () => {
 
         console.log('Actions under pressure:', aiActions.map(a => a.type));
 
-        // Under economic pressure (credits <100 AND cargo >200), harvesters should NOT flee 
+        // Under economic pressure (credits <100 AND cargo >200), harvesters should NOT flee
         // from non-attacking enemies that are beyond minimum safe distance (80 units)
         expect(fleeActions.length).toBe(0);
     });
@@ -213,19 +147,29 @@ describe('Harvester Economic Pressure', () => {
 
         // Create a harvester
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1' as EntityId,
-                    baseTargetId: null,
-                    avgVel: new Vector(0, 0),
-                    lastAttackerId: null // NOT being attacked
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1' as EntityId,
+                        baseTargetId: null
+                    },
+                    movement: {
+                        ...harv.movement,
+                        avgVel: new Vector(0, 0)
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastAttackerId: null // NOT being attacked
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         // Create an enemy unit that's at the edge of HARVESTER_FLEE_DISTANCE (300)
@@ -285,19 +229,29 @@ describe('Harvester Economic Pressure', () => {
 
         // Create a harvester that was DIRECTLY attacked
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1' as EntityId,
-                    baseTargetId: null,
-                    avgVel: new Vector(0, 0),
-                    lastAttackerId: 'enemy_unit' // BEING attacked!
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1' as EntityId,
+                        baseTargetId: null
+                    },
+                    movement: {
+                        ...harv.movement,
+                        avgVel: new Vector(0, 0)
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastAttackerId: 'enemy_unit' as EntityId // BEING attacked!
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         // Run AI
@@ -346,7 +300,7 @@ describe('Harvester Economic Pressure', () => {
         // Add conyard for player 1
         state = spawnBuilding(state, 500, 500, 90, 90, 'cy_p1', 1, 'conyard');
 
-        // Add TWO refineries in different safe areas 
+        // Add TWO refineries in different safe areas
         state = spawnBuilding(state, 200, 800, 100, 80, 'ref_p1_safe1', 1, 'refinery'); // Safe area 1
         state = spawnBuilding(state, 800, 800, 100, 80, 'ref_p1_safe2', 1, 'refinery'); // Safe area 2
 
@@ -364,17 +318,27 @@ describe('Harvester Economic Pressure', () => {
 
         // Set them up - all being attacked
         for (const id of ['harv1', 'harv2', 'harv3']) {
+            const harv = state.entities[id] as HarvesterUnit;
             state = {
                 ...state,
                 entities: {
                     ...state.entities,
                     [id]: {
-                        ...state.entities[id],
-                        cargo: 100,
-                        resourceTargetId: null,
-                        baseTargetId: null,
-                        avgVel: new Vector(0, 0),
-                        lastAttackerId: 'enemy_unit' // All being attacked
+                        ...harv,
+                        harvester: {
+                            ...harv.harvester,
+                            cargo: 100,
+                            resourceTargetId: null,
+                            baseTargetId: null
+                        },
+                        movement: {
+                            ...harv.movement,
+                            avgVel: new Vector(0, 0)
+                        },
+                        combat: {
+                            ...harv.combat,
+                            lastAttackerId: 'enemy_unit' as EntityId // All being attacked
+                        }
                     }
                 }
             } as any;
@@ -433,17 +397,24 @@ describe('Harvester Economic Pressure', () => {
 
         // Create harvester at ore - NOT recently damaged
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1' as EntityId,
-                    lastDamageTick: undefined // NOT recently damaged
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1' as EntityId
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastDamageTick: undefined // NOT recently damaged
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         // Create infantry at 150 pixels away (within old flee distance, but not minimum safe distance)
@@ -495,18 +466,25 @@ describe('Harvester Economic Pressure', () => {
 
         // Create harvester that WAS recently damaged (within 60 ticks)
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1' as EntityId,
-                    lastAttackerId: 'enemy_unit',
-                    lastDamageTick: 85 // 5 ticks ago - recent damage!
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1' as EntityId
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastAttackerId: 'enemy_unit' as EntityId,
+                        lastDamageTick: 85 // 5 ticks ago - recent damage!
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         const aiActions = computeAiActions(state, 1);
@@ -555,31 +533,42 @@ describe('Harvester Economic Pressure', () => {
 
         // Create an allied unit NEAR the harvester that was recently damaged
         state = spawnUnit(state, 700, 500, 'ally_tank', 1, 'tank');
+        const allyTank = state.entities['ally_tank'] as CombatUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'ally_tank': {
-                    ...state.entities['ally_tank'],
-                    lastAttackerId: 'enemy_unit',
-                    lastDamageTick: 85 // Ally was just damaged!
+                    ...allyTank,
+                    combat: {
+                        ...allyTank.combat,
+                        lastAttackerId: 'enemy_unit' as EntityId,
+                        lastDamageTick: 85 // Ally was just damaged!
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         // Create harvester that was NOT damaged itself
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1' as EntityId,
-                    lastDamageTick: undefined // NOT recently damaged itself
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1' as EntityId
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastDamageTick: undefined // NOT recently damaged itself
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         const aiActions = computeAiActions(state, 1);
@@ -629,18 +618,25 @@ describe('Harvester Economic Pressure', () => {
 
         // Create harvester with significant cargo, recently damaged
         state = spawnUnit(state, 680, 500, 'harv_p1', 1, 'harvester');
+        const harv = state.entities['harv_p1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 'harv_p1': {
-                    ...state.entities['harv_p1'],
-                    cargo: 300, // Significant cargo to deliver
-                    resourceTargetId: null,
-                    baseTargetId: 'ref_p1', // Heading to refinery
-                    lastDamageTick: undefined // NOT recently damaged - enemy just passing by
+                    ...harv,
+                    harvester: {
+                        ...harv.harvester,
+                        cargo: 300, // Significant cargo to deliver
+                        resourceTargetId: null,
+                        baseTargetId: 'ref_p1' as EntityId // Heading to refinery
+                    },
+                    combat: {
+                        ...harv.combat,
+                        lastDamageTick: undefined // NOT recently damaged - enemy just passing by
+                    }
                 }
-            } as any
+            } as Record<EntityId, Entity>
         };
 
         const aiActions = computeAiActions(state, 1);

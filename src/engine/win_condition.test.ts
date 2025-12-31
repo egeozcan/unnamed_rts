@@ -1,48 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Entity, Vector } from './types.js';
+import { GameState } from './types.js';
 import { update, INITIAL_STATE } from './reducer.js';
+import { createTestBuilding, createTestCombatUnit } from './test-utils.js';
 
 describe('Win Condition', () => {
-    const createBuilding = (id: string, owner: number): Entity => ({
-        id,
-        owner,
-        type: 'BUILDING',
-        key: 'conyard',
-        pos: new Vector(0, 0),
-        prevPos: new Vector(0, 0),
-        hp: 100,
-        maxHp: 100,
-        w: 40,
-        h: 40,
-        radius: 20,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    });
-
     it('should declare a winner when one player has no buildings left', () => {
+        const p1Building = createTestBuilding({ id: 'p1_conyard', owner: 0, key: 'conyard' });
+        const p2Building = createTestBuilding({ id: 'p2_conyard', owner: 1, key: 'conyard' });
+
         let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             mode: 'game',
             entities: {
-                'p1_conyard': createBuilding('p1_conyard', 0),
-                'p2_conyard': createBuilding('p2_conyard', 1)
+                'p1_conyard': p1Building,
+                'p2_conyard': p2Building
             }
         };
 
@@ -73,13 +45,16 @@ describe('Win Condition', () => {
     });
 
     it('should declare a draw when both players lose all buildings in the same tick', () => {
+        const p1Building = createTestBuilding({ id: 'p1_conyard', owner: 0, key: 'conyard' });
+        const p2Building = createTestBuilding({ id: 'p2_conyard', owner: 1, key: 'conyard' });
+
         let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             mode: 'game',
             entities: {
-                'p1_conyard': createBuilding('p1_conyard', 0),
-                'p2_conyard': createBuilding('p2_conyard', 1)
+                'p1_conyard': p1Building,
+                'p2_conyard': p2Building
             }
         };
 
@@ -102,45 +77,16 @@ describe('Win Condition', () => {
     });
 
     it('should not declare a winner if a player has no buildings but has an MCV', () => {
-        const createMCV = (id: string, owner: number): Entity => ({
-            id,
-            owner,
-            type: 'UNIT',
-            key: 'mcv',
-            pos: new Vector(0, 0),
-            prevPos: new Vector(0, 0),
-            hp: 100,
-            maxHp: 100,
-            w: 40,
-            h: 40,
-            radius: 20,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        });
+        const p1Building = createTestBuilding({ id: 'p1_conyard', owner: 0, key: 'conyard' });
+        const p2MCV = createTestCombatUnit({ id: 'p2_mcv', owner: 1, key: 'mcv' });
 
         let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             mode: 'game',
             entities: {
-                'p1_conyard': createBuilding('p1_conyard', 0),
-                'p2_mcv': createMCV('p2_mcv', 1)
+                'p1_conyard': p1Building,
+                'p2_mcv': p2MCV
             }
         };
 

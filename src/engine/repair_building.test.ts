@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity } from './types.js';
+import { GameState, BuildingEntity } from './types.js';
+import { createTestBuilding } from './test-utils.js';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
 
@@ -51,133 +52,67 @@ describe('Building Repair', () => {
 
     describe('Start Repair', () => {
         it('should start repair on damaged building', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400 });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'START_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBe(true);
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBe(true);
         });
 
         it('should not start repair on full health building', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 800, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100 });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'START_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBeFalsy();
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBeFalsy();
         });
 
         it('should not start repair on enemy building', () => {
-            const building: Entity = {
-                id: 'b1', owner: 1, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 1, key: 'power', x: 100, y: 100, hp: 400 });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'START_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBeFalsy();
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBeFalsy();
         });
 
         it('should not start repair with zero credits', () => {
             state.players[0] = { ...state.players[0], credits: 0 };
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400 });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'START_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBeFalsy();
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBeFalsy();
         });
     });
 
     describe('Stop Repair', () => {
         it('should stop repair on building', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, isRepairing: true });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'STOP_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBe(false);
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBe(false);
         });
 
         it('should toggle repair off when START_REPAIR on already repairing building', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, isRepairing: true });
+            state = { ...state, entities: { 'b1': building } };
 
             state = update(state, { type: 'START_REPAIR', payload: { buildingId: 'b1', playerId: 0 } });
 
-            expect(state.entities['b1'].isRepairing).toBe(false);
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBe(false);
         });
     });
 
     describe('Repair Tick Processing', () => {
         it('should heal building and deduct credits on tick', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, isRepairing: true });
+            state = { ...state, entities: { 'b1': building } };
             const initialCredits = state.players[0].credits;
             const initialHp = building.hp;
 
@@ -188,64 +123,34 @@ describe('Building Repair', () => {
         });
 
         it('should auto-stop repair when building reaches full HP', () => {
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 799, maxHp: 800, radius: 30, dead: false,  // Almost full
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 799, isRepairing: true });
+            state = { ...state, entities: { 'b1': building } };
 
             // Tick once should be enough to max it out
             state = update(state, { type: 'TICK' });
 
             expect(state.entities['b1'].hp).toBe(800);
-            expect(state.entities['b1'].isRepairing).toBe(false);
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBe(false);
         });
 
         it('should auto-stop repair when credits run out', () => {
             state.players[0] = { ...state.players[0], credits: 0.01 }; // Very low credits
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 400, maxHp: 800, radius: 30, dead: false,
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
-            state.entities['b1'] = building;
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, isRepairing: true });
+            state = { ...state, entities: { 'b1': building } };
             const initialHp = building.hp;
 
             state = update(state, { type: 'TICK' });
 
             // Should have stopped repairing due to no credits
-            expect(state.entities['b1'].isRepairing).toBe(false);
+            expect((state.entities['b1'] as BuildingEntity).building.isRepairing).toBe(false);
             expect(state.entities['b1'].hp).toBe(initialHp); // HP unchanged
         });
 
         it('should repair at 30% of building cost', () => {
             // Power plant costs 300, so full repair cost is 90 (30%)
-            const building: Entity = {
-                id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-                pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-                hp: 0, maxHp: 800, radius: 30, dead: false,  // Fully damaged
-                w: 60, h: 60, vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-                stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0,
-                flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null,
-                isRepairing: true
-            };
+            const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 0, isRepairing: true });
             state.players[0] = { ...state.players[0], credits: 1000 };
-            state.entities['b1'] = building;
+            state = { ...state, entities: { 'b1': building } };
 
             // Run 600 ticks (full repair duration)
             for (let i = 0; i < 600; i++) {

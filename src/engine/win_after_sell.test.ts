@@ -1,28 +1,20 @@
-
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from './reducer';
-import { GameState, Entity, Vector } from './types.js';
+import { GameState, Vector } from './types.js';
+import { createTestBuilding, createTestCombatUnit } from './test-utils.js';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
 
 describe('Win Condition - Sell Building', () => {
     it('should trigger loss when last building is sold', () => {
         let state = getInitialState();
-        state = { ...state, mode: 'game', running: true }; // Ensure game mode for win check
+        state = { ...state, mode: 'game', running: true };
 
         // Player 0 has 1 building and no MCV
-        const building = {
-            id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-            pos: new Vector(100, 100), hp: 800, maxHp: 800, radius: 30, dead: false,
-            vel: new Vector(0, 0), rotation: 0, cooldown: 0, flash: 0
-        } as Entity;
+        const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100 });
 
         // Player 1 has existing buildings
-        const enemyBuilding = {
-            id: 'e1', owner: 1, type: 'BUILDING', key: 'power',
-            pos: new Vector(2000, 2000), hp: 800, maxHp: 800, radius: 30, dead: false,
-            vel: new Vector(0, 0), rotation: 0, cooldown: 0, flash: 0
-        } as Entity;
+        const enemyBuilding = createTestBuilding({ id: 'e1', owner: 1, key: 'power', x: 2000, y: 2000 });
 
         state = {
             ...state,
@@ -44,11 +36,7 @@ describe('Win Condition - Sell Building', () => {
 
         // Verify that Player 0's units are destroyed
         // Add a unit for Player 0 to simulate this
-        const unit = {
-            id: 'u1', owner: 0, type: 'UNIT', key: 'rifle',
-            pos: new Vector(150, 150), hp: 100, maxHp: 100, radius: 10, dead: false,
-            vel: new Vector(0, 0), rotation: 0
-        } as Entity;
+        const unit = createTestCombatUnit({ id: 'u1', owner: 0, key: 'rifle', x: 150, y: 150 });
 
         // Re-run the update with the unit present
         state = {
@@ -69,26 +57,14 @@ describe('Win Condition - Sell Building', () => {
         let state = getInitialState();
         state = { ...state, mode: 'game', running: true };
 
-        // Player 0 has 1 building (Power Plant)
-        const building = {
-            id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-            pos: new Vector(100, 100), hp: 10, maxHp: 800, radius: 30, dead: false,
-            vel: new Vector(0, 0), rotation: 0, cooldown: 0, flash: 0
-        } as Entity;
+        // Player 0 has 1 building (Power Plant) with low HP
+        const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 10 });
 
         // Player 0 has a unit
-        const unit = {
-            id: 'u1', owner: 0, type: 'UNIT', key: 'rifle',
-            pos: new Vector(150, 150), hp: 100, maxHp: 100, radius: 10, dead: false,
-            vel: new Vector(0, 0), rotation: 0
-        } as Entity;
+        const unit = createTestCombatUnit({ id: 'u1', owner: 0, key: 'rifle', x: 150, y: 150 });
 
         // Player 1 has a building (to win)
-        const enemyBuilding = {
-            id: 'e1', owner: 1, type: 'BUILDING', key: 'power',
-            pos: new Vector(2000, 2000), hp: 800, maxHp: 800, radius: 30, dead: false,
-            vel: new Vector(0, 0), rotation: 0
-        } as Entity;
+        const enemyBuilding = createTestBuilding({ id: 'e1', owner: 1, key: 'power', x: 2000, y: 2000 });
 
         // Player 1 has a projectile hitting Player 0's building
         const projectile = {

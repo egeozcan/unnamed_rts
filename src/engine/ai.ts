@@ -1,6 +1,7 @@
-import { GameState, Action, Entity, EntityId, Vector, PlayerState } from './types.js';
+import { GameState, Action, Entity, EntityId, Vector, PlayerState, UnitEntity, HarvesterUnit, BuildingEntity } from './types.js';
 import { RULES, AI_CONFIG, PersonalityName, AIPersonality } from '../data/schemas/index.js';
 import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from './perf.js';
+import { isUnit } from './type-guards.js';
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';
@@ -631,8 +632,8 @@ function updateVengeance(
 
     // Track damage from attackers
     for (const entity of myEntities) {
-        if (entity.lastAttackerId) {
-            const attacker = state.entities[entity.lastAttackerId];
+        if (isUnit(entity) && entity.combat.lastAttackerId) {
+            const attacker = state.entities[entity.combat.lastAttackerId];
             if (attacker && attacker.owner !== playerId && attacker.owner !== -1) {
                 const attackerOwner = attacker.owner;
                 aiState.vengeanceScores[attackerOwner] =
@@ -836,7 +837,8 @@ function detectThreats(
 
     // Find harvesters under attack
     for (const harv of harvesters) {
-        if (harv.lastAttackerId) {
+        const harvUnit = harv as HarvesterUnit;
+        if (harvUnit.combat.lastAttackerId) {
             harvestersUnderAttack.push(harv.id);
         } else {
             // Check for nearby threats
@@ -1610,8 +1612,9 @@ function handleMCVOperations(
     }
 
     for (const mcv of mcvs) {
+        const mcvUnit = mcv as UnitEntity;
         // If MCV has no destination, assign expansion target
-        if (!mcv.moveTarget && !mcv.finalDest && bestExpansionTarget) {
+        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && bestExpansionTarget) {
             // Move to expansion target (offset from ore so we don't block it)
             const targetPos = bestExpansionTarget.add(new Vector(100, 0));
             actions.push({
@@ -1623,7 +1626,7 @@ function handleMCVOperations(
         // If MCV is near its destination (within 100 units), deploy it
         // Note: This requires a DEPLOY_MCV action in reducer. If not implemented,
         // we can simulate by having MCV build a conyard
-        if (mcv.finalDest && mcv.pos.dist(mcv.finalDest) < 100) {
+        if (mcvUnit.movement.finalDest && mcv.pos.dist(mcvUnit.movement.finalDest) < 100) {
             // Check if there's enough space to deploy
             const deployPos = mcv.pos;
             let canDeploy = true;
@@ -1659,10 +1662,11 @@ function findNearestDefender(
     threat: Entity,
     aiState: AIPlayerState
 ): EntityId | null {
-    let potentialDefenders = combatUnits.filter(u =>
-        !u.targetId && // Not currently attacking
-        u.key !== 'harvester' // Should be filtered by combatUnits arg but double check
-    );
+    let potentialDefenders = combatUnits.filter(u => {
+        const unit = u as UnitEntity;
+        return !unit.combat.targetId && // Not currently attacking
+            u.key !== 'harvester'; // Should be filtered by combatUnits arg but double check
+    });
 
     if (potentialDefenders.length === 0) {
         // Steal from attack group if desperate
@@ -1716,8 +1720,9 @@ function handleHarvesterSafety(
     const MINIMUM_SAFE_DISTANCE = 80; // Always flee from threats this close
 
     for (const harv of harvesters) {
+        const harvUnit = harv as HarvesterUnit;
         // Check economic pressure per-harvester based on cargo
-        const hasSignificantCargo = harv.cargo > 200;
+        const hasSignificantCargo = harvUnit.harvester.cargo > 200;
         const isCriticallyBroke = player && player.credits < 300;
         const isUnderEconomicPressure = isCriticallyBroke && hasSignificantCargo;
 
@@ -1728,8 +1733,9 @@ function handleHarvesterSafety(
 
         // Helper: Check if entity was damaged recently (within RECENT_DAMAGE_WINDOW ticks)
         const wasRecentlyDamaged = (entity: Entity) => {
-            return entity.lastDamageTick !== undefined &&
-                (state.tick - entity.lastDamageTick) < RECENT_DAMAGE_WINDOW;
+            if (!isUnit(entity)) return false;
+            return entity.combat.lastDamageTick !== undefined &&
+                (state.tick - entity.combat.lastDamageTick) < RECENT_DAMAGE_WINDOW;
         };
 
         // Check if harvester itself was damaged recently - this is a DIRECT attack
@@ -1748,8 +1754,8 @@ function handleHarvesterSafety(
         // If harvester was damaged recently, identify the attacker as threat
         // (use larger radius since they actually hit us)
         // NOTE: Ignore enemy harvesters as threats - they're not real combat units
-        if (harvesterUnderFire && harv.lastAttackerId) {
-            const attacker = state.entities[harv.lastAttackerId];
+        if (harvesterUnderFire && harvUnit.combat.lastAttackerId) {
+            const attacker = state.entities[harvUnit.combat.lastAttackerId];
             if (attacker && !attacker.dead && attacker.key !== 'harvester' && attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
                 nearestThreat = attacker;
                 nearestDist = attacker.pos.dist(harv.pos);
@@ -1785,8 +1791,8 @@ function handleHarvesterSafety(
 
         // Also check if our destination (refinery) is compromised
         // NOTE: Skip enemy harvesters - they're not a real threat
-        if (!nearestThreat && harv.baseTargetId && !isUnderEconomicPressure) {
-            const refinery = state.entities[harv.baseTargetId];
+        if (!nearestThreat && harvUnit.harvester.baseTargetId && !isUnderEconomicPressure) {
+            const refinery = state.entities[harvUnit.harvester.baseTargetId];
             if (refinery && !refinery.dead) {
                 for (const enemy of enemies) {
                     if (enemy.type !== 'UNIT') continue;
@@ -1928,10 +1934,11 @@ function handleHarvesterSafety(
                 // Simplest: Find nearest combat unit that isn't already doing something critical.
                 // Or just grab ANY nearest combat unit.
 
-                let potentialDefenders = combatUnits.filter(u =>
-                    !u.targetId && // Not currently attacking
-                    u.key !== 'harvester' // Should be filtered by combatUnits arg but double check
-                );
+                let potentialDefenders = combatUnits.filter(u => {
+                    const unit = u as UnitEntity;
+                    return !unit.combat.targetId && // Not currently attacking
+                        u.key !== 'harvester'; // Should be filtered by combatUnits arg but double check
+                });
 
                 if (potentialDefenders.length === 0) {
                     // Steal from attack group if desperate?
@@ -1970,8 +1977,8 @@ function handleHarvesterSafety(
             // Harvester is safe from immediate threats.
             // Check if it's idle and stuck in manual mode (e.g. stopped after fleeing)
             // Note: manualMode is undefined (truthy default) or explicitly true
-            const isManual = harv.manualMode !== false;
-            const isIdle = !harv.moveTarget && !harv.baseTargetId && !harv.resourceTargetId;
+            const isManual = harvUnit.harvester.manualMode !== false;
+            const isIdle = !harvUnit.movement.moveTarget && !harvUnit.harvester.baseTargetId && !harvUnit.harvester.resourceTargetId;
 
             if (isManual && isIdle) {
                 // Resume harvesting: COMMAND_ATTACK on ore resets manualMode to false
@@ -2033,9 +2040,13 @@ function handleDefense(
     // Get idle units near base or all units if base under heavy attack
     const heavyAttack = threats.length >= 3;
     const defenders = heavyAttack
-        ? combatUnits.filter(u => !u.targetId || threats.includes(u.targetId))
+        ? combatUnits.filter(u => {
+            const unit = u as UnitEntity;
+            return !unit.combat.targetId || threats.includes(unit.combat.targetId);
+        })
         : combatUnits.filter(u => {
-            if (u.targetId) return false;
+            const unit = u as UnitEntity;
+            if (unit.combat.targetId) return false;
             // Local defense: Is this unit near ANY threat?
             // Or near base center?
             if (u.pos.dist(baseCenter) < BASE_DEFENSE_RADIUS * 1.5) return true;
@@ -2111,12 +2122,13 @@ function handleRally(
             .forEach(g => g.unitIds.forEach(id => activeUnitIds.add(id)));
     }
 
-    const idleUnits = combatUnits.filter(u =>
-        !activeUnitIds.has(u.id) && // Not in an active group
-        !u.targetId && // Not currently attacking
-        !u.moveTarget && // Not currently moving
-        u.pos.dist(rallyPoint) > 100 // Not already near rally
-    );
+    const idleUnits = combatUnits.filter(u => {
+        const unit = u as UnitEntity;
+        return !activeUnitIds.has(u.id) && // Not in an active group
+            !unit.combat.targetId && // Not currently attacking
+            !unit.movement.moveTarget && // Not currently moving
+            u.pos.dist(rallyPoint) > 100; // Not already near rally
+    });
 
     if (idleUnits.length > 0) {
         actions.push({
@@ -2221,9 +2233,9 @@ function handleHarass(
             // Attack
             const unitsNeedingOrders = aiState.harassGroup.filter(id => {
                 const unit = state.entities[id];
-                if (!unit || unit.dead) return false;
-                if (!unit.targetId) return true;
-                const target = state.entities[unit.targetId];
+                if (!unit || unit.dead || !isUnit(unit)) return false;
+                if (!unit.combat.targetId) return true;
+                const target = state.entities[unit.combat.targetId];
                 return !target || target.dead;
             });
 
@@ -2449,14 +2461,15 @@ function handleAttack(
     const activeThreats = new Set<EntityId>();
     for (const id of aiState.attackGroup) {
         const unit = state.entities[id];
-        if (unit && !unit.dead && unit.lastAttackerId) {
-            activeThreats.add(unit.lastAttackerId);
+        if (unit && !unit.dead && isUnit(unit) && unit.combat.lastAttackerId) {
+            activeThreats.add(unit.combat.lastAttackerId);
         }
     }
 
     // Also consider nearby enemy units/defenses as threats
     for (const enemy of enemies) {
-        if (enemy.targetId && aiState.attackGroup.includes(enemy.targetId)) {
+        const enemyTargetId = isUnit(enemy) ? enemy.combat.targetId : (enemy.type === 'BUILDING' && enemy.combat ? enemy.combat.targetId : null);
+        if (enemyTargetId && aiState.attackGroup.includes(enemyTargetId)) {
             activeThreats.add(enemy.id);
         }
     }
@@ -2534,7 +2547,7 @@ function handleAttack(
 
         // ===== STRONGER FOCUS FIRE BONUS (Issue #5) =====
         // Much stronger bonus for attacking what allies are attacking
-        const alliesAttacking = combatUnits.filter(u => u.targetId === enemy.id).length;
+        const alliesAttacking = combatUnits.filter(u => isUnit(u) && u.combat.targetId === enemy.id).length;
         if (alliesAttacking >= 3) {
             score += 100 + alliesAttacking * 30; // Strong focus fire bonus
         } else {
@@ -2600,11 +2613,11 @@ function handleAttack(
             // Main group attacks primary target
             const mainUnitsNeedingOrders = mainGroupUnits.filter(id => {
                 const unit = state.entities[id];
-                if (!unit || unit.dead) return false;
-                if (!unit.targetId) return true;
-                const currentTarget = state.entities[unit.targetId];
+                if (!unit || unit.dead || !isUnit(unit)) return false;
+                if (!unit.combat.targetId) return true;
+                const currentTarget = state.entities[unit.combat.targetId];
                 if (!currentTarget || currentTarget.dead) return true;
-                if (unit.targetId !== bestTarget.id) return true;
+                if (unit.combat.targetId !== bestTarget.id) return true;
                 return false;
             });
 
@@ -2622,11 +2635,11 @@ function handleAttack(
             if (secondBestTarget && flankGroupUnits.length > 0) {
                 const flankUnitsNeedingOrders = flankGroupUnits.filter(id => {
                     const unit = state.entities[id];
-                    if (!unit || unit.dead) return false;
-                    if (!unit.targetId) return true;
-                    const currentTarget = state.entities[unit.targetId];
+                    if (!unit || unit.dead || !isUnit(unit)) return false;
+                    if (!unit.combat.targetId) return true;
+                    const currentTarget = state.entities[unit.combat.targetId];
                     if (!currentTarget || currentTarget.dead) return true;
-                    if (unit.targetId !== secondBestTarget!.id) return true;
+                    if (unit.combat.targetId !== secondBestTarget!.id) return true;
                     return false;
                 });
 
@@ -2644,11 +2657,11 @@ function handleAttack(
             // Standard single-front attack for smaller armies
             const unitsNeedingOrders = aiState.attackGroup.filter(id => {
                 const unit = state.entities[id];
-                if (!unit || unit.dead) return false;
-                if (!unit.targetId) return true;
-                const currentTarget = state.entities[unit.targetId];
+                if (!unit || unit.dead || !isUnit(unit)) return false;
+                if (!unit.combat.targetId) return true;
+                const currentTarget = state.entities[unit.combat.targetId];
                 if (!currentTarget || currentTarget.dead) return true;
-                if (unit.targetId !== bestTarget.id && bestScore > 100) return true;
+                if (unit.combat.targetId !== bestTarget.id && bestScore > 100) return true;
                 return false;
             });
 
@@ -2665,7 +2678,7 @@ function handleAttack(
             // For units that have NO orders and aren't attacking, send them towards the target
             const idleUnits = aiState.attackGroup.filter(id => {
                 const unit = state.entities[id];
-                return unit && !unit.dead && !unit.targetId && !unit.moveTarget;
+                return unit && !unit.dead && isUnit(unit) && !unit.combat.targetId && !unit.movement.moveTarget;
             });
 
             if (idleUnits.length > 0) {
@@ -2773,7 +2786,7 @@ function handleScouting(
 
     // Find a fast, idle unit to scout
     const availableScouts = combatUnits.filter(u =>
-        !u.targetId && !u.moveTarget &&
+        isUnit(u) && !u.combat.targetId && !u.movement.moveTarget &&
         (u.key === 'light' || u.key === 'rifle')
     );
 
@@ -3388,7 +3401,8 @@ function handleBuildingRepair(
         const repairConfig = repairPriorities[building.key] || { threshold: 0.3, priority: 10 };
 
         // Check if building needs repair and isn't already being repaired
-        if (hpRatio < repairConfig.threshold && !building.isRepairing) {
+        const bldEntity = building as BuildingEntity;
+        if (hpRatio < repairConfig.threshold && !bldEntity.building.isRepairing) {
 
             // Skip non-essential refineries (far from ore)
             if (building.key === 'refinery' && !isRefineryUseful(building, _state)) {
@@ -3411,7 +3425,7 @@ function handleBuildingRepair(
     damagedBuildings.sort((a, b) => a.priority - b.priority);
 
     // Count how many buildings are already being repaired
-    const currentlyRepairing = buildings.filter(b => b.isRepairing).length;
+    const currentlyRepairing = buildings.filter(b => (b as BuildingEntity).building.isRepairing).length;
     const maxConcurrentRepairs = player.credits > 2000 ? 2 : 1;
 
     // Repair logic based on current game state
@@ -3484,7 +3498,8 @@ function handleEmergencySell(
     // Filter out buildings that were just placed (prevent build-then-sell loops)
     const BUILDING_GRACE_PERIOD = 300; // 5 seconds
     const matureBuildings = buildings.filter(b => {
-        const age = _state.tick - (b.placedTick || 0);
+        const bldEntity = b as BuildingEntity;
+        const age = _state.tick - (bldEntity.building.placedTick || 0);
         return age >= BUILDING_GRACE_PERIOD;
     });
 

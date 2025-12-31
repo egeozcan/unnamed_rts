@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, UnitKey, BuildingKey } from './types';
+import {
+    createTestHarvester,
+    createTestCombatUnit,
+    createTestBuilding,
+    createTestResource
+} from './test-utils';
 
 const { getAIState, ATTACK_GROUP_MIN_SIZE } = _testUtils;
 
@@ -13,24 +19,45 @@ function createEntity(
     key: string,
     x: number,
     y: number,
-    overrides?: Partial<Entity>
+    overrides?: {
+        hp?: number;
+        maxHp?: number;
+        dead?: boolean;
+        targetId?: EntityId | null;
+        lastAttackerId?: EntityId | null;
+        moveTarget?: Vector | null;
+        cargo?: number;
+        resourceTargetId?: EntityId | null;
+        baseTargetId?: EntityId | null;
+        manualMode?: boolean;
+        placedTick?: number;
+        isRepairing?: boolean;
+    }
 ): Entity {
-    return {
-        id, owner, type, key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 100, maxHp: 100,
-        w: 30, h: 30, radius: 15,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null, path: null, pathIdx: 0, finalDest: null,
-        stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null,
-        cooldown: 0, flash: 0, turretAngle: 0,
-        cargo: 0, resourceTargetId: null, baseTargetId: null,
-        ...overrides
-    };
+    if (type === 'BUILDING') {
+        return createTestBuilding({
+            id, owner, key: key as BuildingKey, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
+            targetId: overrides?.targetId, placedTick: overrides?.placedTick,
+            isRepairing: overrides?.isRepairing
+        });
+    } else if (type === 'RESOURCE') {
+        return createTestResource({ id, x, y, hp: overrides?.hp });
+    } else if (key === 'harvester') {
+        return createTestHarvester({
+            id, owner, x, y, hp: overrides?.hp, dead: overrides?.dead,
+            targetId: overrides?.targetId, moveTarget: overrides?.moveTarget,
+            cargo: overrides?.cargo, resourceTargetId: overrides?.resourceTargetId,
+            baseTargetId: overrides?.baseTargetId, manualMode: overrides?.manualMode
+        });
+    } else {
+        return createTestCombatUnit({
+            id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
+            targetId: overrides?.targetId, lastAttackerId: overrides?.lastAttackerId,
+            moveTarget: overrides?.moveTarget
+        });
+    }
 }
 
 function createTestState(entities: Record<EntityId, Entity>): GameState {

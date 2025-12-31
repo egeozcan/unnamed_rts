@@ -1,56 +1,34 @@
 
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-import { createEntity } from './utils';
+import { GameState, Vector, Entity, EntityId, UnitEntity } from './types';
+import { createTestCombatUnit, createTestBuilding } from './test-utils';
 
 describe('Advanced Movement Scenarios', () => {
 
     // Helper to spawn units
     function spawnUnit(state: GameState, x: number, y: number, id: string): GameState {
-        const unit = createEntity(x, y, 0, 'UNIT', 'rifle');
+        const unit = createTestCombatUnit({ id, owner: 0, key: 'rifle', x, y });
         return {
             ...state,
             entities: {
                 ...state.entities,
-                [id]: { ...unit, id }
+                [id]: unit
             } as Record<EntityId, Entity>
         };
     }
 
     // Helper to spawn buildings
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string): GameState {
-        const building: Entity = {
+        const building = createTestBuilding({
             id,
             owner: 0,
-            type: 'BUILDING',
-            key: 'conyard', // Use conyard as generic blocker
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
+            key: 'conyard',
+            x, y,
+            w, h,
             hp: 1000,
-            maxHp: 1000,
-            w,
-            h,
-            radius: Math.min(w, h) / 2, // Use min dimension for better rectangular approximation
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
+            maxHp: 1000
+        });
         return {
             ...state,
             entities: {
@@ -84,7 +62,7 @@ describe('Advanced Movement Scenarios', () => {
         state = update(state, { type: 'COMMAND_MOVE', payload: { unitIds: ['unitB'], x: 200, y: 500 } });
 
         // Verify initial state
-        expect(state.entities['unitA'].stuckTimer).toBe(0);
+        expect((state.entities['unitA'] as UnitEntity).movement.stuckTimer).toBe(0);
 
         // Run simulation and track progress
         let unstuckTriggered = false;
@@ -92,11 +70,11 @@ describe('Advanced Movement Scenarios', () => {
         for (let i = 0; i < 600; i++) {
             state = update(state, { type: 'TICK' });
 
-            const uA = state.entities['unitA'];
-            const uB = state.entities['unitB'];
+            const uA = state.entities['unitA'] as UnitEntity;
+            const uB = state.entities['unitB'] as UnitEntity;
 
-            if ((uA.unstuckTimer && uA.unstuckTimer > 0) ||
-                (uB.unstuckTimer && uB.unstuckTimer > 0)) {
+            if ((uA.movement.unstuckTimer && uA.movement.unstuckTimer > 0) ||
+                (uB.movement.unstuckTimer && uB.movement.unstuckTimer > 0)) {
                 unstuckTriggered = true;
             }
         }

@@ -2,6 +2,7 @@ import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_C
 import { getAsset, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
+import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -148,7 +149,7 @@ export class Renderer {
         }
 
         // Draw repair icon for buildings being repaired (flashing)
-        if (entity.type === 'BUILDING' && entity.isRepairing) {
+        if (isBuilding(entity) && entity.building.isRepairing) {
             const showIcon = (tick % 30) < 20; // Flash on for 20 ticks, off for 10
             if (showIcon) {
                 ctx.save();
@@ -217,12 +218,16 @@ export class Renderer {
             ctx.arc(-r * 0.3, -r * 0.2, r * 0.15, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            ctx.rotate(entity.rotation);
+            // Get rotation from movement component for units, 0 for buildings
+            const rotation = isUnit(entity) ? entity.movement.rotation : 0;
+            ctx.rotate(rotation);
 
             const img = getAsset(entity.key, entity.owner);
             const playerColor = PLAYER_COLORS[entity.owner] || '#888888';
 
-            if (entity.flash > 0) {
+            // Get flash from combat component (units always have it, buildings may have it)
+            const flash = entity.combat?.flash ?? 0;
+            if (flash > 0) {
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(-entity.w / 2, -entity.h / 2, entity.w, entity.h);
             } else if (img && img.complete) {
@@ -233,8 +238,8 @@ export class Renderer {
             }
 
             // Harvester Cargo Bar
-            if (entity.key === 'harvester' && entity.cargo > 0) {
-                const ratio = Math.min(1, entity.cargo / 500); // 500 is capacity
+            if (isHarvester(entity) && entity.harvester.cargo > 0) {
+                const ratio = Math.min(1, entity.harvester.cargo / 500); // 500 is capacity
                 ctx.fillStyle = '#333';
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20, 3);
                 ctx.fillStyle = '#0ff';
@@ -243,11 +248,11 @@ export class Renderer {
 
             // Draw turret barrel overlay for units/buildings with turrets
             const turretEntities = ['light', 'heavy', 'mammoth', 'artillery', 'flame_tank', 'turret', 'sam_site', 'pillbox', 'jeep'];
-            if (turretEntities.includes(entity.key)) {
+            if (turretEntities.includes(entity.key) && entity.combat) {
                 ctx.save();
                 // Undo body rotation first, then apply turret angle
-                ctx.rotate(-entity.rotation);
-                ctx.rotate(entity.turretAngle);
+                ctx.rotate(-rotation);
+                ctx.rotate(entity.combat.turretAngle);
 
                 // Draw turret barrel based on entity type
                 if (entity.key === 'turret') {
@@ -277,7 +282,7 @@ export class Renderer {
                     // Pillbox - gun slit
                     ctx.fillStyle = '#000';
                     ctx.fillRect(10, -5, entity.w * 0.4, 10);
-                } else if (entity.key === 'heavy' || entity.key === 'mammoth') {
+                } else if (entity.key === 'heavy') {
                     // Heavy tanks - thick barrel
                     ctx.fillStyle = '#111';
                     ctx.fillRect(0, -5, entity.w * 0.55, 10);
@@ -289,6 +294,10 @@ export class Renderer {
                 } else if (entity.key === 'mammoth') {
                     // Mammoth - twin barrels
                     ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -5, entity.w * 0.55, 10);
+                    ctx.strokeStyle = '#000';
+                    ctx.strokeRect(0, -5, entity.w * 0.55, 10);
+                    // Also draw twin barrels for mammoth
                     ctx.fillRect(0, -9, entity.w * 0.5, 6);
                     ctx.fillRect(0, 3, entity.w * 0.5, 6);
                 } else if (entity.key === 'artillery') {

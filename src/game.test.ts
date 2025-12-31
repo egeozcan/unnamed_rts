@@ -89,13 +89,16 @@ describe('Game Logic', () => {
                 entities: {
                     'e1': {
                         id: 'e1',
+                        type: 'UNIT',
                         pos: { x: 10, y: 20 },
                         prevPos: { x: 9, y: 19 },
-                        vel: { x: 1, y: 1 },
-                        moveTarget: { x: 100, y: 100 },
-                        finalDest: { x: 200, y: 200 },
-                        unstuckDir: { x: 1, y: 0 },
-                        path: [{ x: 50, y: 50 }, { x: 100, y: 100 }]
+                        movement: {
+                            vel: { x: 1, y: 1 },
+                            moveTarget: { x: 100, y: 100 },
+                            finalDest: { x: 200, y: 200 },
+                            unstuckDir: { x: 1, y: 0 },
+                            path: [{ x: 50, y: 50 }, { x: 100, y: 100 }]
+                        }
                     }
                 },
                 running: true,
@@ -107,12 +110,14 @@ describe('Game Logic', () => {
             // Check that vectors are proper Vector instances
             expect(result.entities['e1'].pos).toBeInstanceOf(Vector);
             expect(result.entities['e1'].prevPos).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].vel).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].moveTarget).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].finalDest).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].unstuckDir).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].path![0]).toBeInstanceOf(Vector);
-            expect(result.entities['e1'].path![1]).toBeInstanceOf(Vector);
+            // For units, movement vectors are inside movement component
+            const entity = result.entities['e1'] as any;
+            expect(entity.movement.vel).toBeInstanceOf(Vector);
+            expect(entity.movement.moveTarget).toBeInstanceOf(Vector);
+            expect(entity.movement.finalDest).toBeInstanceOf(Vector);
+            expect(entity.movement.unstuckDir).toBeInstanceOf(Vector);
+            expect(entity.movement.path![0]).toBeInstanceOf(Vector);
+            expect(entity.movement.path![1]).toBeInstanceOf(Vector);
         });
 
         it('should handle null vector fields', () => {
@@ -121,23 +126,27 @@ describe('Game Logic', () => {
                 entities: {
                     'e1': {
                         id: 'e1',
+                        type: 'UNIT',
                         pos: { x: 10, y: 20 },
                         prevPos: { x: 9, y: 19 },
-                        vel: { x: 0, y: 0 },
-                        moveTarget: null,
-                        finalDest: null,
-                        unstuckDir: null,
-                        path: null
+                        movement: {
+                            vel: { x: 0, y: 0 },
+                            moveTarget: null,
+                            finalDest: null,
+                            unstuckDir: null,
+                            path: null
+                        }
                     }
                 }
             } as any;
 
             const result = reconstructVectors(plainState);
 
-            expect(result.entities['e1'].moveTarget).toBeNull();
-            expect(result.entities['e1'].finalDest).toBeNull();
-            expect(result.entities['e1'].unstuckDir).toBeNull();
-            expect(result.entities['e1'].path).toBeNull();
+            const entity = result.entities['e1'] as any;
+            expect(entity.movement.moveTarget).toBeNull();
+            expect(entity.movement.finalDest).toBeNull();
+            expect(entity.movement.unstuckDir).toBeNull();
+            expect(entity.movement.path).toBeNull();
         });
 
         it('should preserve camera coordinates', () => {
@@ -164,12 +173,13 @@ describe('Game Logic', () => {
                     dead: false,
                     pos: new Vector(100, 100),
                     prevPos: new Vector(100, 100),
-                    vel: new Vector(0, 0),
                     hp: 500,
                     maxHp: 500,
                     w: 60,
                     h: 60,
-                    radius: 30
+                    radius: 30,
+                    placedTick: 0,
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false }
                 } as Entity
             };
 
@@ -189,12 +199,13 @@ describe('Game Logic', () => {
                     dead: false,
                     pos: new Vector(100, 100),
                     prevPos: new Vector(100, 100),
-                    vel: new Vector(0, 0),
                     hp: 1500,
                     maxHp: 1500,
                     w: 80,
                     h: 80,
-                    radius: 40
+                    radius: 40,
+                    placedTick: 0,
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false }
                 } as Entity
             };
 
@@ -213,12 +224,13 @@ describe('Game Logic', () => {
                     dead: true, // Dead!
                     pos: new Vector(100, 100),
                     prevPos: new Vector(100, 100),
-                    vel: new Vector(0, 0),
                     hp: 0,
                     maxHp: 500,
                     w: 60,
                     h: 60,
-                    radius: 30
+                    radius: 30,
+                    placedTick: 0,
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false }
                 } as Entity
             };
 
@@ -236,7 +248,15 @@ describe('Game Logic', () => {
                     type: 'BUILDING',
                     key: 'power',
                     dead: false,
-                    pos: new Vector(100, 100)
+                    pos: new Vector(100, 100),
+                    prevPos: new Vector(100, 100),
+                    hp: 500,
+                    maxHp: 500,
+                    w: 60,
+                    h: 60,
+                    radius: 30,
+                    placedTick: 0,
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false }
                 } as Entity,
                 'power_p1': {
                     id: 'power_p1',
@@ -244,7 +264,15 @@ describe('Game Logic', () => {
                     type: 'BUILDING',
                     key: 'power',
                     dead: false,
-                    pos: new Vector(500, 500)
+                    pos: new Vector(500, 500),
+                    prevPos: new Vector(500, 500),
+                    hp: 500,
+                    maxHp: 500,
+                    w: 60,
+                    h: 60,
+                    radius: 30,
+                    placedTick: 0,
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false }
                 } as Entity
             };
 

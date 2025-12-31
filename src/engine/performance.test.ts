@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from './reducer';
 import { GameState, Vector, Entity, EntityId, PlayerState } from './types';
-import { createEntity, findPath, refreshCollisionGrid, setPathCacheTick } from './utils';
+import { findPath, refreshCollisionGrid, setPathCacheTick } from './utils';
 import { rebuildSpatialGrid, getSpatialGrid } from './spatial';
+import {
+    createTestHarvester,
+    createTestCombatUnit,
+    createTestBuilding,
+    createTestResource,
+    resetTestEntityCounter
+} from './test-utils';
 
 /**
  * Performance benchmark tests for the RTS game engine.
@@ -10,6 +17,10 @@ import { rebuildSpatialGrid, getSpatialGrid } from './spatial';
  * without significant performance degradation.
  */
 describe('Performance Benchmarks', () => {
+    beforeEach(() => {
+        resetTestEntityCounter();
+    });
+
     // Helper to create a large game state with many entities
     function createLargeGameState(
         numPlayers: number,
@@ -26,36 +37,54 @@ describe('Performance Benchmarks', () => {
             players[p] = createPlayerState(p, p > 0, 'medium', `#${p}${p}${p}`);
 
             // Create construction yard for each player
-            const cyPos = new Vector(
-                200 + (p % 4) * 700,
-                200 + Math.floor(p / 4) * 700
-            );
-            const cyId = `cy_p${p}`;
-            entities[cyId] = {
-                ...createEntity(cyPos.x, cyPos.y, p, 'BUILDING', 'conyard'),
-                id: cyId
-            };
+            const cyPosX = 200 + (p % 4) * 700;
+            const cyPosY = 200 + Math.floor(p / 4) * 700;
+            const cy = createTestBuilding({
+                id: `cy_p${p}`,
+                owner: p,
+                key: 'conyard',
+                x: cyPosX,
+                y: cyPosY
+            });
+            entities[cy.id] = cy;
 
             // Create refinery for each player
-            const refPos = cyPos.add(new Vector(150, 0));
-            const refId = `ref_p${p}`;
-            entities[refId] = {
-                ...createEntity(refPos.x, refPos.y, p, 'BUILDING', 'refinery'),
-                id: refId
-            };
+            const ref = createTestBuilding({
+                id: `ref_p${p}`,
+                owner: p,
+                key: 'refinery',
+                x: cyPosX + 150,
+                y: cyPosY
+            });
+            entities[ref.id] = ref;
 
             // Create units for each player
             for (let u = 0; u < unitsPerPlayer; u++) {
-                const unitPos = cyPos.add(new Vector(
-                    -100 + (u % 5) * 40,
-                    100 + Math.floor(u / 5) * 40
-                ));
+                const unitX = cyPosX - 100 + (u % 5) * 40;
+                const unitY = cyPosY + 100 + Math.floor(u / 5) * 40;
                 const unitId = `unit_p${p}_${u}`;
-                const unitType = u % 3 === 0 ? 'harvester' : (u % 3 === 1 ? 'rifle' : 'heavy');
-                entities[unitId] = {
-                    ...createEntity(unitPos.x, unitPos.y, p, 'UNIT', unitType),
-                    id: unitId
-                };
+
+                if (u % 3 === 0) {
+                    // Harvester
+                    const harvester = createTestHarvester({
+                        id: unitId,
+                        owner: p,
+                        x: unitX,
+                        y: unitY
+                    });
+                    entities[harvester.id] = harvester;
+                } else {
+                    // Combat unit
+                    const unitType = u % 3 === 1 ? 'rifle' : 'heavy';
+                    const unit = createTestCombatUnit({
+                        id: unitId,
+                        owner: p,
+                        key: unitType,
+                        x: unitX,
+                        y: unitY
+                    });
+                    entities[unit.id] = unit;
+                }
             }
         }
 
@@ -63,13 +92,13 @@ describe('Performance Benchmarks', () => {
         for (let r = 0; r < numResources; r++) {
             const x = 100 + Math.random() * (mapWidth - 200);
             const y = 100 + Math.random() * (mapHeight - 200);
-            const resId = `res_${r}`;
-            entities[resId] = {
-                ...createEntity(x, y, -1, 'RESOURCE', 'ore'),
-                id: resId,
-                hp: 1000,
-                maxHp: 1000
-            };
+            const resource = createTestResource({
+                id: `res_${r}`,
+                x,
+                y,
+                hp: 1000
+            });
+            entities[resource.id] = resource;
         }
 
         return {
@@ -261,12 +290,18 @@ describe('Performance Benchmarks', () => {
             for (let i = 0; i < 50; i++) {
                 const x = 500 + (i % 10) * 30;
                 const y = 500 + Math.floor(i / 10) * 30;
-                const id = `unit_${i}`;
+                const unit = createTestCombatUnit({
+                    id: `unit_${i}`,
+                    owner: 0,
+                    key: 'rifle',
+                    x,
+                    y
+                });
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [id]: { ...createEntity(x, y, 0, 'UNIT', 'rifle'), id }
+                        [unit.id]: unit
                     }
                 };
             }
@@ -405,33 +440,47 @@ describe('Performance Benchmarks', () => {
 
             // Create 4 players with refineries and harvesters
             for (let p = 0; p < 4; p++) {
-                state.players[p] = createPlayerState(p, p > 0, 'medium', `#${p}00`);
+                state = {
+                    ...state,
+                    players: {
+                        ...state.players,
+                        [p]: createPlayerState(p, p > 0, 'medium', `#${p}00`)
+                    }
+                };
 
                 const baseX = 300 + (p % 2) * 1500;
                 const baseY = 300 + Math.floor(p / 2) * 1500;
 
                 // Add refinery
-                const refId = `ref_p${p}`;
+                const refinery = createTestBuilding({
+                    id: `ref_p${p}`,
+                    owner: p,
+                    key: 'refinery',
+                    x: baseX,
+                    y: baseY
+                });
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [refId]: { ...createEntity(baseX, baseY, p, 'BUILDING', 'refinery'), id: refId }
+                        [refinery.id]: refinery
                     }
                 };
 
                 // Add 4 harvesters per player (16 total)
                 for (let h = 0; h < 4; h++) {
-                    const harvId = `harv_p${p}_${h}`;
+                    const harvester = createTestHarvester({
+                        id: `harv_p${p}_${h}`,
+                        owner: p,
+                        x: baseX + 50 + h * 40,
+                        y: baseY + 100,
+                        manualMode: false // Enable auto-harvest
+                    });
                     state = {
                         ...state,
                         entities: {
                             ...state.entities,
-                            [harvId]: {
-                                ...createEntity(baseX + 50 + h * 40, baseY + 100, p, 'UNIT', 'harvester'),
-                                id: harvId,
-                                manualMode: false // Enable auto-harvest
-                            } as Entity
+                            [harvester.id]: harvester
                         }
                     };
                 }
@@ -441,12 +490,17 @@ describe('Performance Benchmarks', () => {
             for (let i = 0; i < 100; i++) {
                 const x = 200 + Math.random() * 2600;
                 const y = 200 + Math.random() * 2600;
-                const oreId = `ore_${i}`;
+                const ore = createTestResource({
+                    id: `ore_${i}`,
+                    x,
+                    y,
+                    hp: 1000
+                });
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [oreId]: { ...createEntity(x, y, -1, 'RESOURCE', 'ore'), id: oreId, hp: 1000, maxHp: 1000 }
+                        [ore.id]: ore
                     }
                 };
             }
@@ -484,13 +538,19 @@ describe('Performance Benchmarks', () => {
             for (let i = 0; i < 30; i++) {
                 const x = 400 + (i % 6) * 50;
                 const y = 400 + Math.floor(i / 6) * 50;
-                const id = `p0_unit_${i}`;
-                const type = i % 3 === 0 ? 'heavy' : 'rifle';
+                const unitType = i % 3 === 0 ? 'heavy' : 'rifle';
+                const unit = createTestCombatUnit({
+                    id: `p0_unit_${i}`,
+                    owner: 0,
+                    key: unitType,
+                    x,
+                    y
+                });
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [id]: { ...createEntity(x, y, 0, 'UNIT', type), id }
+                        [unit.id]: unit
                     }
                 };
             }
@@ -499,13 +559,19 @@ describe('Performance Benchmarks', () => {
             for (let i = 0; i < 30; i++) {
                 const x = 800 + (i % 6) * 50;
                 const y = 400 + Math.floor(i / 6) * 50;
-                const id = `p1_unit_${i}`;
-                const type = i % 3 === 0 ? 'heavy' : 'rifle';
+                const unitType = i % 3 === 0 ? 'heavy' : 'rifle';
+                const unit = createTestCombatUnit({
+                    id: `p1_unit_${i}`,
+                    owner: 1,
+                    key: unitType,
+                    x,
+                    y
+                });
                 state = {
                     ...state,
                     entities: {
                         ...state.entities,
-                        [id]: { ...createEntity(x, y, 1, 'UNIT', type), id }
+                        [unit.id]: unit
                     }
                 };
             }

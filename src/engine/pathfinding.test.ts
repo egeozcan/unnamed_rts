@@ -1,104 +1,51 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-import { createEntity } from './utils';
+import { GameState, Vector, Entity, EntityId, HarvesterUnit } from './types';
+import {
+    createTestCombatUnit,
+    createTestHarvester,
+    createTestBuilding,
+    createTestResource,
+    addEntityToState
+} from './test-utils';
 
 describe('Pathfinding Issues', () => {
 
-    // Helper to spawn units
+    // Helper to spawn units using test-utils
     function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
-        const unit = createEntity(x, y, owner, 'UNIT', key);
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: { ...unit, id }
-            } as Record<EntityId, Entity>
-        };
+        if (key === 'harvester') {
+            const harvester = createTestHarvester({ id, owner, x, y });
+            return addEntityToState(state, harvester);
+        } else {
+            const unit = createTestCombatUnit({
+                id,
+                owner,
+                x,
+                y,
+                key: key as Exclude<import('./types').UnitKey, 'harvester'>
+            });
+            return addEntityToState(state, unit);
+        }
     }
 
-    // Helper to spawn buildings
+    // Helper to spawn buildings using test-utils
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building: Entity = {
+        const building = createTestBuilding({
             id,
             owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
+            key: key as import('./types').BuildingKey,
+            x,
+            y,
             w,
-            h,
-            radius: Math.min(w, h) / 2, // Use min dimension for better rectangular approximation
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: building
-            } as Record<EntityId, Entity>
-        };
+            h
+        });
+        return addEntityToState(state, building);
     }
 
-    // Helper to spawn resources
+    // Helper to spawn resources using test-utils
     function spawnResource(state: GameState, x: number, y: number, id: string): GameState {
-        const resource: Entity = {
-            id,
-            owner: -1,
-            type: 'RESOURCE',
-            key: 'ore',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w: 25,
-            h: 25,
-            radius: 12.5,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: resource
-            } as Record<EntityId, Entity>
-        };
+        const resource = createTestResource({ id, x, y });
+        return addEntityToState(state, resource);
     }
 
     describe('Erratic Movement', () => {
@@ -224,20 +171,13 @@ describe('Pathfinding Issues', () => {
 
             // Spawn 3 harvesters near the refinery dock point
             const dockY = 500 + 60; // Refinery dock offset
-            state = spawnUnit(state, 480, dockY - 30, 'h1', 0, 'harvester');
-            state = spawnUnit(state, 500, dockY - 30, 'h2', 0, 'harvester');
-            state = spawnUnit(state, 520, dockY - 30, 'h3', 0, 'harvester');
+            const h1 = createTestHarvester({ id: 'h1', owner: 0, x: 480, y: dockY - 30, cargo: 500, baseTargetId: 'refinery1' });
+            const h2 = createTestHarvester({ id: 'h2', owner: 0, x: 500, y: dockY - 30, cargo: 500, baseTargetId: 'refinery1' });
+            const h3 = createTestHarvester({ id: 'h3', owner: 0, x: 520, y: dockY - 30, cargo: 500, baseTargetId: 'refinery1' });
 
-            // Set all harvesters to full cargo so they want to dock
-            state = {
-                ...state,
-                entities: {
-                    ...state.entities,
-                    h1: { ...state.entities['h1'], cargo: 500, baseTargetId: 'refinery1' },
-                    h2: { ...state.entities['h2'], cargo: 500, baseTargetId: 'refinery1' },
-                    h3: { ...state.entities['h3'], cargo: 500, baseTargetId: 'refinery1' }
-                }
-            };
+            state = addEntityToState(state, h1);
+            state = addEntityToState(state, h2);
+            state = addEntityToState(state, h3);
 
             // Track total movement distance during docking phase
             let totalMovement = 0;
@@ -313,19 +253,18 @@ describe('Pathfinding Issues', () => {
 
             // Refinery and harvester
             state = spawnBuilding(state, 300, 300, 100, 80, 'refinery1', 0, 'refinery');
-            state = spawnUnit(state, 350, 400, 'harv1', 0, 'harvester');
+            const harvester = createTestHarvester({
+                id: 'harv1',
+                owner: 0,
+                x: 350,
+                y: 400,
+                resourceTargetId: 'ore1',
+                manualMode: false
+            });
+            state = addEntityToState(state, harvester);
 
             // Ore is 400 pixels away
             state = spawnResource(state, 700, 400, 'ore1');
-
-            // Set harvester to look for ore with manualMode: false for auto-harvesting
-            state = {
-                ...state,
-                entities: {
-                    ...state.entities,
-                    harv1: { ...state.entities['harv1'], resourceTargetId: 'ore1', manualMode: false }
-                }
-            };
 
             const target = state.entities['ore1'].pos;
             const startPos = state.entities['harv1'].pos;
@@ -360,22 +299,16 @@ describe('Pathfinding Issues', () => {
             // Single ore patch
             state = spawnResource(state, 700, 500, 'ore1');
 
-            // 4 harvesters all heading to same ore
-            state = spawnUnit(state, 350, 450, 'h1', 0, 'harvester');
-            state = spawnUnit(state, 350, 500, 'h2', 0, 'harvester');
-            state = spawnUnit(state, 350, 550, 'h3', 0, 'harvester');
-            state = spawnUnit(state, 400, 500, 'h4', 0, 'harvester');
+            // 4 harvesters all heading to same ore with manualMode: false
+            const h1 = createTestHarvester({ id: 'h1', owner: 0, x: 350, y: 450, resourceTargetId: 'ore1', manualMode: false });
+            const h2 = createTestHarvester({ id: 'h2', owner: 0, x: 350, y: 500, resourceTargetId: 'ore1', manualMode: false });
+            const h3 = createTestHarvester({ id: 'h3', owner: 0, x: 350, y: 550, resourceTargetId: 'ore1', manualMode: false });
+            const h4 = createTestHarvester({ id: 'h4', owner: 0, x: 400, y: 500, resourceTargetId: 'ore1', manualMode: false });
 
-            // All target same ore with manualMode: false
-            for (const id of ['h1', 'h2', 'h3', 'h4']) {
-                state = {
-                    ...state,
-                    entities: {
-                        ...state.entities,
-                        [id]: { ...state.entities[id], resourceTargetId: 'ore1', manualMode: false }
-                    }
-                };
-            }
+            state = addEntityToState(state, h1);
+            state = addEntityToState(state, h2);
+            state = addEntityToState(state, h3);
+            state = addEntityToState(state, h4);
 
             // Run simulation and count how many harvesters successfully harvest
             let harvestEvents = 0;
@@ -384,10 +317,11 @@ describe('Pathfinding Issues', () => {
                 const preState = state;
                 state = update(state, { type: 'TICK' });
 
-                // Count cargo increases
+                // Count cargo increases - access cargo via harvester component
                 for (const id of ['h1', 'h2', 'h3', 'h4']) {
-                    if (state.entities[id] && preState.entities[id] &&
-                        state.entities[id].cargo > preState.entities[id].cargo) {
+                    const curr = state.entities[id] as HarvesterUnit;
+                    const prev = preState.entities[id] as HarvesterUnit;
+                    if (curr && prev && curr.harvester.cargo > prev.harvester.cargo) {
                         harvestEvents++;
                     }
                 }
@@ -404,15 +338,16 @@ describe('Pathfinding Issues', () => {
             // Setup refinery and ore
             state = spawnBuilding(state, 300, 500, 100, 80, 'refinery1', 0, 'refinery');
             state = spawnResource(state, 600, 500, 'ore1');
-            state = spawnUnit(state, 350, 560, 'harv1', 0, 'harvester');
+
             // Enable auto-harvesting for this harvester
-            state = {
-                ...state,
-                entities: {
-                    ...state.entities,
-                    harv1: { ...state.entities['harv1'], manualMode: false }
-                }
-            };
+            const harvester = createTestHarvester({
+                id: 'harv1',
+                owner: 0,
+                x: 350,
+                y: 560,
+                manualMode: false
+            });
+            state = addEntityToState(state, harvester);
 
             // Track complete harvest cycles (go to ore, fill up, return, unload)
             let cycles = 0;
@@ -421,14 +356,14 @@ describe('Pathfinding Issues', () => {
             for (let i = 0; i < 2000; i++) {
                 state = update(state, { type: 'TICK' });
 
-                const harv = state.entities['harv1'];
+                const harv = state.entities['harv1'] as HarvesterUnit;
                 if (!harv) continue;
 
-                // Detect unload event (cargo goes from 500 to 0)
-                if (lastCargo >= 400 && harv.cargo === 0) {
+                // Detect unload event (cargo goes from 500 to 0) - access via harvester component
+                if (lastCargo >= 400 && harv.harvester.cargo === 0) {
                     cycles++;
                 }
-                lastCargo = harv.cargo;
+                lastCargo = harv.harvester.cargo;
             }
 
             // In 2000 ticks, a harvester should complete at least 2 full cycles

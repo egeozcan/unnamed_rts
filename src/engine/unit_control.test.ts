@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from './reducer.js';
-import { GameState, Vector, Entity } from './types.js';
+import { GameState, Vector, UnitEntity, HarvesterUnit } from './types.js';
+import { createTestCombatUnit, createTestBuilding, createTestHarvester, createTestResource } from './test-utils.js';
 
 describe('Unit Control', () => {
     // Helper to create a minimal game state
@@ -19,73 +20,13 @@ describe('Unit Control', () => {
     }
 
     // Helper to create units
-    function createUnit(id: string, owner: number, pos: Vector, key: string = 'light'): Entity {
-        return {
-            id,
-            owner,
-            type: 'UNIT',
-            key,
-            pos,
-            prevPos: pos,
-            hp: 500,
-            maxHp: 500,
-            w: 30,
-            h: 30,
-            radius: 15,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        } as Entity;
+    function createUnit(id: string, owner: number, pos: Vector, key: string = 'light') {
+        return createTestCombatUnit({ id, owner, key: key as any, x: pos.x, y: pos.y });
     }
 
     // Helper to create a building (needed to prevent game from ending due to win condition)
-    function createBuilding(id: string, owner: number, pos: Vector, key: string = 'conyard'): Entity {
-        return {
-            id,
-            owner,
-            type: 'BUILDING',
-            key,
-            pos,
-            prevPos: pos,
-            hp: 3000,
-            maxHp: 3000,
-            w: 90,
-            h: 90,
-            radius: 45,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        } as Entity;
+    function createBuilding(id: string, owner: number, pos: Vector, key: string = 'conyard') {
+        return createTestBuilding({ id, owner, key: key as any, x: pos.x, y: pos.y });
     }
 
     describe('Pulling back auto-attacking units', () => {
@@ -109,7 +50,7 @@ describe('Unit Control', () => {
             state = update(state, { type: 'TICK' });
 
             // Tank should have acquired enemy as target
-            expect(state.entities['tank1'].targetId).toBe('enemy1');
+            expect((state.entities['tank1'] as UnitEntity).combat.targetId).toBe('enemy1');
 
             // Player issues a move command to pull back
             state = update(state, {
@@ -118,8 +59,8 @@ describe('Unit Control', () => {
             });
 
             // Unit should now be moving away, not attacking
-            expect(state.entities['tank1'].moveTarget).not.toBeNull();
-            expect(state.entities['tank1'].targetId).toBeNull();
+            expect((state.entities['tank1'] as UnitEntity).movement.moveTarget).not.toBeNull();
+            expect((state.entities['tank1'] as UnitEntity).combat.targetId).toBeNull();
 
             // Run several ticks - the unit should continue moving away
             // even though enemy is still in range
@@ -128,9 +69,9 @@ describe('Unit Control', () => {
             }
 
             // Unit should NOT have re-acquired the target while it has a moveTarget
-            const tank = state.entities['tank1'];
-            expect(tank.moveTarget).not.toBeNull();
-            expect(tank.targetId).toBeNull();
+            const tank = state.entities['tank1'] as UnitEntity;
+            expect(tank.movement.moveTarget).not.toBeNull();
+            expect(tank.combat.targetId).toBeNull();
 
             // Unit should be moving toward the move target (200, 500), not toward enemy
             expect(tank.pos.x).toBeLessThan(500);
@@ -158,7 +99,7 @@ describe('Unit Control', () => {
                 payload: { unitIds: ['tank1'], x: 490, y: 500 } // Very close move
             });
 
-            expect(state.entities['tank1'].moveTarget).not.toBeNull();
+            expect((state.entities['tank1'] as UnitEntity).movement.moveTarget).not.toBeNull();
 
             // Run ticks until unit reaches destination
             for (let i = 0; i < 20; i++) {
@@ -167,88 +108,23 @@ describe('Unit Control', () => {
 
             // After reaching destination, moveTarget should be cleared
             // and if enemy is in range, unit should auto-acquire target
-            const tank = state.entities['tank1'];
-            expect(tank.moveTarget).toBeNull();
-            expect(tank.targetId).toBe('enemy1');
+            const tank = state.entities['tank1'] as UnitEntity;
+            expect(tank.movement.moveTarget).toBeNull();
+            expect(tank.combat.targetId).toBe('enemy1');
         });
     });
 
     describe('Harvester manual control', () => {
-        function createHarvester(id: string, owner: number, pos: Vector, cargo: number = 0): Entity {
-            return {
-                ...createUnit(id, owner, pos, 'harvester'),
-                cargo,
-                hp: 1000,
-                maxHp: 1000
-            } as Entity;
+        function createHarvester(id: string, owner: number, pos: Vector, cargo: number = 0) {
+            return createTestHarvester({ id, owner, x: pos.x, y: pos.y, cargo });
         }
 
-        function createRefinery(id: string, owner: number, pos: Vector): Entity {
-            return {
-                id,
-                owner,
-                type: 'BUILDING',
-                key: 'refinery',
-                pos,
-                prevPos: pos,
-                hp: 2000,
-                maxHp: 2000,
-                w: 90,
-                h: 90,
-                radius: 45,
-                dead: false,
-                vel: new Vector(0, 0),
-                rotation: 0,
-                moveTarget: null,
-                path: null,
-                pathIdx: 0,
-                finalDest: null,
-                stuckTimer: 0,
-                unstuckDir: null,
-                unstuckTimer: 0,
-                targetId: null,
-                lastAttackerId: null,
-                cooldown: 0,
-                flash: 0,
-                turretAngle: 0,
-                cargo: 0,
-                resourceTargetId: null,
-                baseTargetId: null
-            } as Entity;
+        function createRefinery(id: string, owner: number, pos: Vector) {
+            return createTestBuilding({ id, owner, key: 'refinery', x: pos.x, y: pos.y });
         }
 
-        function createOre(id: string, pos: Vector): Entity {
-            return {
-                id,
-                owner: -1,
-                type: 'RESOURCE',
-                key: 'ore',
-                pos,
-                prevPos: pos,
-                hp: 1000,
-                maxHp: 1000,
-                w: 25,
-                h: 25,
-                radius: 12,
-                dead: false,
-                vel: new Vector(0, 0),
-                rotation: 0,
-                moveTarget: null,
-                path: null,
-                pathIdx: 0,
-                finalDest: null,
-                stuckTimer: 0,
-                unstuckDir: null,
-                unstuckTimer: 0,
-                targetId: null,
-                lastAttackerId: null,
-                cooldown: 0,
-                flash: 0,
-                turretAngle: 0,
-                cargo: 0,
-                resourceTargetId: null,
-                baseTargetId: null
-            } as Entity;
+        function createOre(id: string, pos: Vector) {
+            return createTestResource({ id, x: pos.x, y: pos.y });
         }
 
         it('freshly spawned harvester should not auto-move to ore', () => {
@@ -276,8 +152,8 @@ describe('Unit Control', () => {
             }
 
             // Harvester should NOT have moved toward the ore automatically
-            const harv = state.entities['harv1'];
-            expect(harv.resourceTargetId).toBeNull();
+            const harv = state.entities['harv1'] as HarvesterUnit;
+            expect(harv.harvester.resourceTargetId).toBeNull();
             // Position should be roughly the same (small movement due to collision is ok)
             expect(harv.pos.dist(initialPos)).toBeLessThan(30);
         });
@@ -313,9 +189,9 @@ describe('Unit Control', () => {
 
             // Harvester should have acquired ore and started harvesting
             // After harvesting, it should auto-return to refinery
-            const harv = state.entities['harv1'];
+            const harv = state.entities['harv1'] as HarvesterUnit;
             // Either harvesting or returning to base (has cargo and baseTargetId)
-            expect(harv.cargo > 0 || harv.resourceTargetId !== null || harv.baseTargetId !== null).toBe(true);
+            expect(harv.harvester.cargo > 0 || harv.harvester.resourceTargetId !== null || harv.harvester.baseTargetId !== null).toBe(true);
         });
 
         it('harvester should start auto-harvesting after right-clicking refinery', () => {
@@ -336,15 +212,19 @@ describe('Unit Control', () => {
             };
 
             // Set harvester to NOT be in auto mode (simulating fresh spawn or pulled back)
+            const harvEnt = state.entities['harv1'] as HarvesterUnit;
             state = {
                 ...state,
                 entities: {
                     ...state.entities,
                     'harv1': {
-                        ...state.entities['harv1'],
-                        manualMode: true,
-                        baseTargetId: null
-                    } as Entity
+                        ...harvEnt,
+                        harvester: {
+                            ...harvEnt.harvester,
+                            manualMode: true,
+                            baseTargetId: null
+                        }
+                    }
                 },
                 selection: ['harv1']
             };
@@ -360,14 +240,14 @@ describe('Unit Control', () => {
             }
 
             // Harvester should have unloaded and then auto-acquired ore
-            const harv = state.entities['harv1'];
+            const harv = state.entities['harv1'] as HarvesterUnit;
             // Check that manualMode is false (auto-harvesting enabled)
-            expect((harv as any).manualMode).toBe(false);
+            expect(harv.harvester.manualMode).toBe(false);
             // After right-clicking refinery, harvester should either:
             // - Have unloaded cargo and acquired ore (cargo=0, resourceTargetId set)
             // - Still be in the process of docking/unloading (cargo>0, baseTargetId set)
             // The key test is that it's NOT sitting idle in manual mode
-            const isAutoHarvesting = harv.resourceTargetId !== null || harv.baseTargetId !== null || harv.cargo > 0;
+            const isAutoHarvesting = harv.harvester.resourceTargetId !== null || harv.harvester.baseTargetId !== null || harv.harvester.cargo > 0;
             expect(isAutoHarvesting).toBe(true);
         });
 
@@ -376,8 +256,11 @@ describe('Unit Control', () => {
 
             // Create harvester that was auto-harvesting
             // Also include buildings for both players to prevent win condition
-            const harv1 = createHarvester('harv1', 0, new Vector(500, 500), 100);
-            (harv1 as any).resourceTargetId = 'ore1';
+            const baseHarv = createHarvester('harv1', 0, new Vector(500, 500), 100);
+            const harv1 = {
+                ...baseHarv,
+                harvester: { ...baseHarv.harvester, resourceTargetId: 'ore1' }
+            } as HarvesterUnit;
             state = {
                 ...state,
                 entities: {
@@ -402,10 +285,10 @@ describe('Unit Control', () => {
             }
 
             // After reaching destination, harvester should NOT auto-acquire new ore
-            const harv = state.entities['harv1'];
-            expect(harv.moveTarget).toBeNull();
-            expect(harv.resourceTargetId).toBeNull();
-            expect(harv.baseTargetId).toBeNull();
+            const harv = state.entities['harv1'] as HarvesterUnit;
+            expect(harv.movement.moveTarget).toBeNull();
+            expect(harv.harvester.resourceTargetId).toBeNull();
+            expect(harv.harvester.baseTargetId).toBeNull();
         });
     });
 });

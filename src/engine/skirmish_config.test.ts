@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES, DENSITY_SETTINGS } from './types';
+import { GameState, Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES, DENSITY_SETTINGS, ResourceEntity, RockEntity } from './types';
+import { createTestBuilding, createTestHarvester } from './test-utils';
 
 // Helper to create a basic skirmish config
 function createSkirmishConfig(numPlayers: number, mapSize: 'small' | 'medium' | 'large' = 'medium'): SkirmishConfig {
@@ -47,13 +48,12 @@ function generateMapForTest(config: SkirmishConfig): { entities: Record<EntityId
         const x = 400 + Math.random() * (mapWidth - 800);
         const y = 400 + Math.random() * (mapHeight - 800);
         const id = 'res_' + i;
-        entities[id] = {
+        const resource: ResourceEntity = {
             id, owner: -1, type: 'RESOURCE', key: 'ore',
             pos: new Vector(x, y), prevPos: new Vector(x, y),
-            hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false,
-            vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false
         };
+        entities[id] = resource;
     }
 
     // Generate rocks
@@ -63,13 +63,12 @@ function generateMapForTest(config: SkirmishConfig): { entities: Record<EntityId
         const y = 300 + Math.random() * (mapHeight - 600);
         const size = 30 + Math.random() * 40;
         const id = 'rock_' + i;
-        entities[id] = {
+        const rock: RockEntity = {
             id, owner: -1, type: 'ROCK', key: 'rock',
             pos: new Vector(x, y), prevPos: new Vector(x, y),
-            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false,
-            vel: new Vector(0, 0), rotation: Math.random() * Math.PI * 2, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false
         };
+        entities[id] = rock;
     }
 
     return { entities, mapWidth, mapHeight };
@@ -96,24 +95,16 @@ function createGameFromSkirmishConfig(config: SkirmishConfig): GameState {
 
         // Construction Yard
         const cyId = `cy_p${p.slot}`;
-        entities[cyId] = {
-            id: cyId, owner: p.slot, type: 'BUILDING', key: 'conyard',
-            pos: pos, prevPos: pos,
-            hp: 3000, maxHp: 3000, w: 90, h: 90, radius: 45, dead: false,
-            vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-        };
+        entities[cyId] = createTestBuilding({
+            id: cyId, owner: p.slot, key: 'conyard', x: pos.x, y: pos.y
+        });
 
         // Harvester
         const harvId = `harv_p${p.slot}`;
         const harvPos = pos.add(new Vector(80, 50));
-        entities[harvId] = {
-            id: harvId, owner: p.slot, type: 'UNIT', key: 'harvester',
-            pos: harvPos, prevPos: harvPos,
-            hp: 1000, maxHp: 1000, w: 35, h: 35, radius: 17, dead: false,
-            vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-        };
+        entities[harvId] = createTestHarvester({
+            id: harvId, owner: p.slot, x: harvPos.x, y: harvPos.y
+        });
     });
 
     const isObserverMode = !config.players.some(p => p.type === 'human');

@@ -1,5 +1,5 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS, Action } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, BuildingEntity, HarvesterUnit, UnitEntity } from './engine/types.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback } from './ui/index.js';
@@ -7,6 +7,7 @@ import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
 import { RULES } from './data/schemas/index.js';
+import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
 
 // Get canvas
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -183,13 +184,12 @@ function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entit
             if (x < 100 || x > mapWidth - 100 || y < 100 || y > mapHeight - 100) continue;
 
             const id = 'res_' + resourceId++;
-            entities[id] = {
+            const resourceEntity: ResourceEntity = {
                 id, owner: -1, type: 'RESOURCE', key: 'ore',
                 pos: new Vector(x, y), prevPos: new Vector(x, y),
-                hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false,
-                vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+                hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false
             };
+            entities[id] = resourceEntity;
         }
     }
 
@@ -211,13 +211,12 @@ function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entit
 
         const size = 30 + Math.random() * 40;
         const id = 'rock_' + rocksPlaced;
-        entities[id] = {
+        const rockEntity: RockEntity = {
             id, owner: -1, type: 'ROCK', key: 'rock',
             pos: new Vector(x, y), prevPos: new Vector(x, y),
-            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false,
-            vel: new Vector(0, 0), rotation: Math.random() * Math.PI * 2, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false
         };
+        entities[id] = rockEntity;
         rocksPlaced++;
     }
 
@@ -248,16 +247,66 @@ function reconstructVectors(state: GameState): GameState {
     const entities: Record<EntityId, Entity> = {};
     for (const id in state.entities) {
         const e = state.entities[id];
-        entities[id] = {
+
+        // Base entity properties
+        const baseEntity = {
             ...e,
             pos: new Vector(e.pos.x, e.pos.y),
-            prevPos: new Vector(e.prevPos.x, e.prevPos.y),
-            vel: new Vector(e.vel.x, e.vel.y),
-            moveTarget: e.moveTarget ? new Vector(e.moveTarget.x, e.moveTarget.y) : null,
-            finalDest: e.finalDest ? new Vector(e.finalDest.x, e.finalDest.y) : null,
-            unstuckDir: e.unstuckDir ? new Vector(e.unstuckDir.x, e.unstuckDir.y) : null,
-            path: e.path ? e.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null
+            prevPos: new Vector(e.prevPos.x, e.prevPos.y)
         };
+
+        if (isUnit(e)) {
+            // Reconstruct movement component vectors
+            const movement = e.movement;
+            const reconstructedMovement = {
+                ...movement,
+                vel: new Vector(movement.vel.x, movement.vel.y),
+                moveTarget: movement.moveTarget ? new Vector(movement.moveTarget.x, movement.moveTarget.y) : null,
+                finalDest: movement.finalDest ? new Vector(movement.finalDest.x, movement.finalDest.y) : null,
+                unstuckDir: movement.unstuckDir ? new Vector(movement.unstuckDir.x, movement.unstuckDir.y) : null,
+                path: movement.path ? movement.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null,
+                avgVel: movement.avgVel ? new Vector(movement.avgVel.x, movement.avgVel.y) : undefined
+            };
+
+            if (isHarvester(e)) {
+                // Harvester unit - reconstruct harvester component vectors
+                const harvester = e.harvester;
+                const reconstructedHarvester = {
+                    ...harvester,
+                    dockPos: harvester.dockPos ? new Vector(harvester.dockPos.x, harvester.dockPos.y) : undefined
+                };
+                entities[id] = {
+                    ...baseEntity,
+                    type: 'UNIT',
+                    key: 'harvester',
+                    movement: reconstructedMovement,
+                    combat: e.combat,
+                    harvester: reconstructedHarvester
+                } as HarvesterUnit;
+            } else {
+                // Combat unit
+                entities[id] = {
+                    ...baseEntity,
+                    type: 'UNIT',
+                    key: e.key,
+                    movement: reconstructedMovement,
+                    combat: e.combat,
+                    engineer: (e as any).engineer
+                } as UnitEntity;
+            }
+        } else if (isBuilding(e)) {
+            // Building entity
+            entities[id] = {
+                ...baseEntity,
+                type: 'BUILDING',
+                key: e.key,
+                building: e.building,
+                combat: e.combat
+            } as BuildingEntity;
+        } else {
+            // Resource or Rock entity - no additional components
+            entities[id] = baseEntity as Entity;
+        }
     }
 
     return {
@@ -294,24 +343,49 @@ function startGameWithConfig(config: SkirmishConfig) {
 
         // Construction Yard
         const cyId = `cy_p${p.slot}`;
-        entities[cyId] = {
+        const conyardEntity: BuildingEntity = {
             id: cyId, owner: p.slot, type: 'BUILDING', key: 'conyard',
             pos: pos, prevPos: pos,
             hp: 3000, maxHp: 3000, w: 90, h: 90, radius: 45, dead: false,
-            vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            building: {
+                isRepairing: false,
+                placedTick: 0
+            }
         };
+        entities[cyId] = conyardEntity;
 
         // Harvester
         const harvId = `harv_p${p.slot}`;
         const harvPos = pos.add(new Vector(80, 50));
-        entities[harvId] = {
+        const harvesterEntity: HarvesterUnit = {
             id: harvId, owner: p.slot, type: 'UNIT', key: 'harvester',
             pos: harvPos, prevPos: harvPos,
             hp: 1000, maxHp: 1000, w: 35, h: 35, radius: 17, dead: false,
-            vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            movement: {
+                vel: new Vector(0, 0),
+                rotation: 0,
+                moveTarget: null,
+                path: null,
+                pathIdx: 0,
+                finalDest: null,
+                stuckTimer: 0,
+                unstuckDir: null,
+                unstuckTimer: 0
+            },
+            combat: {
+                targetId: null,
+                lastAttackerId: null,
+                cooldown: 0,
+                flash: 0,
+                turretAngle: 0
+            },
+            harvester: {
+                cargo: 0,
+                resourceTargetId: null,
+                baseTargetId: null
+            }
         };
+        entities[harvId] = harvesterEntity;
     });
 
     // Build game state
@@ -433,7 +507,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         if (humanPlayerId === null) return;
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && e.owner === humanPlayerId && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead && e.owner === humanPlayerId && isBuilding(e) && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
             currentState = update(currentState, {
@@ -450,11 +524,11 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         if (humanPlayerId === null) return;
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && e.owner === humanPlayerId && e.type === 'BUILDING' && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead && e.owner === humanPlayerId && isBuilding(e) && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
-        if (clicked) {
+        if (clicked && isBuilding(clicked)) {
             // Toggle repair on/off for this building
-            if (clicked.isRepairing) {
+            if (clicked.building.isRepairing) {
                 currentState = update(currentState, {
                     type: 'STOP_REPAIR',
                     payload: { buildingId: clicked.id, playerId: humanPlayerId }
@@ -487,7 +561,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     if (isDrag && dragRect) {
         for (const id in currentState.entities) {
             const e = currentState.entities[id];
-            if (humanPlayerId !== null && e.owner === humanPlayerId && e.type === 'UNIT' && !e.dead &&
+            if (humanPlayerId !== null && e.owner === humanPlayerId && isUnit(e) && !e.dead &&
                 e.pos.x > dragRect.x1 && e.pos.x < dragRect.x2 &&
                 e.pos.y > dragRect.y1 && e.pos.y < dragRect.y2) {
                 newSelection.push(e.id);

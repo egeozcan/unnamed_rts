@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { GameState, Entity, Vector, PlayerState, ProductionQueue } from './types.js';
+import { GameState, Vector, PlayerState, ProductionQueue } from './types.js';
 import { computeAiActions, resetAIState, _testUtils } from './ai.js';
+import { createTestBuilding, createTestResource } from './test-utils.js';
 
 const { getAIState } = _testUtils;
 
@@ -44,76 +45,6 @@ function createMinimalState(overrides: Partial<GameState> = {}): GameState {
     };
 }
 
-// Helper to create a building entity
-function createBuilding(id: string, key: string, owner: number, pos: Vector): Entity {
-    return {
-        id,
-        owner,
-        key,
-        type: 'BUILDING',
-        pos: pos,
-        prevPos: pos,
-        hp: 100,
-        maxHp: 100,
-        w: 60,
-        h: 60,
-        radius: 30,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    };
-}
-
-// Helper to create a resource entity
-function createResource(id: string, pos: Vector, hp: number = 1000): Entity {
-    return {
-        id,
-        owner: -1,
-        key: 'ore',
-        type: 'RESOURCE',
-        pos: pos,
-        prevPos: pos,
-        hp,
-        maxHp: 1000,
-        w: 25,
-        h: 25,
-        radius: 12,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    };
-}
-
 function createDefaultPlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
     const defaultQueue: ProductionQueue = { current: null, progress: 0, invested: 0 };
     return {
@@ -148,21 +79,21 @@ describe('AI Building Walk Limits', () => {
         const state = createMinimalState({
             entities: {
                 // AI base
-                'cy_p1': createBuilding('cy_p1', 'conyard', 1, new Vector(350, 350)),
-                'barracks_p1': createBuilding('barracks_p1', 'barracks', 1, new Vector(450, 350)),
-                'factory_p1': createBuilding('factory_p1', 'factory', 1, new Vector(300, 450)),
+                'cy_p1': createTestBuilding({ id: 'cy_p1', key: 'conyard', owner: 1, x: 350, y: 350 }),
+                'barracks_p1': createTestBuilding({ id: 'barracks_p1', key: 'barracks', owner: 1, x: 450, y: 350 }),
+                'factory_p1': createTestBuilding({ id: 'factory_p1', key: 'factory', owner: 1, x: 300, y: 450 }),
 
                 // Power plants already built toward ore (building walk)
-                'power_1': createBuilding('power_1', 'power', 1, new Vector(500, 500)),
-                'power_2': createBuilding('power_2', 'power', 1, new Vector(600, 550)), // This one is close to ore!
+                'power_1': createTestBuilding({ id: 'power_1', key: 'power', owner: 1, x: 500, y: 500 }),
+                'power_2': createTestBuilding({ id: 'power_2', key: 'power', owner: 1, x: 600, y: 550 }), // This one is close to ore!
 
                 // Ore patch (now within BUILD_RADIUS of power_2)
-                'ore_1': createResource('ore_1', new Vector(700, 600)),
-                'ore_2': createResource('ore_2', new Vector(720, 580)),
-                'ore_3': createResource('ore_3', new Vector(680, 620)),
+                'ore_1': createTestResource({ id: 'ore_1', x: 700, y: 600 }),
+                'ore_2': createTestResource({ id: 'ore_2', x: 720, y: 580 }),
+                'ore_3': createTestResource({ id: 'ore_3', x: 680, y: 620 }),
 
                 // Enemy conyard (to prevent weird state changes)
-                'cy_p0': createBuilding('cy_p0', 'conyard', 0, new Vector(1600, 1600)),
+                'cy_p0': createTestBuilding({ id: 'cy_p0', key: 'conyard', owner: 0, x: 1600, y: 1600 }),
             },
             players: {
                 0: createDefaultPlayerState({ id: 0 }),
@@ -189,21 +120,21 @@ describe('AI Building Walk Limits', () => {
         const state = createMinimalState({
             entities: {
                 // AI base
-                'cy_p1': createBuilding('cy_p1', 'conyard', 1, new Vector(350, 350)),
-                'barracks_p1': createBuilding('barracks_p1', 'barracks', 1, new Vector(450, 350)),
-                'factory_p1': createBuilding('factory_p1', 'factory', 1, new Vector(300, 450)),
+                'cy_p1': createTestBuilding({ id: 'cy_p1', key: 'conyard', owner: 1, x: 350, y: 350 }),
+                'barracks_p1': createTestBuilding({ id: 'barracks_p1', key: 'barracks', owner: 1, x: 450, y: 350 }),
+                'factory_p1': createTestBuilding({ id: 'factory_p1', key: 'factory', owner: 1, x: 300, y: 450 }),
 
                 // Power plants reaching toward ore
-                'power_1': createBuilding('power_1', 'power', 1, new Vector(500, 500)),
-                'power_2': createBuilding('power_2', 'power', 1, new Vector(650, 600)), // Close to ore
+                'power_1': createTestBuilding({ id: 'power_1', key: 'power', owner: 1, x: 500, y: 500 }),
+                'power_2': createTestBuilding({ id: 'power_2', key: 'power', owner: 1, x: 650, y: 600 }), // Close to ore
 
                 // Ore patch - within BUILD_RADIUS (400) of power_2
-                'ore_1': createResource('ore_1', new Vector(800, 650)),
-                'ore_2': createResource('ore_2', new Vector(820, 630)),
-                'ore_3': createResource('ore_3', new Vector(780, 670)),
+                'ore_1': createTestResource({ id: 'ore_1', x: 800, y: 650 }),
+                'ore_2': createTestResource({ id: 'ore_2', x: 820, y: 630 }),
+                'ore_3': createTestResource({ id: 'ore_3', x: 780, y: 670 }),
 
                 // Enemy
-                'cy_p0': createBuilding('cy_p0', 'conyard', 0, new Vector(1600, 1600)),
+                'cy_p0': createTestBuilding({ id: 'cy_p0', key: 'conyard', owner: 0, x: 1600, y: 1600 }),
             },
             players: {
                 0: createDefaultPlayerState({ id: 0 }),
@@ -228,29 +159,29 @@ describe('AI Building Walk Limits', () => {
     });
 
     it('should NOT build power plants beyond the ore', () => {
-        // AI has ore at (700, 600) 
+        // AI has ore at (700, 600)
         // Power plant at (750, 650) - already past the ore!
         // Should not build more power plants in this direction
 
         const state = createMinimalState({
             entities: {
                 // AI base at bottom-right
-                'cy_p1': createBuilding('cy_p1', 'conyard', 1, new Vector(1600, 1600)),
-                'barracks_p1': createBuilding('barracks_p1', 'barracks', 1, new Vector(1500, 1600)),
-                'factory_p1': createBuilding('factory_p1', 'factory', 1, new Vector(1600, 1500)),
+                'cy_p1': createTestBuilding({ id: 'cy_p1', key: 'conyard', owner: 1, x: 1600, y: 1600 }),
+                'barracks_p1': createTestBuilding({ id: 'barracks_p1', key: 'barracks', owner: 1, x: 1500, y: 1600 }),
+                'factory_p1': createTestBuilding({ id: 'factory_p1', key: 'factory', owner: 1, x: 1600, y: 1500 }),
 
                 // Power plants going toward ore (top-left direction)
-                'power_1': createBuilding('power_1', 'power', 1, new Vector(1400, 1400)),
-                'power_2': createBuilding('power_2', 'power', 1, new Vector(1200, 1200)),
-                'power_3': createBuilding('power_3', 'power', 1, new Vector(1000, 1000)), // Already past ore
+                'power_1': createTestBuilding({ id: 'power_1', key: 'power', owner: 1, x: 1400, y: 1400 }),
+                'power_2': createTestBuilding({ id: 'power_2', key: 'power', owner: 1, x: 1200, y: 1200 }),
+                'power_3': createTestBuilding({ id: 'power_3', key: 'power', owner: 1, x: 1000, y: 1000 }), // Already past ore
 
                 // Ore patch - now behind the power_3 (between base and power_3)
-                'ore_1': createResource('ore_1', new Vector(1150, 1150)),
-                'ore_2': createResource('ore_2', new Vector(1130, 1170)),
-                'ore_3': createResource('ore_3', new Vector(1170, 1130)),
+                'ore_1': createTestResource({ id: 'ore_1', x: 1150, y: 1150 }),
+                'ore_2': createTestResource({ id: 'ore_2', x: 1130, y: 1170 }),
+                'ore_3': createTestResource({ id: 'ore_3', x: 1170, y: 1130 }),
 
                 // Enemy
-                'cy_p0': createBuilding('cy_p0', 'conyard', 0, new Vector(350, 350)),
+                'cy_p0': createTestBuilding({ id: 'cy_p0', key: 'conyard', owner: 0, x: 350, y: 350 }),
             },
             players: {
                 0: createDefaultPlayerState({ id: 0 }),
@@ -258,7 +189,7 @@ describe('AI Building Walk Limits', () => {
             }
         });
 
-        // Force economy priority 
+        // Force economy priority
         const aiState = getAIState(1);
         aiState.investmentPriority = 'economy';
 
@@ -280,21 +211,21 @@ describe('AI Building Walk Limits', () => {
         const state = createMinimalState({
             entities: {
                 // AI base
-                'cy_p1': createBuilding('cy_p1', 'conyard', 1, new Vector(350, 350)),
-                'barracks_p1': createBuilding('barracks_p1', 'barracks', 1, new Vector(470, 300)),
-                'factory_p1': createBuilding('factory_p1', 'factory', 1, new Vector(300, 470)),
+                'cy_p1': createTestBuilding({ id: 'cy_p1', key: 'conyard', owner: 1, x: 350, y: 350 }),
+                'barracks_p1': createTestBuilding({ id: 'barracks_p1', key: 'barracks', owner: 1, x: 470, y: 300 }),
+                'factory_p1': createTestBuilding({ id: 'factory_p1', key: 'factory', owner: 1, x: 300, y: 470 }),
 
                 // Power plants forming a chain
-                'power_1': createBuilding('power_1', 'power', 1, new Vector(469, 550)),
-                'power_2': createBuilding('power_2', 'power', 1, new Vector(759, 460)),
+                'power_1': createTestBuilding({ id: 'power_1', key: 'power', owner: 1, x: 469, y: 550 }),
+                'power_2': createTestBuilding({ id: 'power_2', key: 'power', owner: 1, x: 759, y: 460 }),
 
                 // Ore patch - within 400 units of power_2
-                'ore_1': createResource('ore_1', new Vector(640, 584)),
-                'ore_2': createResource('ore_2', new Vector(598, 558)),
-                'ore_3': createResource('ore_3', new Vector(549, 582)),
+                'ore_1': createTestResource({ id: 'ore_1', x: 640, y: 584 }),
+                'ore_2': createTestResource({ id: 'ore_2', x: 598, y: 558 }),
+                'ore_3': createTestResource({ id: 'ore_3', x: 549, y: 582 }),
 
                 // Enemy
-                'cy_p0': createBuilding('cy_p0', 'conyard', 0, new Vector(1650, 1650)),
+                'cy_p0': createTestBuilding({ id: 'cy_p0', key: 'conyard', owner: 0, x: 1650, y: 1650 }),
             },
             players: {
                 0: createDefaultPlayerState({ id: 0 }),

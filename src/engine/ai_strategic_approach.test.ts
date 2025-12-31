@@ -10,8 +10,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
 import { INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, UnitKey, BuildingKey } from './types';
 import { findPath, refreshCollisionGrid, dangerGrids } from './utils';
+import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource } from './test-utils';
 
 const { getAIState } = _testUtils;
 
@@ -23,40 +24,24 @@ function createEntity(
     key: string,
     x: number,
     y: number,
-    overrides?: Partial<Entity>
+    overrides?: { hp?: number; maxHp?: number; dead?: boolean; w?: number; h?: number; radius?: number; }
 ): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 100,
-        maxHp: 100,
-        w: 30,
-        h: 30,
-        radius: 15,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        ...overrides
-    };
+    if (type === 'BUILDING') {
+        return createTestBuilding({
+            id, owner, key: key as BuildingKey, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
+            w: overrides?.w, h: overrides?.h, radius: overrides?.radius
+        });
+    } else if (type === 'RESOURCE') {
+        return createTestResource({ id, x, y, hp: overrides?.hp });
+    } else if (key === 'harvester') {
+        return createTestHarvester({ id, owner, x, y, hp: overrides?.hp, dead: overrides?.dead });
+    } else {
+        return createTestCombatUnit({
+            id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead
+        });
+    }
 }
 
 function createTestState(entities: Record<EntityId, Entity>): GameState {

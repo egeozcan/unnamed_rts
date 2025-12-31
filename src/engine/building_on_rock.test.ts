@@ -1,26 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { Vector, Entity, EntityId } from './types';
+import { Vector, Entity, EntityId, BuildingKey } from './types';
+import { createTestRock, createTestBuilding } from './test-utils';
 
 // Helper to create a rock entity
 function createRock(id: string, x: number, y: number, size: number = 50): Entity {
-    return {
-        id, owner: -1, type: 'ROCK', key: 'rock',
-        pos: new Vector(x, y), prevPos: new Vector(x, y),
-        hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-    };
+    return createTestRock({ id, x, y, size });
 }
 
 // Helper to create a building entity
 function createBuilding(id: string, x: number, y: number, key: string, owner: number = 0): Entity {
-    return {
-        id, owner, type: 'BUILDING', key,
-        pos: new Vector(x, y), prevPos: new Vector(x, y),
-        hp: 1000, maxHp: 1000, w: 90, h: 90, radius: 45, dead: false,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
-    };
+    return createTestBuilding({ id, owner, key: key as BuildingKey, x, y, w: 90, h: 90, hp: 1000, maxHp: 1000 });
 }
 
 // Recreate the isValidPlacement logic from ai.ts for testing

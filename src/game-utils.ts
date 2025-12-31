@@ -3,7 +3,7 @@
  * These are separated from game.ts to enable unit testing without DOM dependencies.
  */
 
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS } from './engine/types.js';
 import { RULES } from './data/schemas/index.js';
 
 /**
@@ -36,17 +36,35 @@ export function reconstructVectors(state: GameState): GameState {
     // Deep clone and reconstruct vectors
     const entities: Record<EntityId, Entity> = {};
     for (const id in state.entities) {
-        const e = state.entities[id];
-        entities[id] = {
+        const e = state.entities[id] as any; // Use any for JSON deserialization
+        const base = {
             ...e,
             pos: new Vector(e.pos.x, e.pos.y),
-            prevPos: new Vector(e.prevPos.x, e.prevPos.y),
-            vel: new Vector(e.vel.x, e.vel.y),
-            moveTarget: e.moveTarget ? new Vector(e.moveTarget.x, e.moveTarget.y) : null,
-            finalDest: e.finalDest ? new Vector(e.finalDest.x, e.finalDest.y) : null,
-            unstuckDir: e.unstuckDir ? new Vector(e.unstuckDir.x, e.unstuckDir.y) : null,
-            path: e.path ? e.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null
+            prevPos: new Vector(e.prevPos.x, e.prevPos.y)
         };
+
+        if (e.type === 'UNIT') {
+            // Reconstruct movement component vectors
+            const movement = e.movement ? {
+                ...e.movement,
+                vel: e.movement.vel ? new Vector(e.movement.vel.x, e.movement.vel.y) : new Vector(0, 0),
+                moveTarget: e.movement.moveTarget ? new Vector(e.movement.moveTarget.x, e.movement.moveTarget.y) : null,
+                finalDest: e.movement.finalDest ? new Vector(e.movement.finalDest.x, e.movement.finalDest.y) : null,
+                unstuckDir: e.movement.unstuckDir ? new Vector(e.movement.unstuckDir.x, e.movement.unstuckDir.y) : null,
+                path: e.movement.path ? e.movement.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null,
+                avgVel: e.movement.avgVel ? new Vector(e.movement.avgVel.x, e.movement.avgVel.y) : undefined
+            } : e.movement;
+
+            // Reconstruct harvester component vectors if present
+            const harvester = e.harvester && e.harvester.dockPos ? {
+                ...e.harvester,
+                dockPos: new Vector(e.harvester.dockPos.x, e.harvester.dockPos.y)
+            } : e.harvester;
+
+            entities[id] = { ...base, movement, harvester } as Entity;
+        } else {
+            entities[id] = base as Entity;
+        }
     }
 
     return {
@@ -132,13 +150,21 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
             if (x < 100 || x > mapWidth - 100 || y < 100 || y > mapHeight - 100) continue;
 
             const id = 'res_' + resourceId++;
-            entities[id] = {
-                id, owner: -1, type: 'RESOURCE', key: 'ore',
-                pos: new Vector(x, y), prevPos: new Vector(x, y),
-                hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false,
-                vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-                targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+            const resource: ResourceEntity = {
+                id,
+                owner: -1,
+                type: 'RESOURCE',
+                key: 'ore',
+                pos: new Vector(x, y),
+                prevPos: new Vector(x, y),
+                hp: 1000,
+                maxHp: 1000,
+                w: 25,
+                h: 25,
+                radius: 12,
+                dead: false
             };
+            entities[id] = resource;
         }
     }
 
@@ -160,13 +186,21 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
 
         const size = 30 + Math.random() * 40;
         const id = 'rock_' + rocksPlaced;
-        entities[id] = {
-            id, owner: -1, type: 'ROCK', key: 'rock',
-            pos: new Vector(x, y), prevPos: new Vector(x, y),
-            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false,
-            vel: new Vector(0, 0), rotation: Math.random() * Math.PI * 2, moveTarget: null, path: null, pathIdx: 0, finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-            targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0, cargo: 0, resourceTargetId: null, baseTargetId: null
+        const rock: RockEntity = {
+            id,
+            owner: -1,
+            type: 'ROCK',
+            key: 'rock',
+            pos: new Vector(x, y),
+            prevPos: new Vector(x, y),
+            hp: 9999,
+            maxHp: 9999,
+            w: size,
+            h: size,
+            radius: size / 2,
+            dead: false
         };
+        entities[id] = rock;
         rocksPlaced++;
     }
 

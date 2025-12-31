@@ -3,30 +3,10 @@ import { describe, it, expect } from 'vitest';
 import { GameState, Vector, isActionType } from './types';
 import { computeAiActions } from './ai';
 import { INITIAL_STATE } from './reducer';
+import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource } from './test-utils';
 
-// Mock helpers from previous tests
 function createMockState(): GameState {
     return JSON.parse(JSON.stringify(INITIAL_STATE));
-}
-
-function addEntity(state: GameState, entity: any) {
-    state.entities[entity.id] = entity;
-    return entity;
-}
-
-function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, x: number, y: number): any {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        vel: new Vector(0, 0),
-        hp: 100,
-        maxHp: 100,
-        radius: 10,
-        dead: false
-    };
 }
 
 describe('AI Harvester Fleeing', () => {
@@ -46,22 +26,18 @@ describe('AI Harvester Fleeing', () => {
         const resource2Pos = new Vector(2000, 2100);
 
         // Add Entities
-        addEntity(state, makeEntity('ref1', aiId, 'BUILDING', 'refinery', refinery1Pos.x, refinery1Pos.y));
-        addEntity(state, makeEntity('res1', -1, 'RESOURCE', 'gold', resource1Pos.x, resource1Pos.y));
+        state.entities['ref1'] = createTestBuilding({ id: 'ref1', owner: aiId, key: 'refinery', x: refinery1Pos.x, y: refinery1Pos.y });
+        state.entities['res1'] = createTestResource({ id: 'res1', x: resource1Pos.x, y: resource1Pos.y });
 
-        addEntity(state, makeEntity('ref2', aiId, 'BUILDING', 'refinery', refinery2Pos.x, refinery2Pos.y));
-        addEntity(state, makeEntity('res2', -1, 'RESOURCE', 'gold', resource2Pos.x, resource2Pos.y));
+        state.entities['ref2'] = createTestBuilding({ id: 'ref2', owner: aiId, key: 'refinery', x: refinery2Pos.x, y: refinery2Pos.y });
+        state.entities['res2'] = createTestResource({ id: 'res2', x: resource2Pos.x, y: resource2Pos.y });
 
         // Harvester at Zone A
-        const harv = makeEntity('harv1', aiId, 'UNIT', 'harvester', resource1Pos.x, resource1Pos.y);
-        addEntity(state, harv);
+        const harv = createTestHarvester({ id: 'harv1', owner: aiId, x: resource1Pos.x, y: resource1Pos.y });
+        state.entities['harv1'] = harv;
 
         // Enemy at Zone A (Threatening Harvester)
-        const enemy = makeEntity('enemy1', 0, 'UNIT', 'tank', resource1Pos.x - 50, resource1Pos.y);
-        addEntity(state, enemy);
-
-        // Harvester knows it's being attacked (or threat is detected nearby)
-        // harv.lastAttackerId = enemy.id; // Optional if detection works by proximity
+        state.entities['enemy1'] = createTestCombatUnit({ id: 'enemy1', owner: 0, key: 'heavy', x: resource1Pos.x - 50, y: resource1Pos.y });
 
         // Run AI
         const actions = computeAiActions(state, aiId);

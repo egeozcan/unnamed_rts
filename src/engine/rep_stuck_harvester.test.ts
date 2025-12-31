@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update } from './reducer';
-import { GameState, Vector } from './types';
+import { GameState, Vector, UnitEntity } from './types';
 import { createEntity } from './utils';
 
 describe('Unit Stuck Pathing Priority', () => {
@@ -44,14 +44,20 @@ describe('Unit Stuck Pathing Priority', () => {
         let state = createTestState();
 
         // Create a unit sandwiched between obstacles
-        const unit = createEntity(100, 100, 0, 'UNIT', 'harvester');
-        (unit as any).id = 'stuck_unit';
+        const baseUnit = createEntity(100, 100, 0, 'UNIT', 'harvester') as UnitEntity;
         // Mock stuck timer close to the threshold where it currently fails (30)
-        (unit as any).stuckTimer = 28;
-        (unit as any).moveTarget = new Vector(500, 500); // Far away
-        (unit as any).avgVel = new Vector(0.01, 0.01); // Basically not moving
-        (unit as any).path = [new Vector(100, 100), new Vector(500, 500)]; // Fake path
-        (unit as any).pathIdx = 1;
+        const unit: UnitEntity = {
+            ...baseUnit,
+            id: 'stuck_unit',
+            movement: {
+                ...baseUnit.movement,
+                stuckTimer: 28,
+                moveTarget: new Vector(500, 500), // Far away
+                avgVel: new Vector(0.01, 0.01), // Basically not moving
+                path: [new Vector(100, 100), new Vector(500, 500)], // Fake path
+                pathIdx: 1
+            }
+        };
 
         state.entities['stuck_unit'] = unit;
 
@@ -69,13 +75,13 @@ describe('Unit Stuck Pathing Priority', () => {
             state = update(state, { type: 'TICK' });
         }
 
-        const updatedUnit = state.entities['stuck_unit'];
+        const updatedUnit = state.entities['stuck_unit'] as UnitEntity;
 
         // Check if unstuck maneuver activated
         // If active, unstuckTimer > 0
-        expect(updatedUnit.unstuckTimer).toBeGreaterThan(0);
+        expect(updatedUnit.movement.unstuckTimer).toBeGreaterThan(0);
 
         // Check if stuckTimer reset
-        expect(updatedUnit.stuckTimer).toBe(0);
+        expect(updatedUnit.movement.stuckTimer).toBe(0);
     });
 });

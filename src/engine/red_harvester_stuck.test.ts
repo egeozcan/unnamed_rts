@@ -1,63 +1,64 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-import { createEntity, refreshCollisionGrid } from './utils';
+import { GameState, Vector, Entity, EntityId, HarvesterUnit } from './types';
+import { refreshCollisionGrid } from './utils';
+import {
+    createTestHarvester,
+    createTestBuilding,
+    addEntityToState
+} from './test-utils';
 
 describe('Red Harvester Stuck at Dock', () => {
 
-    // Helper to spawn units
-    function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
-        const unit = createEntity(x, y, owner, 'UNIT', key);
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: { ...unit, id }
-            } as Record<EntityId, Entity>
-        };
+    // Helper to spawn harvesters using test-utils builders
+    function spawnHarvester(state: GameState, x: number, y: number, id: string, owner: number = 0): GameState {
+        const harvester = createTestHarvester({ id, owner, x, y });
+        return addEntityToState(state, harvester);
     }
 
-
-
-    // Helper to spawn buildings
+    // Helper to spawn buildings using test-utils builders
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building: Entity = {
+        const building = createTestBuilding({
             id,
             owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
+            key: key as any,
+            x,
+            y,
             w,
-            h,
-            radius: Math.min(w, h) / 2,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
+            h
+        });
+        return addEntityToState(state, building);
+    }
+
+    // Helper to get harvester cargo
+    function getHarvesterCargo(entity: Entity): number {
+        return (entity as HarvesterUnit).harvester.cargo;
+    }
+
+    // Helper to get movement stuckTimer
+    function getStuckTimer(entity: Entity): number {
+        if (entity.type === 'UNIT') {
+            return (entity as HarvesterUnit).movement.stuckTimer;
+        }
+        return 0;
+    }
+
+    // Helper to set harvester properties
+    function setHarvesterProps(state: GameState, id: string, cargo: number, baseTargetId: string): GameState {
+        const entity = state.entities[id] as HarvesterUnit;
         return {
             ...state,
             entities: {
                 ...state.entities,
-                [id]: building
-            } as Record<EntityId, Entity>
+                [id]: {
+                    ...entity,
+                    harvester: {
+                        ...entity.harvester,
+                        cargo,
+                        baseTargetId
+                    }
+                }
+            }
         };
     }
 
@@ -76,27 +77,13 @@ describe('Red Harvester Stuck at Dock', () => {
         state = spawnBuilding(state, 420, 540, 40, 40, 'turret1', 1, 'turret');
 
         // First harvester - blocked by turret from reaching dock directly
-        state = spawnUnit(state, 400, 460, 'h1', 1, 'harvester');
+        state = spawnHarvester(state, 400, 460, 'h1', 1);
         // Second harvester - approaching from different angle
-        state = spawnUnit(state, 550, 420, 'h2', 1, 'harvester');
+        state = spawnHarvester(state, 550, 420, 'h2', 1);
 
         // Give them full cargo and set baseTargetId to refinery
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                h1: {
-                    ...state.entities['h1'],
-                    cargo: 500,
-                    baseTargetId: 'ref1'
-                },
-                h2: {
-                    ...state.entities['h2'],
-                    cargo: 500,
-                    baseTargetId: 'ref1'
-                }
-            }
-        };
+        state = setHarvesterProps(state, 'h1', 500, 'ref1');
+        state = setHarvesterProps(state, 'h2', 500, 'ref1');
 
         refreshCollisionGrid(state.entities);
 
@@ -127,7 +114,7 @@ describe('Red Harvester Stuck at Dock', () => {
             h2ClosestDist = Math.min(h2ClosestDist, h2DistToDock);
 
             // Check if either unloaded (cargo becomes 0)
-            if (h1.cargo === 0 || h2.cargo === 0) {
+            if (getHarvesterCargo(h1) === 0 || getHarvesterCargo(h2) === 0) {
                 anyDocked = true;
             }
 
@@ -155,17 +142,17 @@ describe('Red Harvester Stuck at Dock', () => {
             h2DistToDock: finalH2.pos.dist(dockPos).toFixed(0),
             h1ClosestDist: h1ClosestDist.toFixed(0),
             h2ClosestDist: h2ClosestDist.toFixed(0),
-            h1Cargo: finalH1.cargo,
-            h2Cargo: finalH2.cargo,
+            h1Cargo: getHarvesterCargo(finalH1),
+            h2Cargo: getHarvesterCargo(finalH2),
             anyDocked,
             noProgressTicks,
-            h1StuckTimer: finalH1.stuckTimer,
-            h2StuckTimer: finalH2.stuckTimer
+            h1StuckTimer: getStuckTimer(finalH1),
+            h2StuckTimer: getStuckTimer(finalH2)
         });
 
         // At least one harvester should have docked successfully
         expect(anyDocked).toBe(true);
-        // Shouldn't be stuck for too long 
+        // Shouldn't be stuck for too long
         expect(noProgressTicks).toBeLessThan(100);
     });
 
@@ -182,20 +169,14 @@ describe('Red Harvester Stuck at Dock', () => {
         state = spawnBuilding(state, 620, 500, 40, 40, 'pillbox1', 1, 'pillbox');
 
         // Three harvesters at different positions, all with full cargo
-        state = spawnUnit(state, 350, 450, 'h1', 1, 'harvester');
-        state = spawnUnit(state, 500, 380, 'h2', 1, 'harvester');
-        state = spawnUnit(state, 650, 450, 'h3', 1, 'harvester');
+        state = spawnHarvester(state, 350, 450, 'h1', 1);
+        state = spawnHarvester(state, 500, 380, 'h2', 1);
+        state = spawnHarvester(state, 650, 450, 'h3', 1);
 
         // All full cargo, all targeting same refinery
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 500, baseTargetId: 'ref1' },
-                h2: { ...state.entities['h2'], cargo: 500, baseTargetId: 'ref1' },
-                h3: { ...state.entities['h3'], cargo: 500, baseTargetId: 'ref1' }
-            }
-        };
+        state = setHarvesterProps(state, 'h1', 500, 'ref1');
+        state = setHarvesterProps(state, 'h2', 500, 'ref1');
+        state = setHarvesterProps(state, 'h3', 500, 'ref1');
 
         refreshCollisionGrid(state.entities);
 
@@ -218,7 +199,7 @@ describe('Red Harvester Stuck at Dock', () => {
             const h3 = state.entities['h3'];
 
             // Count how many have docked (cargo = 0)
-            dockedCount = [h1, h2, h3].filter(h => h.cargo === 0).length;
+            dockedCount = [h1, h2, h3].filter(h => getHarvesterCargo(h) === 0).length;
 
             // Check movement
             const h1Moved = h1.pos.dist(lastPositions.h1) > 0.3;
@@ -229,7 +210,7 @@ describe('Red Harvester Stuck at Dock', () => {
             if (!h1Moved && !h2Moved && !h3Moved && dockedCount < 3) {
                 // But only count as stuck if at least one is far from dock and has cargo
                 const farFromDock = [h1, h2, h3].some(h =>
-                    h.cargo > 0 && h.pos.dist(dockPos) > 80
+                    getHarvesterCargo(h) > 0 && h.pos.dist(dockPos) > 80
                 );
                 if (farFromDock) {
                     noProgressTicks++;
@@ -244,18 +225,18 @@ describe('Red Harvester Stuck at Dock', () => {
             noProgressTicks,
             h1: {
                 pos: `${state.entities['h1'].pos.x.toFixed(0)}, ${state.entities['h1'].pos.y.toFixed(0)}`,
-                cargo: state.entities['h1'].cargo,
-                stuckTimer: state.entities['h1'].stuckTimer
+                cargo: getHarvesterCargo(state.entities['h1']),
+                stuckTimer: getStuckTimer(state.entities['h1'])
             },
             h2: {
                 pos: `${state.entities['h2'].pos.x.toFixed(0)}, ${state.entities['h2'].pos.y.toFixed(0)}`,
-                cargo: state.entities['h2'].cargo,
-                stuckTimer: state.entities['h2'].stuckTimer
+                cargo: getHarvesterCargo(state.entities['h2']),
+                stuckTimer: getStuckTimer(state.entities['h2'])
             },
             h3: {
                 pos: `${state.entities['h3'].pos.x.toFixed(0)}, ${state.entities['h3'].pos.y.toFixed(0)}`,
-                cargo: state.entities['h3'].cargo,
-                stuckTimer: state.entities['h3'].stuckTimer
+                cargo: getHarvesterCargo(state.entities['h3']),
+                stuckTimer: getStuckTimer(state.entities['h3'])
             }
         });
 
@@ -270,20 +251,14 @@ describe('Red Harvester Stuck at Dock', () => {
         // Must navigate around the building to reach dock point
         let state = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };
 
-        // Refinery 
+        // Refinery
         state = spawnBuilding(state, 500, 500, 100, 80, 'ref1', 1, 'refinery');
 
         // Harvester positioned such that refinery body is between it and dock point
         // Dock is at (500, 560), harvester at (500, 420) - refinery blocks direct path
-        state = spawnUnit(state, 500, 420, 'h1', 1, 'harvester');
+        state = spawnHarvester(state, 500, 420, 'h1', 1);
 
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                h1: { ...state.entities['h1'], cargo: 500, baseTargetId: 'ref1' }
-            }
-        };
+        state = setHarvesterProps(state, 'h1', 500, 'ref1');
 
         refreshCollisionGrid(state.entities);
 
@@ -298,7 +273,7 @@ describe('Red Harvester Stuck at Dock', () => {
             const h1 = state.entities['h1'];
             closestDist = Math.min(closestDist, h1.pos.dist(dockPos));
 
-            if (h1.cargo === 0) {
+            if (getHarvesterCargo(h1) === 0) {
                 docked = true;
                 break;
             }
@@ -312,9 +287,9 @@ describe('Red Harvester Stuck at Dock', () => {
             dockPos: `${dockPos.x.toFixed(0)}, ${dockPos.y.toFixed(0)}`,
             distToDock: finalH1.pos.dist(dockPos).toFixed(0),
             closestDist: closestDist.toFixed(0),
-            cargo: finalH1.cargo,
+            cargo: getHarvesterCargo(finalH1),
             docked,
-            stuckTimer: finalH1.stuckTimer
+            stuckTimer: getStuckTimer(finalH1)
         });
 
         // Should have docked
@@ -338,28 +313,22 @@ describe('Red Harvester Stuck at Dock', () => {
         state = spawnBuilding(state, 2941, 2826, 40, 40, 'pillbox1', 1, 'pillbox');
 
         // Harvester e_3750_88701 at (2798, 2689) -> targeting ref2
-        state = spawnUnit(state, 2798, 2689, 'h_3750', 1, 'harvester');
+        state = spawnHarvester(state, 2798, 2689, 'h_3750', 1);
 
         // Harvester e_4379_53328 at (2792, 2834) -> targeting ref2, stuckTimer: 27
-        state = spawnUnit(state, 2792, 2834, 'h_4379', 1, 'harvester');
+        state = spawnHarvester(state, 2792, 2834, 'h_4379', 1);
 
         // Harvester harv_p1 at (2767, 2927) -> targeting ref1, stuckTimer: 12
-        state = spawnUnit(state, 2767, 2927, 'harv_p1', 1, 'harvester');
+        state = spawnHarvester(state, 2767, 2927, 'harv_p1', 1);
 
         // Harvester e_1860_10209 at (2902, 2847) -> targeting ref1, stuckTimer: 6
-        state = spawnUnit(state, 2902, 2847, 'h_1860', 1, 'harvester');
+        state = spawnHarvester(state, 2902, 2847, 'h_1860', 1);
 
         // Set cargo and baseTargetIds
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                h_3750: { ...state.entities['h_3750'], cargo: 500, baseTargetId: 'ref2' },
-                h_4379: { ...state.entities['h_4379'], cargo: 500, baseTargetId: 'ref2' },
-                harv_p1: { ...state.entities['harv_p1'], cargo: 500, baseTargetId: 'ref1' },
-                h_1860: { ...state.entities['h_1860'], cargo: 500, baseTargetId: 'ref1' }
-            }
-        };
+        state = setHarvesterProps(state, 'h_3750', 500, 'ref2');
+        state = setHarvesterProps(state, 'h_4379', 500, 'ref2');
+        state = setHarvesterProps(state, 'harv_p1', 500, 'ref1');
+        state = setHarvesterProps(state, 'h_1860', 500, 'ref1');
 
         refreshCollisionGrid(state.entities);
 
@@ -389,15 +358,15 @@ describe('Red Harvester Stuck at Dock', () => {
             const h_1860 = state.entities['h_1860'];
 
             // Count docked
-            dockedCount = [h_3750, h_4379, harv_p1, h_1860].filter(h => h.cargo === 0).length;
+            dockedCount = [h_3750, h_4379, harv_p1, h_1860].filter(h => getHarvesterCargo(h) === 0).length;
 
             // Track max stuck timer
             maxStuckTimer = Math.max(
                 maxStuckTimer,
-                h_3750.stuckTimer || 0,
-                h_4379.stuckTimer || 0,
-                harv_p1.stuckTimer || 0,
-                h_1860.stuckTimer || 0
+                getStuckTimer(h_3750),
+                getStuckTimer(h_4379),
+                getStuckTimer(harv_p1),
+                getStuckTimer(h_1860)
             );
 
             // Check if any progress
@@ -418,30 +387,30 @@ describe('Red Harvester Stuck at Dock', () => {
             h_3750: {
                 start: `${initialStates.h_3750.pos.x.toFixed(0)}, ${initialStates.h_3750.pos.y.toFixed(0)}`,
                 end: `${finalStates.h_3750.pos.x.toFixed(0)}, ${finalStates.h_3750.pos.y.toFixed(0)}`,
-                cargo: finalStates.h_3750.cargo,
+                cargo: getHarvesterCargo(finalStates.h_3750),
                 distToDock: finalStates.h_3750.pos.dist(dock2).toFixed(0),
-                stuckTimer: finalStates.h_3750.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.h_3750)
             },
             h_4379: {
                 start: `${initialStates.h_4379.pos.x.toFixed(0)}, ${initialStates.h_4379.pos.y.toFixed(0)}`,
                 end: `${finalStates.h_4379.pos.x.toFixed(0)}, ${finalStates.h_4379.pos.y.toFixed(0)}`,
-                cargo: finalStates.h_4379.cargo,
+                cargo: getHarvesterCargo(finalStates.h_4379),
                 distToDock: finalStates.h_4379.pos.dist(dock2).toFixed(0),
-                stuckTimer: finalStates.h_4379.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.h_4379)
             },
             harv_p1: {
                 start: `${initialStates.harv_p1.pos.x.toFixed(0)}, ${initialStates.harv_p1.pos.y.toFixed(0)}`,
                 end: `${finalStates.harv_p1.pos.x.toFixed(0)}, ${finalStates.harv_p1.pos.y.toFixed(0)}`,
-                cargo: finalStates.harv_p1.cargo,
+                cargo: getHarvesterCargo(finalStates.harv_p1),
                 distToDock: finalStates.harv_p1.pos.dist(dock1).toFixed(0),
-                stuckTimer: finalStates.harv_p1.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.harv_p1)
             },
             h_1860: {
                 start: `${initialStates.h_1860.pos.x.toFixed(0)}, ${initialStates.h_1860.pos.y.toFixed(0)}`,
                 end: `${finalStates.h_1860.pos.x.toFixed(0)}, ${finalStates.h_1860.pos.y.toFixed(0)}`,
-                cargo: finalStates.h_1860.cargo,
+                cargo: getHarvesterCargo(finalStates.h_1860),
                 distToDock: finalStates.h_1860.pos.dist(dock1).toFixed(0),
-                stuckTimer: finalStates.h_1860.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.h_1860)
             }
         });
 
@@ -455,7 +424,7 @@ describe('Red Harvester Stuck at Dock', () => {
     it('should handle larger 4000x4000 map with refineries and turrets blocking path', () => {
         // Test based on temp/red_harv_still_stuck.json - 4000x4000 map
         // NOTE: Pathfinding grid is currently hardcoded to 3000/TILE_SIZE cells.
-        // Positions beyond ~3000 may have pathfinding issues. This test uses 
+        // Positions beyond ~3000 may have pathfinding issues. This test uses
         // positions within those bounds but verifies the map config is properly used.
         let state: GameState = {
             ...INITIAL_STATE,
@@ -475,20 +444,14 @@ describe('Red Harvester Stuck at Dock', () => {
         state = spawnBuilding(state, 2780, 2880, 40, 40, 'turret1', 1, 'turret');
 
         // Harvesters positioned to test docking around obstacles
-        state = spawnUnit(state, 2750, 2780, 'harv_p1', 1, 'harvester');
-        state = spawnUnit(state, 2800, 2750, 'h_1860', 1, 'harvester');
-        state = spawnUnit(state, 2650, 2850, 'h_3750', 1, 'harvester');
+        state = spawnHarvester(state, 2750, 2780, 'harv_p1', 1);
+        state = spawnHarvester(state, 2800, 2750, 'h_1860', 1);
+        state = spawnHarvester(state, 2650, 2850, 'h_3750', 1);
 
         // Set cargo and baseTargetIds
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                harv_p1: { ...state.entities['harv_p1'], cargo: 500, baseTargetId: 'ref1' },
-                h_1860: { ...state.entities['h_1860'], cargo: 500, baseTargetId: 'ref1' },
-                h_3750: { ...state.entities['h_3750'], cargo: 500, baseTargetId: 'ref2' }
-            }
-        };
+        state = setHarvesterProps(state, 'harv_p1', 500, 'ref1');
+        state = setHarvesterProps(state, 'h_1860', 500, 'ref1');
+        state = setHarvesterProps(state, 'h_3750', 500, 'ref2');
 
         refreshCollisionGrid(state.entities);
 
@@ -507,13 +470,13 @@ describe('Red Harvester Stuck at Dock', () => {
             const h_1860 = state.entities['h_1860'];
             const h_3750 = state.entities['h_3750'];
 
-            dockedCount = [harv_p1, h_1860, h_3750].filter(h => h.cargo === 0).length;
+            dockedCount = [harv_p1, h_1860, h_3750].filter(h => getHarvesterCargo(h) === 0).length;
 
             maxStuckTimer = Math.max(
                 maxStuckTimer,
-                harv_p1.stuckTimer || 0,
-                h_1860.stuckTimer || 0,
-                h_3750.stuckTimer || 0
+                getStuckTimer(harv_p1),
+                getStuckTimer(h_1860),
+                getStuckTimer(h_3750)
             );
         }
 
@@ -528,21 +491,21 @@ describe('Red Harvester Stuck at Dock', () => {
             maxStuckTimer,
             harv_p1: {
                 pos: `${finalStates.harv_p1.pos.x.toFixed(0)}, ${finalStates.harv_p1.pos.y.toFixed(0)}`,
-                cargo: finalStates.harv_p1.cargo,
+                cargo: getHarvesterCargo(finalStates.harv_p1),
                 distToDock: finalStates.harv_p1.pos.dist(dock1).toFixed(0),
-                stuckTimer: finalStates.harv_p1.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.harv_p1)
             },
             h_1860: {
                 pos: `${finalStates.h_1860.pos.x.toFixed(0)}, ${finalStates.h_1860.pos.y.toFixed(0)}`,
-                cargo: finalStates.h_1860.cargo,
+                cargo: getHarvesterCargo(finalStates.h_1860),
                 distToDock: finalStates.h_1860.pos.dist(dock1).toFixed(0),
-                stuckTimer: finalStates.h_1860.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.h_1860)
             },
             h_3750: {
                 pos: `${finalStates.h_3750.pos.x.toFixed(0)}, ${finalStates.h_3750.pos.y.toFixed(0)}`,
-                cargo: finalStates.h_3750.cargo,
+                cargo: getHarvesterCargo(finalStates.h_3750),
                 distToDock: finalStates.h_3750.pos.dist(dock2).toFixed(0),
-                stuckTimer: finalStates.h_3750.stuckTimer
+                stuckTimer: getStuckTimer(finalStates.h_3750)
             }
         });
 
@@ -567,15 +530,9 @@ describe('Red Harvester Stuck at Dock', () => {
         state = spawnBuilding(state, 3500, 3500, 100, 80, 'ref1', 1, 'refinery');
 
         // Harvester at (3400, 3400) needs to reach dock at (3500, 3560)
-        state = spawnUnit(state, 3400, 3400, 'harv1', 1, 'harvester');
+        state = spawnHarvester(state, 3400, 3400, 'harv1', 1);
 
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                harv1: { ...state.entities['harv1'], cargo: 500, baseTargetId: 'ref1' }
-            }
-        };
+        state = setHarvesterProps(state, 'harv1', 500, 'ref1');
 
         refreshCollisionGrid(state.entities, state.config);
 
@@ -588,11 +545,11 @@ describe('Red Harvester Stuck at Dock', () => {
             state = update(state, { type: 'TICK' });
 
             const harv = state.entities['harv1'];
-            if (harv.cargo === 0) {
+            if (getHarvesterCargo(harv) === 0) {
                 docked = true;
                 break;
             }
-            maxStuckTimer = Math.max(maxStuckTimer, harv.stuckTimer || 0);
+            maxStuckTimer = Math.max(maxStuckTimer, getStuckTimer(harv));
         }
 
         const finalHarv = state.entities['harv1'];
@@ -602,7 +559,7 @@ describe('Red Harvester Stuck at Dock', () => {
             finalPos: `${finalHarv.pos.x.toFixed(0)}, ${finalHarv.pos.y.toFixed(0)}`,
             dock: '3500, 3560',
             distToDock: finalHarv.pos.dist(dock).toFixed(0),
-            cargo: finalHarv.cargo,
+            cargo: getHarvesterCargo(finalHarv),
             docked,
             maxStuckTimer
         });
@@ -612,4 +569,3 @@ describe('Red Harvester Stuck at Dock', () => {
         expect(maxStuckTimer).toBeLessThan(60);
     });
 });
-

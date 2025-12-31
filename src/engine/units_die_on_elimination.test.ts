@@ -1,76 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Entity, Vector } from './types.js';
+import { GameState } from './types.js';
 import { update, INITIAL_STATE, createPlayerState } from './reducer.js';
+import { createTestBuilding, createTestCombatUnit } from './test-utils.js';
 
 describe('Units Die on Elimination', () => {
-    const createBuilding = (id: string, owner: number, key: string = 'conyard'): Entity => ({
-        id,
-        owner,
-        type: 'BUILDING',
-        key,
-        pos: new Vector(owner * 500, 100),
-        prevPos: new Vector(owner * 500, 100),
-        hp: 100,
-        maxHp: 100,
-        w: 40,
-        h: 40,
-        radius: 20,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    });
+    const createBuilding = (id: string, owner: number, key: string = 'conyard') =>
+        createTestBuilding({ id, owner, key: key as any, x: owner * 500, y: 100 });
 
-    const createUnit = (id: string, owner: number, key: string = 'light'): Entity => ({
-        id,
-        owner,
-        type: 'UNIT',
-        key,
-        pos: new Vector(owner * 500 + 50, 150),
-        prevPos: new Vector(owner * 500 + 50, 150),
-        hp: 100,
-        maxHp: 100,
-        w: 30,
-        h: 30,
-        radius: 15,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    });
+    const createUnit = (id: string, owner: number, key: string = 'light') =>
+        createTestCombatUnit({ id, owner, key: key as any, x: owner * 500 + 50, y: 150 });
 
-    const createMCV = (id: string, owner: number): Entity => ({
-        ...createUnit(id, owner, 'mcv'),
-        key: 'mcv'
-    });
+    const createMCV = (id: string, owner: number) =>
+        createTestCombatUnit({ id, owner, key: 'mcv', x: owner * 500 + 50, y: 150 });
 
     it('should kill all units when a player loses their last building (no MCV)', () => {
         // 3-player game: P0, P1, P2

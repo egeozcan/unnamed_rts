@@ -1,104 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-import { createEntity, refreshCollisionGrid } from './utils';
+import { GameState, Vector, Entity, EntityId, HarvesterUnit, BuildingKey } from './types';
+import { refreshCollisionGrid } from './utils';
+import {
+    createTestHarvester,
+    createTestBuilding,
+    createTestResource,
+    addEntityToState
+} from './test-utils';
 
 describe('Harvester Convoy Stuck', () => {
 
-    // Helper to spawn units
-    function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
-        const unit = createEntity(x, y, owner, 'UNIT', key);
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: { ...unit, id }
-            } as Record<EntityId, Entity>
-        };
+    // Helper to spawn harvesters
+    function spawnHarvester(state: GameState, x: number, y: number, id: string, owner: number = 0): GameState {
+        const harvester = createTestHarvester({ id, owner, x, y });
+        return addEntityToState(state, harvester);
     }
 
     // Helper to spawn resources
     function spawnResource(state: GameState, x: number, y: number, id: string): GameState {
-        const resource: Entity = {
-            id,
-            owner: -1,
-            type: 'RESOURCE',
-            key: 'ore',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w: 25,
-            h: 25,
-            radius: 12,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: resource
-            } as Record<EntityId, Entity>
-        };
+        const resource = createTestResource({ id, x, y, hp: 1000 });
+        return addEntityToState(state, resource);
     }
 
     // Helper to spawn buildings
-    function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building: Entity = {
-            id,
-            owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w,
-            h,
-            radius: Math.min(w, h) / 2,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: building
-            } as Record<EntityId, Entity>
-        };
+    function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: BuildingKey = 'conyard'): GameState {
+        const building = createTestBuilding({ id, owner, key, x, y, w, h });
+        return addEntityToState(state, building);
     }
 
     it('two harvesters stacked vertically trying to go through same path should not get permanently stuck', () => {
@@ -119,24 +47,32 @@ describe('Harvester Convoy Stuck', () => {
 
         // Place two harvesters stacked vertically, both with cargo wanting to go to the same resource
         // Similar to positions 2729, 616 and 2729, 649
-        state = spawnUnit(state, 430, 350, 'h1', 2, 'harvester');
-        state = spawnUnit(state, 430, 380, 'h2', 2, 'harvester');
+        state = spawnHarvester(state, 430, 350, 'h1', 2);
+        state = spawnHarvester(state, 430, 380, 'h2', 2);
 
         // Give them cargo and set them to target the same resource
         // They both have partial cargo (not full), so they should be harvesting
+        const h1 = state.entities['h1'] as HarvesterUnit;
+        const h2 = state.entities['h2'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 h1: {
-                    ...state.entities['h1'],
-                    cargo: 50,
-                    resourceTargetId: 'ore1'
+                    ...h1,
+                    harvester: {
+                        ...h1.harvester,
+                        cargo: 50,
+                        resourceTargetId: 'ore1'
+                    }
                 },
                 h2: {
-                    ...state.entities['h2'],
-                    cargo: 450,
-                    resourceTargetId: 'ore1'
+                    ...h2,
+                    harvester: {
+                        ...h2.harvester,
+                        cargo: 450,
+                        resourceTargetId: 'ore1'
+                    }
                 }
             }
         };
@@ -158,11 +94,11 @@ describe('Harvester Convoy Stuck', () => {
         for (let i = 0; i < 150; i++) {
             state = update(state, { type: 'TICK' });
 
-            const h1 = state.entities['h1'];
-            const h2 = state.entities['h2'];
+            const h1Current = state.entities['h1'];
+            const h2Current = state.entities['h2'];
 
-            const h1DistToOre = h1.pos.dist(orePos);
-            const h2DistToOre = h2.pos.dist(orePos);
+            const h1DistToOre = h1Current.pos.dist(orePos);
+            const h2DistToOre = h2Current.pos.dist(orePos);
 
             // Check if either reached the ore (within harvest range of 40)
             if (h1DistToOre < 40 || h2DistToOre < 40) {
@@ -170,19 +106,19 @@ describe('Harvester Convoy Stuck', () => {
             }
 
             // Check if neither harvester moved significantly this tick
-            const h1Moved = h1.pos.dist(lastH1Pos) > 0.5;
-            const h2Moved = h2.pos.dist(lastH2Pos) > 0.5;
+            const h1Moved = h1Current.pos.dist(lastH1Pos) > 0.5;
+            const h2Moved = h2Current.pos.dist(lastH2Pos) > 0.5;
 
             if (!h1Moved && !h2Moved && h1DistToOre > 50 && h2DistToOre > 50) {
                 noProgressTicks++;
             }
 
-            lastH1Pos = h1.pos;
-            lastH2Pos = h2.pos;
+            lastH1Pos = h1Current.pos;
+            lastH2Pos = h2Current.pos;
         }
 
-        const finalH1 = state.entities['h1'];
-        const finalH2 = state.entities['h2'];
+        const finalH1 = state.entities['h1'] as HarvesterUnit;
+        const finalH2 = state.entities['h2'] as HarvesterUnit;
         const ore = state.entities['ore1'];
 
         const h1Dist = finalH1.pos.dist(ore.pos);
@@ -202,8 +138,8 @@ describe('Harvester Convoy Stuck', () => {
             h2Progress: h2Progress.toFixed(0),
             noProgressTicks,
             anyProgressMade,
-            h1StuckTimer: finalH1.stuckTimer,
-            h2StuckTimer: finalH2.stuckTimer
+            h1StuckTimer: finalH1.movement.stuckTimer,
+            h2StuckTimer: finalH2.movement.stuckTimer
         });
 
         // At least one harvester should have made significant progress toward the ore
@@ -224,39 +160,51 @@ describe('Harvester Convoy Stuck', () => {
         state = spawnBuilding(state, 350, 400, 100, 80, 'ref1', 2, 'refinery');
 
         // Two harvesters at almost the same position (stacked)
-        state = spawnUnit(state, 350, 340, 'h1', 2, 'harvester');
-        state = spawnUnit(state, 352, 305, 'h2', 2, 'harvester'); // Just above h1
+        state = spawnHarvester(state, 350, 340, 'h1', 2);
+        state = spawnHarvester(state, 352, 305, 'h2', 2); // Just above h1
 
-        // Both targeting same ore
+        // Both targeting same ore with explicit paths that go through the same point
+        const h1 = state.entities['h1'] as HarvesterUnit;
+        const h2 = state.entities['h2'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 h1: {
-                    ...state.entities['h1'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1',
-                    // Set explicit paths that go through the same point
-                    path: [
-                        new Vector(380, 300),
-                        new Vector(450, 250),
-                        new Vector(600, 200)
-                    ],
-                    pathIdx: 0,
-                    finalDest: new Vector(600, 200)
+                    ...h1,
+                    harvester: {
+                        ...h1.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1'
+                    },
+                    movement: {
+                        ...h1.movement,
+                        path: [
+                            new Vector(380, 300),
+                            new Vector(450, 250),
+                            new Vector(600, 200)
+                        ],
+                        pathIdx: 0,
+                        finalDest: new Vector(600, 200)
+                    }
                 },
                 h2: {
-                    ...state.entities['h2'],
-                    cargo: 100,
-                    resourceTargetId: 'ore1',
-                    // Same path points
-                    path: [
-                        new Vector(380, 300),
-                        new Vector(450, 250),
-                        new Vector(600, 200)
-                    ],
-                    pathIdx: 0,
-                    finalDest: new Vector(600, 200)
+                    ...h2,
+                    harvester: {
+                        ...h2.harvester,
+                        cargo: 100,
+                        resourceTargetId: 'ore1'
+                    },
+                    movement: {
+                        ...h2.movement,
+                        path: [
+                            new Vector(380, 300),
+                            new Vector(450, 250),
+                            new Vector(600, 200)
+                        ],
+                        pathIdx: 0,
+                        finalDest: new Vector(600, 200)
+                    }
                 }
             }
         };
@@ -272,28 +220,28 @@ describe('Harvester Convoy Stuck', () => {
         for (let i = 0; i < 200; i++) {
             state = update(state, { type: 'TICK' });
 
-            const h1 = state.entities['h1'];
-            const h2 = state.entities['h2'];
+            const h1Current = state.entities['h1'];
+            const h2Current = state.entities['h2'];
 
             // Check if either reached the ore
-            if (h1.pos.dist(orePos) < 40 || h2.pos.dist(orePos) < 40) {
+            if (h1Current.pos.dist(orePos) < 40 || h2Current.pos.dist(orePos) < 40) {
                 reachedOre = true;
             }
 
             // Check if neither moved significantly and both far from ore
-            const h1Moved = h1.pos.dist(lastH1Pos) > 0.5;
-            const h2Moved = h2.pos.dist(lastH2Pos) > 0.5;
+            const h1Moved = h1Current.pos.dist(lastH1Pos) > 0.5;
+            const h2Moved = h2Current.pos.dist(lastH2Pos) > 0.5;
             if (!h1Moved && !h2Moved &&
-                h1.pos.dist(orePos) > 50 && h2.pos.dist(orePos) > 50) {
+                h1Current.pos.dist(orePos) > 50 && h2Current.pos.dist(orePos) > 50) {
                 noProgressTicks++;
             }
 
-            lastH1Pos = h1.pos;
-            lastH2Pos = h2.pos;
+            lastH1Pos = h1Current.pos;
+            lastH2Pos = h2Current.pos;
         }
 
-        const finalH1 = state.entities['h1'];
-        const finalH2 = state.entities['h2'];
+        const finalH1 = state.entities['h1'] as HarvesterUnit;
+        const finalH2 = state.entities['h2'] as HarvesterUnit;
 
         console.log('Same-path test:', {
             h1End: `${finalH1.pos.x.toFixed(0)}, ${finalH1.pos.y.toFixed(0)}`,

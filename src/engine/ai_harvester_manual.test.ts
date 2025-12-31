@@ -1,51 +1,61 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState } from './ai';
-import { GameState, Entity, EntityId, Vector } from './types';
+import { GameState, Entity, EntityId, Vector, UnitKey, BuildingKey } from './types';
 import { INITIAL_STATE } from './reducer';
+import {
+    createTestHarvester,
+    createTestCombatUnit,
+    createTestBuilding,
+    createTestResource
+} from './test-utils';
 
 // Helper to create minimal entity
 function createEntity(
     id: string,
     owner: number,
-    type: 'BUILDING' | 'UNIT' | 'RESOURCE',
+    type: 'UNIT' | 'BUILDING' | 'RESOURCE',
     key: string,
     x: number,
     y: number,
-    overrides: Partial<Entity> = {}
+    overrides?: {
+        hp?: number;
+        maxHp?: number;
+        dead?: boolean;
+        targetId?: EntityId | null;
+        lastAttackerId?: EntityId | null;
+        moveTarget?: Vector | null;
+        cargo?: number;
+        resourceTargetId?: EntityId | null;
+        baseTargetId?: EntityId | null;
+        manualMode?: boolean;
+        placedTick?: number;
+        isRepairing?: boolean;
+    }
 ): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 1000,
-        maxHp: 1000,
-        w: 50,
-        h: 50,
-        radius: 25,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        manualMode: undefined, // Default is undefined (behaviorally same as true for harvesters initially)
-        ...overrides
-    } as Entity;
+    if (type === 'BUILDING') {
+        return createTestBuilding({
+            id, owner, key: key as BuildingKey, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
+            targetId: overrides?.targetId, placedTick: overrides?.placedTick,
+            isRepairing: overrides?.isRepairing
+        });
+    } else if (type === 'RESOURCE') {
+        return createTestResource({ id, x, y, hp: overrides?.hp });
+    } else if (key === 'harvester') {
+        return createTestHarvester({
+            id, owner, x, y, hp: overrides?.hp, dead: overrides?.dead,
+            targetId: overrides?.targetId, moveTarget: overrides?.moveTarget,
+            cargo: overrides?.cargo, resourceTargetId: overrides?.resourceTargetId,
+            baseTargetId: overrides?.baseTargetId, manualMode: overrides?.manualMode
+        });
+    } else {
+        return createTestCombatUnit({
+            id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
+            targetId: overrides?.targetId, lastAttackerId: overrides?.lastAttackerId,
+            moveTarget: overrides?.moveTarget
+        });
+    }
 }
 
 // Helper to create test state

@@ -1,3 +1,11 @@
+import {
+    MovementComponent,
+    CombatComponent,
+    HarvesterComponent,
+    EngineerComponent,
+    BuildingStateComponent
+} from './components.js';
+
 export type PlayerId = string;
 export type EntityId = string;
 
@@ -45,13 +53,30 @@ export class Vector {
     }
 }
 
+// ============ KEY TYPES ============
+// Type-safe keys for each entity category
+
+export type UnitKey =
+    | 'harvester'
+    | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando'
+    | 'jeep' | 'apc' | 'light' | 'heavy' | 'flame_tank' | 'stealth' | 'artillery' | 'mlrs' | 'mammoth'
+    | 'heli' | 'mcv';
+
+export type BuildingKey =
+    | 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory'
+    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech';
+
+export type ResourceKey = 'ore';
+export type RockKey = 'rock';
+
 export type EntityType = 'UNIT' | 'BUILDING' | 'RESOURCE' | 'ROCK';
 
-export interface Entity {
+// ============ BASE ENTITY ============
+// Properties shared by all entity types
+
+export interface BaseEntity {
     readonly id: EntityId;
-    readonly owner: number; // 0 = player, 1 = enemy, -1 = neutral
-    readonly type: EntityType;
-    readonly key: string; // 'harvester', 'conyard', 'power', etc.
+    readonly owner: number; // 0-7 = players, -1 = neutral
     readonly pos: Vector;
     readonly prevPos: Vector;
     readonly hp: number;
@@ -60,44 +85,63 @@ export interface Entity {
     readonly h: number;
     readonly radius: number;
     readonly dead: boolean;
-
-    // Movement
-    readonly vel: Vector;
-    readonly rotation: number;
-    readonly moveTarget: Vector | null;
-    readonly path: Vector[] | null;
-    readonly pathIdx: number;
-    readonly finalDest: Vector | null;
-    readonly stuckTimer: number;
-    readonly unstuckDir: Vector | null;
-    readonly unstuckTimer: number;
-
-    // Combat
-    readonly targetId: EntityId | null; // Changed to ID for serializability check
-    readonly lastAttackerId: EntityId | null; // Changed to ID
-    readonly lastDamageTick?: number; // Tick when entity last took damage
-    readonly cooldown: number;
-    readonly flash: number;
-    readonly turretAngle: number; // Angle the turret is facing (for tanks/defensive buildings)
-
-    // Harvester specific
-    readonly cargo: number;
-    readonly resourceTargetId: EntityId | null; // Changed to ID
-    readonly baseTargetId: EntityId | null; // Changed to ID
-    readonly dockPos?: Vector;
-    readonly avgVel?: Vector;
-    readonly manualMode?: boolean; // If true, harvester won't auto-acquire resources
-
-    // Specialized unit flags
-    readonly captureTargetId?: EntityId | null;
-    readonly repairTargetId?: EntityId | null;
-
-    // Building repair state
-    readonly isRepairing?: boolean;
-
-    // Building metadata
-    readonly placedTick?: number; // Tick when building was placed (for AI decision-making)
 }
+
+// ============ UNIT ENTITIES ============
+
+// Combat units (all units except harvester)
+export interface CombatUnit extends BaseEntity {
+    readonly type: 'UNIT';
+    readonly key: Exclude<UnitKey, 'harvester'>;
+    readonly movement: MovementComponent;
+    readonly combat: CombatComponent;
+    readonly engineer?: EngineerComponent; // Only for engineer units
+}
+
+// Harvester units (special unit with harvesting capability)
+export interface HarvesterUnit extends BaseEntity {
+    readonly type: 'UNIT';
+    readonly key: 'harvester';
+    readonly movement: MovementComponent;
+    readonly combat: CombatComponent;
+    readonly harvester: HarvesterComponent;
+}
+
+export type UnitEntity = CombatUnit | HarvesterUnit;
+
+// ============ BUILDING ENTITIES ============
+
+export interface BuildingEntity extends BaseEntity {
+    readonly type: 'BUILDING';
+    readonly key: BuildingKey;
+    readonly combat?: CombatComponent; // Only for defense buildings (turret, sam_site, etc.)
+    readonly building: BuildingStateComponent;
+}
+
+// ============ STATIC ENTITIES ============
+
+export interface ResourceEntity extends BaseEntity {
+    readonly type: 'RESOURCE';
+    readonly key: ResourceKey;
+}
+
+export interface RockEntity extends BaseEntity {
+    readonly type: 'ROCK';
+    readonly key: RockKey;
+}
+
+// ============ DISCRIMINATED UNION ============
+
+export type Entity = UnitEntity | BuildingEntity | ResourceEntity | RockEntity;
+
+// Re-export component types for convenience
+export type {
+    MovementComponent,
+    CombatComponent,
+    HarvesterComponent,
+    EngineerComponent,
+    BuildingStateComponent
+} from './components.js';
 
 export interface Projectile {
     readonly ownerId: EntityId;

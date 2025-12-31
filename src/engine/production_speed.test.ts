@@ -1,38 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-
-function createEntity(
-    id: string,
-    owner: number,
-    type: 'UNIT' | 'BUILDING' | 'RESOURCE',
-    key: string,
-    x: number,
-    y: number,
-    overrides?: Partial<Entity>
-): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        hp: 100,
-        maxHp: 100,
-        size: 20,
-        velocity: new Vector(0, 0),
-        dead: false,
-        visible: true,
-        turretAngle: 0,
-        w: 50,
-        h: 50,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        cooldown: 0,
-        flash: 0,
-        ...overrides
-    } as Entity;
-}
+import { GameState, EntityId, Entity } from './types';
+import { createTestBuilding } from './test-utils';
 
 function createTestState(entities: Record<EntityId, Entity>, credits: number = 5000): GameState {
     const state = { ...INITIAL_STATE, running: true };
@@ -48,19 +17,19 @@ describe('Production Speed - Multiple Buildings', () => {
         it('should produce infantry faster with 2 barracks than 1', () => {
             // Setup: Player with credits and infantry in production
             const entities1: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'power1': createEntity('power1', 0, 'BUILDING', 'power', 250, 300),
-                'power2': createEntity('power2', 0, 'BUILDING', 'power', 250, 350),
-                'barracks1': createEntity('barracks1', 0, 'BUILDING', 'barracks', 350, 300),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'power1': createTestBuilding({ id: 'power1', owner: 0, key: 'power', x: 250, y: 300 }),
+                'power2': createTestBuilding({ id: 'power2', owner: 0, key: 'power', x: 250, y: 350 }),
+                'barracks1': createTestBuilding({ id: 'barracks1', owner: 0, key: 'barracks', x: 350, y: 300 }),
             };
 
             const entities2: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'power1': createEntity('power1', 0, 'BUILDING', 'power', 250, 300),
-                'power2': createEntity('power2', 0, 'BUILDING', 'power', 250, 350),
-                'power3': createEntity('power3', 0, 'BUILDING', 'power', 250, 400),
-                'barracks1': createEntity('barracks1', 0, 'BUILDING', 'barracks', 350, 300),
-                'barracks2': createEntity('barracks2', 0, 'BUILDING', 'barracks', 400, 300),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'power1': createTestBuilding({ id: 'power1', owner: 0, key: 'power', x: 250, y: 300 }),
+                'power2': createTestBuilding({ id: 'power2', owner: 0, key: 'power', x: 250, y: 350 }),
+                'power3': createTestBuilding({ id: 'power3', owner: 0, key: 'power', x: 250, y: 400 }),
+                'barracks1': createTestBuilding({ id: 'barracks1', owner: 0, key: 'barracks', x: 350, y: 300 }),
+                'barracks2': createTestBuilding({ id: 'barracks2', owner: 0, key: 'barracks', x: 400, y: 300 }),
             };
 
             // Start with same state but different barracks counts
@@ -88,21 +57,21 @@ describe('Production Speed - Multiple Buildings', () => {
 
         it('should produce infantry even faster with 3 barracks', () => {
             const entities3: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'power1': createEntity('power1', 0, 'BUILDING', 'power', 250, 300),
-                'power2': createEntity('power2', 0, 'BUILDING', 'power', 250, 350),
-                'power3': createEntity('power3', 0, 'BUILDING', 'power', 250, 400),
-                'power4': createEntity('power4', 0, 'BUILDING', 'power', 250, 450),
-                'barracks1': createEntity('barracks1', 0, 'BUILDING', 'barracks', 350, 300),
-                'barracks2': createEntity('barracks2', 0, 'BUILDING', 'barracks', 400, 300),
-                'barracks3': createEntity('barracks3', 0, 'BUILDING', 'barracks', 450, 300),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'power1': createTestBuilding({ id: 'power1', owner: 0, key: 'power', x: 250, y: 300 }),
+                'power2': createTestBuilding({ id: 'power2', owner: 0, key: 'power', x: 250, y: 350 }),
+                'power3': createTestBuilding({ id: 'power3', owner: 0, key: 'power', x: 250, y: 400 }),
+                'power4': createTestBuilding({ id: 'power4', owner: 0, key: 'power', x: 250, y: 450 }),
+                'barracks1': createTestBuilding({ id: 'barracks1', owner: 0, key: 'barracks', x: 350, y: 300 }),
+                'barracks2': createTestBuilding({ id: 'barracks2', owner: 0, key: 'barracks', x: 400, y: 300 }),
+                'barracks3': createTestBuilding({ id: 'barracks3', owner: 0, key: 'barracks', x: 450, y: 300 }),
             };
 
             const entities1: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'power1': createEntity('power1', 0, 'BUILDING', 'power', 250, 300),
-                'power2': createEntity('power2', 0, 'BUILDING', 'power', 250, 350),
-                'barracks1': createEntity('barracks1', 0, 'BUILDING', 'barracks', 350, 300),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'power1': createTestBuilding({ id: 'power1', owner: 0, key: 'power', x: 250, y: 300 }),
+                'power2': createTestBuilding({ id: 'power2', owner: 0, key: 'power', x: 250, y: 350 }),
+                'barracks1': createTestBuilding({ id: 'barracks1', owner: 0, key: 'barracks', x: 350, y: 300 }),
             };
 
             let state1 = createTestState(entities1, 5000);
@@ -128,16 +97,16 @@ describe('Production Speed - Multiple Buildings', () => {
     describe('Vehicle production', () => {
         it('should produce vehicles faster with 2 factories than 1', () => {
             const entities1: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'factory1': createEntity('factory1', 0, 'BUILDING', 'factory', 350, 300),
-                'refinery': createEntity('refinery', 0, 'BUILDING', 'refinery', 300, 350),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'factory1': createTestBuilding({ id: 'factory1', owner: 0, key: 'factory', x: 350, y: 300 }),
+                'refinery': createTestBuilding({ id: 'refinery', owner: 0, key: 'refinery', x: 300, y: 350 }),
             };
 
             const entities2: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
-                'factory1': createEntity('factory1', 0, 'BUILDING', 'factory', 350, 300),
-                'factory2': createEntity('factory2', 0, 'BUILDING', 'factory', 400, 300),
-                'refinery': createEntity('refinery', 0, 'BUILDING', 'refinery', 300, 350),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
+                'factory1': createTestBuilding({ id: 'factory1', owner: 0, key: 'factory', x: 350, y: 300 }),
+                'factory2': createTestBuilding({ id: 'factory2', owner: 0, key: 'factory', x: 400, y: 300 }),
+                'refinery': createTestBuilding({ id: 'refinery', owner: 0, key: 'refinery', x: 300, y: 350 }),
             };
 
             let state1 = createTestState(entities1, 5000);
@@ -165,7 +134,7 @@ describe('Production Speed - Multiple Buildings', () => {
             // Buildings are produced by construction yards but speed is not affected
             // (since you can only have one construction at a time anyway)
             const entities1: Record<EntityId, Entity> = {
-                'conyard': createEntity('conyard', 0, 'BUILDING', 'conyard', 300, 300),
+                'conyard': createTestBuilding({ id: 'conyard', owner: 0, key: 'conyard', x: 300, y: 300 }),
             };
 
             let state1 = createTestState(entities1, 5000);

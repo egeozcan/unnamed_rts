@@ -109,3 +109,12 @@ export const RulesSchema = z.object({
   damageModifiers: z.record(z.string(), DamageModifierSchema),
 });
 export type Rules = z.infer<typeof RulesSchema>;
+
+// Type guards for distinguishing Building vs Unit data
+export function isBuildingData(data: Building | Unit): data is Building {
+  return 'h' in data; // Buildings have height property, units don't
+}
+
+export function isUnitData(data: Building | Unit): data is Unit {
+  return 'speed' in data; // Units have speed property, buildings don't
+}

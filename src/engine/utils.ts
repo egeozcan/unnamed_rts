@@ -204,19 +204,57 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         data = { hp: 100, w: 20, h: 20 };
     }
 
-    const entity: Entity = {
-        id: 'e' + (nextEntityId++),
+    const id = 'e' + (nextEntityId++);
+    const pos = new Vector(x, y);
+    const hp = data.hp || 100;
+    const w = data.w || 20;
+    const h = data.h || data.w || 20;
+    const radius = Math.max(w, h) / 2;
+
+    const baseProps = {
+        id,
         owner,
-        type,
-        key: statsKey,
-        pos: new Vector(x, y),
+        pos,
         prevPos: new Vector(x, y),
-        hp: data.hp || 100,
-        maxHp: data.hp || 100,
-        w: data.w || 20,
-        h: data.h || data.w || 20,
-        radius: Math.max(data.w || 20, data.h || data.w || 20) / 2,
-        dead: false,
+        hp,
+        maxHp: hp,
+        w,
+        h,
+        radius,
+        dead: false
+    };
+
+    if (isResource) {
+        return {
+            ...baseProps,
+            type: 'RESOURCE' as const,
+            key: 'ore' as const
+        };
+    }
+
+    if (isBuilding) {
+        const isDefense = ['turret', 'sam_site', 'pillbox', 'obelisk'].includes(statsKey);
+        return {
+            ...baseProps,
+            type: 'BUILDING' as const,
+            key: statsKey as any,
+            combat: isDefense ? {
+                targetId: null,
+                lastAttackerId: null,
+                lastDamageTick: undefined,
+                cooldown: 0,
+                flash: 0,
+                turretAngle: 0
+            } : undefined,
+            building: {
+                isRepairing: undefined,
+                placedTick: undefined
+            }
+        };
+    }
+
+    // Unit
+    const movement = {
         vel: new Vector(0, 0),
         rotation: 0,
         moveTarget: null,
@@ -226,18 +264,47 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         stuckTimer: 0,
         unstuckDir: null,
         unstuckTimer: 0,
+        avgVel: undefined
+    };
+
+    const combat = {
         targetId: null,
         lastAttackerId: null,
         lastDamageTick: undefined,
         cooldown: 0,
         flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
+        turretAngle: 0
     };
 
-    return entity;
+    if (statsKey === 'harvester') {
+        return {
+            ...baseProps,
+            type: 'UNIT' as const,
+            key: 'harvester' as const,
+            movement,
+            combat,
+            harvester: {
+                cargo: 0,
+                resourceTargetId: null,
+                baseTargetId: null,
+                dockPos: undefined,
+                manualMode: undefined,
+                harvestAttemptTicks: undefined,
+                lastDistToOre: undefined,
+                bestDistToOre: undefined,
+                blockedOreId: undefined,
+                blockedOreTimer: undefined
+            }
+        };
+    }
+
+    return {
+        ...baseProps,
+        type: 'UNIT' as const,
+        key: statsKey as any,
+        movement,
+        combat
+    };
 }
 
 export function findOpenSpot(x: number, y: number, radius: number, entities: Entity[]): Vector {

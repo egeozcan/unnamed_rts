@@ -3,15 +3,12 @@ import { Vector } from './types.js';
 import { SpatialGrid, getSpatialGrid, rebuildSpatialGrid, queryEntitiesInRadius, findNearestEnemy, findNearestResource } from './spatial.js';
 
 describe('SpatialGrid', () => {
+    // Minimal entity for spatial grid testing - only needs pos, id, radius, dead, owner, type
     const createTestEntity = (id: string, x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string = 'test', radius: number = 10) => ({
         id, owner, type, key, dead: false,
         pos: new Vector(x, y), prevPos: new Vector(x, y),
-        hp: 100, maxHp: 100, w: 20, h: 20, radius,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0,
-        finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0,
-        cargo: 0, resourceTargetId: null, baseTargetId: null
-    });
+        hp: 100, maxHp: 100, w: 20, h: 20, radius
+    } as any);
 
     describe('SpatialGrid class', () => {
         let grid: SpatialGrid;

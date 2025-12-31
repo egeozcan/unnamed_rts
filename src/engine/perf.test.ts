@@ -1,24 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { Vector } from './types.js';
 import { createEntityCache, getEntitiesForOwner, getBuildingsForOwner, getUnitsForOwner, ownerHasBuilding, getEnemiesOf } from './perf.js';
+import { createTestCombatUnit, createTestBuilding, createTestResource, createTestHarvester } from './test-utils.js';
 
 describe('EntityCache', () => {
-    const createTestEntity = (id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, dead = false) => ({
-        id, owner, type, key, dead,
-        pos: new Vector(100, 100), prevPos: new Vector(100, 100),
-        hp: 100, maxHp: 100, w: 20, h: 20, radius: 10,
-        vel: new Vector(0, 0), rotation: 0, moveTarget: null, path: null, pathIdx: 0,
-        finalDest: null, stuckTimer: 0, unstuckDir: null, unstuckTimer: 0,
-        targetId: null, lastAttackerId: null, cooldown: 0, flash: 0, turretAngle: 0,
-        cargo: 0, resourceTargetId: null, baseTargetId: null
-    });
-
     it('should index all entities', () => {
         const entities = {
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank'),
-            'u2': createTestEntity('u2', 1, 'UNIT', 'infantry'),
-            'b1': createTestEntity('b1', 0, 'BUILDING', 'conyard'),
-            'r1': createTestEntity('r1', -1, 'RESOURCE', 'ore')
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy' }),
+            'u2': createTestCombatUnit({ id: 'u2', owner: 1, key: 'rifle' }),
+            'b1': createTestBuilding({ id: 'b1', owner: 0, key: 'conyard' }),
+            'r1': createTestResource({ id: 'r1' })
         };
 
         const cache = createEntityCache(entities);
@@ -29,8 +19,8 @@ describe('EntityCache', () => {
 
     it('should filter out dead entities from alive list', () => {
         const entities = {
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank', false),
-            'u2': createTestEntity('u2', 0, 'UNIT', 'tank', true) // dead
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy', dead: false }),
+            'u2': createTestCombatUnit({ id: 'u2', owner: 0, key: 'heavy', dead: true }) // dead
         };
 
         const cache = createEntityCache(entities);
@@ -41,9 +31,9 @@ describe('EntityCache', () => {
 
     it('should group entities by owner', () => {
         const entities = {
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank'),
-            'u2': createTestEntity('u2', 0, 'UNIT', 'infantry'),
-            'u3': createTestEntity('u3', 1, 'UNIT', 'tank')
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy' }),
+            'u2': createTestCombatUnit({ id: 'u2', owner: 0, key: 'rifle' }),
+            'u3': createTestCombatUnit({ id: 'u3', owner: 1, key: 'heavy' })
         };
 
         const cache = createEntityCache(entities);
@@ -55,10 +45,10 @@ describe('EntityCache', () => {
 
     it('should group buildings by owner', () => {
         const entities = {
-            'b1': createTestEntity('b1', 0, 'BUILDING', 'conyard'),
-            'b2': createTestEntity('b2', 0, 'BUILDING', 'power'),
-            'b3': createTestEntity('b3', 1, 'BUILDING', 'conyard'),
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank')
+            'b1': createTestBuilding({ id: 'b1', owner: 0, key: 'conyard' }),
+            'b2': createTestBuilding({ id: 'b2', owner: 0, key: 'power' }),
+            'b3': createTestBuilding({ id: 'b3', owner: 1, key: 'conyard' }),
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy' })
         };
 
         const cache = createEntityCache(entities);
@@ -69,9 +59,9 @@ describe('EntityCache', () => {
 
     it('should group units by owner', () => {
         const entities = {
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank'),
-            'u2': createTestEntity('u2', 0, 'UNIT', 'infantry'),
-            'b1': createTestEntity('b1', 0, 'BUILDING', 'conyard')
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy' }),
+            'u2': createTestCombatUnit({ id: 'u2', owner: 0, key: 'rifle' }),
+            'b1': createTestBuilding({ id: 'b1', owner: 0, key: 'conyard' })
         };
 
         const cache = createEntityCache(entities);
@@ -81,9 +71,9 @@ describe('EntityCache', () => {
 
     it('should track which building keys each owner has', () => {
         const entities = {
-            'b1': createTestEntity('b1', 0, 'BUILDING', 'conyard'),
-            'b2': createTestEntity('b2', 0, 'BUILDING', 'power'),
-            'b3': createTestEntity('b3', 1, 'BUILDING', 'barracks')
+            'b1': createTestBuilding({ id: 'b1', owner: 0, key: 'conyard' }),
+            'b2': createTestBuilding({ id: 'b2', owner: 0, key: 'power' }),
+            'b3': createTestBuilding({ id: 'b3', owner: 1, key: 'barracks' })
         };
 
         const cache = createEntityCache(entities);
@@ -97,9 +87,9 @@ describe('EntityCache', () => {
 
     it('should collect resources', () => {
         const entities = {
-            'r1': createTestEntity('r1', -1, 'RESOURCE', 'ore'),
-            'r2': createTestEntity('r2', -1, 'RESOURCE', 'ore'),
-            'u1': createTestEntity('u1', 0, 'UNIT', 'harvester')
+            'r1': createTestResource({ id: 'r1' }),
+            'r2': createTestResource({ id: 'r2' }),
+            'u1': createTestHarvester({ id: 'u1', owner: 0 })
         };
 
         const cache = createEntityCache(entities);
@@ -109,10 +99,10 @@ describe('EntityCache', () => {
 
     it('should find enemies of a player', () => {
         const entities = {
-            'u1': createTestEntity('u1', 0, 'UNIT', 'tank'),
-            'u2': createTestEntity('u2', 1, 'UNIT', 'tank'),
-            'u3': createTestEntity('u3', 2, 'UNIT', 'tank'),
-            'r1': createTestEntity('r1', -1, 'RESOURCE', 'ore') // neutral, not an enemy
+            'u1': createTestCombatUnit({ id: 'u1', owner: 0, key: 'heavy' }),
+            'u2': createTestCombatUnit({ id: 'u2', owner: 1, key: 'heavy' }),
+            'u3': createTestCombatUnit({ id: 'u3', owner: 2, key: 'heavy' }),
+            'r1': createTestResource({ id: 'r1' }) // neutral, not an enemy
         };
 
         const cache = createEntityCache(entities);

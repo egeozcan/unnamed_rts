@@ -1,17 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from './reducer';
-import { GameState, Vector, Entity, isActionType } from './types.js';
+import { GameState, isActionType } from './types.js';
 import { _testUtils as aiTestUtils, resetAIState } from './ai';
+import { createTestBuilding } from './test-utils';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
 
 describe('Building Selling', () => {
     it('should sell undamaged building for 50% refund', () => {
         let state = getInitialState();
-        const building = {
-            id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-            pos: new Vector(100, 100), hp: 800, maxHp: 800, radius: 30, dead: false
-        } as Entity;
+        const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 800, maxHp: 800 });
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
 
@@ -25,10 +23,7 @@ describe('Building Selling', () => {
 
     it('should sell damaged building for proportional refund', () => {
         let state = getInitialState();
-        const building = {
-            id: 'b1', owner: 0, type: 'BUILDING', key: 'power',
-            pos: new Vector(100, 100), hp: 400, maxHp: 800, radius: 30, dead: false
-        } as Entity;
+        const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, maxHp: 800 });
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
 
@@ -41,7 +36,7 @@ describe('Building Selling', () => {
 
     it('should remove sold building from selection', () => {
         let state = getInitialState();
-        state.entities['b1'] = { id: 'b1', owner: 0, type: 'BUILDING', key: 'power', pos: new Vector(0, 0), hp: 800, maxHp: 800, dead: false } as Entity;
+        state.entities['b1'] = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 0, y: 0, hp: 800, maxHp: 800 });
         state = { ...state, selection: ['b1'] };
 
         const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
@@ -52,7 +47,7 @@ describe('Building Selling', () => {
 
     it('should not sell building owned by another player', () => {
         let state = getInitialState();
-        state.entities['b1'] = { id: 'b1', owner: 1, type: 'BUILDING', key: 'power', pos: new Vector(0, 0), hp: 800, maxHp: 800, dead: false } as Entity;
+        state.entities['b1'] = createTestBuilding({ id: 'b1', owner: 1, key: 'power', x: 0, y: 0, hp: 800, maxHp: 800 });
         const initialCredits = state.players[0].credits;
 
         const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
@@ -81,11 +76,11 @@ describe('AI Emergency Selling', () => {
         // Use tick 600 to be past the 300 tick building grace period
         state = { ...state, tick: 600 };
 
-        const building = {
-            id: 'b_ai', owner: 1, type: 'BUILDING', key: 'power',
-            pos: new Vector(2000, 2000), hp: 400, maxHp: 800, dead: false, radius: 30,
+        const building = createTestBuilding({
+            id: 'b_ai', owner: 1, key: 'power',
+            x: 2000, y: 2000, hp: 400, maxHp: 800, radius: 30,
             placedTick: 0  // Building is "mature" (placed at tick 0, now at tick 600)
-        } as Entity;
+        });
 
         const aiPlayer = { ...state.players[1], credits: 10 };
         const aiState = aiTestUtils.getAIState(1);
@@ -104,7 +99,7 @@ describe('AI Emergency Selling', () => {
     it('should NOT sell buildings when credits are healthy', () => {
         resetAIState(1);
         const state = getInitialState();
-        const building = { id: 'b_ai', owner: 1, type: 'BUILDING', key: 'power', hp: 800, maxHp: 800, dead: false } as Entity;
+        const building = createTestBuilding({ id: 'b_ai', owner: 1, key: 'power', hp: 800, maxHp: 800 });
         const aiPlayer = { ...state.players[1], credits: 1000 };
         const aiState = aiTestUtils.getAIState(1);
 

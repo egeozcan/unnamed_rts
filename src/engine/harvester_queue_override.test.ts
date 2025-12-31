@@ -1,55 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
-import { createEntity, refreshCollisionGrid } from './utils';
+import { GameState, Vector, Entity, EntityId, HarvesterUnit } from './types';
+import { createTestHarvester, createTestBuilding, createTestResource } from './test-utils';
+import { refreshCollisionGrid } from './utils';
 
 describe('Harvester Queue Override Bug', () => {
 
     // Helper to spawn units
     function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
-        const unit = createEntity(x, y, owner, 'UNIT', key);
+        const unit = key === 'harvester'
+            ? createTestHarvester({ id, owner, x, y })
+            : createTestHarvester({ id, owner, x, y }); // Fallback to harvester since we only use harvesters in this test
         return {
             ...state,
             entities: {
                 ...state.entities,
-                [id]: { ...unit, id }
+                [id]: unit
             } as Record<EntityId, Entity>
         };
     }
 
     // Helper to spawn resources
     function spawnResource(state: GameState, x: number, y: number, id: string): GameState {
-        const resource: Entity = {
-            id,
-            owner: -1,
-            type: 'RESOURCE',
-            key: 'ore',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w: 25,
-            h: 25,
-            radius: 12,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
+        const resource = createTestResource({ id, x, y });
         return {
             ...state,
             entities: {
@@ -61,37 +34,7 @@ describe('Harvester Queue Override Bug', () => {
 
     // Helper to spawn buildings
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building: Entity = {
-            id,
-            owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w,
-            h,
-            radius: Math.min(w, h) / 2,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
+        const building = createTestBuilding({ id, owner, key: key as any, x, y, w, h });
         return {
             ...state,
             entities: {
@@ -124,23 +67,35 @@ describe('Harvester Queue Override Bug', () => {
         // - Both have full cargo
         // - Both have baseTargetId set to refinery
         // - harv1 has a moveTarget (player override) pointing AWAY from the dock
+        const harv1 = state.entities['harv1'] as HarvesterUnit;
+        const harv2 = state.entities['harv2'] as HarvesterUnit;
+
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 harv1: {
-                    ...state.entities['harv1'],
-                    cargo: 500, // Full cargo
-                    baseTargetId: 'refinery1',
-                    moveTarget: new Vector(300, 300), // Player override - going away from dock
-                    path: [new Vector(300, 300)],
-                    finalDest: new Vector(300, 300)
+                    ...harv1,
+                    harvester: {
+                        ...harv1.harvester,
+                        cargo: 500, // Full cargo
+                        baseTargetId: 'refinery1'
+                    },
+                    movement: {
+                        ...harv1.movement,
+                        moveTarget: new Vector(300, 300), // Player override - going away from dock
+                        path: [new Vector(300, 300)],
+                        finalDest: new Vector(300, 300)
+                    }
                 },
                 harv2: {
-                    ...state.entities['harv2'],
-                    cargo: 500, // Full cargo
-                    baseTargetId: 'refinery1'
-                    // No moveTarget - should be heading to dock
+                    ...harv2,
+                    harvester: {
+                        ...harv2.harvester,
+                        cargo: 500, // Full cargo
+                        baseTargetId: 'refinery1'
+                        // No moveTarget - should be heading to dock
+                    }
                 }
             }
         };
@@ -157,16 +112,16 @@ describe('Harvester Queue Override Bug', () => {
             state = update(state, { type: 'TICK' });
         }
 
-        const finalHarv1 = state.entities['harv1'];
-        const finalHarv2 = state.entities['harv2'];
+        const finalHarv1 = state.entities['harv1'] as HarvesterUnit;
+        const finalHarv2 = state.entities['harv2'] as HarvesterUnit;
         const harv2FinalDist = finalHarv2.pos.dist(dockPos);
 
         console.log('Queue override test:', {
             harv1Pos: `${finalHarv1.pos.x.toFixed(0)}, ${finalHarv1.pos.y.toFixed(0)}`,
             harv2Pos: `${finalHarv2.pos.x.toFixed(0)}, ${finalHarv2.pos.y.toFixed(0)}`,
             harv2Progress: `${(initialDist - harv2FinalDist).toFixed(0)}`,
-            harv1HasMoveTarget: finalHarv1.moveTarget !== null,
-            harv2Vel: `${finalHarv2.vel.x.toFixed(2)}, ${finalHarv2.vel.y.toFixed(2)}`
+            harv1HasMoveTarget: finalHarv1.movement.moveTarget !== null,
+            harv2Vel: `${finalHarv2.movement.vel.x.toFixed(2)}, ${finalHarv2.movement.vel.y.toFixed(2)}`
         });
 
         // harv2 should have made progress towards the dock, not be stuck
@@ -194,21 +149,30 @@ describe('Harvester Queue Override Bug', () => {
         // - Both have full cargo
         // - Both have baseTargetId set to refinery
         // - NO moveTarget on either - both want to dock
+        const harv1 = state.entities['harv1'] as HarvesterUnit;
+        const harv2 = state.entities['harv2'] as HarvesterUnit;
+
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 harv1: {
-                    ...state.entities['harv1'],
-                    cargo: 500, // Full cargo
-                    baseTargetId: 'refinery1'
-                    // No moveTarget - actively trying to dock
+                    ...harv1,
+                    harvester: {
+                        ...harv1.harvester,
+                        cargo: 500, // Full cargo
+                        baseTargetId: 'refinery1'
+                        // No moveTarget - actively trying to dock
+                    }
                 },
                 harv2: {
-                    ...state.entities['harv2'],
-                    cargo: 500, // Full cargo
-                    baseTargetId: 'refinery1'
-                    // No moveTarget
+                    ...harv2,
+                    harvester: {
+                        ...harv2.harvester,
+                        cargo: 500, // Full cargo
+                        baseTargetId: 'refinery1'
+                        // No moveTarget
+                    }
                 }
             }
         };
@@ -225,8 +189,8 @@ describe('Harvester Queue Override Bug', () => {
             state = update(state, { type: 'TICK' });
         }
 
-        const finalHarv1 = state.entities['harv1'];
-        const finalHarv2 = state.entities['harv2'];
+        const finalHarv1 = state.entities['harv1'] as HarvesterUnit;
+        const finalHarv2 = state.entities['harv2'] as HarvesterUnit;
 
         // harv1 is much closer, should reach dock first
         const harv1AtDock = finalHarv1.pos.dist(dockPos) < 25;

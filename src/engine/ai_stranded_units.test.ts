@@ -1,42 +1,55 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from './ai';
-import { GameState, Entity, Vector, PlayerState } from './types.js';
+import { GameState, Entity, Vector, PlayerState, UnitKey, BuildingKey, EntityId } from './types.js';
+import { createTestCombatUnit, createTestBuilding } from './test-utils';
 
 const { getAIState } = _testUtils;
 
-function createTestEntity(overrides: Partial<Entity> = {}): Entity {
-    return {
-        id: 'test_' + Math.random().toString(36).slice(2),
-        owner: 0,
-        type: 'UNIT',
-        key: 'tank',
-        pos: new Vector(100, 100),
-        prevPos: new Vector(100, 100),
-        hp: 400,
-        maxHp: 400,
-        w: 30,
-        h: 30,
-        radius: 15,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        ...overrides
-    };
+interface TestEntityOverrides {
+    id?: string;
+    owner?: number;
+    type?: 'UNIT' | 'BUILDING';
+    key?: string;
+    pos?: Vector;
+    prevPos?: Vector;
+    x?: number;
+    y?: number;
+    hp?: number;
+    maxHp?: number;
+    dead?: boolean;
+    targetId?: EntityId | null;
+    moveTarget?: Vector | null;
+}
+
+function createTestEntity(overrides: TestEntityOverrides = {}): Entity {
+    const id = overrides.id ?? 'test_' + Math.random().toString(36).slice(2);
+    const x = overrides.pos?.x ?? overrides.x ?? 100;
+    const y = overrides.pos?.y ?? overrides.y ?? 100;
+
+    if (overrides.type === 'BUILDING') {
+        return createTestBuilding({
+            id,
+            owner: overrides.owner ?? 0,
+            key: (overrides.key ?? 'conyard') as BuildingKey,
+            x, y,
+            hp: overrides.hp,
+            maxHp: overrides.maxHp,
+            dead: overrides.dead,
+            targetId: overrides.targetId
+        });
+    }
+
+    return createTestCombatUnit({
+        id,
+        owner: overrides.owner ?? 0,
+        key: (overrides.key ?? 'heavy') as Exclude<UnitKey, 'harvester'>,
+        x, y,
+        hp: overrides.hp ?? 400,
+        maxHp: overrides.maxHp ?? 400,
+        dead: overrides.dead,
+        targetId: overrides.targetId,
+        moveTarget: overrides.moveTarget
+    });
 }
 
 function createPlayer(id: number, overrides: Partial<PlayerState> = {}): PlayerState {
@@ -82,7 +95,7 @@ describe('AI Stranded Units', () => {
             const tank1 = createTestEntity({
                 id: 'tank1',
                 owner: aiPlayerId,
-                key: 'tank',
+                key: 'heavy',
                 pos: new Vector(2400, 2400),
                 prevPos: new Vector(2400, 2400),
                 moveTarget: null,
@@ -92,7 +105,7 @@ describe('AI Stranded Units', () => {
             const tank2 = createTestEntity({
                 id: 'tank2',
                 owner: aiPlayerId,
-                key: 'tank',
+                key: 'heavy',
                 pos: new Vector(2450, 2420),
                 prevPos: new Vector(2450, 2420),
                 moveTarget: null,
@@ -218,7 +231,7 @@ describe('AI Stranded Units', () => {
             const tank1 = createTestEntity({
                 id: 'tank1',
                 owner: aiPlayerId,
-                key: 'tank',
+                key: 'heavy',
                 pos: new Vector(2400, 2400),
                 moveTarget: null,
                 targetId: null
@@ -227,7 +240,7 @@ describe('AI Stranded Units', () => {
             const tank2 = createTestEntity({
                 id: 'tank2',
                 owner: aiPlayerId,
-                key: 'tank',
+                key: 'heavy',
                 pos: new Vector(2450, 2420),
                 moveTarget: null,
                 targetId: null
@@ -316,9 +329,9 @@ describe('AI Stranded Units', () => {
 
             // 3 units far from base
             const units = [
-                createTestEntity({ id: 'tank1', owner: aiPlayerId, key: 'tank', pos: new Vector(2400, 2400) }),
-                createTestEntity({ id: 'tank2', owner: aiPlayerId, key: 'tank', pos: new Vector(2450, 2420) }),
-                createTestEntity({ id: 'tank3', owner: aiPlayerId, key: 'tank', pos: new Vector(2380, 2380) })
+                createTestEntity({ id: 'tank1', owner: aiPlayerId, key: 'heavy', pos: new Vector(2400, 2400) }),
+                createTestEntity({ id: 'tank2', owner: aiPlayerId, key: 'heavy', pos: new Vector(2450, 2420) }),
+                createTestEntity({ id: 'tank3', owner: aiPlayerId, key: 'heavy', pos: new Vector(2380, 2380) })
             ];
 
             const conyard = createTestEntity({
@@ -415,7 +428,7 @@ describe('AI Stranded Units', () => {
             const tank1 = createTestEntity({
                 id: 'tank1',
                 owner: aiPlayerId,
-                key: 'tank',
+                key: 'heavy',
                 pos: basePos.add(new Vector(100, 100)),
             });
 

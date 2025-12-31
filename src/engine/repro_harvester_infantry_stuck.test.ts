@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { Vector, Entity, EntityId } from './types';
+import { Vector, Entity, EntityId, HarvesterUnit, CombatUnit } from './types';
 import { createEntity } from './utils';
 
 describe('Harvester and Infantry Stuck Reproduction', () => {
@@ -25,24 +25,32 @@ describe('Harvester and Infantry Stuck Reproduction', () => {
         // Current distance: sqrt(10^2 + 5^2) = sqrt(125) = 11.18
         // Overlap: 24.5 - 11.18 = 13.32
 
-        const harv: Entity = {
-            ...createEntity(harvPos.x, harvPos.y, 1, 'UNIT', 'harvester'),
+        const baseHarv = createEntity(harvPos.x, harvPos.y, 1, 'UNIT', 'harvester') as HarvesterUnit;
+        const harv: HarvesterUnit = {
+            ...baseHarv,
             id: harvId,
             radius: harvRadius,
-            moveTarget: harvTarget, // Emulate harvester moving toward resource
-            path: [harvTarget],
-            pathIdx: 0,
-            finalDest: harvTarget
+            movement: {
+                ...baseHarv.movement,
+                moveTarget: harvTarget,
+                path: [harvTarget],
+                pathIdx: 0,
+                finalDest: harvTarget
+            }
         };
 
-        const rifle: Entity = {
-            ...createEntity(riflePos.x, riflePos.y, 1, 'UNIT', 'rifle'),
+        const baseRifle = createEntity(riflePos.x, riflePos.y, 1, 'UNIT', 'rifle') as CombatUnit;
+        const rifle: CombatUnit = {
+            ...baseRifle,
             id: rifleId,
             radius: rifleRadius,
-            moveTarget: rifleTarget,
-            path: [rifleTarget],
-            pathIdx: 0,
-            finalDest: rifleTarget
+            movement: {
+                ...baseRifle.movement,
+                moveTarget: rifleTarget,
+                path: [rifleTarget],
+                pathIdx: 0,
+                finalDest: rifleTarget
+            }
         };
 
         state.entities[harvId] = harv;

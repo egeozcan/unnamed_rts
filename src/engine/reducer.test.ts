@@ -1,43 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from './reducer';
-import { GameState, Vector } from './types';
+import { GameState, BuildingKey, Entity } from './types';
+import { createTestBuilding, createTestCombatUnit, addEntityToState, addEntitiesToState } from './test-utils';
 
 // Helper to get fresh state to avoid shared mutation across tests
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
 
-// Helper to create a minimal valid entity for testing
-function createTestEntity(id: string, owner: number, type: 'BUILDING' | 'UNIT', key: string, x: number = 500, y: number = 500) {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 3000,
-        maxHp: 3000,
-        w: 90,
-        h: 90,
-        radius: 45,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null
-    };
+// Wrapper function for backwards compatibility with existing tests
+function createTestEntity(id: string, owner: number, type: 'BUILDING' | 'UNIT', key: string, x: number = 500, y: number = 500): Entity {
+    if (type === 'BUILDING') {
+        return createTestBuilding({ id, owner, key: key as BuildingKey, x, y });
+    } else {
+        return createTestCombatUnit({ id, owner, key: key as Exclude<import('./types').UnitKey, 'harvester'>, x, y });
+    }
 }
 
 describe('Reducer', () => {
@@ -45,15 +20,9 @@ describe('Reducer', () => {
         // Need a conyard to build buildings (prerequisite check)
         let state = getInitialState();
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any
-            }
-        };
+        state = addEntityToState(state, conyard);
 
-        const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as const;
         state = update(state, action);
         expect(state.players[0].queues.building.current).toBe('power');
         // Initial state credit check. Since we use getInitialState(), credits are consistently reset.
@@ -64,16 +33,10 @@ describe('Reducer', () => {
         let state = { ...getInitialState(), running: true };
         // Add a conyard for player 0 so production can work (eliminated players can't produce)
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any
-            }
-        };
-        state = update(state, { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as any);
+        state = addEntityToState(state, conyard);
+        state = update(state, { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as const);
 
-        const nextState = update(state, { type: 'TICK' } as any);
+        const nextState = update(state, { type: 'TICK' });
 
         expect(nextState.tick).toBe(1);
         expect(nextState.players[0].queues.building.progress).toBeGreaterThan(0);
@@ -84,18 +47,12 @@ describe('Reducer', () => {
         let state = { ...getInitialState(), running: true };
         // Add a conyard for player 0 so production can work (eliminated players can't produce)
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any
-            }
-        };
+        state = addEntityToState(state, conyard);
         const p0 = state.players[0] as any; // Cast to allow writing to readonly
         // Directly set progress to near completion
         p0.queues.building = { current: 'power', progress: 99.9, invested: 300 };
 
-        const nextState = update(state, { type: 'TICK' } as any);
+        const nextState = update(state, { type: 'TICK' });
 
         expect(nextState.players[0].queues.building.current).toBeNull();
         expect(nextState.players[0].readyToPlace).toBe('power');
@@ -105,9 +62,9 @@ describe('Reducer', () => {
         let state = { ...getInitialState(), running: true };
         const p0 = state.players[0] as any;
         p0.readyToPlace = 'power';
-        state.placingBuilding = 'power';
+        (state as any).placingBuilding = 'power';
 
-        const action = { type: 'PLACE_BUILDING', payload: { key: 'power', x: 100, y: 100, playerId: 0 } } as any;
+        const action = { type: 'PLACE_BUILDING', payload: { key: 'power', x: 100, y: 100, playerId: 0 } } as const;
         const nextState = update(state, action);
 
         expect(nextState.players[0].readyToPlace).toBeNull();
@@ -126,7 +83,7 @@ describe('Reducer', () => {
         p0.queues.building = { current: 'power', progress: 50, invested: 150 }; // Power costs 300, so 50% = 150
         const initialCredits = state.players[0].credits;
 
-        const action = { type: 'CANCEL_BUILD', payload: { category: 'building', playerId: 0 } } as any;
+        const action = { type: 'CANCEL_BUILD', payload: { category: 'building', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         expect(nextState.players[0].queues.building.current).toBeNull();
@@ -145,7 +102,7 @@ describe('Reducer', () => {
         p0.readyToPlace = 'power';
 
         // Tick should cancel all production for eliminated player
-        const nextState = update(state, { type: 'TICK' } as any);
+        const nextState = update(state, { type: 'TICK' });
 
         // All queues should be cleared
         expect(nextState.players[0].queues.building.current).toBeNull();
@@ -161,15 +118,9 @@ describe('Reducer', () => {
         let state = getInitialState();
         // Add conyard only - no barracks
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any
-            }
-        };
+        state = addEntityToState(state, conyard);
 
-        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be rejected - infantry queue should remain empty
@@ -181,16 +132,9 @@ describe('Reducer', () => {
         // Add conyard and barracks
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks]);
 
-        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be allowed
@@ -202,16 +146,9 @@ describe('Reducer', () => {
         // Add conyard and barracks, but no factory
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks]);
 
-        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be rejected
@@ -225,18 +162,9 @@ describe('Reducer', () => {
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
         const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
         const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any,
-                [refinery.id]: refinery as any,
-                [factory.id]: factory as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks, refinery, factory]);
 
-        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be allowed
@@ -247,7 +175,7 @@ describe('Reducer', () => {
         let state = getInitialState();
         // No buildings at all
 
-        const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be rejected
@@ -261,19 +189,10 @@ describe('Reducer', () => {
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
         const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
         const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any,
-                [refinery.id]: refinery as any,
-                [factory.id]: factory as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks, refinery, factory]);
 
         // Mammoth tank requires tech center
-        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be rejected - mammoth requires tech center
@@ -288,20 +207,10 @@ describe('Reducer', () => {
         const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
         const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
         const tech = createTestEntity('tech_test', 0, 'BUILDING', 'tech', 900, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any,
-                [refinery.id]: refinery as any,
-                [factory.id]: factory as any,
-                [tech.id]: tech as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks, refinery, factory, tech]);
 
         // Mammoth tank requires tech center
-        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as any;
+        const action = { type: 'START_BUILD', payload: { category: 'vehicle', key: 'mammoth', playerId: 0 } } as const;
         const nextState = update(state, action);
 
         // Should be allowed now
@@ -313,22 +222,15 @@ describe('Reducer', () => {
         // Add conyard and barracks
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks]);
 
         // Start infantry production
-        state = update(state, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as any);
+        state = update(state, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } } as const);
         expect(state.players[0].queues.infantry.current).toBe('rifle');
 
         // Simulate some ticks to invest credits
         for (let i = 0; i < 10; i++) {
-            state = update(state, { type: 'TICK' } as any);
+            state = update(state, { type: 'TICK' });
         }
         const investedCredits = state.players[0].queues.infantry.invested;
         const creditsBeforeDestruction = state.players[0].credits;
@@ -344,7 +246,7 @@ describe('Reducer', () => {
         };
 
         // Next tick should cancel production and refund
-        state = update(state, { type: 'TICK' } as any);
+        state = update(state, { type: 'TICK' });
 
         expect(state.players[0].queues.infantry.current).toBeNull();
         expect(state.players[0].queues.infantry.progress).toBe(0);
@@ -359,19 +261,10 @@ describe('Reducer', () => {
         const barracks = createTestEntity('bar_test', 0, 'BUILDING', 'barracks', 600, 500);
         const refinery = createTestEntity('ref_test', 0, 'BUILDING', 'refinery', 700, 500);
         const factory = createTestEntity('fac_test', 0, 'BUILDING', 'factory', 800, 500);
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                [conyard.id]: conyard as any,
-                [barracks.id]: barracks as any,
-                [refinery.id]: refinery as any,
-                [factory.id]: factory as any
-            }
-        };
+        state = addEntitiesToState(state, [conyard, barracks, refinery, factory]);
 
         // Start vehicle production
-        state = update(state, { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as any);
+        state = update(state, { type: 'START_BUILD', payload: { category: 'vehicle', key: 'light', playerId: 0 } } as const);
         expect(state.players[0].queues.vehicle.current).toBe('light');
 
         // Destroy the factory
@@ -384,7 +277,7 @@ describe('Reducer', () => {
         };
 
         // Next tick should cancel production
-        state = update(state, { type: 'TICK' } as any);
+        state = update(state, { type: 'TICK' });
 
         expect(state.players[0].queues.vehicle.current).toBeNull();
     });

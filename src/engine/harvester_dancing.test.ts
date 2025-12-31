@@ -1,90 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from './reducer';
-import { GameState, Vector, Entity, EntityId } from './types';
+import { GameState, Vector, Entity, EntityId, HarvesterUnit } from './types';
+import { createTestHarvester, createTestBuilding, addEntityToState } from './test-utils';
 
 describe('Harvester Dancing Bug', () => {
-    // Helper to spawn units
-    function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'harvester'): GameState {
-        const unit: Entity = {
-            id,
-            owner,
-            type: 'UNIT',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1000,
-            maxHp: 1000,
-            w: 35,
-            h: 35,
-            radius: 17,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: unit
-            } as Record<EntityId, Entity>
-        };
+    // Helper to spawn harvesters using test utils
+    function spawnHarvester(state: GameState, x: number, y: number, id: string, owner: number = 0): GameState {
+        const harvester = createTestHarvester({ id, owner, x, y });
+        return addEntityToState(state, harvester);
     }
 
-    // Helper to spawn buildings
+    // Helper to spawn buildings using test utils
     function spawnBuilding(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'refinery'): GameState {
-        const building: Entity = {
-            id,
-            owner,
-            type: 'BUILDING',
-            key,
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 1200,
-            maxHp: 1200,
-            w: 100,
-            h: 80,
-            radius: 50,
-            dead: false,
-            vel: new Vector(0, 0),
-            rotation: 0,
-            moveTarget: null,
-            path: null,
-            pathIdx: 0,
-            finalDest: null,
-            stuckTimer: 0,
-            unstuckDir: null,
-            unstuckTimer: 0,
-            targetId: null,
-            lastAttackerId: null,
-            cooldown: 0,
-            flash: 0,
-            turretAngle: 0,
-            cargo: 0,
-            resourceTargetId: null,
-            baseTargetId: null
-        };
-        return {
-            ...state,
-            entities: {
-                ...state.entities,
-                [id]: building
-            } as Record<EntityId, Entity>
-        };
+        const building = createTestBuilding({ id, owner, key: key as 'refinery', x, y });
+        return addEntityToState(state, building);
     }
 
     it('should clear moveTarget and go to base when harvester has full cargo, even if not stuck', () => {
@@ -101,33 +30,48 @@ describe('Harvester Dancing Bug', () => {
         const fleeDestination = new Vector(400, 400); // The position they fled to
 
         // Spawn harvesters with full cargo (500) and a moveTarget from fleeing
-        state = spawnUnit(state, 405, 395, 'harv1', 0, 'harvester');
-        state = spawnUnit(state, 410, 400, 'harv2', 0, 'harvester');
+        state = spawnHarvester(state, 405, 395, 'harv1', 0);
+        state = spawnHarvester(state, 410, 400, 'harv2', 0);
 
         // Set both harvesters to have full cargo and a flee moveTarget
         // stuckTimer is 0 because they're moving (being pushed around by collisions)
+        const harv1 = state.entities['harv1'] as HarvesterUnit;
+        const harv2 = state.entities['harv2'] as HarvesterUnit;
+
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 harv1: {
-                    ...state.entities['harv1'],
-                    cargo: 500, // FULL
-                    moveTarget: fleeDestination, // Still has flee destination
-                    finalDest: fleeDestination,
-                    resourceTargetId: null,
-                    baseTargetId: null,
-                    stuckTimer: 0, // Not stuck (moving)
-                },
+                    ...harv1,
+                    harvester: {
+                        ...harv1.harvester,
+                        cargo: 500, // FULL
+                        resourceTargetId: null,
+                        baseTargetId: null,
+                    },
+                    movement: {
+                        ...harv1.movement,
+                        moveTarget: fleeDestination, // Still has flee destination
+                        finalDest: fleeDestination,
+                        stuckTimer: 0, // Not stuck (moving)
+                    }
+                } as HarvesterUnit,
                 harv2: {
-                    ...state.entities['harv2'],
-                    cargo: 500, // FULL
-                    moveTarget: fleeDestination, // Still has flee destination
-                    finalDest: fleeDestination,
-                    resourceTargetId: null,
-                    baseTargetId: null,
-                    stuckTimer: 0,
-                }
+                    ...harv2,
+                    harvester: {
+                        ...harv2.harvester,
+                        cargo: 500, // FULL
+                        resourceTargetId: null,
+                        baseTargetId: null,
+                    },
+                    movement: {
+                        ...harv2.movement,
+                        moveTarget: fleeDestination, // Still has flee destination
+                        finalDest: fleeDestination,
+                        stuckTimer: 0,
+                    }
+                } as HarvesterUnit
             }
         };
 
@@ -136,15 +80,15 @@ describe('Harvester Dancing Bug', () => {
             state = update(state, { type: 'TICK' });
         }
 
-        const h1After = state.entities['harv1'];
-        const h2After = state.entities['harv2'];
+        const h1After = state.entities['harv1'] as HarvesterUnit;
+        const h2After = state.entities['harv2'] as HarvesterUnit;
 
         // The harvesters should have cleared their flee moveTarget
         // and should now have baseTargetId set (going to refinery)
-        expect(h1After.moveTarget).toBeNull();
-        expect(h2After.moveTarget).toBeNull();
-        expect(h1After.baseTargetId).toBe('ref1');
-        expect(h2After.baseTargetId).toBe('ref1');
+        expect(h1After.movement.moveTarget).toBeNull();
+        expect(h2After.movement.moveTarget).toBeNull();
+        expect(h1After.harvester.baseTargetId).toBe('ref1');
+        expect(h2After.harvester.baseTargetId).toBe('ref1');
     });
 
     it('should reproduce the actual game state dancing bug', () => {
@@ -166,20 +110,27 @@ describe('Harvester Dancing Bug', () => {
         ];
 
         for (const h of harvesterData) {
-            state = spawnUnit(state, h.x, h.y, h.id, 0, 'harvester');
+            state = spawnHarvester(state, h.x, h.y, h.id, 0);
+            const harvester = state.entities[h.id] as HarvesterUnit;
             state = {
                 ...state,
                 entities: {
                     ...state.entities,
                     [h.id]: {
-                        ...state.entities[h.id],
-                        cargo: h.cargo,
-                        moveTarget: fleeDestination,
-                        finalDest: fleeDestination,
-                        resourceTargetId: null,
-                        baseTargetId: null,
-                        stuckTimer: 0,
-                    }
+                        ...harvester,
+                        harvester: {
+                            ...harvester.harvester,
+                            cargo: h.cargo,
+                            resourceTargetId: null,
+                            baseTargetId: null,
+                        },
+                        movement: {
+                            ...harvester.movement,
+                            moveTarget: fleeDestination,
+                            finalDest: fleeDestination,
+                            stuckTimer: 0,
+                        }
+                    } as HarvesterUnit
                 }
             };
         }
@@ -191,13 +142,14 @@ describe('Harvester Dancing Bug', () => {
 
         // Check that full-cargo harvesters are now heading to base
         const fullCargoHarvesters = Object.values(state.entities).filter(
-            (e: Entity) => e.key === 'harvester' && e.owner === 0 && e.cargo >= 500
+            (e: Entity) => e.type === 'UNIT' && e.key === 'harvester' && e.owner === 0 && (e as HarvesterUnit).harvester.cargo >= 500
         );
 
         // At least some full harvesters should have cleared moveTarget and be heading to base
-        const headingToBase = fullCargoHarvesters.filter((h: Entity) =>
-            h.moveTarget === null && h.baseTargetId !== null
-        );
+        const headingToBase = fullCargoHarvesters.filter((h: Entity) => {
+            const harvester = h as HarvesterUnit;
+            return harvester.movement.moveTarget === null && harvester.harvester.baseTargetId !== null;
+        });
 
         console.log('Full cargo harvesters heading to base:', headingToBase.length, 'of', fullCargoHarvesters.length);
 
@@ -213,19 +165,26 @@ describe('Harvester Dancing Bug', () => {
         const fleeDestination = new Vector(400, 400);
 
         // Harvester with low cargo - should continue fleeing if targeted
-        state = spawnUnit(state, 380, 380, 'harv1', 0, 'harvester');
+        state = spawnHarvester(state, 380, 380, 'harv1', 0);
+        const harvester = state.entities['harv1'] as HarvesterUnit;
         state = {
             ...state,
             entities: {
                 ...state.entities,
                 harv1: {
-                    ...state.entities['harv1'],
-                    cargo: 100, // NOT full
-                    moveTarget: fleeDestination,
-                    resourceTargetId: null,
-                    baseTargetId: null,
-                    stuckTimer: 0,
-                }
+                    ...harvester,
+                    harvester: {
+                        ...harvester.harvester,
+                        cargo: 100, // NOT full
+                        resourceTargetId: null,
+                        baseTargetId: null,
+                    },
+                    movement: {
+                        ...harvester.movement,
+                        moveTarget: fleeDestination,
+                        stuckTimer: 0,
+                    }
+                } as HarvesterUnit
             }
         };
 
@@ -234,10 +193,10 @@ describe('Harvester Dancing Bug', () => {
             state = update(state, { type: 'TICK' });
         }
 
-        const hAfter = state.entities['harv1'];
+        const hAfter = state.entities['harv1'] as HarvesterUnit;
 
         // With low cargo, harvester should NOT be heading to base
         // (It should continue toward its moveTarget or find resources)
-        expect(hAfter.baseTargetId).toBeNull();
+        expect(hAfter.harvester.baseTargetId).toBeNull();
     });
 });

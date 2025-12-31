@@ -1,36 +1,12 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector } from './types'; // Adjust imports as needed
-import { computeAiActions } from './ai'; // You might need to export internal functions or just test public API
+import { GameState, Vector } from './types';
+import { computeAiActions } from './ai';
 import { INITIAL_STATE } from './reducer';
+import { createTestHarvester, createTestCombatUnit, createTestBuilding } from './test-utils';
 
-// Mock helpers
 function createMockState(): GameState {
     return JSON.parse(JSON.stringify(INITIAL_STATE));
-}
-
-function addEntity(state: GameState, entity: any) {
-    state.entities[entity.id] = entity;
-    return entity;
-}
-
-function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING', key: string, x: number, y: number): any {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        vel: new Vector(0, 0),
-        hp: 100,
-        maxHp: 100,
-        dealDamage: 10,
-        dead: false,
-        cooldown: 0,
-        rotation: 0,
-        radius: 10,
-        targetId: null
-    };
 }
 
 describe('AI Harvester Defense', () => {
@@ -43,26 +19,38 @@ describe('AI Harvester Defense', () => {
         const basePos = new Vector(2000, 2000);
 
         // Add AI buildings to establish base
-        // Add AI buildings to establish base
-        addEntity(state, makeEntity('ai_conyard', aiPlayerId, 'BUILDING', 'conyard', basePos.x, basePos.y));
-        addEntity(state, makeEntity('ai_fact', aiPlayerId, 'BUILDING', 'factory', basePos.x + 50, basePos.y));
+        state.entities['ai_conyard'] = createTestBuilding({ id: 'ai_conyard', owner: aiPlayerId, key: 'conyard', x: basePos.x, y: basePos.y });
+        state.entities['ai_fact'] = createTestBuilding({ id: 'ai_fact', owner: aiPlayerId, key: 'factory', x: basePos.x + 50, y: basePos.y });
 
-        // Add AI Harvester FAR away from base
-        const harvester = makeEntity('ai_harv', aiPlayerId, 'UNIT', 'harvester', basePos.x - 1000, basePos.y);
-        addEntity(state, harvester);
+        // Add AI Harvester FAR away from base, under attack
+        const enemyId = 'enemy_tank';
+        const harvester = createTestHarvester({
+            id: 'ai_harv',
+            owner: aiPlayerId,
+            x: basePos.x - 1000,
+            y: basePos.y,
+            hp: 80,
+            lastAttackerId: enemyId
+        });
+        state.entities['ai_harv'] = harvester;
 
         // Add AI Combat Unit (defender) near base - but should travel
-        const tank = makeEntity('ai_tank', aiPlayerId, 'UNIT', 'light', basePos.x - 50, basePos.y);
-        addEntity(state, tank);
+        state.entities['ai_tank'] = createTestCombatUnit({
+            id: 'ai_tank',
+            owner: aiPlayerId,
+            key: 'light',
+            x: basePos.x - 50,
+            y: basePos.y
+        });
 
         // Add Enemy Unit attacking harvester
-        const enemyId = 'enemy_tank';
-        const enemy = makeEntity(enemyId, 0, 'UNIT', 'light', harvester.pos.x - 50, harvester.pos.y);
-        addEntity(state, enemy);
-
-        // Simulate harvester taking damage from enemy
-        harvester.lastAttackerId = enemyId;
-        harvester.hp = 80;
+        state.entities[enemyId] = createTestCombatUnit({
+            id: enemyId,
+            owner: 0,
+            key: 'light',
+            x: harvester.pos.x - 50,
+            y: harvester.pos.y
+        });
 
         // Run AI
         const actions = computeAiActions(state, aiPlayerId);
@@ -71,7 +59,7 @@ describe('AI Harvester Defense', () => {
         const attackAction = actions.find(a =>
             a.type === 'COMMAND_ATTACK' &&
             a.payload.targetId === enemyId &&
-            a.payload.unitIds.includes(tank.id)
+            a.payload.unitIds.includes('ai_tank')
         );
 
         expect(attackAction).toBeDefined();

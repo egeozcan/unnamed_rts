@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, getAIState, resetAIState } from './ai';
-import { GameState, Entity, EntityId, Vector } from './types';
+import { GameState, Entity, EntityId, UnitKey, BuildingKey } from './types';
 import { INITIAL_STATE } from './reducer';
+import { createTestBuilding, createTestCombatUnit, createTestResource } from './test-utils';
 
 // Helper to create test state
 function createTestState(entities: Record<EntityId, Entity>): GameState {
@@ -36,7 +37,7 @@ function createTestState(entities: Record<EntityId, Entity>): GameState {
     return state;
 }
 
-// Helper to create minimal entity
+// Helper to create entity using test-utils
 function createEntity(
     id: string,
     owner: number,
@@ -44,40 +45,21 @@ function createEntity(
     key: string,
     x: number,
     y: number,
-    overrides: Partial<Entity> = {}
+    overrides?: { hp?: number; maxHp?: number; }
 ): Entity {
-    return {
-        id,
-        owner,
-        type,
-        key,
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 1000,
-        maxHp: 1000,
-        w: 50,
-        h: 50,
-        radius: 25,
-        dead: false,
-        vel: new Vector(0, 0),
-        rotation: 0,
-        moveTarget: null,
-        path: null,
-        pathIdx: 0,
-        finalDest: null,
-        stuckTimer: 0,
-        unstuckDir: null,
-        unstuckTimer: 0,
-        targetId: null,
-        lastAttackerId: null,
-        cooldown: 0,
-        flash: 0,
-        turretAngle: 0,
-        cargo: 0,
-        resourceTargetId: null,
-        baseTargetId: null,
-        ...overrides
-    } as Entity;
+    if (type === 'BUILDING') {
+        return createTestBuilding({
+            id, owner, key: key as BuildingKey, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp
+        });
+    } else if (type === 'RESOURCE') {
+        return createTestResource({ id, x, y, hp: overrides?.hp });
+    } else {
+        return createTestCombatUnit({
+            id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y,
+            hp: overrides?.hp, maxHp: overrides?.maxHp
+        });
+    }
 }
 
 describe('AI Prerequisites', () => {
