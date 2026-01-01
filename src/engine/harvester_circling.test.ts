@@ -196,4 +196,98 @@ describe('Harvester Circling Bug', () => {
         // Harvester should have cleared moveTarget and started looking for ore
         expect(finalHarv.movement.moveTarget).toBeNull();
     });
+
+    it('should stop spinning when harvesters bounce off each other without making progress (spinning_harvester.json bug)', () => {
+        // Reproduces the exact scenario from spinning_harvester.json:
+        // - Two harvesters at (~936, 3660) and (~898, 3673) - very close together
+        // - Both have moveTargets pointing in similar directions (to the west/south)
+        // - They collide and bounce, giving them non-zero avgVel
+        // - But they're not actually making progress toward their targets
+        // - The new fix tracks progress toward moveTarget and clears it after no-progress timeout
+
+        // Player 3's refinery is at (772, 3498)
+        const refinery = createTestBuilding({ id: 'ref1', owner: 3, key: 'refinery', x: 772, y: 3498 });
+
+        // Harvester 1 (harv_p3): pos (936.5, 3660.5), moveTarget (835.8, 3690.3)
+        // Distance to target: ~105 units
+        const harv1 = createTestHarvester({
+            id: 'harv1',
+            owner: 3,
+            x: 936.5,
+            y: 3660.5,
+            cargo: 0,
+            manualMode: true,
+            moveTarget: new Vector(835.8, 3690.3)
+        });
+
+        // Harvester 2 (e_1230_42675): pos (898.0, 3673.2), moveTarget (799.6, 3709.7)
+        // Distance to target: ~106 units
+        const harv2 = createTestHarvester({
+            id: 'harv2',
+            owner: 3,
+            x: 898.0,
+            y: 3673.2,
+            cargo: 150,
+            manualMode: true,
+            moveTarget: new Vector(799.6, 3709.7)
+        });
+
+        // Add some ore for them to harvest after clearing moveTarget
+        const ore = createTestResource({ id: 'ore1', x: 1000, y: 3700 });
+
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {
+                harv1,
+                harv2,
+                ore1: ore,
+                ref1: refinery,
+            } as Record<EntityId, Entity>
+        };
+
+        // Verify initial distances are significant (harvesters are not close to their targets)
+        expect(harv1.pos.dist(harv1.movement.moveTarget!)).toBeGreaterThan(90);
+        expect(harv2.pos.dist(harv2.movement.moveTarget!)).toBeGreaterThan(90);
+
+        // Harvesters are close to each other (will collide)
+        expect(harv1.pos.dist(harv2.pos)).toBeLessThan(50);
+
+        // Track progress over time
+        let clearedMoveTargetTick = -1;
+
+        // Run 150 ticks - should clear moveTargets within ~60-80 ticks if no progress
+        // (The no-progress timeout is 60 ticks)
+        for (let i = 0; i < 150; i++) {
+            state = update(state, { type: 'TICK' });
+
+            const h1 = state.entities['harv1'] as HarvesterUnit;
+            const h2 = state.entities['harv2'] as HarvesterUnit;
+
+            // Check when moveTargets are cleared
+            if (clearedMoveTargetTick === -1 && (!h1.movement.moveTarget || !h2.movement.moveTarget)) {
+                clearedMoveTargetTick = i;
+            }
+        }
+
+        const finalHarv1 = state.entities['harv1'] as HarvesterUnit;
+        const finalHarv2 = state.entities['harv2'] as HarvesterUnit;
+
+        console.log('Spinning harvester test:', {
+            clearedMoveTargetTick,
+            h1MoveTarget: finalHarv1.movement.moveTarget,
+            h2MoveTarget: finalHarv2.movement.moveTarget,
+            h1NoProgressTicks: finalHarv1.movement.moveTargetNoProgressTicks,
+            h2NoProgressTicks: finalHarv2.movement.moveTargetNoProgressTicks,
+            h1ResourceTarget: finalHarv1.harvester.resourceTargetId,
+            h2ResourceTarget: finalHarv2.harvester.resourceTargetId,
+        });
+
+        // Both harvesters should have cleared their moveTargets
+        expect(finalHarv1.movement.moveTarget).toBeNull();
+        expect(finalHarv2.movement.moveTarget).toBeNull();
+
+        // The timeout should have triggered within ~80 ticks (60 + some buffer)
+        expect(clearedMoveTargetTick).toBeLessThan(100);
+    });
 });

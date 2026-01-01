@@ -1721,6 +1721,20 @@ function handleHarvesterSafety(
 
     for (const harv of harvesters) {
         const harvUnit = harv as HarvesterUnit;
+
+        // Skip harvesters that are already fleeing (have a moveTarget)
+        // This prevents constantly re-issuing flee commands which causes the
+        // "spinning/dancing" bug where harvesters can't reach their flee destination
+        if (harvUnit.movement.moveTarget) {
+            continue;
+        }
+
+        // Skip harvesters on flee cooldown (recently had flee timeout)
+        // This prevents the cycle of: flee -> timeout -> flee -> timeout
+        if (harvUnit.harvester.fleeCooldownUntilTick && state.tick < harvUnit.harvester.fleeCooldownUntilTick) {
+            continue;
+        }
+
         // Check economic pressure per-harvester based on cargo
         const hasSignificantCargo = harvUnit.harvester.cargo > 200;
         const isCriticallyBroke = player && player.credits < 300;

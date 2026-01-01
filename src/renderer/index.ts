@@ -434,10 +434,20 @@ export class Renderer {
                 if (name) {
                     ctx.save();
                     ctx.font = '12px "Segoe UI", Arial, sans-serif';
-                    const metrics = ctx.measureText(name);
+
+                    // In observer mode (localPlayerId === null), show extra debug info
+                    const isObserver = localPlayerId === null;
+                    let tooltipText = name;
+                    let extraLine = '';
+                    if (isObserver) {
+                        extraLine = `${entity.id} (${Math.round(entity.pos.x)}, ${Math.round(entity.pos.y)})`;
+                    }
+
+                    const metrics = ctx.measureText(tooltipText);
+                    const extraMetrics = extraLine ? ctx.measureText(extraLine) : { width: 0 };
                     const padding = 6;
-                    const w = metrics.width + (padding * 2);
-                    const h = 24;
+                    const w = Math.max(metrics.width, extraMetrics.width) + (padding * 2);
+                    const h = isObserver ? 40 : 24;
                     const x = mousePos.x + 16;
                     const y = mousePos.y + 16;
 
@@ -459,7 +469,14 @@ export class Renderer {
                     // Text
                     ctx.fillStyle = isEnemy ? '#ffaaaa' : '#ffffff';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(name, finalX + padding, finalY + (h / 2));
+                    if (isObserver) {
+                        ctx.fillText(tooltipText, finalX + padding, finalY + 12);
+                        ctx.fillStyle = '#aaaaaa';
+                        ctx.font = '10px "Segoe UI", Arial, sans-serif';
+                        ctx.fillText(extraLine, finalX + padding, finalY + 28);
+                    } else {
+                        ctx.fillText(tooltipText, finalX + padding, finalY + (h / 2));
+                    }
                     ctx.restore();
 
                     // Only show one tooltip

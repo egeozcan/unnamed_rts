@@ -906,7 +906,7 @@ function updateEntities(state: GameState): { entities: Record<EntityId, Entity>,
         if (entity.dead) continue;
 
         if (entity.type === 'UNIT') {
-            const res = updateUnit(entity, state.entities, entityList, state.config);
+            const res = updateUnit(entity, state.entities, entityList, state.config, state.tick);
             nextEntities[id] = res.entity;
             if (res.projectile) newProjectiles.push(res.projectile);
             if (res.creditsEarned > 0) {
@@ -1153,7 +1153,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 }
 
 
-function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
+function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, entityList: Entity[], mapConfig: { width: number, height: number }, currentTick: number): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
     let nextEntity: UnitEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
@@ -1466,10 +1466,13 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                         const prevBestDist = harvester.harvester.bestDistToOre;
                         const bestDistToOre = prevBestDist ?? distToOre;
 
-                        // First tick = initialize, else check for 10px progress from LAST tracking point
-                        const madeProgress = (prevLastDist === undefined) || (distToOre < lastDistToOre - 10);
                         // Track minimum distance ever achieved
                         const newBestDist = Math.min(bestDistToOre, distToOre);
+
+                        // Check if we're making REAL progress toward being able to harvest
+                        // Use bestDistToOre improvement, not just any movement, to prevent
+                        // oscillating harvesters from resetting the stuck timer forever
+                        const madeProgress = (prevBestDist === undefined) || (newBestDist < bestDistToOre - 5);
 
                         // Check for congestion - is another harvester closer to this ore?
                         let positionInQueue = 0;
@@ -1547,10 +1550,10 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                 };
                             }
                         } else if (harvestAttemptTicks > 30 && distToOre > 43) {
-                            // Give up on this ore after being stuck
-                            // Blocked (by building): best distance is far (> 55px, can't get close)
-                            // Congested (by units): best distance is close (< 55px, ore is reachable)
-                            const isBlocked = newBestDist > 55;
+                            // Give up on this ore after being stuck for too long
+                            // Always mark as blocked to prevent immediately retargeting the same ore
+                            // This fixes the "spinning harvester" bug where harvesters get stuck
+                            // trying to reach ore near refineries and keep retargeting it
                             nextEntity = {
                                 ...harvester,
                                 movement: { ...harvester.movement, stuckTimer: 0, path: null, pathIdx: 0 },
@@ -1560,8 +1563,26 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                     harvestAttemptTicks: 0,
                                     lastDistToOre: null,
                                     bestDistToOre: null,
-                                    blockedOreId: isBlocked ? ore.id : harvester.harvester.blockedOreId,
-                                    blockedOreTimer: isBlocked ? 500 : harvester.harvester.blockedOreTimer
+                                    blockedOreId: ore.id,
+                                    blockedOreTimer: 300 // Block this ore for ~5 seconds
+                                }
+                            };
+                        } else if (newBestDist > 45 && harvestAttemptTicks > 60) {
+                            // Failsafe: if after 60 ticks we've never gotten close enough to harvest
+                            // (bestDistToOre > 45), the ore is likely unreachable (blocked by building)
+                            // This catches oscillating harvesters that keep "making progress" but
+                            // never actually get close enough due to pathing around obstacles
+                            nextEntity = {
+                                ...harvester,
+                                movement: { ...harvester.movement, stuckTimer: 0, path: null, pathIdx: 0 },
+                                harvester: {
+                                    ...harvester.harvester,
+                                    resourceTargetId: null,
+                                    harvestAttemptTicks: 0,
+                                    lastDistToOre: null,
+                                    bestDistToOre: null,
+                                    blockedOreId: ore.id,
+                                    blockedOreTimer: 300
                                 }
                             };
                         } else {
@@ -1580,14 +1601,15 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                     }
                                 } as HarvesterUnit;
                             } else {
-                                // Not making progress - increment counter, preserve lastDistToOre
+                                // Not making progress - increment counter
+                                // Keep bestDistToOre at the old value so we can detect 5+ unit improvement
                                 nextEntity = {
                                     ...nextEntity,
                                     harvester: {
                                         ...(nextEntity as HarvesterUnit).harvester,
                                         harvestAttemptTicks: harvestAttemptTicks + 1,
-                                        lastDistToOre: lastDistToOre,  // Preserve the last tracking point
-                                        bestDistToOre: newBestDist
+                                        lastDistToOre: lastDistToOre,
+                                        bestDistToOre: bestDistToOre  // Don't update - wait for 5+ unit improvement
                                     }
                                 } as HarvesterUnit;
                             }
@@ -1781,10 +1803,48 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
             const harvesterFleeTimeout = 40;
             const isStuckOnFlee = ((nextEntity as HarvesterUnit).movement.stuckTimer || 0) > harvesterFleeTimeout;
 
-            if (nextEntity.pos.dist(harvesterUnit.movement.moveTarget!) < clearDistance || isStuckOnFlee) {
+            // NEW: Track time spent trying to reach moveTarget - fixes "spinning/dancing" bug
+            // where harvesters bounce off each other and can't reach their flee destination
+            let moveTargetTicks = harvesterUnit.movement.moveTargetNoProgressTicks || 0;
+            moveTargetTicks++;
+
+            // Absolute timeout: give up on flee destination after 90 ticks (~1.5 seconds)
+            // This ensures harvesters don't get stuck trying to reach unreachable destinations forever
+            const absoluteFleeTimeout = 90;
+            const isFleeTimedOut = moveTargetTicks > absoluteFleeTimeout;
+
+            if (nextEntity.pos.dist(harvesterUnit.movement.moveTarget!) < clearDistance || isStuckOnFlee || isFleeTimedOut) {
+                // When clearing flee moveTarget due to timeout, also:
+                // 1. Set manualMode: false so harvester starts auto-harvesting
+                // 2. Set a flee cooldown to prevent AI from immediately issuing another flee command
+                const shouldDisableManualMode = isFleeTimedOut || isStuckOnFlee;
+                const fleeCooldownDuration = 300; // ~5 seconds cooldown before can flee again
                 nextEntity = {
                     ...nextEntity,
-                    movement: { ...(nextEntity as HarvesterUnit).movement, moveTarget: null, path: null, pathIdx: 0, stuckTimer: 0 }
+                    movement: {
+                        ...(nextEntity as HarvesterUnit).movement,
+                        moveTarget: null,
+                        path: null,
+                        pathIdx: 0,
+                        stuckTimer: 0,
+                        lastDistToMoveTarget: undefined,
+                        bestDistToMoveTarget: undefined,
+                        moveTargetNoProgressTicks: undefined
+                    },
+                    harvester: {
+                        ...(nextEntity as HarvesterUnit).harvester,
+                        manualMode: shouldDisableManualMode ? false : (nextEntity as HarvesterUnit).harvester.manualMode,
+                        fleeCooldownUntilTick: shouldDisableManualMode ? (currentTick + fleeCooldownDuration) : undefined
+                    }
+                };
+            } else {
+                // Update tick counter
+                nextEntity = {
+                    ...nextEntity,
+                    movement: {
+                        ...(nextEntity as HarvesterUnit).movement,
+                        moveTargetNoProgressTicks: moveTargetTicks
+                    }
                 };
             }
         }

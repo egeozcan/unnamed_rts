@@ -14,6 +14,10 @@ export interface MovementComponent {
     readonly unstuckDir: Vector | null;
     readonly unstuckTimer: number;
     readonly avgVel?: Vector;
+    // Progress tracking for flee destinations (harvesters)
+    readonly lastDistToMoveTarget?: number;
+    readonly bestDistToMoveTarget?: number;
+    readonly moveTargetNoProgressTicks?: number;
 }
 
 // ============ COMBAT COMPONENT ============
@@ -42,6 +46,8 @@ export interface HarvesterComponent {
     readonly bestDistToOre?: number | null;
     readonly blockedOreId?: EntityId | null;
     readonly blockedOreTimer?: number;
+    // Cooldown to prevent flee spam after a flee times out
+    readonly fleeCooldownUntilTick?: number;
 }
 
 // ============ ENGINEER COMPONENT ============
