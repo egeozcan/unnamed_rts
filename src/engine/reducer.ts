@@ -73,7 +73,8 @@ export const INITIAL_STATE: GameState = {
     winner: null,
     config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
     debugMode: false,
-    showMinimap: true
+    showMinimap: true,
+    notification: null
 };
 
 export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
@@ -125,6 +126,8 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, debugMode: !state.debugMode };
         case 'TOGGLE_MINIMAP':
             return { ...state, showMinimap: !state.showMinimap };
+        case 'DEPLOY_MCV':
+            return deployMCV(state, action.payload);
         default:
             return state;
     }
@@ -137,6 +140,12 @@ function tick(state: GameState): GameState {
 
     // Update path cache tick for proper cache invalidation
     setPathCacheTick(nextTick);
+
+    // Clear notification after 3 seconds (180 ticks)
+    let nextNotification = state.notification;
+    if (nextNotification && state.tick - nextNotification.tick > 180) {
+        nextNotification = null;
+    }
 
     let nextEntities = { ...state.entities };
     let nextPlayers = { ...state.players };
@@ -337,7 +346,8 @@ function tick(state: GameState): GameState {
         players: nextPlayers,
         projectiles: nextProjectiles,
         winner: nextWinner,
-        running: nextRunning
+        running: nextRunning,
+        notification: nextNotification
     };
 }
 
@@ -800,6 +810,102 @@ function stopRepair(state: GameState, payload: { buildingId: EntityId; playerId:
                 building: { ...building.building, isRepairing: false }
             }
         }
+    };
+}
+
+function deployMCV(state: GameState, payload: { unitId: EntityId }): GameState {
+    const { unitId } = payload;
+    const mcv = state.entities[unitId];
+
+    // Validate MCV
+    if (!mcv || mcv.type !== 'UNIT' || mcv.key !== 'mcv' || mcv.dead) {
+        return state;
+    }
+
+    // Define ConYard dimensions (90x90 per rules)
+    const size = 90;
+    const radius = size / 2;
+    const x = mcv.pos.x;
+    const y = mcv.pos.y;
+
+    // Check bounds
+    if (x < size / 2 || x > state.config.width - size / 2 ||
+        y < size / 2 || y > state.config.height - size / 2) {
+        return {
+            ...state,
+            notification: { text: 'Cannot deploy: Out of bounds', type: 'error', tick: state.tick }
+        };
+    }
+
+    // Check collisions with other entities
+    // We only care about static things that woud block a building:
+    // Buildings, Resources, Rocks, Wells.
+    // Units should technically move, but for simplicity we can say "blocked by units" too 
+    // or just let them be squished/pushed. Starcraft/C&C usually prevents if units are in the way?
+    // Actually C&C usually crushes infantry or waits.
+    // Let's just check against static obstacles for now to match "not enough space".
+
+    const blockers = Object.values(state.entities).filter(e =>
+        !e.dead && e.id !== unitId && (
+            e.type === 'BUILDING' ||
+            e.type === 'RESOURCE' ||
+            e.type === 'ROCK' ||
+            e.type === 'WELL'
+        )
+    );
+
+    for (const blocker of blockers) {
+        // Simple circle/box overlap check. 
+        // Buildings/Rocks/Wells are roughly circular or boxy.
+        // Let's use radius for a quick check, or box for more precision if we had box collision logic handy.
+        // Using radius sum is safer to prevent overlap.
+        const combinedRadius = radius + blocker.radius;
+        if (mcv.pos.dist(blocker.pos) < combinedRadius * 0.9) { // 0.9 grace factor
+            return {
+                ...state,
+                notification: { text: "Cannot deploy: Blocked", type: 'error', tick: state.tick }
+            };
+        }
+    }
+
+    // Valid placement: Create ConYard
+    // Remove MCV
+    const nextEntities = { ...state.entities };
+    delete nextEntities[unitId];
+
+    // Create ConYard
+    const conyardData = RULES.buildings['conyard'];
+    const newConYard: BuildingEntity = {
+        id: `conyard_${unitId}_${state.tick}`, // Unique ID
+        owner: mcv.owner,
+        type: 'BUILDING',
+        key: 'conyard',
+        pos: mcv.pos,
+        prevPos: mcv.pos,
+        hp: conyardData?.hp || 3000,
+        maxHp: conyardData?.hp || 3000,
+        w: size,
+        h: size,
+        radius: radius,
+        dead: false,
+        building: {
+            isRepairing: false,
+            placedTick: state.tick
+        }
+    };
+
+    nextEntities[newConYard.id] = newConYard;
+
+    // Clear selection if MCV was selected
+    const nextSelection = state.selection.filter(id => id !== unitId);
+    // Auto-select the new conyard? Usually yes.
+    nextSelection.push(newConYard.id);
+
+    return {
+        ...state,
+        entities: nextEntities,
+        selection: nextSelection,
+        notification: { text: "Base Established", type: 'info', tick: state.tick }
     };
 }
 

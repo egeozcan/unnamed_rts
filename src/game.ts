@@ -3,7 +3,7 @@ import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SI
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai.js';
@@ -625,6 +625,11 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
             !e.dead && humanPlayerId !== null && e.owner === humanPlayerId && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
+            // Check if clicking on already selected MCV -> Deploy
+            if (clicked.type === 'UNIT' && clicked.key === 'mcv' && currentState.selection.includes(clicked.id)) {
+                attemptMCVDeploy();
+                return;
+            }
             newSelection.push(clicked.id);
         }
     }
@@ -689,7 +694,21 @@ function handleRightClick(wx: number, wy: number) {
 }
 
 function attemptMCVDeploy() {
-    // TODO: Implement MCV Deploy action in reducer
+    if (humanPlayerId === null) return;
+
+    // Find selected MCV owned by human player
+    const selectedMCVId = currentState.selection.find(id => {
+        const ent = currentState.entities[id];
+        return ent && ent.owner === humanPlayerId && ent.type === 'UNIT' && ent.key === 'mcv';
+    });
+
+    if (selectedMCVId) {
+        currentState = update(currentState, {
+            type: 'DEPLOY_MCV',
+            payload: { unitId: selectedMCVId }
+        });
+        updateButtonsUI();
+    }
 }
 
 function updateButtonsUI() {
@@ -706,6 +725,15 @@ function updateButtonsUI() {
     );
     updateSellModeUI(currentState);
     updateRepairModeUI(currentState);
+
+    // Update status message from notification
+    if (currentState.notification) {
+        setObserverMode(false); // Just to access styling if needed, but setStatusMessage is global
+        setStatusMessage(currentState.notification.text, currentState.notification.type);
+    } else {
+        // Clear message if no notification (or show default hint)
+        setStatusMessage("");
+    }
 }
 
 function gameLoop(timestamp: number = 0) {

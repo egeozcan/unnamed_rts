@@ -265,9 +265,12 @@ export function updatePower(out: number, inPower: number) {
     }
 }
 
-export function setStatusMessage(msg: string) {
+export function setStatusMessage(msg: string, type: 'info' | 'error' = 'info') {
     const el = document.getElementById('status-msg');
-    if (el) el.innerText = msg;
+    if (el) {
+        el.innerText = msg;
+        el.style.color = type === 'error' ? '#f44' : '#fff';
+    }
 }
 
 export function showMenu() {

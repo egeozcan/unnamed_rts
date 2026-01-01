@@ -255,6 +255,7 @@ export interface GameState {
 
     readonly debugMode: boolean;
     readonly showMinimap: boolean;
+    readonly notification: { text: string; type: 'info' | 'error'; tick: number } | null;
 }
 
 // Discriminated union for all game actions
@@ -272,7 +273,8 @@ export type Action =
     | { type: 'START_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
     | { type: 'STOP_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
     | { type: 'TOGGLE_DEBUG' }
-    | { type: 'TOGGLE_MINIMAP' };
+    | { type: 'TOGGLE_MINIMAP' }
+    | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } };
 
 // Helper type to extract action type strings
 export type ActionType = Action['type'];
