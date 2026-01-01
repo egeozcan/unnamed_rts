@@ -87,10 +87,10 @@ export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' 
         maxPower: 0,
         usedPower: 0,
         queues: {
-            building: { current: null, progress: 0, invested: 0 },
-            infantry: { current: null, progress: 0, invested: 0 },
-            vehicle: { current: null, progress: 0, invested: 0 },
-            air: { current: null, progress: 0, invested: 0 }
+            building: { current: null, progress: 0, invested: 0, queued: [] },
+            infantry: { current: null, progress: 0, invested: 0, queued: [] },
+            vehicle: { current: null, progress: 0, invested: 0, queued: [] },
+            air: { current: null, progress: 0, invested: 0, queued: [] }
         },
         readyToPlace: null
     };
@@ -128,6 +128,10 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, showMinimap: !state.showMinimap };
         case 'DEPLOY_MCV':
             return deployMCV(state, action.payload);
+        case 'QUEUE_UNIT':
+            return queueUnit(state, action.payload);
+        case 'DEQUEUE_UNIT':
+            return dequeueUnit(state, action.payload);
         default:
             return state;
     }
@@ -479,11 +483,22 @@ function updateProduction(player: PlayerState, entities: Record<EntityId, Entity
 
                     createdEntities.push(movedUnit);
 
+                    // Start next unit in queue if available
+                    const currentQueue = nextPlayer.queues[cat];
+                    const queuedItems = currentQueue.queued || [];
+                    const nextInQueue = queuedItems[0] || null;
+                    const remainingQueue = queuedItems.slice(1);
+
                     nextPlayer = {
                         ...nextPlayer,
                         queues: {
                             ...nextPlayer.queues,
-                            [cat]: { current: null, progress: 0, invested: 0 }
+                            [cat]: {
+                                current: nextInQueue,
+                                progress: 0,
+                                invested: 0,
+                                queued: remainingQueue
+                            }
                         }
                     };
                 }
@@ -540,6 +555,11 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
     const player = state.players[playerId];
     if (!player) return state;
 
+    // For units (infantry/vehicle), use the queue system (AI compatibility)
+    if (category === 'infantry' || category === 'vehicle') {
+        return queueUnit(state, { category, key, playerId, count: 1 });
+    }
+
     const q = player.queues[category as keyof typeof player.queues];
     if (q.current) return state;
     if (category === 'building' && player.readyToPlace) return state;
@@ -564,7 +584,160 @@ function startBuild(state: GameState, payload: { category: string; key: string; 
                 ...player,
                 queues: {
                     ...player.queues,
-                    [category]: { current: key, progress: 0, invested: 0 }
+                    [category]: { current: key, progress: 0, invested: 0, queued: [] }
+                }
+            }
+        }
+    };
+}
+
+function queueUnit(state: GameState, payload: { category: string; key: string; playerId: number; count: number }): GameState {
+    const { category, key, playerId, count } = payload;
+    const player = state.players[playerId];
+    if (!player) return state;
+
+    // Only infantry and vehicle can be queued
+    if (category !== 'infantry' && category !== 'vehicle') return state;
+
+    // Validate the key exists
+    if (!RULES.units[key]) return state;
+
+    // Check prerequisites and production building requirements
+    if (!canBuild(key, category, playerId, state.entities)) {
+        return state;
+    }
+
+    const q = player.queues[category as keyof typeof player.queues];
+    const existingQueued = q.queued || [];
+
+    // Calculate how many we can add (max 99 total including current)
+    const currentTotal = (q.current ? 1 : 0) + existingQueued.length;
+    const addCount = Math.min(count, 99 - currentTotal);
+    if (addCount <= 0) return state;
+
+    // Create array of items to add
+    const itemsToAdd = Array(addCount).fill(key);
+
+    // If nothing is currently building, start the first one
+    if (!q.current) {
+        return {
+            ...state,
+            players: {
+                ...state.players,
+                [playerId]: {
+                    ...player,
+                    queues: {
+                        ...player.queues,
+                        [category]: {
+                            current: itemsToAdd[0],
+                            progress: 0,
+                            invested: 0,
+                            queued: itemsToAdd.slice(1)
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    // Otherwise just add to queue
+    return {
+        ...state,
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                queues: {
+                    ...player.queues,
+                    [category]: {
+                        ...q,
+                        queued: [...existingQueued, ...itemsToAdd]
+                    }
+                }
+            }
+        }
+    };
+}
+
+function dequeueUnit(state: GameState, payload: { category: string; key: string; playerId: number; count: number }): GameState {
+    const { category, key, playerId, count } = payload;
+    const player = state.players[playerId];
+    if (!player) return state;
+
+    // Only infantry and vehicle can be dequeued
+    if (category !== 'infantry' && category !== 'vehicle') return state;
+
+    const q = player.queues[category as keyof typeof player.queues];
+    const existingQueued = q.queued || [];
+
+    // Nothing to dequeue
+    if (!q.current && existingQueued.length === 0) return state;
+
+    let toRemove = count;
+    const newQueued = [...existingQueued];
+
+    // Remove from end of queue first (LIFO for same item type)
+    for (let i = newQueued.length - 1; i >= 0 && toRemove > 0; i--) {
+        if (newQueued[i] === key) {
+            newQueued.splice(i, 1);
+            toRemove--;
+        }
+    }
+
+    // If we still need to remove more and current item matches
+    if (toRemove > 0 && q.current === key) {
+        // Cancel current build - refund invested
+        if (newQueued.length === 0) {
+            // No more items in queue, clear everything
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        credits: player.credits + (q.invested || 0),
+                        queues: {
+                            ...player.queues,
+                            [category]: { current: null, progress: 0, invested: 0, queued: [] }
+                        }
+                    }
+                }
+            };
+        } else {
+            // Start next item in queue, refund current invested
+            const nextItem = newQueued.shift()!;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        credits: player.credits + (q.invested || 0),
+                        queues: {
+                            ...player.queues,
+                            [category]: {
+                                current: nextItem,
+                                progress: 0,
+                                invested: 0,
+                                queued: newQueued
+                            }
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    // Just update the queue (removed items from queue only)
+    return {
+        ...state,
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                queues: {
+                    ...player.queues,
+                    [category]: { ...q, queued: newQueued }
                 }
             }
         }
@@ -595,7 +768,7 @@ function cancelBuild(state: GameState, payload: { category: string; playerId: nu
             // Refund the actual invested credits
             refund = newQueue.invested || 0;
         }
-        newQueue = { current: null, progress: 0, invested: 0 };
+        newQueue = { current: null, progress: 0, invested: 0, queued: [] };
     }
 
     return {

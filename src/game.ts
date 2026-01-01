@@ -473,7 +473,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     });
 
     // Initialize UI  
-    initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild);
+    initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);
     initMinimap();
 
     // Set observer mode if all players are AI
@@ -522,7 +522,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     gameLoop();
 }
 
-function handleBuildClick(category: string, key: string) {
+function handleBuildClick(category: string, key: string, count: number = 1) {
     if (currentState.mode === 'demo') return;
     if (humanPlayerId === null) return;
 
@@ -539,7 +539,8 @@ function handleBuildClick(category: string, key: string) {
             currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: humanPlayerId } });
         }
     } else {
-        currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: humanPlayerId } });
+        // Units use the queue system
+        currentState = update(currentState, { type: 'QUEUE_UNIT', payload: { category, key, playerId: humanPlayerId, count } });
     }
 
     updateButtonsUI();
@@ -563,6 +564,16 @@ function handleCancelBuild(category: string) {
     currentState = update(currentState, {
         type: 'CANCEL_BUILD',
         payload: { category, playerId: humanPlayerId }
+    });
+    updateButtonsUI();
+}
+
+function handleDequeueUnit(category: string, key: string, count: number) {
+    if (currentState.mode === 'demo') return;
+    if (humanPlayerId === null) return;
+    currentState = update(currentState, {
+        type: 'DEQUEUE_UNIT',
+        payload: { category, key, playerId: humanPlayerId, count }
     });
     updateButtonsUI();
 }

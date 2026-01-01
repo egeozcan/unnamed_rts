@@ -177,6 +177,7 @@ export interface ProductionQueue {
     readonly current: string | null;
     readonly progress: number;
     readonly invested: number;  // Credits already spent on this item
+    readonly queued?: readonly string[];  // Queued items waiting to be built (max 99 total)
 }
 
 export interface Camera {
@@ -255,7 +256,7 @@ export interface GameState {
 
     readonly debugMode: boolean;
     readonly showMinimap: boolean;
-    readonly notification: { text: string; type: 'info' | 'error'; tick: number } | null;
+    readonly notification?: { text: string; type: 'info' | 'error'; tick: number } | null;
 }
 
 // Discriminated union for all game actions
@@ -274,7 +275,9 @@ export type Action =
     | { type: 'STOP_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
     | { type: 'TOGGLE_DEBUG' }
     | { type: 'TOGGLE_MINIMAP' }
-    | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } };
+    | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } }
+    | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
+    | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } };
 
 // Helper type to extract action type strings
 export type ActionType = Action['type'];

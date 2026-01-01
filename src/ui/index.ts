@@ -4,16 +4,25 @@ import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../en
 import { canBuild } from '../engine/reducer.js';
 
 let gameState: GameState | null = null;
-let onBuildClick: ((category: string, key: string) => void) | null = null;
+let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
 let onCancelBuild: ((category: string) => void) | null = null;
+let onDequeueUnit: ((category: string, key: string, count: number) => void) | null = null;
 let onToggleSellMode: (() => void) | null = null;
 let onToggleRepairMode: (() => void) | null = null;
 
 
-export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void, toggleRepair?: () => void, cancelBuild?: (category: string) => void) {
+export function initUI(
+    state: GameState,
+    buildBy: (category: string, key: string, count: number) => void,
+    toggleSell: () => void,
+    toggleRepair?: () => void,
+    cancelBuild?: (category: string) => void,
+    dequeueUnit?: (category: string, key: string, count: number) => void
+) {
     gameState = state;
     onBuildClick = buildBy;
     onCancelBuild = cancelBuild || null;
+    onDequeueUnit = dequeueUnit || null;
     onToggleSellMode = toggleSell;
     onToggleRepairMode = toggleRepair || null;
     setupTabs();
@@ -97,21 +106,34 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
         <div class="btn-name">${name}</div>
         <div class="btn-cost">$${cost}</div>
         <div class="btn-status"></div>
+        <div class="queue-count"></div>
     `;
-    btn.onclick = () => {
+    btn.onclick = (e) => {
         if (gameState?.mode === 'demo') return;
         if (btn.classList.contains('disabled')) return;
+        const count = e.shiftKey ? 10 : 1;
         if (onBuildClick) {
-            onBuildClick(category, key);
+            onBuildClick(category, key, count);
         }
     };
     btn.oncontextmenu = (e) => {
         e.preventDefault();
         if (gameState?.mode === 'demo') return;
-        // Only cancel if this item is currently building or ready
-        if (btn.classList.contains('building') || btn.classList.contains('ready') || btn.classList.contains('placing')) {
-            if (onCancelBuild) {
-                onCancelBuild(category);
+        const count = e.shiftKey ? 10 : 1;
+
+        // For units: use dequeue behavior
+        if (category === 'infantry' || category === 'vehicle') {
+            if (btn.classList.contains('building') || btn.classList.contains('queued')) {
+                if (onDequeueUnit) {
+                    onDequeueUnit(category, key, count);
+                }
+            }
+        } else {
+            // Buildings: existing cancel behavior
+            if (btn.classList.contains('building') || btn.classList.contains('ready') || btn.classList.contains('placing')) {
+                if (onCancelBuild) {
+                    onCancelBuild(category);
+                }
             }
         }
     };
@@ -124,7 +146,7 @@ export function hasBuilding(key: string, owner: number, entities: Entity[]): boo
 
 export function updateButtons(
     entities: Record<EntityId, Entity>,
-    queues: Record<string, { current: string | null; progress: number }>,
+    queues: Record<string, { current: string | null; progress: number; queued?: readonly string[] }>,
     readyToPlace: string | null,
     placingBuilding: string | null
 ) {
@@ -172,23 +194,58 @@ export function updateButtons(
 
             // Reset all buttons in this category
             Array.from(container.children).forEach(btn => {
-                btn.classList.remove('building', 'ready', 'placing');
+                btn.classList.remove('building', 'ready', 'placing', 'queued');
                 const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
                 const status = btn.querySelector('.btn-status') as HTMLElement;
+                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
                 if (overlay) overlay.style.width = '0%';
                 if (status) status.innerText = '';
+                if (queueCountEl) {
+                    queueCountEl.innerText = '';
+                    queueCountEl.style.display = 'none';
+                }
             });
         }
 
-        // Mark currently building
+        // Count queued items by key
+        const queuedCounts: Record<string, number> = {};
+        if (q?.queued) {
+            for (const key of q.queued) {
+                queuedCounts[key] = (queuedCounts[key] || 0) + 1;
+            }
+        }
+
+        // Mark currently building with queue count
         if (q?.current) {
             const btn = document.getElementById('btn-' + q.current);
             if (btn) {
                 btn.classList.add('building');
                 const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
                 const status = btn.querySelector('.btn-status') as HTMLElement;
+                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
                 if (overlay) overlay.style.width = q.progress + '%';
                 if (status) status.innerText = 'BUILDING';
+
+                // Show queue count (including current item)
+                const totalForThisItem = 1 + (queuedCounts[q.current] || 0);
+                if (queueCountEl && totalForThisItem > 1) {
+                    queueCountEl.innerText = `x${totalForThisItem}`;
+                    queueCountEl.style.display = 'block';
+                }
+            }
+        }
+
+        // Show queue counts for items that are queued but not currently building
+        for (const [key, count] of Object.entries(queuedCounts)) {
+            if (key === q?.current) continue; // Already handled above
+            const btn = document.getElementById('btn-' + key);
+            if (btn) {
+                btn.classList.add('queued');
+                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
+                if (queueCountEl) {
+                    queueCountEl.innerText = `x${count}`;
+                    queueCountEl.style.display = 'block';
+                }
             }
         }
 
