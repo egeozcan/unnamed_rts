@@ -579,11 +579,16 @@ function cancelBuild(state: GameState, payload: { category: string; playerId: nu
     let refund = 0;
     let newQueue = { ...player.queues[category as keyof typeof player.queues] };
     let newReadyToPlace = player.readyToPlace;
+    let newPlacingBuilding = state.placingBuilding;
 
     if (category === 'building' && player.readyToPlace) {
         const data = RULES.buildings[player.readyToPlace];
         if (data) refund = data.cost;
         newReadyToPlace = null;
+        // Also clear placement mode if we're canceling the building being placed
+        if (state.placingBuilding === player.readyToPlace) {
+            newPlacingBuilding = null;
+        }
     } else if (newQueue.current) {
         const data = getRuleData(newQueue.current);
         if (data) {
@@ -606,7 +611,8 @@ function cancelBuild(state: GameState, payload: { category: string; playerId: nu
                 },
                 readyToPlace: newReadyToPlace
             }
-        }
+        },
+        placingBuilding: newPlacingBuilding
     };
 }
 
@@ -653,6 +659,11 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
         };
     }
 
+    // Only clear placingBuilding for human players.
+    // AI players never use placement mode (they go directly to PLACE_BUILDING),
+    // so their placements should not affect the human's placement UI.
+    const shouldClearPlacing = !player.isAi;
+
     return {
         ...state,
         entities: { ...state.entities, [building.id]: building, ...extraEntities },
@@ -663,7 +674,7 @@ function placeBuilding(state: GameState, payload: { key: string; x: number; y: n
                 readyToPlace: null
             }
         },
-        placingBuilding: null
+        placingBuilding: shouldClearPlacing ? null : state.placingBuilding
     };
 }
 

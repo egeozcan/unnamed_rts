@@ -473,7 +473,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     });
 
     // Initialize UI  
-    initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode);
+    initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild);
     initMinimap();
 
     // Set observer mode if all players are AI
@@ -528,7 +528,13 @@ function handleBuildClick(category: string, key: string) {
 
     if (category === 'building') {
         if (currentState.players[humanPlayerId].readyToPlace === key) {
-            currentState = { ...currentState, placingBuilding: key };
+            // Exit sell/repair mode when entering placement mode
+            currentState = {
+                ...currentState,
+                placingBuilding: key,
+                sellMode: false,
+                repairMode: false
+            };
         } else {
             currentState = update(currentState, { type: 'START_BUILD', payload: { category, key, playerId: humanPlayerId } });
         }
@@ -548,6 +554,16 @@ function handleToggleSellMode() {
 function handleToggleRepairMode() {
     if (currentState.mode === 'demo') return;
     currentState = update(currentState, { type: 'TOGGLE_REPAIR_MODE' });
+    updateButtonsUI();
+}
+
+function handleCancelBuild(category: string) {
+    if (currentState.mode === 'demo') return;
+    if (humanPlayerId === null) return;
+    currentState = update(currentState, {
+        type: 'CANCEL_BUILD',
+        payload: { category, playerId: humanPlayerId }
+    });
     updateButtonsUI();
 }
 

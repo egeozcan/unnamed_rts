@@ -5,13 +5,15 @@ import { canBuild } from '../engine/reducer.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string) => void) | null = null;
+let onCancelBuild: ((category: string) => void) | null = null;
 let onToggleSellMode: (() => void) | null = null;
 let onToggleRepairMode: (() => void) | null = null;
 
 
-export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void, toggleRepair?: () => void) {
+export function initUI(state: GameState, buildBy: (category: string, key: string) => void, toggleSell: () => void, toggleRepair?: () => void, cancelBuild?: (category: string) => void) {
     gameState = state;
     onBuildClick = buildBy;
+    onCancelBuild = cancelBuild || null;
     onToggleSellMode = toggleSell;
     onToggleRepairMode = toggleRepair || null;
     setupTabs();
@@ -101,6 +103,16 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
         if (btn.classList.contains('disabled')) return;
         if (onBuildClick) {
             onBuildClick(category, key);
+        }
+    };
+    btn.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (gameState?.mode === 'demo') return;
+        // Only cancel if this item is currently building or ready
+        if (btn.classList.contains('building') || btn.classList.contains('ready') || btn.classList.contains('placing')) {
+            if (onCancelBuild) {
+                onCancelBuild(category);
+            }
         }
     };
     parent.appendChild(btn);
