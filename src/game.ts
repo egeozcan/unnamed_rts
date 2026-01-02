@@ -755,7 +755,6 @@ function updateButtonsUI() {
 
     // Update status message from notification
     if (currentState.notification) {
-        setObserverMode(false); // Just to access styling if needed, but setStatusMessage is global
         setStatusMessage(currentState.notification.text, currentState.notification.type);
     } else {
         // Clear message if no notification (or show default hint)

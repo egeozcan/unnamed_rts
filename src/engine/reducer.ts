@@ -1595,7 +1595,10 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                         };
                     } else {
                         // Move toward dock
-                        nextEntity = moveToward(harvester, dockPos, entityList) as HarvesterUnit;
+                        // Skip whisker avoidance when close to dock to avoid false positives
+                        // from grid resolution issues (dock and nearby buildings in same grid cell)
+                        const skipWhiskers = ourDist < 80;
+                        nextEntity = moveToward(harvester, dockPos, entityList, skipWhiskers) as HarvesterUnit;
                     }
                 } else {
                     nextEntity = {
@@ -2236,7 +2239,7 @@ function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>):
     return { proj: nextProj, damage: damageEvent };
 }
 
-function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[]): UnitEntity {
+function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[], skipWhiskerAvoidance = false): UnitEntity {
     const distToTarget = entity.pos.dist(target);
     if (distToTarget < 2) {
         return {
@@ -2364,29 +2367,33 @@ function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[]):
     }
 
     // Static Collision Avoidance (Whiskers) - weaker when we have a valid A* path
+    // Skip entirely when explicitly requested (e.g., harvesters close to dock)
     const hasValidPath = path && path.length > 0;
-    const angles = hasValidPath ? [0, 0.3, -0.3] : [0, 0.4, -0.4, 0.8, -0.8];
     let avoidance = new Vector(0, 0);
 
-    for (const a of angles) {
-        const cos = Math.cos(a);
-        const sin = Math.sin(a);
-        const wx = dir.x * cos - dir.y * sin;
-        const wy = dir.x * sin + dir.y * cos;
-        const whisker = new Vector(wx, wy).norm();
+    if (!skipWhiskerAvoidance) {
+        const angles = hasValidPath ? [0, 0.3, -0.3] : [0, 0.4, -0.4, 0.8, -0.8];
 
-        const checkDist = entity.radius + (hasValidPath ? 10 : 15);
-        const checkPos = entity.pos.add(whisker.scale(checkDist));
+        for (const a of angles) {
+            const cos = Math.cos(a);
+            const sin = Math.sin(a);
+            const wx = dir.x * cos - dir.y * sin;
+            const wy = dir.x * sin + dir.y * cos;
+            const whisker = new Vector(wx, wy).norm();
 
-        const gx = Math.floor(checkPos.x / TILE_SIZE);
-        const gy = Math.floor(checkPos.y / TILE_SIZE);
+            const checkDist = entity.radius + (hasValidPath ? 10 : 15);
+            const checkPos = entity.pos.add(whisker.scale(checkDist));
 
-        if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
-            if (collisionGrid[gy * getGridW() + gx] === 1) {
-                // Reduced avoidance when we have a path (path already handles navigation)
-                const baseWeight = hasValidPath ? 1.0 : 2.5;
-                const weight = a === 0 ? baseWeight : baseWeight * 0.6;
-                avoidance = avoidance.sub(whisker.scale(weight));
+            const gx = Math.floor(checkPos.x / TILE_SIZE);
+            const gy = Math.floor(checkPos.y / TILE_SIZE);
+
+            if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
+                if (collisionGrid[gy * getGridW() + gx] === 1) {
+                    // Reduced avoidance when we have a path (path already handles navigation)
+                    const baseWeight = hasValidPath ? 1.0 : 2.5;
+                    const weight = a === 0 ? baseWeight : baseWeight * 0.6;
+                    avoidance = avoidance.sub(whisker.scale(weight));
+                }
             }
         }
     }
@@ -2399,6 +2406,17 @@ function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[]):
 
         // Increase separation weight to be more effective
         finalDir = dir.add(separation.scale(0.8)).add(avoidance).add(right.scale(rightBias)).norm();
+
+        // CRITICAL: Prevent avoidance from completely reversing movement direction
+        // If finalDir points backward (>90° from intended), clamp to perpendicular
+        // This prevents units from spinning when blocked by buildings ahead
+        const dotProduct = finalDir.dot(dir);
+        if (dotProduct < 0) {
+            // finalDir is pointing backward - project onto perpendicular plane
+            // Use the right vector as the fallback direction
+            const perpendicular = right.scale(finalDir.dot(right) >= 0 ? 1 : -1);
+            finalDir = perpendicular;
+        }
     }
 
     // Smoothing
