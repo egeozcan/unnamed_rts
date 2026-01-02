@@ -137,7 +137,7 @@ export function update(state: GameState, action: Action): GameState {
     }
 }
 
-function tick(state: GameState): GameState {
+export function tick(state: GameState): GameState {
     if (!state.running) return state;
 
     const nextTick = state.tick + 1;
