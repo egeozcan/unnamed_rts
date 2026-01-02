@@ -16,7 +16,7 @@ npm run test:watch   # Run tests in watch mode
 npm run test:coverage # Generate coverage report to ./coverage/
 ```
 
-Single test file: `npx vitest run src/engine/harvester.test.ts`
+Single test file: `npx vitest run tests/engine/harvester.test.ts`
 
 ## Architecture
 
@@ -58,8 +58,13 @@ src/
 ├── ui/              # Building/unit buttons, minimap
 ├── input/           # Keyboard/mouse/touch handling
 └── data/            # rules.json (balance), ai.json (AI profiles)
+
+tests/               # Test files (mirrors src/ structure)
+├── engine/          # Engine tests
+├── renderer/        # Renderer tests
+└── data/            # Schema tests
 ```
 
 ## Testing
 
-Tests use Vitest. Test files are colocated with source: `feature.test.ts`. Tests cover game state immutability, AI behavior, harvester logic, pathfinding edge cases, and renderer.
+Tests use Vitest. Test files are in the `tests/` directory, mirroring the `src/` structure (e.g., `tests/engine/reducer.test.ts`). Tests cover game state immutability, AI behavior, harvester logic, pathfinding edge cases, and renderer.

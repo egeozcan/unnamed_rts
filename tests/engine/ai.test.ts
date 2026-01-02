@@ -1,0 +1,1261 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai';
+import { INITIAL_STATE, update } from '../../src/engine/reducer';
+import { GameState, Vector, Entity, EntityId, isActionType, UnitKey, BuildingKey } from '../../src/engine/types';
+import {
+    createTestHarvester,
+    createTestCombatUnit,
+    createTestBuilding,
+    createTestResource
+} from '../../src/engine/test-utils';
+
+const {
+    findBaseCenter,
+    detectThreats,
+    getAIState,
+
+    updateEnemyBaseLocation,
+    getPersonalityForPlayer,
+    DIFFICULTY_TO_PERSONALITY,
+    ATTACK_GROUP_MIN_SIZE,
+    HARASS_GROUP_SIZE
+} = _testUtils;
+
+// Helper functions - wraps test-utils for backward compatibility
+function createEntity(
+    id: string,
+    owner: number,
+    type: 'UNIT' | 'BUILDING' | 'RESOURCE',
+    key: string,
+    x: number,
+    y: number,
+    overrides?: {
+        hp?: number;
+        maxHp?: number;
+        dead?: boolean;
+        targetId?: EntityId | null;
+        lastAttackerId?: EntityId | null;
+        lastDamageTick?: number;
+        moveTarget?: Vector | null;
+        cargo?: number;
+        resourceTargetId?: EntityId | null;
+        baseTargetId?: EntityId | null;
+        manualMode?: boolean;
+        placedTick?: number;
+        isRepairing?: boolean;
+        w?: number;
+        h?: number;
+    }
+): Entity {
+    if (type === 'BUILDING') {
+        return createTestBuilding({
+            id,
+            owner,
+            key: key as BuildingKey,
+            x, y,
+            hp: overrides?.hp,
+            maxHp: overrides?.maxHp,
+            dead: overrides?.dead,
+            targetId: overrides?.targetId,
+            placedTick: overrides?.placedTick,
+            isRepairing: overrides?.isRepairing,
+            w: overrides?.w,
+            h: overrides?.h
+        });
+    } else if (type === 'RESOURCE') {
+        return createTestResource({ id, x, y, hp: overrides?.hp });
+    } else if (key === 'harvester') {
+        return createTestHarvester({
+            id,
+            owner,
+            x, y,
+            hp: overrides?.hp,
+            dead: overrides?.dead,
+            targetId: overrides?.targetId,
+            lastAttackerId: overrides?.lastAttackerId,
+            lastDamageTick: overrides?.lastDamageTick,
+            moveTarget: overrides?.moveTarget,
+            cargo: overrides?.cargo,
+            resourceTargetId: overrides?.resourceTargetId,
+            baseTargetId: overrides?.baseTargetId,
+            manualMode: overrides?.manualMode
+        });
+    } else {
+        return createTestCombatUnit({
+            id,
+            owner,
+            key: key as Exclude<UnitKey, 'harvester'>,
+            x, y,
+            hp: overrides?.hp,
+            maxHp: overrides?.maxHp,
+            dead: overrides?.dead,
+            targetId: overrides?.targetId,
+            lastAttackerId: overrides?.lastAttackerId,
+            lastDamageTick: overrides?.lastDamageTick,
+            moveTarget: overrides?.moveTarget
+        });
+    }
+}
+
+function createTestState(entities: Record<EntityId, Entity>): GameState {
+    return {
+        ...INITIAL_STATE,
+        running: true,
+        tick: 30, // Set to a tick divisible by 30 so AI runs
+        entities
+    };
+}
+
+describe('AI System', () => {
+    beforeEach(() => {
+        resetAIState();
+    });
+
+    describe('Base Center Detection', () => {
+        it('should find conyard as base center when present', () => {
+            const buildings = [
+                createEntity('conyard1', 1, 'BUILDING', 'conyard', 500, 500),
+                createEntity('barracks1', 1, 'BUILDING', 'barracks', 600, 600)
+            ];
+            const center = findBaseCenter(buildings);
+            expect(center.x).toBe(500);
+            expect(center.y).toBe(500);
+        });
+
+        it('should average building positions when no conyard', () => {
+            const buildings = [
+                createEntity('b1', 1, 'BUILDING', 'barracks', 100, 100),
+                createEntity('b2', 1, 'BUILDING', 'factory', 300, 300)
+            ];
+            const center = findBaseCenter(buildings);
+            expect(center.x).toBe(200);
+            expect(center.y).toBe(200);
+        });
+    });
+
+    describe('Difficulty to Personality Mapping', () => {
+        it('should map easy difficulty to turtle personality', () => {
+            const player = { difficulty: 'easy' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Turtle has lower aggression (0.5) and higher retreat threshold (0.5)
+            expect(personality.aggression_bias).toBe(0.5);
+            expect(personality.retreat_threshold).toBe(0.5);
+        });
+
+        it('should map medium difficulty to balanced personality', () => {
+            const player = { difficulty: 'medium' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Balanced has moderate aggression (1.0) and mid retreat threshold (0.3)
+            expect(personality.aggression_bias).toBe(1.0);
+            expect(personality.retreat_threshold).toBe(0.3);
+        });
+
+        it('should map hard difficulty to rusher personality', () => {
+            const player = { difficulty: 'hard' as const };
+            const personality = getPersonalityForPlayer(player);
+            // Rusher has high aggression (1.5) and low retreat threshold (0.1)
+            expect(personality.aggression_bias).toBe(1.5);
+            expect(personality.retreat_threshold).toBe(0.1);
+        });
+
+        it('should have correct difficulty to personality mapping', () => {
+            expect(DIFFICULTY_TO_PERSONALITY['easy']).toBe('turtle');
+            expect(DIFFICULTY_TO_PERSONALITY['medium']).toBe('balanced');
+            expect(DIFFICULTY_TO_PERSONALITY['hard']).toBe('rusher');
+        });
+    });
+
+    describe('Enemy Base Tracking', () => {
+        it('should track enemy conyard as base location', () => {
+            const aiState = getAIState(1);
+            const enemyBuildings = [
+                createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000),
+                createEntity('enemy_barracks', 0, 'BUILDING', 'barracks', 2100, 2100)
+            ];
+
+            updateEnemyBaseLocation(aiState, enemyBuildings);
+
+            expect(aiState.enemyBaseLocation).toBeTruthy();
+            expect(aiState.enemyBaseLocation!.x).toBe(2000);
+            expect(aiState.enemyBaseLocation!.y).toBe(2000);
+        });
+
+        it('should fallback to factory if no conyard', () => {
+            const aiState = getAIState(1);
+            const enemyBuildings = [
+                createEntity('enemy_factory', 0, 'BUILDING', 'factory', 1800, 1800),
+                createEntity('enemy_barracks', 0, 'BUILDING', 'barracks', 1900, 1900)
+            ];
+
+            updateEnemyBaseLocation(aiState, enemyBuildings);
+
+            expect(aiState.enemyBaseLocation!.x).toBe(1800);
+            expect(aiState.enemyBaseLocation!.y).toBe(1800);
+        });
+    });
+
+    describe('Threat Detection', () => {
+        it('should detect enemies near base', () => {
+            const baseCenter = new Vector(500, 500);
+            const harvesters: Entity[] = [];
+            const enemies = [
+                createEntity('enemy1', 2, 'UNIT', 'tank', 600, 600) // Within 500 radius
+            ];
+            const myBuildings = [
+                createEntity('cy1', 1, 'BUILDING', 'conyard', 500, 500)
+            ];
+
+            const { threatsNearBase } = detectThreats(baseCenter, harvesters, enemies, myBuildings);
+            expect(threatsNearBase).toContain('enemy1');
+        });
+
+        it('should not detect enemies far from base as threats', () => {
+            const baseCenter = new Vector(500, 500);
+            const harvesters: Entity[] = [];
+            const enemies = [
+                createEntity('enemy1', 2, 'UNIT', 'tank', 1500, 1500) // Far away
+            ];
+            const myBuildings: Entity[] = [];
+
+            const { threatsNearBase } = detectThreats(baseCenter, harvesters, enemies, myBuildings);
+            expect(threatsNearBase).not.toContain('enemy1');
+        });
+
+        it('should detect harvesters under attack', () => {
+            const baseCenter = new Vector(500, 500);
+            const harvesters = [
+                createEntity('harv1', 1, 'UNIT', 'harvester', 800, 800, { lastAttackerId: 'enemy1' })
+            ];
+            const enemies = [
+                createEntity('enemy1', 2, 'UNIT', 'tank', 850, 850)
+            ];
+            const myBuildings: Entity[] = [];
+
+            const { harvestersUnderAttack } = detectThreats(baseCenter, harvesters, enemies, myBuildings);
+            expect(harvestersUnderAttack).toContain('harv1');
+        });
+
+        it('should detect harvesters with nearby enemies as under threat', () => {
+            const baseCenter = new Vector(500, 500);
+            const harvesters = [
+                createEntity('harv1', 1, 'UNIT', 'harvester', 800, 800)
+            ];
+            const enemies = [
+                createEntity('enemy1', 2, 'UNIT', 'tank', 810, 810) // Very close
+            ];
+            const myBuildings: Entity[] = [];
+
+            const { harvestersUnderAttack } = detectThreats(baseCenter, harvesters, enemies, myBuildings);
+            expect(harvestersUnderAttack).toContain('harv1');
+        });
+    });
+
+    describe('Group Attack Behavior', () => {
+        it('should form attack groups when army size is sufficient', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI player buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500, { hp: 3000, maxHp: 3000 });
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500, { hp: 2000, maxHp: 2000 });
+
+            // Add combat units for AI
+            for (let i = 0; i < 6; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+
+            // Enemy (far enough to not trigger defense)
+            entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000, { hp: 3000, maxHp: 3000 });
+
+            const state = createTestState(entities);
+
+            // Set lastStrategyChange to past so cooldown is met (cooldown is 300 ticks)
+            const aiState = getAIState(1);
+            aiState.lastStrategyChange = -300;
+
+            // Run AI - strategy should now be able to change
+            const currentState = { ...state, tick: 30 };
+            computeAiActions(currentState, 1);
+
+            expect(aiState.strategy).toBe('attack');
+            expect(aiState.attackGroup.length).toBeGreaterThan(0);
+        });
+
+        it('should coordinate attack group to target enemies together', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI player buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
+
+            // Add combat units
+            for (let i = 0; i < 6; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+
+            // Enemy target
+            entities['enemy_tank'] = createEntity('enemy_tank', 0, 'UNIT', 'tank', 1500, 1500);
+
+            const state = createTestState(entities);
+
+            // Force attack strategy and set group to attacking state
+            const aiState = getAIState(1);
+            aiState.strategy = 'attack';
+            aiState.lastStrategyChange = 0;
+            aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'];
+            // Pre-set group to attacking state (bypass rally)
+            aiState.offensiveGroups = [{
+                id: 'main_attack',
+                unitIds: aiState.attackGroup,
+                target: null,
+                rallyPoint: new Vector(550, 550),
+                status: 'attacking',
+                lastOrderTick: 0
+            }];
+
+            const actions = computeAiActions(state, 1);
+
+            // Should have an attack command
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+            expect(attackAction).toBeDefined();
+
+            if (attackAction) {
+                // Should command multiple units
+                expect(attackAction.payload.unitIds.length).toBeGreaterThan(1);
+            }
+        });
+
+        it('should prioritize high-value targets', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings & units
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
+            for (let i = 0; i < 6; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 1000, 1000);
+            }
+
+            // Multiple enemy targets at similar distance
+            entities['enemy_rifle'] = createEntity('enemy_rifle', 0, 'UNIT', 'rifle', 1200, 1200);
+            entities['enemy_conyard'] = createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1250, 1250);
+            entities['enemy_barracks'] = createEntity('enemy_barracks', 0, 'BUILDING', 'barracks', 1180, 1180);
+
+            const state = createTestState(entities);
+
+            // Force attack strategy with group
+            const aiState = getAIState(1);
+            aiState.strategy = 'attack';
+            aiState.lastStrategyChange = 0;
+            aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'];
+
+            const actions = computeAiActions(state, 1);
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+
+            expect(attackAction).toBeDefined();
+            // Should prioritize conyard (highest value)
+            expect(attackAction?.payload.targetId).toBe('enemy_conyard');
+        });
+
+        it('should add all combat units to attack group during attack phase', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
+
+            // Initial attack group
+            for (let i = 0; i < 5; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+            // Additional unit that's not in group yet
+            entities['lateJoiner'] = createEntity('lateJoiner', 1, 'UNIT', 'light', 700, 550);
+
+            // Enemy
+            entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000);
+
+            const state = createTestState(entities);
+
+            // Set up attack state without lateJoiner
+            const aiState = getAIState(1);
+            aiState.strategy = 'attack';
+            aiState.lastStrategyChange = 0;
+            aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
+
+            // Run AI
+            computeAiActions(state, 1);
+
+            // Late joiner should now be in attack group
+            expect(aiState.attackGroup).toContain('lateJoiner');
+        });
+    });
+
+    describe('Harass Strategy', () => {
+        it('should form harass group with light units', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 600, 500);
+
+            // Light units for harass
+            for (let i = 0; i < HARASS_GROUP_SIZE; i++) {
+                entities[`rifle${i}`] = createEntity(`rifle${i}`, 1, 'UNIT', 'rifle', 550 + i * 20, 550);
+            }
+
+            // Enemy (far from base)
+            entities['enemy_harvester'] = createEntity('enemy_harvester', 0, 'UNIT', 'harvester', 2000, 2000);
+
+            const state = createTestState(entities);
+
+            const aiState = getAIState(1);
+            aiState.lastStrategyChange = -300;
+
+            // Run AI multiple times
+            computeAiActions({ ...state, tick: 30 }, 1);
+
+            // Should have formed harass group
+            expect(aiState.harassGroup.length).toBeGreaterThan(0);
+        });
+
+        it('should target enemy harvesters during harass', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Harass group units
+            for (let i = 0; i < 3; i++) {
+                entities[`rifle${i}`] = createEntity(`rifle${i}`, 1, 'UNIT', 'rifle', 1500, 1500);
+            }
+
+            // Enemy targets
+            entities['enemy_tank'] = createEntity('enemy_tank', 0, 'UNIT', 'tank', 1600, 1600);
+            entities['enemy_harvester'] = createEntity('enemy_harvester', 0, 'UNIT', 'harvester', 1550, 1550);
+
+            const state = createTestState(entities);
+
+            // Force harass strategy
+            const aiState = getAIState(1);
+            aiState.strategy = 'harass';
+            aiState.harassGroup = ['rifle0', 'rifle1', 'rifle2'];
+
+            const actions = computeAiActions(state, 1);
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+
+            expect(attackAction).toBeDefined();
+            // Should target harvester over tank
+            expect(attackAction?.payload.targetId).toBe('enemy_harvester');
+        });
+
+        it('should retreat harass group when damaged', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings (base)
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Damaged harass group
+            entities['rifle0'] = createEntity('rifle0', 1, 'UNIT', 'rifle', 1500, 1500, { hp: 20, maxHp: 100 });
+            entities['rifle1'] = createEntity('rifle1', 1, 'UNIT', 'rifle', 1520, 1500, { hp: 10, maxHp: 100 });
+            entities['rifle2'] = createEntity('rifle2', 1, 'UNIT', 'rifle', 1510, 1510, { hp: 30, maxHp: 100 });
+
+            // Enemy
+            entities['enemy_tank'] = createEntity('enemy_tank', 0, 'UNIT', 'tank', 1600, 1600);
+
+            const state = createTestState(entities);
+
+            // Force harass strategy with damaged group
+            const aiState = getAIState(1);
+            aiState.strategy = 'harass';
+            aiState.harassGroup = ['rifle0', 'rifle1', 'rifle2'];
+
+            const actions = computeAiActions(state, 1);
+            const moveAction = actions.find(a => a.type === 'COMMAND_MOVE');
+
+            expect(moveAction).toBeDefined();
+            // Should be retreating toward base
+            if (moveAction) {
+                expect(moveAction.payload.x).toBeLessThan(1500);
+                expect(moveAction.payload.y).toBeLessThan(1500);
+            }
+        });
+    });
+
+    describe('Rally Behavior', () => {
+        it('should rally idle units during buildup', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Idle combat units scattered around
+            entities['tank1'] = createEntity('tank1', 1, 'UNIT', 'light', 200, 200);
+            entities['tank2'] = createEntity('tank2', 1, 'UNIT', 'light', 800, 300);
+
+            // No enemies (buildup phase)
+
+            const state = createTestState(entities);
+
+            const aiState = getAIState(1);
+            aiState.strategy = 'buildup';
+
+            const actions = computeAiActions(state, 1);
+            const moveAction = actions.find(a => a.type === 'COMMAND_MOVE');
+
+            expect(moveAction).toBeDefined();
+            // Units should be moving toward rally point near base
+            if (moveAction) {
+                expect(moveAction.payload.unitIds).toContain('tank1');
+            }
+        });
+
+        it('should rally toward enemy direction when enemy base is known', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Idle unit far from rally
+            entities['tank1'] = createEntity('tank1', 1, 'UNIT', 'light', 200, 200);
+
+            // Enemy base (to the right)
+            entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2500, 500);
+
+            const state = createTestState(entities);
+            const aiState = getAIState(1);
+            aiState.strategy = 'buildup';
+
+            const actions = computeAiActions(state, 1);
+            const moveAction = actions.find(a => a.type === 'COMMAND_MOVE');
+
+            expect(moveAction).toBeDefined();
+            if (moveAction) {
+                // Rally point should be to the right of base (toward enemy)
+                expect(moveAction.payload.x).toBeGreaterThan(500);
+            }
+        });
+    });
+
+    describe('Defense Behavior', () => {
+        it('should switch to defend strategy when base is threatened', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // AI combat units
+            for (let i = 0; i < 3; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 550, 550 + i * 30);
+            }
+
+            // Enemy attacking base
+            entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 600, 600);
+
+            const state = createTestState(entities);
+            computeAiActions(state, 1);
+
+            const aiState = getAIState(1);
+            expect(aiState.strategy).toBe('defend');
+        });
+
+        it('should issue attack commands against threats near base', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // AI combat units (idle)
+            entities['defender1'] = createEntity('defender1', 1, 'UNIT', 'light', 450, 500);
+            entities['defender2'] = createEntity('defender2', 1, 'UNIT', 'light', 550, 500);
+
+            // Enemy near base
+            entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 580, 580);
+
+            const state = createTestState(entities);
+            const actions = computeAiActions(state, 1);
+
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+            expect(attackAction).toBeDefined();
+            expect(attackAction?.payload.targetId).toBe('attacker');
+            expect(attackAction?.payload.unitIds).toContain('defender1');
+            expect(attackAction?.payload.unitIds).toContain('defender2');
+        });
+
+        it('should recall all units when under heavy attack', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Distant AI unit
+            entities['distantTank'] = createEntity('distantTank', 1, 'UNIT', 'light', 1500, 1500);
+
+            // Multiple attackers (heavy attack)
+            entities['attacker1'] = createEntity('attacker1', 0, 'UNIT', 'tank', 550, 550);
+            entities['attacker2'] = createEntity('attacker2', 0, 'UNIT', 'tank', 450, 450);
+            entities['attacker3'] = createEntity('attacker3', 0, 'UNIT', 'tank', 400, 550);
+
+            const state = createTestState(entities);
+            const actions = computeAiActions(state, 1);
+
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+            expect(attackAction).toBeDefined();
+            // Should include the distant tank in defense (heavy attack)
+            expect(attackAction?.payload.unitIds).toContain('distantTank');
+        });
+    });
+
+    describe('Harvester Defense', () => {
+        it('should make harvesters flee from nearby enemies', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // AI harvester
+            entities['harvester'] = createEntity('harvester', 1, 'UNIT', 'harvester', 800, 800);
+
+            // Enemy near harvester
+            entities['threat'] = createEntity('threat', 0, 'UNIT', 'tank', 850, 850);
+
+            const state = createTestState(entities);
+            const actions = computeAiActions(state, 1);
+
+            const moveAction = actions.find(a =>
+                isActionType(a, 'COMMAND_MOVE') &&
+                a.payload.unitIds.includes('harvester')
+            );
+            expect(moveAction).toBeDefined();
+
+            // Should be fleeing toward base (x,y should be less than harvester's position)
+            // Base is at 500,500, harvester at 800,800, enemy at 850,850
+            // Flee direction should be toward base, so target coords should decrease
+            if (moveAction && isActionType(moveAction, 'COMMAND_MOVE')) {
+                expect(moveAction.payload.x).toBeLessThan(800);
+                expect(moveAction.payload.y).toBeLessThan(800);
+            }
+        });
+
+        it('should react to lastAttackerId on harvester', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // AI harvester that was recently attacked (damaged within last 60 ticks)
+            entities['harvester'] = createEntity('harvester', 1, 'UNIT', 'harvester', 1000, 1000, {
+                lastAttackerId: 'sneaky_attacker',
+                lastDamageTick: 25 // Recent damage (tick 30 - 25 = 5 ticks ago, within 60-tick window)
+            });
+
+            // The attacker is somewhat far but was attacking
+            entities['sneaky_attacker'] = createEntity('sneaky_attacker', 0, 'UNIT', 'tank', 1200, 1200);
+
+            const state = createTestState(entities);
+            const actions = computeAiActions(state, 1);
+
+            const moveAction = actions.find(a =>
+                a.type === 'COMMAND_MOVE' &&
+                a.payload.unitIds.includes('harvester')
+            );
+            expect(moveAction).toBeDefined();
+        });
+
+        it('should not flee if no enemies nearby', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // AI harvester
+            entities['harvester'] = createEntity('harvester', 1, 'UNIT', 'harvester', 800, 800);
+
+            // Far away enemy (beyond flee distance)
+            entities['far_enemy'] = createEntity('far_enemy', 0, 'UNIT', 'tank', 1500, 1500);
+
+            const state = createTestState(entities);
+            const actions = computeAiActions(state, 1);
+
+            const moveAction = actions.find(a =>
+                a.type === 'COMMAND_MOVE' &&
+                a.payload.unitIds.includes('harvester')
+            );
+            expect(moveAction).toBeUndefined();
+        });
+    });
+
+    describe('Strategy Management', () => {
+        it('should start in buildup strategy', () => {
+            resetAIState(1);
+            const aiState = getAIState(1);
+            expect(aiState.strategy).toBe('buildup');
+        });
+
+        it('should transition to attack when army is ready', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI with production capability
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
+
+            // Sufficient combat units
+            for (let i = 0; i < ATTACK_GROUP_MIN_SIZE; i++) {
+                entities[`tank${i}`] = createEntity(`tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+
+            // Some enemies to attack (far from base to not trigger defense)
+            entities['enemy'] = createEntity('enemy', 0, 'BUILDING', 'conyard', 2000, 2000);
+
+            const state = createTestState(entities);
+
+            // Set lastStrategyChange to past so cooldown is met
+            const aiState = getAIState(1);
+            aiState.lastStrategyChange = -300;
+
+            // Run AI
+            computeAiActions({ ...state, tick: 30 }, 1);
+
+            // Should be in attack
+            expect(aiState.strategy).toBe('attack');
+        });
+
+        it('should transition to harass with fewer units', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI with production capability
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 600, 500);
+
+            // Just enough for harass but not attack
+            for (let i = 0; i < HARASS_GROUP_SIZE; i++) {
+                entities[`rifle${i}`] = createEntity(`rifle${i}`, 1, 'UNIT', 'rifle', 550 + i * 20, 550);
+            }
+
+            // Enemies
+            entities['enemy'] = createEntity('enemy', 0, 'BUILDING', 'conyard', 2000, 2000);
+
+            const state = createTestState(entities);
+
+            const aiState = getAIState(1);
+            aiState.lastStrategyChange = -300;
+
+            computeAiActions({ ...state, tick: 30 }, 1);
+
+            expect(aiState.strategy).toBe('harass');
+        });
+
+        it('should maintain buildup strategy without factory', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI without factory (just started)
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Even with some units
+            for (let i = 0; i < 3; i++) {
+                entities[`rifle${i}`] = createEntity(`rifle${i}`, 1, 'UNIT', 'rifle', 550 + i * 20, 550);
+            }
+
+            const state = createTestState(entities);
+            computeAiActions(state, 1);
+
+            const aiState = getAIState(1);
+            expect(aiState.strategy).toBe('buildup');
+        });
+    });
+
+    describe('Focus Fire', () => {
+        it('should focus fire on targets allies are already attacking', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI buildings
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
+
+            // Units - some already attacking enemy1
+            entities['tank0'] = createEntity('tank0', 1, 'UNIT', 'light', 1000, 1000, { targetId: 'enemy1' });
+            entities['tank1'] = createEntity('tank1', 1, 'UNIT', 'light', 1020, 1000, { targetId: 'enemy1' });
+            entities['tank2'] = createEntity('tank2', 1, 'UNIT', 'light', 1040, 1000); // Idle
+            entities['tank3'] = createEntity('tank3', 1, 'UNIT', 'light', 1060, 1000); // Idle
+            entities['tank4'] = createEntity('tank4', 1, 'UNIT', 'light', 1080, 1000); // Idle
+
+            // Two enemies at similar distance
+            entities['enemy1'] = createEntity('enemy1', 0, 'UNIT', 'tank', 1100, 1100);
+            entities['enemy2'] = createEntity('enemy2', 0, 'UNIT', 'tank', 1100, 900);
+
+            const state = createTestState(entities);
+
+            const aiState = getAIState(1);
+            aiState.strategy = 'attack';
+            aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
+            // Pre-set group to attacking state (bypass rally)
+            aiState.offensiveGroups = [{
+                id: 'main_attack',
+                unitIds: aiState.attackGroup,
+                target: null,
+                rallyPoint: new Vector(1000, 1000),
+                status: 'attacking',
+                lastOrderTick: 0
+            }];
+
+            const actions = computeAiActions(state, 1);
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+
+            expect(attackAction).toBeDefined();
+            // Should prefer enemy1 (already being attacked by allies)
+            expect(attackAction?.payload.targetId).toBe('enemy1');
+        });
+    });
+
+    describe('Integration Tests', () => {
+        it('should build economy when starting', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            let state = createTestState(entities);
+            // Ensure player has credits
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: {
+                        ...state.players[1],
+                        credits: 5000
+                    }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+
+            const buildAction = actions.find(a => a.type === 'START_BUILD');
+            expect(buildAction).toBeDefined();
+            // Should try to build power plant first
+            expect(buildAction?.payload.key).toBe('power');
+        });
+
+        it('should place buildings when ready', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            let state = createTestState(entities);
+            // Set player ready to place
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: {
+                        ...state.players[1],
+                        readyToPlace: 'power'
+                    }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+            expect(placeAction).toBeDefined();
+            expect(placeAction?.payload.key).toBe('power');
+        });
+
+        it('should handle complete battle scenario', () => {
+            // Full integration test simulating a battle
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base and army
+            entities['ai_conyard'] = createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 500, 500, { hp: 3000, maxHp: 3000 });
+            entities['ai_factory'] = createEntity('ai_factory', 1, 'BUILDING', 'factory', 600, 500);
+            for (let i = 0; i < 6; i++) {
+                entities[`ai_tank${i}`] = createEntity(`ai_tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+            entities['ai_harvester'] = createEntity('ai_harvester', 1, 'UNIT', 'harvester', 700, 700);
+
+            // Enemy forces
+            entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000, { hp: 3000, maxHp: 3000 });
+            entities['enemy_tank1'] = createEntity('enemy_tank1', 0, 'UNIT', 'light', 550, 600);
+            entities['enemy_tank2'] = createEntity('enemy_tank2', 0, 'UNIT', 'light', 2100, 2100);
+
+            let state = createTestState(entities);
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: { ...state.players[1], credits: 5000 }
+                }
+            };
+
+            // Run several AI cycles
+            let currentState = state;
+            let hasDefended = false;
+
+            for (let i = 0; i < 10; i++) {
+                currentState = { ...currentState, tick: (i + 1) * 30 };
+                const actions = computeAiActions(currentState, 1);
+
+                for (const action of actions) {
+                    if (action.type === 'COMMAND_ATTACK' && action.payload.targetId === 'enemy_tank1') {
+                        hasDefended = true;
+                    }
+                    currentState = update(currentState, action);
+                }
+
+                // After first cycle, remove nearby enemy to allow attack phase
+                if (i === 3 && currentState.entities['enemy_tank1']) {
+                    const updatedEntities = { ...currentState.entities };
+                    updatedEntities['enemy_tank1'] = { ...updatedEntities['enemy_tank1'], dead: true };
+                    currentState = { ...currentState, entities: updatedEntities };
+                }
+            }
+
+            // AI should have attempted defense (enemy was near base)
+            expect(hasDefended).toBe(true);
+        });
+
+        it('should execute full attack sequence', () => {
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI base and large army
+            entities['ai_conyard'] = createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['ai_factory'] = createEntity('ai_factory', 1, 'BUILDING', 'factory', 600, 500);
+            for (let i = 0; i < 8; i++) {
+                entities[`ai_tank${i}`] = createEntity(`ai_tank${i}`, 1, 'UNIT', 'light', 550 + i * 20, 550);
+            }
+
+            // Enemy base (far away)
+            entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2500, 2500);
+
+            let state = createTestState(entities);
+
+            // Force past cooldown
+            const aiState = getAIState(1);
+            aiState.lastStrategyChange = -300;
+
+            // Run AI
+            const actions = computeAiActions({ ...state, tick: 30 }, 1);
+
+            // Should be in attack mode
+            expect(aiState.strategy).toBe('attack');
+
+            // With cohesion logic, first action is rallying (move), not attacking
+            // Group will transition to attacking once cohesive
+            const moveAction = actions.find(a => a.type === 'COMMAND_MOVE');
+            const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+            // Either rallying or attacking is valid
+            expect(moveAction || attackAction).toBeDefined();
+        });
+    });
+
+    describe('Building Placement', () => {
+        it('should place buildings without overlapping existing ones', () => {
+            const entities: Record<EntityId, Entity> = {};
+            // Conyard (90x90) at 500, 500
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500, { w: 90, h: 90 });
+            // Power plant (60x60) very close to the right
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 500 + 80, 500, { w: 60, h: 60 });
+
+            let state = createTestState(entities);
+            // AI wants to place another power plant
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: {
+                        ...state.players[1],
+                        readyToPlace: 'power'
+                    }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                const w = 60; // Power plant size
+                const h = 60;
+
+                // Check overlap with conyard
+                const cy = entities['conyard'];
+                const overlapConyard = Math.abs(x - cy.pos.x) < (w / 2 + cy.w / 2) &&
+                    Math.abs(y - cy.pos.y) < (h / 2 + cy.h / 2);
+                expect(overlapConyard).toBe(false);
+
+                // Check overlap with existing power plant
+                const p = entities['power'];
+                const overlapPower = Math.abs(x - p.pos.x) < (w / 2 + p.w / 2) &&
+                    Math.abs(y - p.pos.y) < (h / 2 + p.h / 2);
+                expect(overlapPower).toBe(false);
+            }
+        });
+
+        it('should place refinery near resources', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+
+            // Resource within build range of base (MAX_ORE_DISTANCE is 600)
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 800, 800);
+
+            let state = createTestState(entities);
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: { ...state.players[1], readyToPlace: 'refinery' }
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                // Should be near ore (800,800)
+                const distToOre = new Vector(x, y).dist(new Vector(800, 800));
+                const distToBase = new Vector(x, y).dist(new Vector(500, 500));
+
+                expect(distToOre).toBeLessThan(250); // Within reasonable range of ore
+                expect(distToOre).toBeLessThan(distToBase); // Closer to ore than base
+            }
+        });
+
+        it('should avoid placing buildings in refinery docking zones', () => {
+            const entities: Record<EntityId, Entity> = {};
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            // Refinery at 600, 600
+            entities['refinery'] = createEntity('refinery', 1, 'BUILDING', 'refinery', 600, 600, { w: 100, h: 80 });
+
+            // Dock zone is roughly at (600, 600 + 40..100) -> (600, 640..700)
+
+            let state = createTestState(entities);
+            state = {
+                ...state,
+                players: {
+                    ...state.players,
+                    1: { ...state.players[1], readyToPlace: 'power' } // Try to place power plant
+                }
+            };
+
+            const actions = computeAiActions(state, 1);
+            const placeAction = actions.find(a => a.type === 'PLACE_BUILDING');
+
+            expect(placeAction).toBeDefined();
+            if (placeAction) {
+                const { x, y } = placeAction.payload;
+                const w = 60;
+                const h = 60;
+
+                const myRect = {
+                    l: x - w / 2,
+                    r: x + w / 2,
+                    t: y - h / 2,
+                    b: y + h / 2
+                };
+
+                const dockRect = {
+                    l: 600 - 30,
+                    r: 600 + 30,
+                    t: 600 + 40,
+                    b: 600 + 100
+                };
+
+                const overlap = !(dockRect.l > myRect.r || dockRect.r < myRect.l || dockRect.t > myRect.b || dockRect.b < myRect.t);
+                expect(overlap).toBe(false);
+            }
+        });
+    });
+
+    describe('AI Panic Behavior', () => {
+        it('should trigger panic unit production when threat is very high', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // AI Base under siege
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 1100, 1000);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 900, 1000);
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 1000, 900);
+
+            // Many enemies right next to the base
+            for (let i = 0; i < 5; i++) {
+                entities[`enemy${i}`] = createEntity(`enemy${i}`, 0, 'UNIT', 'heavy', 1050, 1050);
+            }
+
+            let state = createTestState(entities);
+            // Give AI credits to spend
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 2000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const buildActions = actions.filter(a => a.type === 'START_BUILD');
+            expect(buildActions.length).toBeGreaterThan(0);
+
+            const infantryBuild = buildActions.find(a => a.payload.category === 'infantry');
+            const vehicleBuild = buildActions.find(a => a.payload.category === 'vehicle');
+
+            // Should try to build both (panic mode ignores staggering logic)
+            expect(infantryBuild).toBeDefined();
+            expect(vehicleBuild).toBeDefined();
+
+            // Should default to cheap units
+            if (infantryBuild) expect(['rifle', 'rocket']).toContain(infantryBuild.payload.key);
+            if (vehicleBuild) expect(['light', 'jeep']).toContain(vehicleBuild.payload.key);
+        });
+
+        it('should prioritize defenses in panic mode', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 1000, 1000);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 1100, 1000); // Needed for turrets
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 1000, 900);
+
+            // Enemies near base
+            for (let i = 0; i < 3; i++) {
+                entities[`enemy${i}`] = createEntity(`enemy${i}`, 0, 'UNIT', 'heavy', 1050, 1050);
+            }
+
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 2000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const buildDef = actions.find(a =>
+                a.type === 'START_BUILD' &&
+                a.payload.category === 'building' &&
+                ['turret', 'pillbox'].includes(a.payload.key)
+            );
+
+            expect(buildDef).toBeDefined();
+        });
+    });
+
+    describe('Smart Repair & Sell Logic', () => {
+        it('should NOT repair refinery that is far from resources', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Refinery far from any ore (Ore at 0,0, Refinery at 1000, 1000)
+            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 500, maxHp: 1000 });
+            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 500, maxHp: 1000 });
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
+
+            // Give player lots of credits so they certainly CAN repair
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 5000 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            // Find repair actions
+            const repairActions = actions.filter(a => a.type === 'START_REPAIR');
+            const repairedIds = repairActions.map(a => a.payload.buildingId);
+
+            expect(repairedIds).toContain('useful_ref');
+            expect(repairedIds).not.toContain('useless_ref');
+        });
+
+        it('should SELL non-essential refinery when under attack', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Useless refinery taking damage (under attack) - set placedTick to make it "mature"
+            entities['useless_ref'] = createEntity('useless_ref', 1, 'BUILDING', 'refinery', 1000, 1000, { hp: 400, maxHp: 1000, placedTick: 0 });
+            // Useful refinery safe
+            entities['useful_ref'] = createEntity('useful_ref', 1, 'BUILDING', 'refinery', 100, 100, { hp: 1000, maxHp: 1000, placedTick: 0 });
+            entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
+
+            // Under attack threat
+            entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 1050, 1050);
+
+            let state = createTestState(entities);
+            // Use tick 600 to be past the 300 tick grace period, and set credits low
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
+
+            const actions = computeAiActions(state, 1);
+
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+
+            expect(sellAction).toBeDefined();
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('useless_ref');
+            }
+        });
+        it('should sell buildings to afford a refinery if it is missing', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Critical Conyard - set placedTick to make buildings "mature"
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100, { placedTick: 0 });
+            // Power Plant
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
+            // Expensive Factory (Cost 2000, Sell 1000)
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 300, 100, { placedTick: 0 });
+            // Turret (Cost 800, Sell 400)
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
+            // Barracks (Cost 500, Sell 250)
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 500, 100, { placedTick: 0 });
+
+            let state = createTestState(entities);
+            // Credits 500. Refinery cost 2000. Needs 1500 more. Use tick 600 for grace period
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
+
+            const actions = computeAiActions(state, 1);
+            const hasSell = actions.some(a => a.type === 'SELL_BUILDING');
+            expect(hasSell).toBe(true);
+        });
+    });
+
+    describe('Stalemate Logic', () => {
+        it('should sell buildings in a stalemate (low funds, no income) to fund units', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+
+            // Set placedTick to make buildings "mature"
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
+            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 300, 100, { placedTick: 0 });
+            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
+
+            // Stalemate: 0 credits, no income (no refinery/harvesters), use tick 600 for grace period
+            let state = createTestState(entities);
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeDefined();
+            // Priority is Turret > Power > Conyard
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('turret');
+            }
+        });
+
+        it('should NOT sell the last production building (Factory) in a stalemate', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100);
+
+            let state = createTestState(entities);
+            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeUndefined();
+        });
+
+        it('should sell Conyard if Factory exists in stalemate', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+            // Set placedTick to make buildings "mature"
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
+
+            let state = createTestState(entities);
+            // Use tick 600 for grace period
+            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            expect(sellAction).toBeDefined();
+            if (sellAction) {
+                expect(sellAction.payload.buildingId).toBe('conyard');
+            }
+        });
+    });
+});
