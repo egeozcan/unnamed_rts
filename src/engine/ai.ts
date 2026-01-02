@@ -1611,9 +1611,32 @@ function handleMCVOperations(
         }
     }
 
+    // Check if we have a construction yard
+    const hasConyard = myBuildings.some(b => b.key === 'conyard');
+
     for (const mcv of mcvs) {
         const mcvUnit = mcv as UnitEntity;
-        // If MCV has no destination, assign expansion target
+
+        // Helper to check if MCV can deploy at a position
+        const canDeployAt = (pos: Vector): boolean => {
+            for (const b of Object.values(state.entities)) {
+                if (b.dead) continue;
+                if (b.type === 'BUILDING' || b.type === 'ROCK') {
+                    if (b.pos.dist(pos) < 100) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        // PRIORITY 1: If we have no conyard, deploy immediately
+        if (!hasConyard && canDeployAt(mcv.pos)) {
+            actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+            continue;
+        }
+
+        // PRIORITY 2: If MCV has no destination, assign expansion target
         if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && bestExpansionTarget) {
             // Move to expansion target (offset from ore so we don't block it)
             const targetPos = bestExpansionTarget.add(new Vector(100, 0));
@@ -1623,32 +1646,17 @@ function handleMCVOperations(
             });
         }
 
-        // If MCV is near its destination (within 100 units), deploy it
-        // Note: This requires a DEPLOY_MCV action in reducer. If not implemented,
-        // we can simulate by having MCV build a conyard
+        // PRIORITY 3: If MCV is near its destination (within 100 units), deploy it
         if (mcvUnit.movement.finalDest && mcv.pos.dist(mcvUnit.movement.finalDest) < 100) {
-            // Check if there's enough space to deploy
-            const deployPos = mcv.pos;
-            let canDeploy = true;
-
-            // Check for nearby buildings that would block
-            for (const b of Object.values(state.entities)) {
-                if (b.dead) continue;
-                if (b.type === 'BUILDING' || b.type === 'ROCK') {
-                    if (b.pos.dist(deployPos) < 100) {
-                        canDeploy = false;
-                        break;
-                    }
-                }
+            if (canDeployAt(mcv.pos)) {
+                actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
             }
+        }
 
-            if (canDeploy) {
-                // Issue deploy command (if reducer supports it)
-                // For now, we'll use a placeholder - this needs DEPLOY_MCV action
-                // actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id, playerId } });
-
-                // Alternative: Just stop the MCV so it doesn't wander
-                // The user may need to implement DEPLOY_MCV in reducer
+        // PRIORITY 4: If MCV is idle with no destination and no expansion target, deploy where it is
+        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && !bestExpansionTarget) {
+            if (canDeployAt(mcv.pos)) {
+                actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
             }
         }
     }
