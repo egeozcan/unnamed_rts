@@ -218,34 +218,45 @@ export class Renderer {
             ctx.arc(-r * 0.3, -r * 0.2, r * 0.15, 0, Math.PI * 2);
             ctx.fill();
         } else if (entity.type === 'WELL') {
-            // Draw ore well as a glowing golden pool
+            // Draw ore well - golden when active, grey when blocked
+            const isBlocked = entity.well.isBlocked;
+
+            // Only pulse when active (not blocked)
             const pulsePhase = (tick % 60) / 60;
-            const pulseScale = 1 + Math.sin(pulsePhase * Math.PI * 2) * 0.05;
+            const pulseScale = isBlocked ? 1 : 1 + Math.sin(pulsePhase * Math.PI * 2) * 0.05;
 
             // Outer glow
-            ctx.fillStyle = 'rgba(212, 175, 55, 0.3)';
+            ctx.fillStyle = isBlocked ? 'rgba(128, 128, 128, 0.2)' : 'rgba(212, 175, 55, 0.3)';
             ctx.beginPath();
             ctx.arc(0, 0, entity.radius * 1.5 * pulseScale, 0, Math.PI * 2);
             ctx.fill();
 
             // Main pool with gradient
             const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, entity.radius);
-            gradient.addColorStop(0, '#ffd700');
-            gradient.addColorStop(0.6, '#b8860b');
-            gradient.addColorStop(1, '#8b6914');
+            if (isBlocked) {
+                // Grey/inactive colors
+                gradient.addColorStop(0, '#a0a0a0');
+                gradient.addColorStop(0.6, '#707070');
+                gradient.addColorStop(1, '#505050');
+            } else {
+                // Golden/active colors
+                gradient.addColorStop(0, '#ffd700');
+                gradient.addColorStop(0.6, '#b8860b');
+                gradient.addColorStop(1, '#8b6914');
+            }
             ctx.fillStyle = gradient;
             ctx.beginPath();
             ctx.arc(0, 0, entity.radius * pulseScale, 0, Math.PI * 2);
             ctx.fill();
 
-            // Inner highlight
-            ctx.fillStyle = 'rgba(255, 255, 200, 0.4)';
+            // Inner highlight (dimmer when blocked)
+            ctx.fillStyle = isBlocked ? 'rgba(200, 200, 200, 0.2)' : 'rgba(255, 255, 200, 0.4)';
             ctx.beginPath();
             ctx.arc(-5, -5, entity.radius * 0.3, 0, Math.PI * 2);
             ctx.fill();
 
             // Border
-            ctx.strokeStyle = '#654321';
+            ctx.strokeStyle = isBlocked ? '#404040' : '#654321';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);

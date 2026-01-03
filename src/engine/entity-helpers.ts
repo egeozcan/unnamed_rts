@@ -64,7 +64,8 @@ export function createDefaultWellComponent(): WellComponent {
     return {
         nextSpawnTick: 0,
         currentOreCount: 0,
-        totalSpawned: 0
+        totalSpawned: 0,
+        isBlocked: false
     };
 }
 

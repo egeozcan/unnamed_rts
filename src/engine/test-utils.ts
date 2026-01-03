@@ -299,6 +299,7 @@ export interface WellOptions {
     nextSpawnTick?: number;
     currentOreCount?: number;
     totalSpawned?: number;
+    isBlocked?: boolean;
 }
 
 export function createTestWell(options: WellOptions = {}): WellEntity {
@@ -323,7 +324,8 @@ export function createTestWell(options: WellOptions = {}): WellEntity {
             ...createDefaultWellComponent(),
             nextSpawnTick: options.nextSpawnTick ?? 0,
             currentOreCount: options.currentOreCount ?? 0,
-            totalSpawned: options.totalSpawned ?? 0
+            totalSpawned: options.totalSpawned ?? 0,
+            isBlocked: options.isBlocked ?? false
         }
     };
 }

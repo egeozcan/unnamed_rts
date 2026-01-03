@@ -2521,12 +2521,13 @@ function updateWells(
                 hp: Math.min(targetOre.maxHp, targetOre.hp + wellConfig.oreGrowthRate)
             };
 
-            // Update well tracking
+            // Update well tracking - well is actively growing, so not blocked
             nextEntities[id] = {
                 ...well,
                 well: {
                     ...well.well,
-                    currentOreCount: nearbyOres.length
+                    currentOreCount: nearbyOres.length,
+                    isBlocked: false
                 }
             };
 
@@ -2536,55 +2537,109 @@ function updateWells(
                 nearbyOres.length < wellConfig.maxOrePerWell;
 
             if (shouldSpawn) {
-                // Find valid spawn position (random scatter within radius)
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 30 + Math.random() * (wellConfig.oreSpawnRadius - 30);
-                const spawnX = well.pos.x + Math.cos(angle) * dist;
-                const spawnY = well.pos.y + Math.sin(angle) * dist;
+                // Try to find a valid spawn position (avoid units and buildings)
+                const oreRadius = 12;
+                const maxAttempts = 8;
+                let foundValidPosition = false;
+                let finalX = 0;
+                let finalY = 0;
 
-                // Clamp to map bounds
-                const finalX = Math.max(50, Math.min(config.width - 50, spawnX));
-                const finalY = Math.max(50, Math.min(config.height - 50, spawnY));
-
-                // Create new ore entity
-                const oreId = `ore_well_${id}_${tick}`;
-                const newOre: ResourceEntity = {
-                    id: oreId,
-                    owner: -1,
-                    type: 'RESOURCE',
-                    key: 'ore',
-                    pos: new Vector(finalX, finalY),
-                    prevPos: new Vector(finalX, finalY),
-                    hp: wellConfig.initialOreAmount,
-                    maxHp: wellConfig.maxOreAmount,
-                    w: 25,
-                    h: 25,
-                    radius: 12,
-                    dead: false
-                };
-                nextEntities[oreId] = newOre;
-
-                // Calculate next spawn tick (random interval)
-                const nextSpawnDelay = wellConfig.spawnRateTicksMin +
-                    Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
-
-                // Update well state
-                nextEntities[id] = {
-                    ...well,
-                    well: {
-                        ...well.well,
-                        nextSpawnTick: tick + nextSpawnDelay,
-                        currentOreCount: nearbyOres.length + 1,
-                        totalSpawned: well.well.totalSpawned + 1
+                // Pre-collect units and buildings for collision checks
+                const blockers: { pos: Vector; radius: number }[] = [];
+                for (const otherId in nextEntities) {
+                    const other = nextEntities[otherId];
+                    if (other.dead) continue;
+                    if (other.type === 'UNIT' || other.type === 'BUILDING') {
+                        blockers.push({ pos: other.pos, radius: other.radius });
                     }
-                };
+                }
+
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    // Try evenly distributed angles with some randomness
+                    const baseAngle = (attempt / maxAttempts) * Math.PI * 2;
+                    const angle = baseAngle + (Math.random() - 0.5) * (Math.PI / maxAttempts);
+                    const dist = 30 + Math.random() * (wellConfig.oreSpawnRadius - 30);
+                    const spawnX = well.pos.x + Math.cos(angle) * dist;
+                    const spawnY = well.pos.y + Math.sin(angle) * dist;
+
+                    // Clamp to map bounds
+                    const testX = Math.max(50, Math.min(config.width - 50, spawnX));
+                    const testY = Math.max(50, Math.min(config.height - 50, spawnY));
+                    const testPos = new Vector(testX, testY);
+
+                    // Check collision with all units and buildings
+                    let collides = false;
+                    for (const blocker of blockers) {
+                        const dist = testPos.dist(blocker.pos);
+                        if (dist < oreRadius + blocker.radius) {
+                            collides = true;
+                            break;
+                        }
+                    }
+
+                    if (!collides) {
+                        foundValidPosition = true;
+                        finalX = testX;
+                        finalY = testY;
+                        break;
+                    }
+                }
+
+                if (foundValidPosition) {
+                    // Create new ore entity
+                    const oreId = `ore_well_${id}_${tick}`;
+                    const newOre: ResourceEntity = {
+                        id: oreId,
+                        owner: -1,
+                        type: 'RESOURCE',
+                        key: 'ore',
+                        pos: new Vector(finalX, finalY),
+                        prevPos: new Vector(finalX, finalY),
+                        hp: wellConfig.initialOreAmount,
+                        maxHp: wellConfig.maxOreAmount,
+                        w: 25,
+                        h: 25,
+                        radius: oreRadius,
+                        dead: false
+                    };
+                    nextEntities[oreId] = newOre;
+
+                    // Calculate next spawn tick (random interval)
+                    const nextSpawnDelay = wellConfig.spawnRateTicksMin +
+                        Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
+
+                    // Update well state - successfully spawned, not blocked
+                    nextEntities[id] = {
+                        ...well,
+                        well: {
+                            ...well.well,
+                            nextSpawnTick: tick + nextSpawnDelay,
+                            currentOreCount: nearbyOres.length + 1,
+                            totalSpawned: well.well.totalSpawned + 1,
+                            isBlocked: false
+                        }
+                    };
+                } else {
+                    // No valid spawn position found - mark well as blocked
+                    nextEntities[id] = {
+                        ...well,
+                        well: {
+                            ...well.well,
+                            currentOreCount: nearbyOres.length,
+                            isBlocked: true
+                        }
+                    };
+                }
             } else {
-                // Just update ore count tracking
+                // Not time to spawn yet or at max ore - check if still blocked
+                // If we're at max ore, not blocked. If not time yet, preserve previous blocked state.
+                const isAtMaxOre = nearbyOres.length >= wellConfig.maxOrePerWell;
                 nextEntities[id] = {
                     ...well,
                     well: {
                         ...well.well,
-                        currentOreCount: nearbyOres.length
+                        currentOreCount: nearbyOres.length,
+                        isBlocked: isAtMaxOre ? false : well.well.isBlocked
                     }
                 };
             }

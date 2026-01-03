@@ -73,4 +73,5 @@ export interface WellComponent {
     readonly nextSpawnTick: number;      // When to spawn next ore
     readonly currentOreCount: number;    // Ore entities within radius
     readonly totalSpawned: number;       // Lifetime counter
+    readonly isBlocked: boolean;         // True if no valid spawn positions (area occupied by units/buildings)
 }
