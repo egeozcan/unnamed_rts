@@ -1734,7 +1734,33 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                         }
                     }
 
-                    if (distToOre < 40) {
+                    // Check if ore is contested (taking damage while actively harvesting)
+                    // If so, mark ore as blocked and find different ore
+                    // IMPORTANT: Only block if harvestAttemptTicks > 0, meaning we've been trying
+                    // to reach this ore for at least one tick. This prevents the bug where a harvester
+                    // immediately blocks any ore it finds after taking damage.
+                    const wasRecentlyDamaged = harvester.combat.lastDamageTick !== undefined &&
+                        (currentTick - harvester.combat.lastDamageTick) < 60;
+                    const isNearOre = distToOre < 60;
+                    const hasBeenTryingToHarvest = harvestAttemptTicks > 0;
+
+                    if (wasRecentlyDamaged && isNearOre && hasBeenTryingToHarvest) {
+                        // Mark ore as contested, find different ore
+                        harvester = {
+                            ...harvester,
+                            harvester: {
+                                ...harvester.harvester,
+                                blockedOreId: ore.id,
+                                blockedOreTimer: 300,
+                                resourceTargetId: null,
+                                harvestAttemptTicks: 0,
+                                lastDistToOre: null,
+                                bestDistToOre: null
+                            }
+                        };
+                        nextEntity = harvester;
+                        // Skip the rest of harvesting logic - will find new ore next tick
+                    } else if (distToOre < 40) {
                         // Harvest
                         if (harvester.combat.cooldown <= 0) {
                             const harvestAmount = 25;

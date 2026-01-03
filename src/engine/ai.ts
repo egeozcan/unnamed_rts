@@ -1748,6 +1748,10 @@ function handleHarvesterSafety(
         const isCriticallyBroke = player && player.credits < 300;
         const isUnderEconomicPressure = isCriticallyBroke && hasSignificantCargo;
 
+        // When HP is critically low, treat enemy harvesters as real threats
+        // (normally harvesters are ignored since they deal low damage)
+        const isLowHp = harvUnit.hp < harvUnit.maxHp * 0.3;
+
         // Check if harvester is under threat
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
@@ -1775,10 +1779,11 @@ function handleHarvesterSafety(
 
         // If harvester was damaged recently, identify the attacker as threat
         // (use larger radius since they actually hit us)
-        // NOTE: Ignore enemy harvesters as threats - they're not real combat units
+        // NOTE: Ignore enemy harvesters as threats unless we're low HP
         if (harvesterUnderFire && harvUnit.combat.lastAttackerId) {
             const attacker = state.entities[harvUnit.combat.lastAttackerId];
-            if (attacker && !attacker.dead && attacker.key !== 'harvester' && attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
+            const skipHarvesterAttacker = attacker?.key === 'harvester' && !isLowHp;
+            if (attacker && !attacker.dead && !skipHarvesterAttacker && attacker.pos.dist(harv.pos) < THREAT_DETECTION_RADIUS) {
                 nearestThreat = attacker;
                 nearestDist = attacker.pos.dist(harv.pos);
                 isDirectAttack = true;
@@ -1786,11 +1791,11 @@ function handleHarvesterSafety(
         }
 
         // Find nearest enemy within flee distance (for proximity check)
-        // NOTE: Skip enemy harvesters - they're not a real threat (low damage vs heavy armor)
+        // NOTE: Skip enemy harvesters unless we're low HP
         if (!nearestThreat) {
             for (const enemy of enemies) {
                 if (enemy.type !== 'UNIT') continue;
-                if (enemy.key === 'harvester') continue; // Ignore enemy harvesters
+                if (enemy.key === 'harvester' && !isLowHp) continue; // Ignore enemy harvesters unless low HP
                 const dist = enemy.pos.dist(harv.pos);
                 if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
                     nearestDist = dist;
@@ -1812,13 +1817,13 @@ function handleHarvesterSafety(
         }
 
         // Also check if our destination (refinery) is compromised
-        // NOTE: Skip enemy harvesters - they're not a real threat
+        // NOTE: Skip enemy harvesters unless we're low HP
         if (!nearestThreat && harvUnit.harvester.baseTargetId && !isUnderEconomicPressure) {
             const refinery = state.entities[harvUnit.harvester.baseTargetId];
             if (refinery && !refinery.dead) {
                 for (const enemy of enemies) {
                     if (enemy.type !== 'UNIT') continue;
-                    if (enemy.key === 'harvester') continue; // Ignore enemy harvesters
+                    if (enemy.key === 'harvester' && !isLowHp) continue; // Ignore enemy harvesters unless low HP
                     const dist = enemy.pos.dist(refinery.pos);
                     if (dist < THREAT_DETECTION_RADIUS) {
                         nearestThreat = enemy;

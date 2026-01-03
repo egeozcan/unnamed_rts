@@ -49,6 +49,7 @@ export interface HarvesterOptions {
     baseTargetId?: EntityId | null;
     manualMode?: boolean;
     dead?: boolean;
+    harvestAttemptTicks?: number;
 }
 
 export function createTestHarvester(options: HarvesterOptions = {}): HarvesterUnit {
@@ -85,7 +86,8 @@ export function createTestHarvester(options: HarvesterOptions = {}): HarvesterUn
             cargo: options.cargo ?? 0,
             resourceTargetId: options.resourceTargetId ?? null,
             baseTargetId: options.baseTargetId ?? null,
-            manualMode: options.manualMode
+            manualMode: options.manualMode,
+            harvestAttemptTicks: options.harvestAttemptTicks ?? 0
         }
     };
 }
