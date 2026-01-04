@@ -21,7 +21,7 @@ describe('Red Harvester Stuck at Dock', () => {
         const building = createTestBuilding({
             id,
             owner,
-            key: key as any,
+            key: key as import('../../src/engine/types').BuildingKey,
             x,
             y,
             w,

@@ -355,8 +355,8 @@ describe('AI Overhaul Tests', () => {
 
             const actions = computeAiActions(state, 1);
             const fleeAction = actions.find(a =>
-                a.type === 'COMMAND_MOVE' &&
-                (a.payload as any).unitIds?.includes('harv')
+                isActionType(a, 'COMMAND_MOVE') &&
+                a.payload.unitIds?.includes('harv')
             );
 
             // Should flee - enemy is within minimum safe distance (80 units)
@@ -378,8 +378,8 @@ describe('AI Overhaul Tests', () => {
 
             const actions = computeAiActions(state, 1);
             const fleeAction = actions.find(a =>
-                a.type === 'COMMAND_MOVE' &&
-                (a.payload as any).unitIds?.includes('harv')
+                isActionType(a, 'COMMAND_MOVE') &&
+                a.payload.unitIds?.includes('harv')
             );
 
             // Should NOT flee - under economic pressure and threat is beyond minimum safe distance
@@ -546,8 +546,8 @@ describe('AI Overhaul Tests', () => {
 
             // MCV should receive move command toward distant ore
             const moveAction = actions.find(a =>
-                a.type === 'COMMAND_MOVE' &&
-                (a.payload as any).unitIds?.includes('mcv')
+                isActionType(a, 'COMMAND_MOVE') &&
+                a.payload.unitIds?.includes('mcv')
             );
 
             expect(moveAction).toBeDefined();
@@ -570,8 +570,8 @@ describe('AI Overhaul Tests', () => {
 
             // MCV should NOT receive new move command
             const moveAction = actions.find(a =>
-                a.type === 'COMMAND_MOVE' &&
-                (a.payload as any).unitIds?.includes('mcv')
+                isActionType(a, 'COMMAND_MOVE') &&
+                a.payload.unitIds?.includes('mcv')
             );
 
             expect(moveAction).toBeUndefined();

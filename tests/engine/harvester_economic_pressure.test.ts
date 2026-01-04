@@ -101,8 +101,8 @@ describe('Harvester Economic Pressure', () => {
 
         // Check that NO flee command was issued for the harvester
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         console.log('Actions under pressure:', aiActions.map(a => a.type));
@@ -181,8 +181,8 @@ describe('Harvester Economic Pressure', () => {
 
         // Check the flee commands
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         console.log('Flee actions for distant non-attacking enemy:', fleeActions.length);
@@ -259,8 +259,8 @@ describe('Harvester Economic Pressure', () => {
 
         // Check the flee commands
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         console.log('Flee actions when directly attacked:', fleeActions.length);
@@ -341,7 +341,7 @@ describe('Harvester Economic Pressure', () => {
                         }
                     }
                 }
-            } as any;
+            } as Record<EntityId, Entity>;
         }
 
         // Run AI
@@ -423,8 +423,8 @@ describe('Harvester Economic Pressure', () => {
         const aiActions = computeAiActions(state, 1);
 
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         // Should NOT flee - infantry is just hanging around, not attacking
@@ -490,8 +490,8 @@ describe('Harvester Economic Pressure', () => {
         const aiActions = computeAiActions(state, 1);
 
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         // Should flee - harvester was just damaged
@@ -574,8 +574,8 @@ describe('Harvester Economic Pressure', () => {
         const aiActions = computeAiActions(state, 1);
 
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         // Should flee - nearby ally (within 120 pixels) was just damaged, indicating danger
@@ -642,8 +642,8 @@ describe('Harvester Economic Pressure', () => {
         const aiActions = computeAiActions(state, 1);
 
         const fleeActions = aiActions.filter(a =>
-            a.type === 'COMMAND_MOVE' &&
-            (a.payload as any).unitIds?.includes('harv_p1')
+            isActionType(a, 'COMMAND_MOVE') &&
+            a.payload.unitIds?.includes('harv_p1')
         );
 
         // Should NOT flee - under economic pressure and not actually being hit

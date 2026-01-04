@@ -4,11 +4,11 @@ import { SpatialGrid, getSpatialGrid, rebuildSpatialGrid, queryEntitiesInRadius,
 
 describe('SpatialGrid', () => {
     // Minimal entity for spatial grid testing - only needs pos, id, radius, dead, owner, type
-    const createTestEntity = (id: string, x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string = 'test', radius: number = 10) => ({
+    const createTestEntity = (id: string, x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string = 'test', radius: number = 10): Partial<import('../../src/engine/types').Entity> & { id: string } => ({
         id, owner, type, key, dead: false,
         pos: new Vector(x, y), prevPos: new Vector(x, y),
         hp: 100, maxHp: 100, w: 20, h: 20, radius
-    } as any);
+    } as Partial<import('../../src/engine/types').Entity> & { id: string });
 
     describe('SpatialGrid class', () => {
         let grid: SpatialGrid;

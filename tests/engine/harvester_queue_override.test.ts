@@ -34,7 +34,7 @@ describe('Harvester Queue Override Bug', () => {
 
     // Helper to spawn buildings
     function spawnBuilding(state: GameState, x: number, y: number, w: number, h: number, id: string, owner: number = 0, key: string = 'conyard'): GameState {
-        const building = createTestBuilding({ id, owner, key: key as any, x, y, w, h });
+        const building = createTestBuilding({ id, owner, key: key as import('../../src/engine/types').BuildingKey, x, y, w, h });
         return {
             ...state,
             entities: {

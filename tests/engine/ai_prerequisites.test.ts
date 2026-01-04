@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, getAIState, resetAIState } from '../../src/engine/ai';
-import { GameState, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types';
-import { INITIAL_STATE } from '../../src/engine/reducer';
+import { GameState, Entity, EntityId, UnitKey, BuildingKey, PlayerState, isActionType, Action } from '../../src/engine/types';
+import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestBuilding, createTestCombatUnit, createTestResource } from '../../src/engine/test-utils';
 
 // Helper to create test state
@@ -14,24 +14,10 @@ function createTestState(entities: Record<EntityId, Entity>): GameState {
     };
 
     // Initialize 8 players
-    const players: Record<number, any> = {};
+    const players: Record<number, PlayerState> = {};
     for (let i = 0; i < 8; i++) {
-        players[i] = {
-            id: i,
-            isAi: i > 0,
-            difficulty: 'hard' as const,
-            color: `#${i}${i}${i}${i}${i}${i}`,
-            credits: 5000,
-            maxPower: 100,
-            usedPower: 0,
-            queues: {
-                building: { current: null, progress: 0, invested: 0 },
-                infantry: { current: null, progress: 0, invested: 0 },
-                vehicle: { current: null, progress: 0, invested: 0 },
-                air: { current: null, progress: 0, invested: 0 }
-            },
-            readyToPlace: null
-        };
+        players[i] = createPlayerState(i, i > 0, 'hard', `#${i}${i}${i}${i}${i}${i}`);
+        players[i] = { ...players[i], credits: 5000 };
     }
     state = { ...state, players };
     return state;
@@ -102,8 +88,7 @@ describe('AI Prerequisites', () => {
 
             // Should NOT have any infantry START_BUILD actions
             const infantryBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'infantry'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'infantry'
             );
 
             expect(infantryBuildActions.length).toBe(0);
@@ -139,18 +124,17 @@ describe('AI Prerequisites', () => {
             };
 
             // Run several ticks to let AI decide to build
-            let actions: any[] = [];
+            let actions: Action[] = [];
             for (let i = 0; i < 5; i++) {
                 actions = computeAiActions(state, 1);
-                if (actions.some(a => a.type === 'START_BUILD' && (a as any).payload.category === 'infantry')) {
+                if (actions.some(a => isActionType(a, 'START_BUILD') && a.payload.category === 'infantry')) {
                     break;
                 }
             }
 
             // Should have infantry production action (rifle or rocket)
             const infantryBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'infantry'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'infantry'
             );
 
             expect(infantryBuildActions.length).toBeGreaterThan(0);
@@ -192,8 +176,7 @@ describe('AI Prerequisites', () => {
 
             // Should NOT have any vehicle START_BUILD actions
             const vehicleBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'vehicle'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
             );
 
             expect(vehicleBuildActions.length).toBe(0);
@@ -231,10 +214,10 @@ describe('AI Prerequisites', () => {
             };
 
             // Run several ticks to trigger vehicle production
-            let actions: any[] = [];
+            let actions: Action[] = [];
             for (let i = 0; i < 5; i++) {
                 actions = computeAiActions(state, 1);
-                if (actions.some(a => a.type === 'START_BUILD' && (a as any).payload.category === 'vehicle')) {
+                if (actions.some(a => isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle')) {
                     break;
                 }
                 // Simulate AI alternating - set lastProductionType to infantry
@@ -244,8 +227,7 @@ describe('AI Prerequisites', () => {
 
             // Should have vehicle production action
             const vehicleBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'vehicle'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
             );
 
             expect(vehicleBuildActions.length).toBeGreaterThan(0);
@@ -299,13 +281,11 @@ describe('AI Prerequisites', () => {
 
             // The AI should fall back to infantry since vehicles are too expensive
             const infantryBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'infantry'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'infantry'
             );
 
             const vehicleBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'vehicle'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
             );
 
             // Should have infantry (fallback) but NOT vehicles
@@ -353,8 +333,7 @@ describe('AI Prerequisites', () => {
             const actions = computeAiActions(state, 1);
 
             const vehicleBuildActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.category === 'vehicle'
+                isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
             );
 
             // Should be able to build vehicles when affordable
@@ -395,10 +374,9 @@ describe('AI Prerequisites', () => {
 
             const actions = computeAiActions(state, 1);
 
-            // Should NOT queue harvester production  
+            // Should NOT queue harvester production
             const harvesterActions = actions.filter(a =>
-                a.type === 'START_BUILD' &&
-                (a as any).payload.key === 'harvester'
+                isActionType(a, 'START_BUILD') && a.payload.key === 'harvester'
             );
 
             expect(harvesterActions.length).toBe(0);

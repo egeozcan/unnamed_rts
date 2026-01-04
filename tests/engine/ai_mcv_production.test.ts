@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector, PlayerState } from '../../src/engine/types';
+import { GameState, Vector, PlayerState, isActionType } from '../../src/engine/types';
 import { computeAiActions } from '../../src/engine/ai';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestBuilding, createTestCombatUnit, createTestResource, createTestHarvester } from '../../src/engine/test-utils';
@@ -13,8 +13,7 @@ describe('AI MCV Production Limiting', () => {
     const basePos = new Vector(500, 500);
 
     function setupBaseState(): GameState {
-        const state = createMockState();
-        (state as any).tick = 30; // Force AI to run
+        const state = { ...createMockState(), tick: 30 }; // Force AI to run
 
         // Setup AI player with enough credits for MCV (cost 3000) + buffer (2000)
         state.players[aiPlayerId] = {
@@ -97,8 +96,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have another START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -119,8 +117,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have another START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -142,8 +139,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Count vehicle build actions
         const vehicleBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).category === 'vehicle'
+            isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
         );
 
         // Should have at most 1 vehicle action - the guard prevents queueing multiple
@@ -192,8 +188,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -223,8 +218,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -240,8 +234,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -251,7 +244,7 @@ describe('AI MCV Production Limiting', () => {
         const state = setupBaseState();
 
         // Set credits below threshold (mcvCost 3000 + 2000 buffer = 5000)
-        (state.players[aiPlayerId] as any).credits = 4000;
+        state.players[aiPlayerId] = { ...state.players[aiPlayerId], credits: 4000 };
 
         // Empty vehicle queue to ensure no combat vehicle is built first
         state.players[aiPlayerId].queues.vehicle = {
@@ -265,8 +258,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -297,8 +289,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -319,8 +310,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Count vehicle build actions
         const vehicleBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).category === 'vehicle'
+            isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
         );
 
         // Should have at most 1 vehicle action (the alreadyQueuedVehicleThisTick guard)
@@ -342,8 +332,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT queue another MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);
@@ -364,8 +353,7 @@ describe('AI MCV Production Limiting', () => {
 
         // Should NOT queue another MCV
         const mcvBuildActions = actions.filter(a =>
-            a.type === 'START_BUILD' &&
-            (a.payload as any).key === 'mcv'
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );
 
         expect(mcvBuildActions.length).toBe(0);

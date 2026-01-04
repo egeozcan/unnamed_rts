@@ -49,6 +49,9 @@ let canvas: HTMLCanvasElement;
 let onLeftClick: ((wx: number, wy: number, isDrag: boolean, dragRect?: { x1: number, y1: number, x2: number, y2: number }) => void) | null = null;
 let onRightClick: ((wx: number, wy: number) => void) | null = null;
 let onDeployMCV: (() => void) | null = null;
+let onToggleDebug: (() => void) | null = null;
+let onToggleMinimap: (() => void) | null = null;
+let onSetSpeed: ((speed: 1 | 2 | 3 | 4) => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 
@@ -60,7 +63,7 @@ export function initInput(
         onDeployMCV: () => void;
         onToggleDebug: () => void;
         onToggleMinimap: () => void;
-        onSetSpeed: (speed: 1 | 2 | 3) => void;
+        onSetSpeed: (speed: 1 | 2 | 3 | 4) => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -69,9 +72,9 @@ export function initInput(
     onLeftClick = callbacks.onLeftClick;
     onRightClick = callbacks.onRightClick;
     onDeployMCV = callbacks.onDeployMCV;
-    (inputState as any).onToggleDebug = callbacks.onToggleDebug;
-    (inputState as any).onToggleMinimap = callbacks.onToggleMinimap;
-    (inputState as any).onSetSpeed = callbacks.onSetSpeed;
+    onToggleDebug = callbacks.onToggleDebug;
+    onToggleMinimap = callbacks.onToggleMinimap;
+    onSetSpeed = callbacks.onSetSpeed;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -90,23 +93,23 @@ function setupEventListeners() {
         inputState.keys[e.key] = true;
         if (e.key === 'F3') {
             e.preventDefault(); // Prevent browser's default F3 behavior (find)
-            (inputState as any).onToggleDebug?.();
+            onToggleDebug?.();
         }
         if (e.key === 'm' || e.key === 'M') {
-            (inputState as any).onToggleMinimap?.();
+            onToggleMinimap?.();
         }
-        // Game speed controls (1 = slow, 2 = normal, 3 = fast)
+        // Game speed controls (1 = slow, 2 = normal, 3 = fast, 4 = very fast)
         if (e.key === '1') {
-            (inputState as any).onSetSpeed?.(1);
+            onSetSpeed?.(1);
         }
         if (e.key === '2') {
-            (inputState as any).onSetSpeed?.(2);
+            onSetSpeed?.(2);
         }
         if (e.key === '3') {
-            (inputState as any).onSetSpeed?.(3);
+            onSetSpeed?.(3);
         }
         if (e.key === '4') {
-            (inputState as any).onSetSpeed?.(4);
+            onSetSpeed?.(4);
         }
         // Deploy MCV key handler
         if (e.key === 'Enter') {

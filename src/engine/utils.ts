@@ -1,4 +1,4 @@
-import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle } from './types.js';
+import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle, BuildingKey, UnitKey } from './types.js';
 import { RULES } from '../data/schemas/index.js';
 
 // Default grid dimensions based on default map size
@@ -124,17 +124,16 @@ const gridManager = new GridManager();
 export function getGridW(): number { return gridManager.gridW; }
 export function getGridH(): number { return gridManager.gridH; }
 export const collisionGrid = new Proxy({} as Uint8Array, {
-    get(_, prop) {
-        return (gridManager.collisionGrid as any)[prop];
+    get(_, prop: string | symbol) {
+        return Reflect.get(gridManager.collisionGrid, prop);
     },
-    set(_, prop, value) {
-        (gridManager.collisionGrid as any)[prop] = value;
-        return true;
+    set(_, prop: string | symbol, value: unknown) {
+        return Reflect.set(gridManager.collisionGrid, prop, value);
     }
 });
 export const dangerGrids = new Proxy({} as Record<number, Uint8Array>, {
-    get(_, prop) {
-        return (gridManager.dangerGrids as any)[prop];
+    get(_, prop: string | symbol) {
+        return Reflect.get(gridManager.dangerGrids, prop);
     }
 });
 
@@ -190,18 +189,14 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
     const isBuilding = type === 'BUILDING';
     const isResource = type === 'RESOURCE';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let data: any;
+    type EntityStats = { hp?: number; w?: number; h?: number };
+    let data: EntityStats;
     if (isBuilding) {
-        data = RULES.buildings[statsKey];
+        data = RULES.buildings[statsKey] ?? { hp: 100, w: 20, h: 20 };
     } else if (isResource) {
         data = { hp: 1000, w: 25, h: 25 };
     } else {
-        data = RULES.units[statsKey];
-    }
-
-    if (!data) {
-        data = { hp: 100, w: 20, h: 20 };
+        data = RULES.units[statsKey] ?? { hp: 100, w: 20, h: 20 };
     }
 
     const id = 'e' + (nextEntityId++);
@@ -237,7 +232,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         return {
             ...baseProps,
             type: 'BUILDING' as const,
-            key: statsKey as any,
+            key: statsKey as BuildingKey,
             combat: isDefense ? {
                 targetId: null,
                 lastAttackerId: null,
@@ -301,7 +296,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
     return {
         ...baseProps,
         type: 'UNIT' as const,
-        key: statsKey as any,
+        key: statsKey as Exclude<UnitKey, 'harvester'>,
         movement,
         combat
     };

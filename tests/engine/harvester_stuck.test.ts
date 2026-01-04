@@ -27,7 +27,7 @@ describe('Harvester Stuck at Ore', () => {
         const building = createTestBuilding({
             id,
             owner,
-            key: key as any,
+            key: key as import('../../src/engine/types').BuildingKey,
             x,
             y,
             w,

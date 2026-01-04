@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, isActionType } from '../../src/engine/types.js';
+import { GameState, isActionType, Action } from '../../src/engine/types.js';
 import { _testUtils as aiTestUtils, resetAIState } from '../../src/engine/ai';
 import { createTestBuilding } from '../../src/engine/test-utils';
 
@@ -13,7 +13,7 @@ describe('Building Selling', () => {
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
 
-        const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const action: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         const nextState = update(state, action);
 
         expect(nextState.entities['b1']).toBeUndefined();
@@ -27,7 +27,7 @@ describe('Building Selling', () => {
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
 
-        const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const action: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         const nextState = update(state, action);
 
         // Power plant cost is 300, 50% base is 150. 50% damaged means 50% of 150 = 75. 1000 + 75 = 1075.
@@ -39,7 +39,7 @@ describe('Building Selling', () => {
         state.entities['b1'] = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 0, y: 0, hp: 800, maxHp: 800 });
         state = { ...state, selection: ['b1'] };
 
-        const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const action: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         const nextState = update(state, action);
 
         expect(nextState.selection).not.toContain('b1');
@@ -50,7 +50,7 @@ describe('Building Selling', () => {
         state.entities['b1'] = createTestBuilding({ id: 'b1', owner: 1, key: 'power', x: 0, y: 0, hp: 800, maxHp: 800 });
         const initialCredits = state.players[0].credits;
 
-        const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const action: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         const nextState = update(state, action);
 
         expect(nextState.entities['b1']).toBeDefined();
@@ -61,10 +61,10 @@ describe('Building Selling', () => {
         let state = getInitialState();
         expect(state.sellMode).toBe(false);
 
-        state = update(state, { type: 'TOGGLE_SELL_MODE' } as any);
+        state = update(state, { type: 'TOGGLE_SELL_MODE' });
         expect(state.sellMode).toBe(true);
 
-        state = update(state, { type: 'TOGGLE_SELL_MODE' } as any);
+        state = update(state, { type: 'TOGGLE_SELL_MODE' });
         expect(state.sellMode).toBe(false);
     });
 });

@@ -11,8 +11,7 @@ function createMockState(): GameState {
 
 describe('AI Harvester Defense', () => {
     it('should detect when a harvester is under attack and dispatch defenders', () => {
-        const state = createMockState();
-        (state as any).tick = 30; // Force AI run
+        const state = { ...createMockState(), tick: 30 }; // Force AI run
 
         // Setup AI player (1)
         const aiPlayerId = 1;

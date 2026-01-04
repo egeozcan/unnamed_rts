@@ -3,7 +3,8 @@
  * These are separated from game.ts to enable unit testing without DOM dependencies.
  */
 
-import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, WellEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, WellEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, HarvesterUnit } from './engine/types.js';
+import { isHarvester } from './engine/type-guards.js';
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import { RULES } from './data/schemas/index.js';
 
@@ -37,7 +38,7 @@ export function reconstructVectors(state: GameState): GameState {
     // Deep clone and reconstruct vectors
     const entities: Record<EntityId, Entity> = {};
     for (const id in state.entities) {
-        const e = state.entities[id] as any; // Use any for JSON deserialization
+        const e = state.entities[id];
         const base = {
             ...e,
             pos: new Vector(e.pos.x, e.pos.y),
@@ -57,12 +58,15 @@ export function reconstructVectors(state: GameState): GameState {
             } : e.movement;
 
             // Reconstruct harvester component vectors if present
-            const harvester = e.harvester && e.harvester.dockPos ? {
-                ...e.harvester,
-                dockPos: new Vector(e.harvester.dockPos.x, e.harvester.dockPos.y)
-            } : e.harvester;
-
-            entities[id] = { ...base, movement, harvester } as Entity;
+            if (isHarvester(e)) {
+                const harvester = e.harvester.dockPos ? {
+                    ...e.harvester,
+                    dockPos: new Vector(e.harvester.dockPos.x, e.harvester.dockPos.y)
+                } : e.harvester;
+                entities[id] = { ...base, movement, harvester } as HarvesterUnit;
+            } else {
+                entities[id] = { ...base, movement } as Entity;
+            }
         } else {
             entities[id] = base as Entity;
         }
@@ -78,7 +82,7 @@ export function reconstructVectors(state: GameState): GameState {
 /**
  * Calculate power production and consumption for a specific player.
  */
-export function calculatePower(pid: number, entities: Record<EntityId, any>): { in: number; out: number } {
+export function calculatePower(pid: number, entities: Record<EntityId, Entity>): { in: number; out: number } {
     let p = { in: 0, out: 0 };
     for (const id in entities) {
         const e = entities[id];

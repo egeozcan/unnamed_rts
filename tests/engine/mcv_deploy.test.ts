@@ -75,8 +75,8 @@ describe('MCV Deployment', () => {
     });
 
     test('should deploy MCV into Construction Yard when valid', () => {
-        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } };
-        const newState = update(state, action as any);
+        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } } as const;
+        const newState = update(state, action);
 
         // MCV should be gone
         expect(newState.entities[mcvId]).toBeUndefined();
@@ -111,8 +111,8 @@ describe('MCV Deployment', () => {
             }
         };
 
-        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } };
-        const newState = update(state, action as any);
+        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } } as const;
+        const newState = update(state, action);
 
         // MCV should still affect
         expect(newState.entities[mcvId]).toBeDefined();
@@ -139,8 +139,8 @@ describe('MCV Deployment', () => {
                 [blockerId]: {
                     id: blockerId,
                     owner: playerId,
-                    type: 'BUILDING',
-                    key: 'power',
+                    type: 'BUILDING' as const,
+                    key: 'power' as const,
                     pos: new Vector(500, 500), // Exact same spot
                     prevPos: new Vector(500, 500),
                     hp: 500,
@@ -149,13 +149,13 @@ describe('MCV Deployment', () => {
                     h: 60,
                     radius: 30,
                     dead: false,
-                    building: { isRepairing: false, placedTick: 0 }
+                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false, placedTick: 0 }
                 }
             }
         };
 
-        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } };
-        const newState = update(state, action as any);
+        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } } as const;
+        const newState = update(state, action);
 
         // MCV should still exist
         expect(newState.entities[mcvId]).toBeDefined();
@@ -178,8 +178,8 @@ describe('MCV Deployment', () => {
                 [resId]: {
                     id: resId,
                     owner: -1,
-                    type: 'RESOURCE',
-                    key: 'ore',
+                    type: 'RESOURCE' as const,
+                    key: 'ore' as const,
                     pos: new Vector(530, 500), // Overlapping
                     prevPos: new Vector(530, 500),
                     hp: 100,
@@ -192,8 +192,8 @@ describe('MCV Deployment', () => {
             }
         };
 
-        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } };
-        const newState = update(state, action as any);
+        const action = { type: 'DEPLOY_MCV', payload: { unitId: mcvId } } as const;
+        const newState = update(state, action);
 
         // MCV should still exist
         expect(newState.entities[mcvId]).toBeDefined();

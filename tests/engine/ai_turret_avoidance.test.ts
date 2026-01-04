@@ -19,17 +19,17 @@ describe('AI Turret Avoidance', () => {
 
         // 1. Setup entities
         // My Unit (P0)
-        const unit = {
+        const unit: Partial<import('../../src/engine/types').CombatUnit> = {
             id: 'unit1',
             owner: 0,
             type: 'UNIT',
             key: 'light',
             pos: start,
             radius: 10
-        } as any;
+        };
 
         // Enemy Turret (P1)
-        const turret = {
+        const turret: Partial<import('../../src/engine/types').BuildingEntity> = {
             id: 'turret1',
             owner: 1,
             type: 'BUILDING',
@@ -39,11 +39,11 @@ describe('AI Turret Avoidance', () => {
             h: 40,
             radius: 20,
             dead: false
-        } as any;
+        };
 
-        const entities = {
-            [unit.id]: unit,
-            [turret.id]: turret
+        const entities: Record<string, import('../../src/engine/types').Entity> = {
+            [unit.id!]: unit as import('../../src/engine/types').Entity,
+            [turret.id!]: turret as import('../../src/engine/types').Entity
         };
 
         // 2. Refresh Grids

@@ -48,9 +48,20 @@ describe('Reducer', () => {
         // Add a conyard for player 0 so production can work (eliminated players can't produce)
         const conyard = createTestEntity('cy_test', 0, 'BUILDING', 'conyard');
         state = addEntityToState(state, conyard);
-        const p0 = state.players[0] as any; // Cast to allow writing to readonly
-        // Directly set progress to near completion
-        p0.queues.building = { current: 'power', progress: 99.9, invested: 300 };
+        // Directly set progress to near completion - requires mutable state for tests
+        state = {
+            ...state,
+            players: {
+                ...state.players,
+                0: {
+                    ...state.players[0],
+                    queues: {
+                        ...state.players[0].queues,
+                        building: { current: 'power', progress: 99.9, invested: 300, queued: [] }
+                    }
+                }
+            }
+        };
 
         const nextState = update(state, { type: 'TICK' });
 
@@ -59,10 +70,15 @@ describe('Reducer', () => {
     });
 
     it('should PLACE_BUILDING and create entity', () => {
-        let state = { ...getInitialState(), running: true };
-        const p0 = state.players[0] as any;
-        p0.readyToPlace = 'power';
-        (state as any).placingBuilding = 'power';
+        let state = {
+            ...getInitialState(),
+            running: true,
+            placingBuilding: 'power',
+            players: {
+                ...getInitialState().players,
+                0: { ...getInitialState().players[0], readyToPlace: 'power' }
+            }
+        };
 
         const action = { type: 'PLACE_BUILDING', payload: { key: 'power', x: 100, y: 100, playerId: 0 } } as const;
         const nextState = update(state, action);
@@ -77,10 +93,21 @@ describe('Reducer', () => {
     });
 
     it('should CANCEL_BUILD and refund', () => {
-        let state = { ...getInitialState(), running: true };
-        const p0 = state.players[0] as any;
-        // Set invested amount to simulate credits already spent (refunds are based on invested, not progress)
-        p0.queues.building = { current: 'power', progress: 50, invested: 150 }; // Power costs 300, so 50% = 150
+        const baseState = getInitialState();
+        let state = {
+            ...baseState,
+            running: true,
+            players: {
+                ...baseState.players,
+                0: {
+                    ...baseState.players[0],
+                    queues: {
+                        ...baseState.players[0].queues,
+                        building: { current: 'power', progress: 50, invested: 150, queued: [] }
+                    }
+                }
+            }
+        };
         const initialCredits = state.players[0].credits;
 
         const action = { type: 'CANCEL_BUILD', payload: { category: 'building', playerId: 0 } } as const;
@@ -91,15 +118,26 @@ describe('Reducer', () => {
     });
 
     it('should cancel all production for eliminated players (no buildings, no MCVs)', () => {
-        let state = { ...getInitialState(), running: true };
-
+        const baseState = getInitialState();
         // Player 0 has no buildings and no MCVs (eliminated)
         // But has production in queues (this shouldn't happen normally, but edge case)
-        const p0 = state.players[0] as any;
-        p0.queues.building = { current: 'barracks', progress: 50, invested: 250 };
-        p0.queues.vehicle = { current: 'light', progress: 75, invested: 600 };
-        p0.queues.infantry = { current: 'rifle', progress: 25, invested: 25 };
-        p0.readyToPlace = 'power';
+        let state = {
+            ...baseState,
+            running: true,
+            players: {
+                ...baseState.players,
+                0: {
+                    ...baseState.players[0],
+                    readyToPlace: 'power',
+                    queues: {
+                        building: { current: 'barracks', progress: 50, invested: 250, queued: [] },
+                        vehicle: { current: 'light', progress: 75, invested: 600, queued: [] },
+                        infantry: { current: 'rifle', progress: 25, invested: 25, queued: [] },
+                        air: { current: null, progress: 0, invested: 0, queued: [] }
+                    }
+                }
+            }
+        };
 
         // Tick should cancel all production for eliminated player
         const nextState = update(state, { type: 'TICK' });

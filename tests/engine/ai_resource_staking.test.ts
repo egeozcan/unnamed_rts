@@ -9,12 +9,12 @@ function createMockState(): GameState {
     return JSON.parse(JSON.stringify(INITIAL_STATE));
 }
 
-function addEntity(state: GameState, entity: any) {
-    state.entities[entity.id] = entity;
+function addEntity(state: GameState, entity: Partial<import('../../src/engine/types').Entity> & { id: string }) {
+    state.entities[entity.id] = entity as import('../../src/engine/types').Entity;
     return entity;
 }
 
-function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, x: number, y: number): any {
+function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, x: number, y: number): Partial<import('../../src/engine/types').Entity> & { id: string } {
     return {
         id,
         owner,
@@ -24,13 +24,12 @@ function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESO
         w: 40,
         h: 40,
         dead: false
-    };
+    } as Partial<import('../../src/engine/types').Entity> & { id: string };
 }
 
 describe('AI Resource Staking', () => {
     it('should NOT build a refinery near a resource that already has an ENEMY refinery', () => {
-        const state = createMockState();
-        (state as any).tick = 30; // Force AI run
+        const state = { ...createMockState(), tick: 30 }; // Force AI run
 
         const aiId = 1;
         const enemyId = 0;
@@ -51,12 +50,17 @@ describe('AI Resource Staking', () => {
         addEntity(state, resB);
 
         // Give AI credits and setup player state
-        (state.players[aiId] as any).credits = 2000;
-        (state.players[aiId] as any).readyToPlace = 'refinery'; // AI is deciding WHERE to place
+        const updatedState: GameState = {
+            ...state,
+            players: {
+                ...state.players,
+                [aiId]: { ...state.players[aiId], credits: 2000, readyToPlace: 'refinery' }
+            }
+        };
 
         // Run AI - it should generate a PLACE_BUILDING action
         // Since readyToPlace is set, handleBuildingPlacement is called
-        const actions = computeAiActions(state, aiId);
+        const actions = computeAiActions(updatedState, aiId);
 
         const placeAction = actions.find(a => isActionType(a, 'PLACE_BUILDING') && a.payload.key === 'refinery');
 

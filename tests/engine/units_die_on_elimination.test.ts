@@ -5,10 +5,10 @@ import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-
 
 describe('Units Die on Elimination', () => {
     const createBuilding = (id: string, owner: number, key: string = 'conyard') =>
-        createTestBuilding({ id, owner, key: key as any, x: owner * 500, y: 100 });
+        createTestBuilding({ id, owner, key: key as import('../../src/engine/types').BuildingKey, x: owner * 500, y: 100 });
 
     const createUnit = (id: string, owner: number, key: string = 'light') =>
-        createTestCombatUnit({ id, owner, key: key as any, x: owner * 500 + 50, y: 150 });
+        createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>, x: owner * 500 + 50, y: 150 });
 
     const createMCV = (id: string, owner: number) =>
         createTestCombatUnit({ id, owner, key: 'mcv', x: owner * 500 + 50, y: 150 });

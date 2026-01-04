@@ -1,5 +1,12 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, UnitEntity } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, UnitEntity, CombatUnit, PlayerState } from './engine/types.js';
+
+declare global {
+    interface Window {
+        GAME_STATE?: GameState;
+        startGame?: typeof startGameWithConfig;
+    }
+}
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
@@ -352,7 +359,7 @@ function reconstructVectors(state: GameState): GameState {
                     key: e.key,
                     movement: reconstructedMovement,
                     combat: e.combat,
-                    engineer: (e as any).engineer
+                    engineer: (e as CombatUnit).engineer
                 } as UnitEntity;
             }
         } else if (isBuilding(e)) {
@@ -388,7 +395,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     humanPlayerId = humanPlayer ? humanPlayer.slot : null;
 
     // Create player states
-    const players: Record<number, any> = {};
+    const players: Record<number, PlayerState> = {};
     config.players.forEach(p => {
         const isAi = p.type !== 'human';
         const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'easy' | 'medium' | 'hard';
@@ -503,7 +510,7 @@ function startGameWithConfig(config: SkirmishConfig) {
                 currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
             }
         },
-        onSetSpeed: (speed: 1 | 2 | 3) => {
+        onSetSpeed: (speed: 1 | 2 | 3 | 4) => {
             setGameSpeed(speed);
         },
         getZoom: () => currentState.zoom,
@@ -825,7 +832,7 @@ function gameLoop(timestamp: number = 0) {
     }
 
     // Expose state for debugging
-    (window as any).GAME_STATE = currentState;
+    window.GAME_STATE = currentState;
 
 
     // Camera & Zoom Input
@@ -942,7 +949,7 @@ function checkWinCondition() {
     }
 }
 
-(window as any).startGame = startGameWithConfig;
+window.startGame = startGameWithConfig;
 
 // Export pure functions for testing
 export const _testUtils = {

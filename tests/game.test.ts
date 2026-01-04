@@ -103,7 +103,7 @@ describe('Game Logic', () => {
                 },
                 running: true,
                 tick: 0
-            } as any;
+            } as Partial<import('../src/engine/types').GameState>;
 
             const result = reconstructVectors(plainState);
 
@@ -111,7 +111,7 @@ describe('Game Logic', () => {
             expect(result.entities['e1'].pos).toBeInstanceOf(Vector);
             expect(result.entities['e1'].prevPos).toBeInstanceOf(Vector);
             // For units, movement vectors are inside movement component
-            const entity = result.entities['e1'] as any;
+            const entity = result.entities['e1'] as import('../src/engine/types').UnitEntity;
             expect(entity.movement.vel).toBeInstanceOf(Vector);
             expect(entity.movement.moveTarget).toBeInstanceOf(Vector);
             expect(entity.movement.finalDest).toBeInstanceOf(Vector);
@@ -138,11 +138,11 @@ describe('Game Logic', () => {
                         }
                     }
                 }
-            } as any;
+            } as Partial<import('../src/engine/types').GameState>;
 
             const result = reconstructVectors(plainState);
 
-            const entity = result.entities['e1'] as any;
+            const entity = result.entities['e1'] as import('../src/engine/types').UnitEntity;
             expect(entity.movement.moveTarget).toBeNull();
             expect(entity.movement.finalDest).toBeNull();
             expect(entity.movement.unstuckDir).toBeNull();
@@ -153,7 +153,7 @@ describe('Game Logic', () => {
             const plainState = {
                 camera: { x: 500, y: 750 },
                 entities: {}
-            } as any;
+            } as Partial<import('../src/engine/types').GameState>;
 
             const result = reconstructVectors(plainState);
 

@@ -213,11 +213,13 @@ describe('AI Stranded Units', () => {
 
             // At minimum, idle units far from base should receive commands
             const unitIds = [tank1.id, tank2.id, tank3.id];
-            const hasCommandsForStrandedUnits = moveCommands.some(cmd =>
-                unitIds.some(id => (cmd.payload as any).unitIds?.includes(id))
-            ) || attackCommands.some(cmd =>
-                unitIds.some(id => (cmd.payload as any).unitIds?.includes(id))
-            );
+            const hasCommandsForStrandedUnits = moveCommands.some(cmd => {
+                if (cmd.type !== 'COMMAND_MOVE') return false;
+                return unitIds.some(id => cmd.payload.unitIds?.includes(id));
+            }) || attackCommands.some(cmd => {
+                if (cmd.type !== 'COMMAND_ATTACK') return false;
+                return unitIds.some(id => cmd.payload.unitIds?.includes(id));
+            });
 
             expect(hasCommandsForStrandedUnits).toBe(true);
         });

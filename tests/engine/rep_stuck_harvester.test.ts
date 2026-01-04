@@ -17,12 +17,12 @@ describe('Unit Stuck Pathing Priority', () => {
                     credits: 1000,
                     isAi: false,
                     color: 'blue',
-                    difficulty: 'medium',
+                    difficulty: 'medium' as const,
                     maxPower: 100,
                     usedPower: 0,
                     readyToPlace: null,
                     queues: { building: { current: null, progress: 0, invested: 0 }, infantry: { current: null, progress: 0, invested: 0 }, vehicle: { current: null, progress: 0, invested: 0 }, air: { current: null, progress: 0, invested: 0 } }
-                } as any
+                }
             },
             selection: [],
             projectiles: [],

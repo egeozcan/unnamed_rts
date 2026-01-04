@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector } from '../../src/engine/types.js';
+import { GameState, Vector, Action } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils.js';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
@@ -27,7 +27,7 @@ describe('Win Condition - Sell Building', () => {
         expect(tickState.running).toBe(true);
 
         // Sell the last building
-        const action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const action: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         let nextState = update(tickState, action);
 
         // Verify win condition immediately after sell
@@ -45,7 +45,7 @@ describe('Win Condition - Sell Building', () => {
         };
         tickState = update(state, { type: 'TICK' });
 
-        const actionWithUnit = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } } as any;
+        const actionWithUnit: Action = { type: 'SELL_BUILDING', payload: { buildingId: 'b1', playerId: 0 } };
         nextState = update(tickState, actionWithUnit);
 
         const deadUnit = nextState.entities['u1'];

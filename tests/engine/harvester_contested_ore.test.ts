@@ -5,9 +5,8 @@ import { tick, INITIAL_STATE } from '../../src/engine/reducer';
 import { createTestHarvester, createTestBuilding } from '../../src/engine/test-utils';
 
 function createTestState(): GameState {
-    const state: GameState = JSON.parse(JSON.stringify(INITIAL_STATE));
-    state.running = true;
-    (state as any).tick = 100;
+    const baseState: GameState = JSON.parse(JSON.stringify(INITIAL_STATE));
+    const state = { ...baseState, running: true, tick: 100 };
 
     // Ensure player 2 exists for enemy detection
     if (!state.players[2]) {

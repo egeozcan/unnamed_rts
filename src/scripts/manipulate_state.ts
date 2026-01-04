@@ -106,18 +106,19 @@ function main() {
     // 'types.ts' defines Vector class.
     // Let's do a simple rehydration helper.
 
-    function rehydrateVectors(obj: any): any {
+    function rehydrateVectors(obj: unknown): unknown {
         if (!obj) return obj;
-        if (typeof obj === 'object') {
-            if (typeof obj.x === 'number' && typeof obj.y === 'number' && Object.keys(obj).length === 2) {
-                return new Vector(obj.x, obj.y);
+        if (typeof obj === 'object' && obj !== null) {
+            const record = obj as Record<string, unknown>;
+            if (typeof record.x === 'number' && typeof record.y === 'number' && Object.keys(record).length === 2) {
+                return new Vector(record.x, record.y);
             }
             if (Array.isArray(obj)) {
                 return obj.map(rehydrateVectors);
             }
-            const newObj: any = {};
-            for (const key in obj) {
-                newObj[key] = rehydrateVectors(obj[key]);
+            const newObj: Record<string, unknown> = {};
+            for (const key in record) {
+                newObj[key] = rehydrateVectors(record[key]);
             }
             return newObj;
         }
@@ -132,7 +133,7 @@ function main() {
     // So we MUST rehydrate.
 
     console.log('Rehydrating state...');
-    state = rehydrateVectors(state);
+    state = rehydrateVectors(state) as GameState;
 
     // === APPLY REMOVALS ===
 

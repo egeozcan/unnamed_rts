@@ -21,12 +21,12 @@ describe('Unit Control', () => {
 
     // Helper to create units
     function createUnit(id: string, owner: number, pos: Vector, key: string = 'light') {
-        return createTestCombatUnit({ id, owner, key: key as any, x: pos.x, y: pos.y });
+        return createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>, x: pos.x, y: pos.y });
     }
 
     // Helper to create a building (needed to prevent game from ending due to win condition)
     function createBuilding(id: string, owner: number, pos: Vector, key: string = 'conyard') {
-        return createTestBuilding({ id, owner, key: key as any, x: pos.x, y: pos.y });
+        return createTestBuilding({ id, owner, key: key as import('../../src/engine/types').BuildingKey, x: pos.x, y: pos.y });
     }
 
     describe('Pulling back auto-attacking units', () => {
