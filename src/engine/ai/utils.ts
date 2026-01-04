@@ -379,6 +379,20 @@ export function getProductionBuildingsFor(category: string): string[] {
 
 export function isRefineryUseful(refinery: Entity, state: GameState): boolean {
     const USEFUL_ORE_DISTANCE = 600;
+    const CONYARD_COVERAGE_RADIUS = 500; // Same as expansion refinery build logic
+
+    // Check if refinery is near a friendly conyard (expansion base support)
+    // This prevents selling refineries built for expansion bases
+    const friendlyConyards = Object.values(state.entities).filter(e =>
+        e.type === 'BUILDING' && e.key === 'conyard' && e.owner === refinery.owner && !e.dead
+    );
+    for (const conyard of friendlyConyards) {
+        if (refinery.pos.dist(conyard.pos) < CONYARD_COVERAGE_RADIUS) {
+            return true; // Refinery supports this conyard/expansion
+        }
+    }
+
+    // Check if refinery is near ore
     const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
     for (const ore of allOre) {
         if (refinery.pos.dist(ore.pos) < USEFUL_ORE_DISTANCE) {

@@ -588,8 +588,6 @@ export function handleEmergencySell(
     // 1. Identify Critical Needs
     const hasRefinery = buildings.some(b => b.key === 'refinery');
     const hasConyard = hasProductionBuildingFor('building', buildings);
-    const hasFactory = hasProductionBuildingFor('vehicle', buildings);
-    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
 
     // Check for "Stalemate / Fire Sale" condition
     const harvesters = Object.values(_state.entities).filter(e =>
@@ -622,15 +620,25 @@ export function handleEmergencySell(
     }
 
     // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
+    // Don't sell factory/barracks during stalemate (they'd just be rebuilt causing a loop)
+    // Conyard CAN be sold if we have another production building (factory/barracks)
     if (!shouldSell && isStalemate) {
-        if (hasFactory || hasBarracks) {
-            shouldSell = true;
-            candidates = matureBuildings.filter(b => {
-                if (b.key === 'factory' && buildings.filter(f => f.key === 'factory').length === 1) return false;
-                if (b.key === 'barracks' && !hasFactory && buildings.filter(br => br.key === 'barracks').length === 1) return false;
-                return true;
-            });
+        const hasFactory = hasProductionBuildingFor('vehicle', buildings);
+        const hasBarracks = hasProductionBuildingFor('infantry', buildings);
+        const hasAnyProduction = hasFactory || hasBarracks;
 
+        candidates = matureBuildings.filter(b => {
+            // Never sell factory/barracks during stalemate (causes rebuild loop)
+            if (b.key === 'factory' || b.key === 'barracks') return false;
+            // Never sell refinery (needed for income recovery)
+            if (b.key === 'refinery') return false;
+            // Only sell conyard if we have another production building
+            if (b.key === 'conyard' && !hasAnyProduction) return false;
+            return true;
+        });
+
+        if (candidates.length > 0) {
+            shouldSell = true;
             candidates.sort((a, b) => {
                 const idxA = getPriorityIndex(a.key, sellPriority);
                 const idxB = getPriorityIndex(b.key, sellPriority);
