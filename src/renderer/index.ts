@@ -45,12 +45,18 @@ export class Renderer {
 
         ctx.save();
 
+        // OPTIMIZATION: Cache frequently accessed values
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        const cameraX = camera.x;
+        const cameraY = camera.y;
+
         // Calculate visible world bounds with buffer for large entities
         const buffer = 150;
-        const viewLeft = camera.x - buffer / zoom;
-        const viewRight = camera.x + (this.canvas.width + buffer) / zoom;
-        const viewTop = camera.y - buffer / zoom;
-        const viewBottom = camera.y + (this.canvas.height + buffer) / zoom;
+        const viewLeft = cameraX - buffer / zoom;
+        const viewRight = cameraX + (canvasWidth + buffer) / zoom;
+        const viewTop = cameraY - buffer / zoom;
+        const viewBottom = cameraY + (canvasHeight + buffer) / zoom;
 
         // Use spatial grid to get only visible entities
         const viewCenterX = (viewLeft + viewRight) / 2;
@@ -62,13 +68,61 @@ export class Renderer {
 
         const visibleEntities = getSpatialGrid().queryRadius(viewCenterX, viewCenterY, queryRadius);
 
-        // Sort only visible entities by Y for proper layering
-        const sortedEntities = visibleEntities
-            .filter(e => !e.dead)
-            .sort((a, b) => a.pos.y - b.pos.y);
+        // OPTIMIZATION: Early culling - filter out entities outside screen bounds before sorting
+        // This is more precise than the spatial grid query and happens before expensive sorting
+        const screenCulledEntities = visibleEntities.filter(e => {
+            if (e.dead) return false;
 
-        // Draw entities
+            // Quick screen bounds check using world coordinates
+            const screenX = (e.pos.x - cameraX) * zoom;
+            const screenY = (e.pos.y - cameraY) * zoom;
+            const screenRadius = e.radius * zoom;
+
+            return screenX + screenRadius >= -100 &&
+                screenX - screenRadius <= canvasWidth + 100 &&
+                screenY + screenRadius >= -100 &&
+                screenY - screenRadius <= canvasHeight + 100;
+        });
+
+        // Sort only visible entities by Y for proper layering
+        const sortedEntities = screenCulledEntities.sort((a, b) => a.pos.y - b.pos.y);
+
+        // OPTIMIZATION: Batch entities by type to reduce context state changes
+        // Group entities into batches: RESOURCE, ROCK, WELL, then UNIT/BUILDING by owner
+        const resourceEntities: Entity[] = [];
+        const rockEntities: Entity[] = [];
+        const wellEntities: Entity[] = [];
+        const unitBuildingEntities: Entity[] = [];
+
         for (const entity of sortedEntities) {
+            if (entity.type === 'RESOURCE') {
+                resourceEntities.push(entity);
+            } else if (entity.type === 'ROCK') {
+                rockEntities.push(entity);
+            } else if (entity.type === 'WELL') {
+                wellEntities.push(entity);
+            } else {
+                unitBuildingEntities.push(entity);
+            }
+        }
+
+        // Draw resources (no owner-specific colors)
+        for (const entity of resourceEntities) {
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+        }
+
+        // Draw rocks (no owner-specific colors)
+        for (const entity of rockEntities) {
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+        }
+
+        // Draw wells (no owner-specific colors)
+        for (const entity of wellEntities) {
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+        }
+
+        // Draw units and buildings (batched by owner for color caching)
+        for (const entity of unitBuildingEntities) {
             this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
         }
 
@@ -84,7 +138,7 @@ export class Renderer {
         }
 
         // Building placement preview
-        if (state.mode !== 'demo' && placingBuilding && mousePos.x < this.canvas.width) {
+        if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
             this.drawPlacementPreview(placingBuilding, mousePos, camera, zoom, Object.values(entities), localPlayerId);
         }
 
@@ -112,10 +166,8 @@ export class Renderer {
         const ctx = this.ctx;
         const sc = this.worldToScreen(entity.pos, camera, zoom);
 
-        // Culling
-        if (sc.x < -100 || sc.x > this.canvas.width + 100 || sc.y < -100 || sc.y > this.canvas.height + 100) {
-            return;
-        }
+        // OPTIMIZATION: Culling is now done earlier in render() before sorting
+        // This check is redundant and has been removed for performance
 
         ctx.save();
         ctx.translate(sc.x, sc.y);

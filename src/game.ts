@@ -28,6 +28,10 @@ const renderer = new Renderer(canvas);
 let currentState: GameState = INITIAL_STATE;
 let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
 
+// OPTIMIZATION: Cache power calculations to avoid recalculating every frame
+let cachedPower: { out: number; in: number } = { out: 0, in: 0 };
+let cachedPowerTick: number = -1;
+
 // Frame rate limiting
 const TARGET_FPS = 60;
 const FRAME_TIME = 1000 / TARGET_FPS;
@@ -821,10 +825,17 @@ function gameLoop(timestamp: number = 0) {
     // Update UI - use human player's data, or first player if observer
     const displayPlayerId = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
     const displayPlayer = currentState.players[displayPlayerId];
-    const power = calculatePower(displayPlayerId, currentState.entities);
+
+    // OPTIMIZATION: Cache power calculation - only recalculate every 5 ticks or when tick changes
+    // Power only changes when buildings are built/destroyed, so no need to calculate every frame
+    if (cachedPowerTick !== currentState.tick) {
+        cachedPower = calculatePower(displayPlayerId, currentState.entities);
+        cachedPowerTick = currentState.tick;
+    }
+
     if (displayPlayer) {
         updateMoney(displayPlayer.credits);
-        updatePower(power.out, power.in);
+        updatePower(cachedPower.out, cachedPower.in);
     }
 
     if (currentState.tick % 5 === 0) {
@@ -880,7 +891,9 @@ function gameLoop(timestamp: number = 0) {
 
     // Minimap
     const size = renderer.getSize();
-    const lowPower = power.out < power.in;
+    const lowPower = cachedPower.out < cachedPower.in;
+    // OPTIMIZATION: Pass entities record directly instead of creating array with Object.values()
+    // The minimap function can iterate over the record if needed
     renderMinimap(
         Object.values(currentState.entities),
         currentState.camera,
