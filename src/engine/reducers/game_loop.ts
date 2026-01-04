@@ -461,10 +461,31 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 
                     if (isUnitB) {
                         // Determine which unit is moving vs stationary
+                        // A unit is "moving" if it has an explicit moveTarget OR is actively following a path
+                        // Having only combat.targetId doesn't mean moving - unit may be in attack position
                         const aUnit = a as unknown as UnitEntity;
                         const bUnit = b as unknown as UnitEntity;
-                        const aMoving = aUnit.movement.moveTarget !== null || aUnit.combat.targetId !== null || (aUnit.movement.vel && aUnit.movement.vel.mag() > 0.5);
-                        const bMoving = bUnit.movement.moveTarget !== null || bUnit.combat.targetId !== null || (bUnit.movement.vel && bUnit.movement.vel.mag() > 0.5);
+
+                        // Check for active path following (has path waypoints remaining)
+                        const aHasActivePath = aUnit.movement.path !== null &&
+                                               aUnit.movement.pathIdx < aUnit.movement.path.length;
+                        const bHasActivePath = bUnit.movement.path !== null &&
+                                               bUnit.movement.pathIdx < bUnit.movement.path.length;
+
+                        // Use avgVel to detect meaningful movement vs stuck oscillation
+                        // Units oscillating from collision have low avgVel magnitude
+                        const aAvgVelMag = aUnit.movement.avgVel ?
+                            Math.sqrt(aUnit.movement.avgVel.x ** 2 + aUnit.movement.avgVel.y ** 2) : 0;
+                        const bAvgVelMag = bUnit.movement.avgVel ?
+                            Math.sqrt(bUnit.movement.avgVel.x ** 2 + bUnit.movement.avgVel.y ** 2) : 0;
+
+                        // Threshold for meaningful movement (units actively traveling, not oscillating)
+                        const movingThreshold = 0.8;
+
+                        const aMoving = aUnit.movement.moveTarget !== null ||
+                                        (aHasActivePath && aAvgVelMag > movingThreshold);
+                        const bMoving = bUnit.movement.moveTarget !== null ||
+                                        (bHasActivePath && bAvgVelMag > movingThreshold);
 
                         // Use stronger push to counteract movement speed
                         const pushScale = Math.min(overlap, 2.5);
