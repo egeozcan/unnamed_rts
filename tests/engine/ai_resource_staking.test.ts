@@ -29,7 +29,7 @@ function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESO
 
 describe('AI Resource Staking', () => {
     it('should NOT build a refinery near a resource that already has an ENEMY refinery', () => {
-        const state = { ...createMockState(), tick: 30 }; // Force AI run
+        const state = { ...createMockState(), tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const aiId = 1;
         const enemyId = 0;

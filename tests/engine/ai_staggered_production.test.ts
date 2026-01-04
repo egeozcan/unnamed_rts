@@ -38,7 +38,7 @@ function createTestState(entities: Record<EntityId, Entity>, credits: number = 2
     return {
         ...INITIAL_STATE,
         running: true,
-        tick: 30,
+        tick: 31, // tick % 3 === 1 for player 1 AI
         entities,
         players: {
             1: { ...basePlayer, credits }

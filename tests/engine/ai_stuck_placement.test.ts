@@ -46,7 +46,7 @@ function createTestState(entities: Record<EntityId, Entity>): GameState {
     return {
         ...INITIAL_STATE,
         running: true,
-        tick: 30, // Set to a tick divisible by 30 so AI runs
+        tick: 31, // tick % 3 === 1 for player 1 AI
         entities
     };
 }

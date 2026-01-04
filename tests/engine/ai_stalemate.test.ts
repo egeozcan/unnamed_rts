@@ -92,7 +92,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
 
             // Game tick is well past the stalemate detection threshold (18000)
             // and past STALEMATE_NO_COMBAT_THRESHOLD (6000)
-            const tick = 30000; // 8+ minutes into game
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 30001; // 8+ minutes into game
             const state = createTestState(entities, tick, 200);
 
             // Run AI several times to let it detect stalemate
@@ -116,7 +117,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
                 'enemy_conyard': createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2000, 2000, { maxHp: 500, hp: 500 }),
             };
 
-            const tick = 30000;
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 30001;
             const state = createTestState(entities, tick, 200);
 
             // Manually set high desperation
@@ -143,7 +145,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
                 'enemy_conyard': createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2000, 2000, { maxHp: 500, hp: 500 }),
             };
 
-            const tick = 30000;
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 30001;
             const state = createTestState(entities, tick, 200);
 
             // Start with moderate desperation
@@ -169,7 +172,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
                 'enemy_conyard': createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2000, 2000, { maxHp: 500, hp: 500 }),
             };
 
-            const tick = 30000;
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 30001;
             const state = createTestState(entities, tick, 200);
 
             // Manually set high desperation
@@ -199,8 +203,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
             };
 
             // Tick past the desperate attack threshold (36000 = 10 minutes)
-            // NOTE: Must be a multiple of 30 since AI only runs every 30 ticks
-            const tick = 39990;
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 39991;
             const state = createTestState(entities, tick, 200);
 
             // Set up extreme desperation
@@ -248,8 +252,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
                 'enemy_conyard': createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2000, 2000, { maxHp: 500, hp: 500 }),
             };
 
-            // NOTE: Must be a multiple of 30 since AI only runs every 30 ticks
-            const tick = 39990;
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const tick = 39991;
             const state = createTestState(entities, tick, 200);
 
             const aiState = getAIState(1);
@@ -280,8 +284,8 @@ describe('AI Stalemate Detection and Tiebreaker', () => {
             };
 
             // Early game - before stalemate detection kicks in
-            // NOTE: Must be a multiple of 30 since AI only runs every 30 ticks
-            const earlyTick = 5010; // About 1.5 minutes
+            // NOTE: tick % 3 === 1 for player 1 AI to compute
+            const earlyTick = 5011; // About 1.5 minutes
             const state = createTestState(entities, earlyTick, 200);
 
             const aiState = getAIState(1);

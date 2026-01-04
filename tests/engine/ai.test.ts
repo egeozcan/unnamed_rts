@@ -102,7 +102,7 @@ function createTestState(entities: Record<EntityId, Entity>): GameState {
     return {
         ...INITIAL_STATE,
         running: true,
-        tick: 30, // Set to a tick divisible by 30 so AI runs
+        tick: 31, // tick % 3 === 1 for player 1 AI
         entities
     };
 }
@@ -297,7 +297,7 @@ describe('AI System', () => {
             aiState.lastStrategyChange = -300;
 
             // Run AI - strategy should now be able to change
-            const currentState = { ...state, tick: 30 };
+            const currentState = { ...state, tick: 31 }; // tick % 3 === 1 for player 1
             computeAiActions(currentState, 1);
 
             expect(aiState.strategy).toBe('attack');
@@ -437,7 +437,7 @@ describe('AI System', () => {
             aiState.lastStrategyChange = -300;
 
             // Run AI multiple times
-            computeAiActions({ ...state, tick: 30 }, 1);
+            computeAiActions({ ...state, tick: 31 }, 1); // tick % 3 === 1 for player 1
 
             // Should have formed harass group
             expect(aiState.harassGroup.length).toBeGreaterThan(0);
@@ -740,7 +740,7 @@ describe('AI System', () => {
             aiState.lastStrategyChange = -300;
 
             // Run AI
-            computeAiActions({ ...state, tick: 30 }, 1);
+            computeAiActions({ ...state, tick: 31 }, 1); // tick % 3 === 1 for player 1
 
             // Should be in attack
             expect(aiState.strategy).toBe('attack');
@@ -767,7 +767,7 @@ describe('AI System', () => {
             aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = -300;
 
-            computeAiActions({ ...state, tick: 30 }, 1);
+            computeAiActions({ ...state, tick: 31 }, 1); // tick % 3 === 1 for player 1
 
             expect(aiState.strategy).toBe('harass');
         });
@@ -957,7 +957,7 @@ describe('AI System', () => {
             aiState.lastStrategyChange = -300;
 
             // Run AI
-            const actions = computeAiActions({ ...state, tick: 30 }, 1);
+            const actions = computeAiActions({ ...state, tick: 31 }, 1); // tick % 3 === 1 for player 1
 
             // Should be in attack mode
             expect(aiState.strategy).toBe('attack');

@@ -11,7 +11,7 @@ function createMockState(): GameState {
 
 describe('AI Harvester Fleeing', () => {
     it('should flee to a safe resource/refinery if current location is threatened', () => {
-        const state = { ...createMockState(), tick: 30 };
+        const state = { ...createMockState(), tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const aiId = 1;
 

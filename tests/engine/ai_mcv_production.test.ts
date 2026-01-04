@@ -13,7 +13,7 @@ describe('AI MCV Production Limiting', () => {
     const basePos = new Vector(500, 500);
 
     function setupBaseState(): GameState {
-        const state = { ...createMockState(), tick: 30 }; // Force AI to run
+        const state = { ...createMockState(), tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         // Setup AI player with enough credits for MCV (cost 3000) + buffer (2000)
         state.players[aiPlayerId] = {

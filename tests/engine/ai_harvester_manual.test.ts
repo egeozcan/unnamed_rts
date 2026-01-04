@@ -116,7 +116,7 @@ describe('AI Harvester Manual Mode Recovery', () => {
 
         let state = createTestState(entities);
         // Ensure it's tick 0 or multiple of 30 to trigger AI
-        state = { ...state, tick: 30 };
+        state = { ...state, tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const actions = computeAiActions(state, 1);
 
@@ -145,7 +145,7 @@ describe('AI Harvester Manual Mode Recovery', () => {
         entities['ref_1'] = createEntity('ref_1', 1, 'BUILDING', 'refinery', 600, 500);
 
         let state = createTestState(entities);
-        state = { ...state, tick: 30 };
+        state = { ...state, tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const actions = computeAiActions(state, 1);
 
@@ -172,7 +172,7 @@ describe('AI Harvester Manual Mode Recovery', () => {
         entities['ref_1'] = createEntity('ref_1', 1, 'BUILDING', 'refinery', 600, 500);
 
         let state = createTestState(entities);
-        state = { ...state, tick: 30 };
+        state = { ...state, tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const actions = computeAiActions(state, 1);
 
@@ -201,7 +201,7 @@ describe('AI Harvester Manual Mode Recovery', () => {
         entities['tank_1'] = createEntity('tank_1', 0, 'UNIT', 'medium', 510, 510);
 
         let state = createTestState(entities);
-        state = { ...state, tick: 30 };
+        state = { ...state, tick: 31 }; // tick % 3 === 1 for player 1 AI
 
         const actions = computeAiActions(state, 1);
 

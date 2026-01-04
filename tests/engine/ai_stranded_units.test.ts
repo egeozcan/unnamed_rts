@@ -161,7 +161,7 @@ describe('AI Stranded Units', () => {
                 running: true,
                 mode: 'game',
                 difficulty: 'hard',
-                tick: 30, // AI runs on ticks divisible by 30
+                tick: 31, // tick % 3 === 1 for player 1 AI
                 camera: { x: 0, y: 0 },
                 zoom: 1,
                 entities: {
@@ -282,7 +282,7 @@ describe('AI Stranded Units', () => {
                 running: true,
                 mode: 'game',
                 difficulty: 'hard',
-                tick: 30,
+                tick: 31, // tick % 3 === 1 for player 1 AI
                 camera: { x: 0, y: 0 },
                 zoom: 1,
                 entities: {
@@ -377,7 +377,7 @@ describe('AI Stranded Units', () => {
                 running: true,
                 mode: 'game',
                 difficulty: 'hard',
-                tick: 60, // AI runs on ticks divisible by 30
+                tick: 61, // tick % 3 === 1 for player 1 AI
                 camera: { x: 0, y: 0 },
                 zoom: 1,
                 entities,
@@ -454,7 +454,7 @@ describe('AI Stranded Units', () => {
                 running: true,
                 mode: 'game',
                 difficulty: 'hard',
-                tick: 5010, // Must be divisible by 30 for AI strategy update
+                tick: 5011, // tick % 3 === 1 for player 1 AI
                 camera: { x: 0, y: 0 },
                 zoom: 1,
                 entities: {

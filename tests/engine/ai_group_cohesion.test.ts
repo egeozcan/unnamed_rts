@@ -61,7 +61,7 @@ function createEntity(
 }
 
 function createTestState(entities: Record<EntityId, Entity>): GameState {
-    return { ...INITIAL_STATE, running: true, tick: 30, entities };
+    return { ...INITIAL_STATE, running: true, tick: 31, entities }; // tick % 3 === 1 for player 1 AI
 }
 
 describe('AI Attack Group Cohesion', () => {
