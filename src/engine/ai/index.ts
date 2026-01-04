@@ -116,16 +116,23 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     const isFullComputeTick = state.tick < AI_CONSTANTS.AI_TICK_INTERVAL ||
         state.tick % AI_CONSTANTS.AI_TICK_INTERVAL === tickOffset;
 
-    // CRITICAL REACTIONS: Always run these for responsiveness
-    // Detect threats every tick for immediate response
-    const { threatsNearBase, harvestersUnderAttack } = detectThreats(
-        baseCenter,
-        harvesters,
-        enemies,
-        myBuildings
-    );
-    aiState.threatsNearBase = threatsNearBase;
-    aiState.harvestersUnderAttack = harvestersUnderAttack;
+    // CRITICAL REACTIONS: Detect threats on compute ticks or when threats exist
+    // Skip expensive O(enemies × buildings) calculation when idle
+    const shouldDetectThreats = isFullComputeTick ||
+        aiState.threatsNearBase.length > 0 ||
+        aiState.harvestersUnderAttack.length > 0;
+
+    if (shouldDetectThreats) {
+        const threats = detectThreats(
+            baseCenter,
+            harvesters,
+            enemies,
+            myBuildings
+        );
+        aiState.threatsNearBase = threats.threatsNearBase;
+        aiState.harvestersUnderAttack = threats.harvestersUnderAttack;
+    }
+    const threatsNearBase = aiState.threatsNearBase;
 
     // Always handle critical combat reactions
     actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState));

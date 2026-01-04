@@ -248,8 +248,8 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
     refreshCollisionGrid(state.entities, state.config);
 
-    // PERFORMANCE: Rebuild spatial grid for O(1) neighbor lookups
-    rebuildSpatialGrid(state.entities);
+    // NOTE: Spatial grid was already rebuilt in tick() before updateWells
+    // No need to rebuild again - new ore from wells is rare and minor
 
     const entityList = Object.values(state.entities);
 

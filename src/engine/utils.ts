@@ -11,8 +11,8 @@ interface PathCacheEntry {
     tick: number;
 }
 const pathCache = new Map<string, PathCacheEntry>();
-const PATH_CACHE_TTL = 60; // Valid for 60 ticks (1 second at 60 FPS)
-const PATH_CACHE_MAX_SIZE = 200;
+const PATH_CACHE_TTL = 300; // Valid for 300 ticks (~250ms at lightning speed, 5s at normal)
+const PATH_CACHE_MAX_SIZE = 1000; // Support 400+ entities with path variations
 let currentPathTick = 0;
 
 // Update the current tick for path caching (call from game loop)
@@ -100,16 +100,23 @@ class GridManager {
         const grid = this._dangerGrids[playerId];
         if (!grid) return;
 
+        // PERF: Precompute squared radius to avoid sqrt in inner loop
+        const grSq = gr * gr;
+
         for (let j = gy - gr; j <= gy + gr; j++) {
             for (let i = gx - gr; i <= gx + gr; i++) {
                 if (i >= 0 && i < this._gridW && j >= 0 && j < this._gridH) {
                     const dx = i - gx;
                     const dy = j - gy;
                     const distSq = dx * dx + dy * dy;
-                    if (distSq <= gr * gr) {
-                        const distRatio = Math.sqrt(distSq) / gr;
-                        const dangerCost = Math.floor(100 - 50 * distRatio);
-                        grid[j * this._gridW + i] = Math.max(grid[j * this._gridW + i], dangerCost);
+                    if (distSq <= grSq) {
+                        // Use squared ratio instead of sqrt - steeper falloff, but equivalent for avoidance
+                        const distRatioSq = distSq / grSq;
+                        const dangerCost = Math.floor(100 - 50 * distRatioSq);
+                        const idx = j * this._gridW + i;
+                        if (dangerCost > grid[idx]) {
+                            grid[idx] = dangerCost;
+                        }
                     }
                 }
             }
