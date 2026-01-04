@@ -567,6 +567,56 @@ function updateEnemyBaseLocation(aiState: AIPlayerState, enemyBuildings: Entity[
     aiState.enemyBaseLocation = new Vector(sumX / enemyBuildings.length, sumY / enemyBuildings.length);
 }
 
+// Cluster ore into "fields" - groups of ore that are close together
+// Returns array of fields, each field is an array of ore entities
+function clusterOreIntoFields(allOre: Entity[], clusterRadius: number = 200): Entity[][] {
+    const fields: Entity[][] = [];
+    const assigned = new Set<EntityId>();
+
+    for (const ore of allOre) {
+        if (assigned.has(ore.id)) continue;
+
+        // Start a new field with this ore
+        const field: Entity[] = [ore];
+        assigned.add(ore.id);
+
+        // Find all connected ore (within clusterRadius of any ore in the field)
+        let expanded = true;
+        while (expanded) {
+            expanded = false;
+            for (const otherOre of allOre) {
+                if (assigned.has(otherOre.id)) continue;
+
+                // Check if this ore is close to any ore already in the field
+                for (const fieldOre of field) {
+                    if (otherOre.pos.dist(fieldOre.pos) < clusterRadius) {
+                        field.push(otherOre);
+                        assigned.add(otherOre.id);
+                        expanded = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        fields.push(field);
+    }
+
+    return fields;
+}
+
+// Check if an ore field is contested (has enemy presence)
+function isFieldContested(field: Entity[], enemies: Entity[], contestRadius: number = 400): boolean {
+    for (const ore of field) {
+        for (const enemy of enemies) {
+            if (enemy.type === 'UNIT' && ore.pos.dist(enemy.pos) < contestRadius) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // ===== ENEMY INTELLIGENCE =====
 
 function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[], tick: number): void {
@@ -1510,46 +1560,64 @@ function handleEconomy(
         }
     }
 
-    // MCV production for expansion when wealthy
+    // ========== MCV PRODUCTION FOR EXPANSION ==========
     const mcvCost = RULES.units.mcv?.cost || 3000;
-    // hasFactory already defined above in unit production section
-    const alreadyBuildingMcv = player.queues.vehicle.current === 'mcv';
-    const existingMcvs = Object.values(state.entities).filter((e: Entity) =>
-        e.owner === playerId && e.key === 'mcv' && !e.dead
+    const vehicleQueue = player.queues.vehicle;
+    const alreadyBuildingMcv = vehicleQueue.current === 'mcv';
+    const mcvInQueued = vehicleQueue.queued?.includes('mcv') || false;
+
+    // CRITICAL: Check if we already queued a vehicle action THIS TICK
+    // Since all actions are computed from the same state, vehicleQueue.current
+    // won't reflect actions we just pushed to the actions array
+    const alreadyQueuedVehicleThisTick = actions.some(a =>
+        a.type === 'START_BUILD' &&
+        (a.payload as { category: string }).category === 'vehicle'
     );
 
-    if (hasFactory && !alreadyBuildingMcv && existingMcvs.length === 0 && player.credits > mcvCost + 2000) {
-        // Check if there's distant ore worth expanding towards
-        const baseCenter = buildings.find(b => b.key === 'conyard')?.pos || buildings[0]?.pos;
-        if (baseCenter) {
-            const BUILD_RADIUS = 400;
-            let hasDistantOre = false;
+    // Debug: find all MCVs for this player
+    const allMcvs = Object.values(state.entities).filter((e: Entity) => e.key === 'mcv' && !e.dead);
+    const existingMcvs = allMcvs.filter(e => e.owner === playerId);
 
-            for (const e of Object.values(state.entities)) {
-                const entity = e as Entity;
-                if (entity.type !== 'RESOURCE' || entity.dead) continue;
+    const existingConyards = buildings.filter(b => b.key === 'conyard' && !b.dead);
+    const MAX_BASES = 2;
 
-                // Check if ore is beyond current build range
-                let inRange = false;
-                for (const b of buildings) {
-                    const bData = RULES.buildings[b.key];
-                    if (bData?.isDefense) continue;
-                    if (entity.pos.dist(b.pos) < BUILD_RADIUS + 200) {
-                        inRange = true;
-                        break;
-                    }
-                }
+    // Guards - return early if any condition fails
+    if (!hasFactory) return actions;
+    if (alreadyBuildingMcv || mcvInQueued) return actions;
+    if (alreadyQueuedVehicleThisTick) return actions;
+    if (existingMcvs.length > 0) return actions;
+    if (existingConyards.length >= MAX_BASES) return actions;
+    if (existingConyards.length === 0) return actions;
+    if (player.credits <= mcvCost + 2000) return actions;
 
-                if (!inRange && entity.pos.dist(baseCenter) < 1500) {
-                    hasDistantOre = true;
-                    break;
-                }
-            }
+    // Find distant ore for expansion
+    const baseCenter = buildings.find(b => b.key === 'conyard')?.pos || buildings[0]?.pos;
+    if (!baseCenter) return actions;
 
-            if (hasDistantOre) {
-                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
+    let hasDistantOre = false;
+    for (const e of Object.values(state.entities)) {
+        const entity = e as Entity;
+        if (entity.type !== 'RESOURCE' || entity.dead) continue;
+
+        let inRange = false;
+        for (const b of buildings) {
+            const bData = RULES.buildings[b.key];
+            if (bData?.isDefense) continue;
+            if (entity.pos.dist(b.pos) < 600) {
+                inRange = true;
+                break;
             }
         }
+
+        const distFromBase = entity.pos.dist(baseCenter);
+        if (!inRange && distFromBase > 600 && distFromBase < 1500) {
+            hasDistantOre = true;
+            break;
+        }
+    }
+    if (hasDistantOre) {
+        console.log(`[MCV] P${playerId} queueing MCV for expansion (conyards=${existingConyards.length}/${MAX_BASES})`);
+        actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
     }
 
     return actions;
@@ -1571,6 +1639,7 @@ function handleMCVOperations(
     if (mcvs.length === 0) return actions;
 
     const BUILD_RADIUS = 400;
+    const MAX_BASES = 2; // Main base + 1 expansion (matches handleEconomy)
     const baseCenter = findBaseCenter(myBuildings);
 
     // Find expansion location - distant ore that needs a new base
@@ -1614,15 +1683,32 @@ function handleMCVOperations(
     // Check if we have a construction yard
     const hasConyard = myBuildings.some(b => b.key === 'conyard');
 
+    // Count current conyards to enforce MAX_BASES limit (computed once, before loop)
+    const currentConyards = myBuildings.filter(b => b.key === 'conyard').length;
+
+    // Track if we've already queued a deployment this tick (only allow one)
+    let deploymentQueuedThisTick = false;
+
     for (const mcv of mcvs) {
         const mcvUnit = mcv as UnitEntity;
 
+        // ConYard is 90x90, so radius 45
+        const CONYARD_RADIUS = 45;
+
         // Helper to check if MCV can deploy at a position
         const canDeployAt = (pos: Vector): boolean => {
-            for (const b of Object.values(state.entities)) {
-                if (b.dead) continue;
-                if (b.type === 'BUILDING' || b.type === 'ROCK') {
-                    if (b.pos.dist(pos) < 100) {
+            // Check map bounds (conyard needs 45 pixels from edge)
+            if (pos.x < CONYARD_RADIUS || pos.x > state.config.width - CONYARD_RADIUS ||
+                pos.y < CONYARD_RADIUS || pos.y > state.config.height - CONYARD_RADIUS) {
+                return false;
+            }
+
+            for (const e of Object.values(state.entities)) {
+                if (e.dead || e.id === mcv.id) continue;
+                // Check all blocking entity types (matching reducer logic)
+                if (e.type === 'BUILDING' || e.type === 'ROCK' || e.type === 'RESOURCE' || e.type === 'WELL') {
+                    const combinedRadius = CONYARD_RADIUS + e.radius;
+                    if (e.pos.dist(pos) < combinedRadius * 0.9) {
                         return false;
                     }
                 }
@@ -1630,34 +1716,100 @@ function handleMCVOperations(
             return true;
         };
 
-        // PRIORITY 1: If we have no conyard, deploy immediately
-        if (!hasConyard && canDeployAt(mcv.pos)) {
-            actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+        // Helper to find a valid deployment position near a target using spiral search
+        const findDeployPosition = (center: Vector, maxSearchRadius: number = 200): Vector | null => {
+            // First check the center itself
+            if (canDeployAt(center)) return center;
+
+            // Spiral outward search pattern
+            const step = 40; // TILE_SIZE
+            for (let radius = step; radius <= maxSearchRadius; radius += step) {
+                // Check 8 directions at this radius
+                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                    const testPos = new Vector(
+                        center.x + Math.cos(angle) * radius,
+                        center.y + Math.sin(angle) * radius
+                    );
+                    if (canDeployAt(testPos)) {
+                        return testPos;
+                    }
+                }
+            }
+            return null;
+        };
+
+        // PRIORITY 1: If we have no conyard, deploy immediately (emergency)
+        if (!hasConyard && !deploymentQueuedThisTick) {
+            const deployPos = findDeployPosition(mcv.pos, 300);
+            if (deployPos) {
+                // If valid position is at MCV location, deploy directly
+                if (deployPos.dist(mcv.pos) < 20) {
+                    actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+                    deploymentQueuedThisTick = true;
+                } else {
+                    // Move to valid position first
+                    actions.push({
+                        type: 'COMMAND_MOVE',
+                        payload: { unitIds: [mcv.id], x: deployPos.x, y: deployPos.y }
+                    });
+                }
+            }
             continue;
         }
 
-        // PRIORITY 2: If MCV has no destination, assign expansion target
-        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && bestExpansionTarget) {
-            // Move to expansion target (offset from ore so we don't block it)
-            const targetPos = bestExpansionTarget.add(new Vector(100, 0));
-            actions.push({
-                type: 'COMMAND_MOVE',
-                payload: { unitIds: [mcv.id], x: targetPos.x, y: targetPos.y }
-            });
-        }
+        // Check if we're at max bases or already queued a deployment
+        const atMaxBases = (currentConyards + (deploymentQueuedThisTick ? 1 : 0)) >= MAX_BASES;
 
-        // PRIORITY 3: If MCV is near its destination (within 100 units), deploy it
-        if (mcvUnit.movement.finalDest && mcv.pos.dist(mcvUnit.movement.finalDest) < 100) {
-            if (canDeployAt(mcv.pos)) {
-                actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+        // PRIORITY 2: If MCV has no destination, assign expansion target (only if under base limit)
+        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && bestExpansionTarget && !atMaxBases) {
+            // Find a valid deployment spot near the expansion target
+            const deployPos = findDeployPosition(bestExpansionTarget.add(new Vector(100, 0)), 250);
+            if (deployPos) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: { unitIds: [mcv.id], x: deployPos.x, y: deployPos.y }
+                });
             }
+            continue;
         }
 
-        // PRIORITY 4: If MCV is idle with no destination and no expansion target, deploy where it is
+        // PRIORITY 3: If MCV is near its destination, try to deploy (only if under base limit)
+        if (mcvUnit.movement.finalDest && mcv.pos.dist(mcvUnit.movement.finalDest) < 100 && !atMaxBases) {
+            const deployPos = findDeployPosition(mcv.pos, 200);
+            if (deployPos) {
+                if (deployPos.dist(mcv.pos) < 20) {
+                    actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+                    deploymentQueuedThisTick = true; // Only one deployment per tick
+                } else {
+                    // Blocked at destination - move to nearby valid spot
+                    actions.push({
+                        type: 'COMMAND_MOVE',
+                        payload: { unitIds: [mcv.id], x: deployPos.x, y: deployPos.y }
+                    });
+                }
+            }
+            continue;
+        }
+
+        // PRIORITY 4: Emergency deployment - only deploy idle MCV if we have NO conyard at all
+        // This prevents MCVs from deploying near existing base when no expansion target is found
         if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && !bestExpansionTarget) {
-            if (canDeployAt(mcv.pos)) {
-                actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+            if (!hasConyard) {
+                // Emergency: no conyard exists, deploy immediately to establish a base
+                const deployPos = findDeployPosition(mcv.pos, 200);
+                if (deployPos) {
+                    if (deployPos.dist(mcv.pos) < 20) {
+                        actions.push({ type: 'DEPLOY_MCV', payload: { unitId: mcv.id } });
+                    } else {
+                        actions.push({
+                            type: 'COMMAND_MOVE',
+                            payload: { unitIds: [mcv.id], x: deployPos.x, y: deployPos.y }
+                        });
+                    }
+                }
             }
+            // If we have a conyard already but no expansion target, MCV stays idle
+            // This prevents clustering conyards near existing base
         }
     }
 
@@ -2009,30 +2161,35 @@ function handleHarvesterSafety(
 
             if (isManual && isIdle) {
                 // Resume harvesting: COMMAND_ATTACK on ore resets manualMode to false
-                // Find nearest safe ore
+                // Use field-based logic: avoid entire contested ore fields, not just individual ore
                 const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+                const oreFields = clusterOreIntoFields(allOre, 200);
+
+                // Mark each field as contested or safe
+                const fieldInfo = oreFields.map(field => ({
+                    field,
+                    contested: isFieldContested(field, enemies, 400)
+                }));
+
+                // Find the best ore, heavily preferring uncontested fields
                 let bestOre: Entity | null = null;
                 let bestScore = -Infinity;
 
-                for (const ore of allOre) {
-                    const dist = harv.pos.dist(ore.pos);
+                for (const { field, contested } of fieldInfo) {
+                    for (const ore of field) {
+                        const dist = harv.pos.dist(ore.pos);
 
-                    // Check if ore is near enemies (don't send harvester back into danger)
-                    let oreExposed = false;
-                    for (const enemy of enemies) {
-                        if (enemy.type === 'UNIT' && enemy.pos.dist(ore.pos) < 300) {
-                            oreExposed = true;
-                            break;
+                        // Base score is negative distance (prefer closer)
+                        let score = -dist;
+
+                        // Heavily penalize entire contested fields
+                        // This ensures harvester goes to a different field, not just different ore in same field
+                        if (contested) score -= 10000;
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestOre = ore;
                         }
-                    }
-
-                    // Heavily penalize exposed ore, but don't strictly exclude it (fallback)
-                    let score = -dist;
-                    if (oreExposed) score -= 5000;
-
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestOre = ore;
                     }
                 }
 
