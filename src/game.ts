@@ -17,8 +17,8 @@ import { computeAiActions } from './engine/ai.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
 
-// Game speed setting (1 = slow, 2 = medium, 3 = fast)
-type GameSpeed = 1 | 2 | 3 | 4;
+// Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
+type GameSpeed = 1 | 2 | 3 | 4 | 5;
 
 // Get canvas
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -36,7 +36,7 @@ const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
     2: 2,
     3: 3,
     4: 4,
-
+    5: 20,
 };
 
 let lastFrameTime = 0;
@@ -54,7 +54,7 @@ function updateSpeedIndicator() {
         return;
     }
 
-    const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST', 4: 'VERY FAST' };
+    const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST', 4: 'VERY FAST', 5: 'LIGHTSPEED' };
     indicator.textContent = labels[gameSpeed];
     indicator.className = `speed-${gameSpeed}`;
 }
@@ -510,7 +510,7 @@ function startGameWithConfig(config: SkirmishConfig) {
                 currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
             }
         },
-        onSetSpeed: (speed: 1 | 2 | 3 | 4) => {
+        onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
             setGameSpeed(speed);
         },
         getZoom: () => currentState.zoom,

@@ -51,7 +51,7 @@ let onRightClick: ((wx: number, wy: number) => void) | null = null;
 let onDeployMCV: (() => void) | null = null;
 let onToggleDebug: (() => void) | null = null;
 let onToggleMinimap: (() => void) | null = null;
-let onSetSpeed: ((speed: 1 | 2 | 3 | 4) => void) | null = null;
+let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 
@@ -63,7 +63,7 @@ export function initInput(
         onDeployMCV: () => void;
         onToggleDebug: () => void;
         onToggleMinimap: () => void;
-        onSetSpeed: (speed: 1 | 2 | 3 | 4) => void;
+        onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -98,7 +98,7 @@ function setupEventListeners() {
         if (e.key === 'm' || e.key === 'M') {
             onToggleMinimap?.();
         }
-        // Game speed controls (1 = slow, 2 = normal, 3 = fast, 4 = very fast)
+        // Game speed controls (1 = slow, 2 = normal, 3 = fast, 4 = very fast, 5 = lightspeed)
         if (e.key === '1') {
             onSetSpeed?.(1);
         }
@@ -110,6 +110,9 @@ function setupEventListeners() {
         }
         if (e.key === '4') {
             onSetSpeed?.(4);
+        }
+        if (e.key === '5') {
+            onSetSpeed?.(5);
         }
         // Deploy MCV key handler
         if (e.key === 'Enter') {

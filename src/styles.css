@@ -1098,6 +1098,15 @@ canvas#gameCanvas {
     animation: speed-fast-pulse 0.2s infinite;
 }
 
+#speed-indicator.speed-5 {
+    background: rgba(200, 100, 255, 0.4);
+    color: #e0f;
+    border: 2px solid rgba(200, 100, 255, 0.8);
+    text-shadow: 0 0 10px #e0f, 0 0 20px #fff;
+    box-shadow: 0 0 15px rgba(200, 100, 255, 0.4);
+    animation: speed-fast-pulse 0.1s infinite;
+}
+
 @keyframes speed-fast-pulse {
 
     0%,
