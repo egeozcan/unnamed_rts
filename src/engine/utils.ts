@@ -186,6 +186,9 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
 let nextEntityId = 1;
 
 export function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', statsKey: string): Entity {
+    // NOTE: This is a legacy/utility version primarily for tests or simple entity creation without full GameState.
+    // For main game logic, use createEntity from reducers/helpers.ts which uses state.tick for ID generation.
+
     const isBuilding = type === 'BUILDING';
     const isResource = type === 'RESOURCE';
 
