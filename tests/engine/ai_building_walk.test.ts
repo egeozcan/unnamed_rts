@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GameState, Vector, PlayerState, ProductionQueue } from '../../src/engine/types.js';
-import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai.js';
+import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { createTestBuilding, createTestResource } from '../../src/engine/test-utils.js';
 
 const { getAIState } = _testUtils;

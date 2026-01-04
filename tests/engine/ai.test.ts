@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai';
+import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
 import { GameState, Vector, Entity, EntityId, isActionType, UnitKey, BuildingKey } from '../../src/engine/types';
 import {

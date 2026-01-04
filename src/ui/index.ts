@@ -1,6 +1,6 @@
 import { RULES } from '../data/schemas/index.js';
 import { GameState, Entity, EntityId, Vector } from '../engine/types.js';
-import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai.js';
+import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
 
 let gameState: GameState | null = null;

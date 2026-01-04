@@ -1,81 +1,222 @@
+import { GameState, Action } from '../types.js';
+import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../perf.js';
+
+// Export everything for consumers (tests, game.ts, etc.)
+export * from './types.js';
+export * from './state.js';
+export * from './utils.js';
+export * from './planning.js';
+export * from './action_economy.js';
+export * from './action_combat.js';
+
+// Import locally for computeAiActions and _testUtils
+import {
+    getAIState,
+    findBaseCenter,
+    updateEnemyBaseLocation,
+    updateEnemyIntelligence,
+    updateVengeance,
+    getGroupCenter
+} from './state.js';
+
+import {
+    getPersonalityForPlayer,
+    getNonDefenseBuildings,
+    getDefenseBuildings,
+    getRefineries,
+    getAllOre,
+    getAccessibleOre,
+    findNearestUncoveredOre,
+    isWithinBuildRange,
+    findNearestBuilding,
+    getCounterUnits,
+    AI_CONSTANTS,
+    DIFFICULTY_TO_PERSONALITY,
+    ATTACK_GROUP_MIN_SIZE,
+    HARASS_GROUP_SIZE,
+    BASE_DEFENSE_RADIUS,
+    HARVESTER_FLEE_DISTANCE,
+    RALLY_DISTANCE,
+    VENGEANCE_DECAY,
+    VENGEANCE_PER_HIT
+} from './utils.js';
+
+import {
+    detectThreats,
+    updateStrategy,
+    evaluateInvestmentPriority
+} from './planning.js';
+
+import {
+    handleEconomy,
+    handleEmergencySell,
+    handleAllInSell,
+    handleBuildingPlacement,
+    handleBuildingRepair,
+    handleMCVOperations,
+    handleHarvesterGathering
+} from './action_economy.js';
+
+import {
+    handleAttack,
+    handleDefense,
+    handleHarass,
+    handleRally,
+    handleScouting,
+    handleMicro,
+    handleHarvesterSafety,
+    handleHarvesterSuicideAttack,
+    findNearestDefender
+} from './action_combat.js';
+
 /**
- * AI Module Entry Point
- *
- * This module provides a modular AI system for the RTS game.
- * It handles strategy selection, unit control, economy management,
- * and tactical decision-making for AI players.
- *
- * Architecture:
- * - types.ts: Core type definitions
- * - state.ts: AI state management
- * - strategy/: Strategy selection and transitions
- * - tactics/: Economic and combat tactics
- * - micro/: Unit micro-management (kiting, retreat)
- * - squad/: Squad formations and coordination
- * - scouting/: Intelligence gathering
- * - utils/: Utility functions
- *
- * For backwards compatibility, this module re-exports from the
- * original ai.ts while new features are developed in the modular structure.
+ * Main AI Logic Loop
+ * This function determines the actions for an AI player for a given tick.
  */
+export function computeAiActions(state: GameState, playerId: number): Action[] {
+    const actions: Action[] = [];
+    const player = state.players[playerId];
+    if (!player) return actions;
 
-// Re-export types
-export type {
-    AIStrategy,
-    AIPlayerState,
-    OffensiveGroup,
-    InvestmentPriority,
-    EnemyIntelligence,
-    CounterUnits
-} from './types.js';
+    const aiState = getAIState(playerId);
+    const personality = getPersonalityForPlayer(player);
 
-export { AI_CONSTANTS, createAIPlayerState } from './types.js';
+    // PERFORMANCE OPTIMIZATION: Use cached entity lookups
+    const cache = createEntityCache(state.entities);
+    const myBuildings = getBuildingsForOwner(cache, playerId);
+    const myUnits = getUnitsForOwner(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId);
 
-// Re-export state management
-export { getAIState, resetAIState, getAllAIStates, setAIState } from './state.js';
+    // Check for elimination (no buildings AND no MCV)
+    const hasMCV = myUnits.some(u => u.key === 'mcv');
+    if (myBuildings.length === 0 && !hasMCV) {
+        return actions;
+    }
 
-// Re-export utilities
-export * from './utils/index.js';
+    const harvesters = myUnits.filter(u => u.key === 'harvester');
+    const combatUnits = myUnits.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
 
-// Re-export strategy functions
-export { updateStrategy, evaluateInvestmentPriority } from './strategy/index.js';
-export * from './strategy/new-strategies.js';
+    const baseCenter = findBaseCenter(myBuildings);
 
-// Re-export micro functions
-export {
-    evaluateKite,
-    evaluateStutterStep,
-    evaluateRetreat,
-    evaluateSpread,
-    processMicro
-} from './micro/index.js';
+    // 2. Update Intelligence & State
+    updateEnemyBaseLocation(aiState, enemies);
+    updateEnemyIntelligence(aiState, enemies, state.tick);
+    updateVengeance(state, playerId, aiState, [...myBuildings, ...myUnits]);
 
-// Re-export squad system
-export * from './squad/types.js';
-export { calculateFormationPositions, assignRoles, suggestFormation } from './squad/formations.js';
-export { SquadManager } from './squad/index.js';
+    // Detect threats
+    const { threatsNearBase, harvestersUnderAttack } = detectThreats(
+        baseCenter,
+        harvesters,
+        enemies,
+        myBuildings
+    );
+    aiState.threatsNearBase = threatsNearBase;
+    aiState.harvestersUnderAttack = harvestersUnderAttack;
 
-// Re-export scouting system
-export {
-    ScoutManager,
-    DEFAULT_SCOUTING_CONFIG,
-    predictThreat,
-    analyzeEnemyComposition
-} from './scouting/index.js';
-export type {
-    EnemyIntel,
-    BuildingIntel,
-    UnitIntel,
-    ScoutAssignment,
-    ScoutingConfig
-} from './scouting/index.js';
+    // Update Strategy
+    updateStrategy(
+        aiState,
+        state.tick,
+        myBuildings,
+        combatUnits,
+        enemies,
+        threatsNearBase,
+        personality,
+        player.credits
+    );
 
-// Re-export personality system
-export * from './personality/index.js';
+    // Evaluate Investment Priority
+    evaluateInvestmentPriority(
+        state,
+        playerId,
+        aiState,
+        myBuildings,
+        combatUnits,
+        enemies,
+        baseCenter
+    );
 
-// Re-export defensive tactics
-export * from './tactics/index.js';
+    // 3. Execute Actions based on State
 
-// For now, re-export the main computeAiActions from the original file
-// This will be migrated to use the modular components incrementally
-export { computeAiActions } from '../ai.js';
+    // --- ECONOMY & PRODUCTION ---
+    if (player.readyToPlace) {
+        actions.push(...handleBuildingPlacement(state, playerId, myBuildings, player));
+    }
+
+    actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
+    actions.push(...handleAllInSell(state, playerId, myBuildings, aiState));
+    actions.push(...handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies));
+    actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
+    actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
+    actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack)); // Gather resources
+
+    // --- COMBAT & UNIT CONTROL ---
+    actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState));
+
+    if (aiState.strategy === 'defend') {
+        actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
+    } else {
+        aiState.defenseGroup = [];
+    }
+
+    if (aiState.strategy === 'attack' || aiState.strategy === 'all_in') {
+        const ignoreSizeLimit = aiState.strategy === 'all_in';
+        actions.push(...handleAttack(state, playerId, aiState, combatUnits, enemies, baseCenter, personality, ignoreSizeLimit));
+
+        if (aiState.strategy === 'all_in') {
+            actions.push(...handleHarvesterSuicideAttack(state, playerId, harvesters, enemies, combatUnits));
+        }
+    }
+
+    if (aiState.strategy === 'harass') {
+        actions.push(...handleHarass(state, playerId, aiState, combatUnits, enemies));
+    }
+
+    if (aiState.strategy === 'buildup') {
+        actions.push(...handleRally(state, playerId, aiState, combatUnits, baseCenter, enemies));
+    }
+
+    actions.push(...handleScouting(state, playerId, aiState, combatUnits, enemies, baseCenter));
+    actions.push(...handleMicro(state, combatUnits, enemies, baseCenter));
+
+    return actions;
+}
+
+// Export internal functions for testing and backward compatibility
+export const _testUtils = {
+    findBaseCenter,
+    detectThreats,
+    updateStrategy,
+    handleDefense,
+    handleAttack,
+    handleHarass,
+    handleRally,
+    handleHarvesterSafety,
+    handleEmergencySell,
+    handleMCVOperations,
+    updateEnemyIntelligence,
+    updateVengeance,
+    getAIState,
+    getGroupCenter,
+    updateEnemyBaseLocation,
+    getPersonalityForPlayer,
+    DIFFICULTY_TO_PERSONALITY,
+    AI_CONSTANTS,
+    getNonDefenseBuildings,
+    getDefenseBuildings,
+    getRefineries,
+    getAllOre,
+    getAccessibleOre,
+    findNearestUncoveredOre,
+    isWithinBuildRange,
+    findNearestBuilding,
+    findNearestDefender,
+    getCounterUnits,
+    ATTACK_GROUP_MIN_SIZE,
+    HARASS_GROUP_SIZE,
+    BASE_DEFENSE_RADIUS,
+    HARVESTER_FLEE_DISTANCE,
+    RALLY_DISTANCE,
+    VENGEANCE_DECAY,
+    VENGEANCE_PER_HIT
+};

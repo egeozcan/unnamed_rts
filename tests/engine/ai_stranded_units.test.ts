@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai';
+import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { GameState, Entity, Vector, PlayerState, UnitKey, BuildingKey, EntityId } from '../../src/engine/types.js';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
 

@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameState, Vector } from '../../src/engine/types';
-import { computeAiActions } from '../../src/engine/ai';
+import { computeAiActions } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE } from '../../src/engine/reducer';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
 
@@ -29,7 +29,8 @@ describe('AI Harvester Defense', () => {
             x: basePos.x - 1000,
             y: basePos.y,
             hp: 80,
-            lastAttackerId: enemyId
+            lastAttackerId: enemyId,
+            lastDamageTick: 25 // Ensure it counts as "recently damaged"
         });
         state.entities['ai_harv'] = harvester;
 

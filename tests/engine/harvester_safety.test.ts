@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
 import { GameState, Vector, Entity, EntityId, HarvesterUnit } from '../../src/engine/types';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource, addEntityToState } from '../../src/engine/test-utils';
-import { computeAiActions, resetAIState } from '../../src/engine/ai';
+import { computeAiActions, resetAIState } from '../../src/engine/ai/index.js';
 
 /**
  * Test for oscillating harvester bug.

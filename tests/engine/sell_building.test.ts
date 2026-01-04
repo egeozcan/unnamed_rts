@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
 import { GameState, isActionType, Action } from '../../src/engine/types.js';
-import { _testUtils as aiTestUtils, resetAIState } from '../../src/engine/ai';
+import { _testUtils as aiTestUtils, resetAIState } from '../../src/engine/ai/index.js';
 import { createTestBuilding } from '../../src/engine/test-utils';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));

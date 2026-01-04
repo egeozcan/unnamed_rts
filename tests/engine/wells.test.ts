@@ -163,9 +163,12 @@ describe('Ore Wells', () => {
             // Similar test with units surrounding the well
             const well = createTestWell({ x: 500, y: 500, nextSpawnTick: 0 });
             // Densely pack units around well
+            // Densely pack units around well - increased density to ensure no gaps
+            // With radius 10 (default test unit size), we need very tight packing
             const units = [];
-            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
-                for (let dist = 40; dist <= 100; dist += 30) {
+            // Use PI/16 for 32 units per ring, ensuring overlap even at max distance
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 16) {
+                for (let dist = 35; dist <= 120; dist += 25) {
                     units.push(createTestCombatUnit({
                         x: 500 + Math.cos(angle) * dist,
                         y: 500 + Math.sin(angle) * dist,
