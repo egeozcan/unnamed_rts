@@ -10,7 +10,6 @@ import {
     MAX_CHASE_DISTANCE,
     RECENT_DAMAGE_WINDOW,
     ALLY_DANGER_RADIUS,
-    THREAT_DETECTION_RADIUS,
     isUnit,
     getRefineries
 } from './utils.js';
