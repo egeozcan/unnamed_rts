@@ -19,6 +19,8 @@ function parseArgs() {
         removeBuildingTypes: [] as string[],
         removeBuildingNear: [] as { id: string, dist: number }[],
         removeBuildingFurther: [] as { id: string, dist: number }[],
+        listUnitsNear: [] as { id: string, dist: number }[],
+        listUnitsFurther: [] as { id: string, dist: number }[],
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -51,6 +53,12 @@ function parseArgs() {
         } else if (arg === '--remove-building-further') {
             const parts = args[++i].split(',');
             config.removeBuildingFurther.push({ id: parts[0], dist: parseFloat(parts[1]) });
+        } else if (arg === '--list-units-near') {
+            const parts = args[++i].split(',');
+            config.listUnitsNear.push({ id: parts[0], dist: parseFloat(parts[1]) });
+        } else if (arg === '--list-units-further') {
+            const parts = args[++i].split(',');
+            config.listUnitsFurther.push({ id: parts[0], dist: parseFloat(parts[1]) });
         } else if (arg === '--help') {
             console.log(`
 Usage:
@@ -66,6 +74,8 @@ Usage:
   --remove-building-type <type> Remove buildings of specific type
   --remove-building-near <id>,<d> Remove buildings within distance d of entity ID
   --remove-building-further <id>,<d> Remove buildings further than distance d from entity ID
+  --list-units-near <id>,<d>    List units within distance d of entity ID
+  --list-units-further <id>,<d> List units further than distance d from entity ID
             `);
             process.exit(0);
         }
@@ -134,6 +144,42 @@ function main() {
 
     console.log('Rehydrating state...');
     state = rehydrateVectors(state) as GameState;
+
+    // === LIST UNITS ===
+
+    // Near
+    config.listUnitsNear.forEach(check => {
+        const target = state.entities[check.id];
+        if (!target) {
+            console.warn(`Warning: Target entity ${check.id} not found for list near check.`);
+            return;
+        }
+        console.log(`Units within ${check.dist} of ${check.id}:`);
+        Object.values(state.entities).forEach(e => {
+            if (e.id !== check.id) {
+                if (e.type === 'UNIT' && getDistance(e, target) <= check.dist) {
+                    console.log(`- ${e.id} (${e.key}) Dist: ${getDistance(e, target).toFixed(2)}`);
+                }
+            }
+        });
+    });
+
+    // Further
+    config.listUnitsFurther.forEach(check => {
+        const target = state.entities[check.id];
+        if (!target) {
+            console.warn(`Warning: Target entity ${check.id} not found for list further check.`);
+            return;
+        }
+        console.log(`Units further than ${check.dist} from ${check.id}:`);
+        Object.values(state.entities).forEach(e => {
+            if (e.id !== check.id) {
+                if (e.type === 'UNIT' && getDistance(e, target) > check.dist) {
+                    console.log(`- ${e.id} (${e.key}) Dist: ${getDistance(e, target).toFixed(2)}`);
+                }
+            }
+        });
+    });
 
     // === APPLY REMOVALS ===
 

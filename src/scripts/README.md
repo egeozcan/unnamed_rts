@@ -26,6 +26,8 @@ npm run manipulate-state -- [options]
 | `--remove-building-type <type>` | Remove all buildings of a specific type (e.g. `turret`, `power`). |
 | `--remove-building-near <id>,<d>` | Remove buildings within distance `d` of unit/entity `id`. |
 | `--remove-building-further <id>,<d>` | Remove buildings further than distance `d` from unit/entity `id`. |
+| `--list-units-near <id>,<d>` | List units within distance `d` of unit/entity `id`. |
+| `--list-units-further <id>,<d>` | List units further than distance `d` from unit/entity `id`. |
 
 ## Examples
 
@@ -52,4 +54,9 @@ npm run manipulate-state -- --input saves/jammed.json --remove-unit-near unit_12
 **Remove units far from base (e.g. cleanup):**
 ```bash
 npm run manipulate-state -- --input saves/game.json --remove-unit-further base_structure_id,2000
+```
+
+**List units near a point of interest:**
+```bash
+npm run manipulate-state -- --input saves/game.json --list-units-near unit_555,100
 ```

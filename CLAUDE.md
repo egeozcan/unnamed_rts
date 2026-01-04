@@ -69,4 +69,4 @@ tests/               # Test files (mirrors src/ structure)
 
 Tests use Vitest. Test files are in the `tests/` directory, mirroring the `src/` structure (e.g., `tests/engine/reducer.test.ts`). Tests cover game state immutability, AI behavior, harvester logic, pathfinding edge cases, and renderer.
 
-Under `src/scripts/` there is a script to manipulate game state. It can be run with `npm run manipulate-state`. It allows for removing players, units, and buildings based on various criteria, as well as advancing the game simulation. Run `npm run manipulate-state -- --help` for more information.
+Under `src/scripts/` there is a script to manipulate game state. It can be run with `npm run manipulate-state`. It allows for removing players, units, and buildings based on various criteria, listing units based on distance, as well as advancing the game simulation. Run `npm run manipulate-state -- --help` for more information.
