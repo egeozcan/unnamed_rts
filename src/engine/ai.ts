@@ -1368,6 +1368,38 @@ function handleEconomy(
         }
     }
 
+    // ===== EXPANSION REFINERY PRIORITY =====
+    // After deploying an MCV at an expansion, prioritize building a refinery there.
+    // This ensures new bases have economic infrastructure regardless of build order.
+    // NOTE: Requires conyard to queue buildings
+    if (hasConyard && buildingQueueEmpty && !isPanic) {
+        const conyards = buildings.filter(b => b.key === 'conyard' && !b.dead);
+        const REFINERY_COVERAGE_RADIUS = 500; // Distance within which a refinery "covers" a conyard
+
+        // Check if any conyard lacks a nearby refinery
+        for (const conyard of conyards) {
+            const hasNearbyRefinery = refineries.some(r => r.pos.dist(conyard.pos) < REFINERY_COVERAGE_RADIUS);
+
+            if (!hasNearbyRefinery) {
+                // This conyard has no refinery nearby - check if there's ore to harvest
+                const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+                const oreNearConyard = allOre.some(ore => ore.pos.dist(conyard.pos) < 800);
+
+                if (oreNearConyard) {
+                    const refineryData = RULES.buildings['refinery'];
+                    const canBuildRefinery = checkPrerequisites('refinery', buildings);
+
+                    if (refineryData && canBuildRefinery && player.credits >= refineryData.cost) {
+                        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                        // Return early - refinery at expansion is high priority
+                        return actions;
+                    }
+                }
+                break; // Only check one conyard per tick
+            }
+        }
+    }
+
     // ===== STANDARD BUILD ORDER =====
     // NOTE: Can only queue buildings if we have a conyard
 
