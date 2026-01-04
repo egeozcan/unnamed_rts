@@ -909,16 +909,23 @@ export function handleAllInSell(
 
     let candidates: Entity[] = [];
 
-    // Phase 3: Sell EVERYTHING (self-elimination)
+    // Phase 3: Sell EVERYTHING (self-elimination) - but ONLY if we have no combat units left
     if (ticksInAllIn >= ALL_IN_PHASE3_TICKS) {
-        // Sell all buildings, including production - this is the end
-        candidates = buildings.filter(b => !b.dead);
-        // Sort by cost (sell cheapest first to keep production going as long as possible)
-        candidates.sort((a, b) => {
-            const costA = RULES.buildings[a.key]?.cost || 0;
-            const costB = RULES.buildings[b.key]?.cost || 0;
-            return costA - costB;
-        });
+        // Check if we still have combat units - if so, don't self-eliminate!
+        const hasCombatUnits = Object.values(state.entities).some(e =>
+            e.owner === playerId && e.type === 'UNIT' &&
+            e.key !== 'harvester' && e.key !== 'mcv' && !e.dead
+        );
+        if (!hasCombatUnits) {
+            // Sell all buildings, including production - this is the end
+            candidates = buildings.filter(b => !b.dead);
+            // Sort by cost (sell cheapest first to keep production going as long as possible)
+            candidates.sort((a, b) => {
+                const costA = RULES.buildings[a.key]?.cost || 0;
+                const costB = RULES.buildings[b.key]?.cost || 0;
+                return costA - costB;
+            });
+        }
     }
     // Phase 2: Sell economy/support buildings
     else if (ticksInAllIn >= ALL_IN_PHASE2_TICKS) {
