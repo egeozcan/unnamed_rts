@@ -1819,7 +1819,8 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                         // If blocked by a harvester and not making progress, switch to different ore
                         if (blockedByHarvester && harvestAttemptTicks > 15) {
                             // Find a different ore with less congestion
-                            const MAX_HARVESTERS_PER_ORE = 2;
+                            // Use higher limit for alternative search to give more options
+                            const MAX_HARVESTERS_FOR_ALT = 3;
                             let altOre: Entity | null = null;
                             let bestAltScore = -Infinity;
 
@@ -1836,8 +1837,8 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                             }
                                         }
                                     }
-                                    // Skip if already at max capacity
-                                    if (harvestersAtOre >= MAX_HARVESTERS_PER_ORE) continue;
+                                    // Skip if already at max capacity for alternatives
+                                    if (harvestersAtOre >= MAX_HARVESTERS_FOR_ALT) continue;
 
                                     // Score: closer is better, fewer harvesters is better
                                     const effectiveDist = d + harvestersAtOre * 100;
@@ -1862,11 +1863,10 @@ function updateUnit(entity: UnitEntity, allEntities: Record<EntityId, Entity>, e
                                     }
                                 };
                             } else {
-                                // No alternative ore - wait in queue
-                                nextEntity = {
-                                    ...harvester,
-                                    movement: { ...harvester.movement, vel: new Vector(0, 0) }
-                                };
+                                // No alternative ore available - keep moving toward current ore
+                                // but from a slightly offset angle to avoid direct collision
+                                // This is better than stopping completely which causes "stuck" appearance
+                                nextEntity = moveToward(harvester, ore.pos, entityList) as HarvesterUnit;
                             }
                         } else if (harvestAttemptTicks > 30 && distToOre > 43) {
                             // Give up on this ore after being stuck for too long

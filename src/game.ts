@@ -10,6 +10,9 @@ import { computeAiActions } from './engine/ai.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
 
+// Game speed setting (1 = slow, 2 = medium, 3 = fast)
+type GameSpeed = 1 | 2 | 3 | 4;
+
 // Get canvas
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const renderer = new Renderer(canvas);
@@ -21,26 +24,32 @@ let humanPlayerId: number | null = 0; // Track which player is human (null = obs
 // Frame rate limiting
 const TARGET_FPS = 60;
 const FRAME_TIME = 1000 / TARGET_FPS;
-let lastFrameTime = 0;
+const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
 
-// Game speed setting (1 = slow, 2 = medium, 3 = fast)
-type GameSpeed = 1 | 2 | 3;
+};
+
+let lastFrameTime = 0;
 let gameSpeed: GameSpeed = 2;
-let slowTickCounter = 0; // Used for slow speed (skip every other tick)
 
 function setGameSpeed(speed: GameSpeed) {
     gameSpeed = speed;
-    slowTickCounter = 0;
     updateSpeedIndicator();
 }
 
 function updateSpeedIndicator() {
     const indicator = document.getElementById('speed-indicator');
-    if (indicator) {
-        const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST' };
-        indicator.textContent = labels[gameSpeed];
-        indicator.className = `speed-${gameSpeed}`;
+
+    if (!indicator) {
+        return;
     }
+
+    const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST', 4: 'VERY FAST' };
+    indicator.textContent = labels[gameSpeed];
+    indicator.className = `speed-${gameSpeed}`;
 }
 
 // Setup Skirmish UI logic
@@ -780,15 +789,7 @@ function gameLoop(timestamp: number = 0) {
         // Just render, don't update
     } else {
         // Determine how many ticks to run based on speed setting
-        let ticksToRun = 1;
-        if (gameSpeed === 1) {
-            // Slow: run tick every other frame
-            slowTickCounter++;
-            ticksToRun = slowTickCounter % 2 === 0 ? 1 : 0;
-        } else if (gameSpeed === 3) {
-            // Fast: run 2 ticks per frame
-            ticksToRun = 2;
-        }
+        const ticksToRun = TICKS_PER_GAME_SPEED[gameSpeed];
 
         for (let t = 0; t < ticksToRun; t++) {
             // AI Logic - iterate over ALL AI players

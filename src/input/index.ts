@@ -105,6 +105,9 @@ function setupEventListeners() {
         if (e.key === '3') {
             (inputState as any).onSetSpeed?.(3);
         }
+        if (e.key === '4') {
+            (inputState as any).onSetSpeed?.(4);
+        }
         // Deploy MCV key handler
         if (e.key === 'Enter') {
             onDeployMCV?.();
