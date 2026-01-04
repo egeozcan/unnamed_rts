@@ -494,11 +494,15 @@ describe('Expansion Refinery Priority', () => {
     it('should prioritize building refinery at expansion conyard without one', () => {
         const entities: Record<EntityId, Entity> = {};
 
-        // Main base with refinery
+        // Main base with refinery and production buildings
         entities['conyard1'] = createEntity('conyard1', 1, 'BUILDING', 'conyard', 500, 500);
         entities['refinery1'] = createEntity('refinery1', 1, 'BUILDING', 'refinery', 600, 500, { w: 100, h: 80 });
         entities['power1'] = createEntity('power1', 1, 'BUILDING', 'power', 400, 500);
+        entities['barracks1'] = createEntity('barracks1', 1, 'BUILDING', 'barracks', 400, 600);
+        entities['factory1'] = createEntity('factory1', 1, 'BUILDING', 'factory', 600, 600);
+        // Need 2 harvesters per refinery (ideal), otherwise AI prioritizes harvester production
         entities['harv1'] = createEntity('harv1', 1, 'UNIT', 'harvester', 650, 500);
+        entities['harv2'] = createEntity('harv2', 1, 'UNIT', 'harvester', 700, 500);
 
         // Expansion base (new conyard) - NO refinery nearby
         entities['conyard2'] = createEntity('conyard2', 1, 'BUILDING', 'conyard', 1500, 500);

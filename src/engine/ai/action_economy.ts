@@ -71,8 +71,37 @@ export function handleEconomy(
         }
     }
 
+    // CRITICAL FIX: Maximum refineries per player to prevent infinite refinery spam
+    const MAX_REFINERIES = 4;
+    const hasEnoughRefineries = refineries.length >= MAX_REFINERIES;
+    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
+
     if (aiState.investmentPriority === 'economy' && !isPanic) {
         // ECONOMY PRIORITY: Build harvesters and expand toward ore
+
+        // CRITICAL FIX: Prioritize production buildings BEFORE more refineries
+        // Without barracks/factory, the AI cannot build an army!
+        if (hasConyard && buildingQueueEmpty) {
+            // If we have a refinery but no barracks, build barracks first
+            if (refineries.length > 0 && !hasBarracks) {
+                const barracksData = RULES.buildings['barracks'];
+                const barracksReqsMet = checkPrerequisites('barracks', buildings);
+                if (barracksData && barracksReqsMet && player.credits >= barracksData.cost) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
+                    return actions;
+                }
+            }
+
+            // If we have barracks but no factory, build factory
+            if (hasBarracks && !hasFactory) {
+                const factoryData = RULES.buildings['factory'];
+                const factoryReqsMet = checkPrerequisites('factory', buildings);
+                if (factoryData && factoryReqsMet && player.credits >= factoryData.cost) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'factory', playerId } });
+                    return actions;
+                }
+            }
+        }
 
         // 1. Build harvesters if we have too few (need 2 per refinery)
         const idealHarvesters = Math.max(refineries.length * 2, 2);
@@ -87,7 +116,8 @@ export function handleEconomy(
         }
 
         // 2. Build refinery near distant ore if we have an expansion target
-        if (hasConyard && aiState.expansionTarget && buildingQueueEmpty) {
+        // CRITICAL FIX: Only if below max refineries
+        if (hasConyard && aiState.expansionTarget && buildingQueueEmpty && !hasEnoughRefineries) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = checkPrerequisites('refinery', buildings);
 
@@ -125,13 +155,17 @@ export function handleEconomy(
         }
 
         // 3. Build refinery near accessible unclaimed ore (when expansionTarget is null)
-        if (hasConyard && !aiState.expansionTarget && buildingQueueEmpty) {
+        // CRITICAL FIX: Only if below max refineries
+        if (hasConyard && !aiState.expansionTarget && buildingQueueEmpty && !hasEnoughRefineries) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = checkPrerequisites('refinery', buildings);
             const BUILD_RADIUS = 400;
 
-            // Check for accessible ore without a refinery
+            // Check for accessible ore without a refinery (from ANY player, not just ours)
             const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const allRefineries = Object.values(state.entities).filter(e =>
+                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
+            );
             const nonDefenseBuildings = buildings.filter(b => {
                 const bData = RULES.buildings[b.key];
                 return !bData?.isDefense;
@@ -149,8 +183,8 @@ export function handleEconomy(
                 }
                 if (!isAccessible) continue;
 
-                // Check if ore already has a refinery nearby
-                const hasNearbyRefinery = refineries.some(r => r.pos.dist(ore.pos) < 300);
+                // CRITICAL FIX: Check if ore already has a refinery nearby from ANY player
+                const hasNearbyRefinery = allRefineries.some(r => r.pos.dist(ore.pos) < 300);
                 if (!hasNearbyRefinery) {
                     hasUnclaimedAccessibleOre = true;
                     break;
@@ -195,13 +229,17 @@ export function handleEconomy(
         }
 
         // 2. Build additional refinery if we have accessible ore without refinery coverage
-        if (hasConyard && buildingQueueEmpty) {
+        // CRITICAL FIX: Only if below max refineries
+        if (hasConyard && buildingQueueEmpty && !hasEnoughRefineries) {
             const refineryData = RULES.buildings['refinery'];
             const canBuildRefinery = checkPrerequisites('refinery', buildings);
             const BUILD_RADIUS = 400;
 
-            // Find ore patches within build range that don't have a nearby refinery
+            // Find ore patches within build range that don't have a nearby refinery (from ANY player)
             const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const allRefineries = Object.values(state.entities).filter(e =>
+                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
+            );
             const nonDefenseBuildings = buildings.filter(b => {
                 const bData = RULES.buildings[b.key];
                 return !bData?.isDefense;
@@ -219,8 +257,8 @@ export function handleEconomy(
                 }
                 if (!isAccessible) continue;
 
-                // Check if ore already has a refinery nearby
-                const hasNearbyRefinery = refineries.some(r => r.pos.dist(ore.pos) < 300);
+                // CRITICAL FIX: Check if ore already has a refinery nearby from ANY player
+                const hasNearbyRefinery = allRefineries.some(r => r.pos.dist(ore.pos) < 300);
                 if (!hasNearbyRefinery) {
                     hasUnclaimedAccessibleOre = true;
                     break;
@@ -283,7 +321,8 @@ export function handleEconomy(
 
     // ===== EXPANSION REFINERY PRIORITY =====
     // After deploying an MCV at an expansion, prioritize building a refinery there.
-    if (hasConyard && buildingQueueEmpty && !isPanic) {
+    // CRITICAL FIX: Only if below max refineries
+    if (hasConyard && buildingQueueEmpty && !isPanic && !hasEnoughRefineries) {
         const conyards = buildings.filter(b => b.key === 'conyard' && !b.dead);
         const REFINERY_COVERAGE_RADIUS = 500; // Distance within which a refinery "covers" a conyard
 
@@ -396,7 +435,7 @@ export function handleEconomy(
         creditBuffer = 0;
     }
 
-    const hasBarracks = hasProductionBuildingFor('infantry', buildings);
+
     const infantryQueueEmpty = !player.queues.infantry.current;
 
     // Get counter-building unit preferences based on enemy composition
