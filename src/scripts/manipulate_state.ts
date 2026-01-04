@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { GameState, Vector, EntityId } from '../engine/types';
-import { tick } from '../engine/reducer';
+import { tick, update } from '../engine/reducer';
+import { computeAiActions, resetAIState } from '../engine/ai/index';
 
 // Helper to parse arguments
 function parseArgs() {
@@ -322,13 +323,34 @@ function main() {
     // === ADVANCE SIMULATION ===
     if (config.ticks > 0) {
         console.log(`Advancing simulation by ${config.ticks} ticks...`);
-        // We likely need to set 'running' to true for tick to do anything, 
+        // We likely need to set 'running' to true for tick to do anything,
         // or tick might require it. Logic in reducer.ts: "if (!state.running) return state;"
         // So we must force running = true temporarily.
         const wasRunning = state.running;
         state = { ...state, running: true };
 
+        // Reset AI state for all players to ensure fresh state
+        for (const pidStr of Object.keys(state.players)) {
+            const pid = parseInt(pidStr, 10);
+            if (state.players[pid]?.isAi) {
+                resetAIState(pid);
+            }
+        }
+
         for (let i = 0; i < config.ticks; i++) {
+            // Run AI for each AI player and apply their actions
+            for (const pidStr of Object.keys(state.players)) {
+                const pid = parseInt(pidStr, 10);
+                const player = state.players[pid];
+                if (player?.isAi) {
+                    const aiActions = computeAiActions(state, pid);
+                    for (const action of aiActions) {
+                        state = update(state, action);
+                    }
+                }
+            }
+
+            // Then tick the game simulation
             state = tick(state);
             if (i % 100 === 0 && i > 0) process.stdout.write('.');
         }

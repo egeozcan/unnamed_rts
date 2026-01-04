@@ -483,7 +483,11 @@ export function handleRally(
 ): Action[] {
     const actions: Action[] = [];
 
-    if (aiState.strategy === 'attack' || aiState.strategy === 'defend' || aiState.strategy === 'harass' || aiState.strategy === 'all_in') {
+    // In doomed mode during buildup, we MUST rally units aggressively
+    // Don't let them wander off attacking individually
+    const isDoomedBuildup = aiState.isDoomed && aiState.strategy === 'buildup';
+
+    if (!isDoomedBuildup && (aiState.strategy === 'attack' || aiState.strategy === 'defend' || aiState.strategy === 'harass' || aiState.strategy === 'all_in')) {
         return actions;
     }
 
@@ -497,18 +501,31 @@ export function handleRally(
     );
 
     if (freeUnits.length > 0) {
-        // Only move if idle
-        const idleUnits = freeUnits.filter(u => !(u as UnitEntity).movement.moveTarget && !(u as UnitEntity).combat.targetId);
-
-        if (idleUnits.length > 0) {
+        if (isDoomedBuildup) {
+            // In doomed buildup mode, FORCE all units to rally
+            // Even if they're currently attacking, pull them back to group up
             actions.push({
                 type: 'COMMAND_MOVE',
                 payload: {
-                    unitIds: idleUnits.map(u => u.id),
+                    unitIds: freeUnits.map(u => u.id),
                     x: rallyPoint.x,
                     y: rallyPoint.y
                 }
             });
+        } else {
+            // Normal mode: Only move if idle
+            const idleUnits = freeUnits.filter(u => !(u as UnitEntity).movement.moveTarget && !(u as UnitEntity).combat.targetId);
+
+            if (idleUnits.length > 0) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: idleUnits.map(u => u.id),
+                        x: rallyPoint.x,
+                        y: rallyPoint.y
+                    }
+                });
+            }
         }
     }
     return actions;

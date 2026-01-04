@@ -49,7 +49,8 @@ export function getAIState(playerId: number): AIPlayerState {
             vengeanceScores: {},
             lastCombatTick: 0,
             stalemateDesperation: 0,
-            allInStartTick: 0
+            allInStartTick: 0,
+            isDoomed: false
         };
     }
     return aiStates[playerId];

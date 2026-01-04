@@ -52,6 +52,8 @@ export interface AIPlayerState {
     stalemateDesperation: number; // 0-100 desperation level (higher = more risky behavior)
     // All-in mode tracking
     allInStartTick: number;       // When all_in mode started (0 = not in all_in)
+    // Doomed mode: no income AND no way to recover (no conyard to build refinery)
+    isDoomed: boolean;
 }
 
 export interface CounterUnits {

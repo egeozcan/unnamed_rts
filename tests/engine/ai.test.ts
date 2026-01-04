@@ -1168,8 +1168,9 @@ describe('AI System', () => {
             entities['ore1'] = createEntity('ore1', -1, 'RESOURCE', 'ore', 150, 150);
 
             // Give player lots of credits so they certainly CAN repair
+            // Use tick 31 for player 1 AI compute (player 1 computes on tick % 3 === 1)
             let state = createTestState(entities);
-            state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 5000 } } };
+            state = { ...state, tick: 31, players: { ...state.players, 1: { ...state.players[1], credits: 5000 } } };
 
             const actions = computeAiActions(state, 1);
 
@@ -1195,8 +1196,8 @@ describe('AI System', () => {
             entities['attacker'] = createEntity('attacker', 0, 'UNIT', 'tank', 1050, 1050);
 
             let state = createTestState(entities);
-            // Use tick 600 to be past the 300 tick grace period, and set credits low
-            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
+            // Use tick 601 for grace period AND player 1 AI compute (player 1 computes on tick % 3 === 1)
+            state = { ...state, tick: 601, players: { ...state.players, 1: { ...state.players[1], credits: 200 } } };
 
             const actions = computeAiActions(state, 1);
 
@@ -1213,18 +1214,16 @@ describe('AI System', () => {
 
             // Critical Conyard - set placedTick to make buildings "mature"
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100, { placedTick: 0 });
-            // Power Plant
+            // Power Plant - now protected
             entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
-            // Expensive Factory (Cost 2000, Sell 1000)
-            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 300, 100, { placedTick: 0 });
-            // Turret (Cost 800, Sell 400)
-            entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
-            // Barracks (Cost 500, Sell 250)
-            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 500, 100, { placedTick: 0 });
+            // Tech Center (Cost 1500, Sell 750) - this is the only sellable building under normal pressure
+            entities['tech'] = createEntity('tech', 1, 'BUILDING', 'tech', 250, 100, { placedTick: 0 });
+            // Factory, Turret, Barracks are now protected and won't be sold
 
             let state = createTestState(entities);
-            // Credits 500. Refinery cost 2000. Needs 1500 more. Use tick 600 for grace period
-            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
+            // Credits 500. Refinery cost 2000. Needs 1500 more.
+            // Use tick 601 for grace period AND player 1 AI compute (player 1 computes on tick % 3 === 1)
+            state = { ...state, tick: 601, players: { ...state.players, 1: { ...state.players[1], credits: 500 } } };
 
             const actions = computeAiActions(state, 1);
             const hasSell = actions.some(a => a.type === 'SELL_BUILDING');
@@ -1242,17 +1241,20 @@ describe('AI System', () => {
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
             entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 300, 100, { placedTick: 0 });
             entities['turret'] = createEntity('turret', 1, 'BUILDING', 'turret', 400, 100, { placedTick: 0 });
+            // Add tech center - now the priority target for selling under normal pressure
+            entities['tech'] = createEntity('tech', 1, 'BUILDING', 'tech', 500, 100, { placedTick: 0 });
 
-            // Stalemate: 0 credits, no income (no refinery/harvesters), use tick 600 for grace period
+            // Stalemate: 0 credits, no income (no refinery/harvesters)
+            // Use tick 601 for grace period AND player 1 AI compute (player 1 computes on tick % 3 === 1)
             let state = createTestState(entities);
-            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+            state = { ...state, tick: 601, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
 
             const actions = computeAiActions(state, 1);
             const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
             expect(sellAction).toBeDefined();
-            // Priority is Turret > Power > Conyard
+            // New priority: Tech > Conyard (defense, production, power are now protected)
             if (sellAction) {
-                expect(sellAction.payload.buildingId).toBe('turret');
+                expect(sellAction.payload.buildingId).toBe('tech');
             }
         });
 
@@ -1277,8 +1279,8 @@ describe('AI System', () => {
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities);
-            // Use tick 600 for grace period
-            state = { ...state, tick: 600, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+            // Use tick 601 for grace period AND player 1 AI compute (player 1 computes on tick % 3 === 1)
+            state = { ...state, tick: 601, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
 
             const actions = computeAiActions(state, 1);
             const sellAction = actions.find(a => a.type === 'SELL_BUILDING');

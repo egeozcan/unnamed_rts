@@ -390,6 +390,12 @@ export function handleEconomy(
         creditBuffer = 0;    // No reserves
     }
 
+    // Override for Doomed Mode - no point saving, spend everything to build army
+    if (aiState.isDoomed) {
+        creditThreshold = 0;
+        creditBuffer = 0;
+    }
+
     const hasBarracks = hasProductionBuildingFor('infantry', buildings);
     const infantryQueueEmpty = !player.queues.infantry.current;
 
@@ -595,12 +601,22 @@ export function handleEmergencySell(
     );
     const hasIncome = harvesters.length > 0 && hasRefinery;
     const isBroke = player.credits < 200;
-    const isStalemate = !hasIncome && isBroke;
+    // "Doomed" state: no income AND no way to recover (no conyard to build refinery)
+    const isDoomed = !hasIncome && !hasConyard && !hasRefinery;
+    const isStalemate = (!hasIncome && isBroke) || isDoomed;
+
+    // Track doomed state in AI state for strategy module to use
+    aiState.isDoomed = isDoomed;
 
     const needsRefinery = hasConyard && !hasRefinery && player.credits < REFINERY_COST;
 
-    // 2. Define Sell Candidates with Priority
-    const sellPriority = ['turret', 'pillbox', 'sam_site', 'tech', 'power', 'conyard', 'barracks', 'factory'];
+    // 2. Define Protected Buildings
+    // Protect defense, production (barracks/factory), and power under normal pressure
+    const protectedBuildings = new Set([
+        'turret', 'pillbox', 'sam_site', 'obelisk',  // Defense
+        'barracks', 'factory',                        // Production
+        'power'                                       // Power
+    ]);
 
     let shouldSell = false;
     let candidates: Entity[] = [];
@@ -620,28 +636,41 @@ export function handleEmergencySell(
     }
 
     // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
-    // Don't sell factory/barracks during stalemate (they'd just be rebuilt causing a loop)
-    // Conyard CAN be sold if we have another production building (factory/barracks)
+    // Priority: tech -> conyard -> excess production -> factory (if has barracks)
     if (!shouldSell && isStalemate) {
         const hasFactory = hasProductionBuildingFor('vehicle', buildings);
         const hasBarracks = hasProductionBuildingFor('infantry', buildings);
         const hasAnyProduction = hasFactory || hasBarracks;
 
+        // Count production buildings to identify excess
+        const barracksCount = matureBuildings.filter(b => b.key === 'barracks').length;
+        const factoryCount = matureBuildings.filter(b => b.key === 'factory').length;
+
         candidates = matureBuildings.filter(b => {
-            // Never sell factory/barracks during stalemate (causes rebuild loop)
-            if (b.key === 'factory' || b.key === 'barracks') return false;
+            // Always allow selling tech
+            if (b.key === 'tech') return true;
+            // Sell conyard if we have another production building
+            if (b.key === 'conyard' && hasAnyProduction) return true;
+            // Sell excess barracks (keep at least 1)
+            if (b.key === 'barracks' && barracksCount > 1) return true;
+            // Sell excess factories (keep at least 1)
+            if (b.key === 'factory' && factoryCount > 1) return true;
+            // Sell factory if we have barracks (can still produce infantry)
+            if (b.key === 'factory' && hasBarracks) return true;
+            // Protect defense and power
+            if (protectedBuildings.has(b.key)) return false;
             // Never sell refinery (needed for income recovery)
             if (b.key === 'refinery') return false;
-            // Only sell conyard if we have another production building
-            if (b.key === 'conyard' && !hasAnyProduction) return false;
             return true;
         });
 
         if (candidates.length > 0) {
             shouldSell = true;
+            // Priority: tech, conyard, excess barracks, factory
+            const stalematePriority = ['tech', 'conyard', 'barracks', 'factory'];
             candidates.sort((a, b) => {
-                const idxA = getPriorityIndex(a.key, sellPriority);
-                const idxB = getPriorityIndex(b.key, sellPriority);
+                const idxA = getPriorityIndex(a.key, stalematePriority);
+                const idxB = getPriorityIndex(b.key, stalematePriority);
                 if (idxA !== idxB) return idxA - idxB;
                 return 0;
             });
@@ -668,26 +697,46 @@ export function handleEmergencySell(
 
     if (!shouldSell && criticalLow && (underAttack || player.credits <= 50)) {
         shouldSell = true;
-        const critical = ['conyard', 'refinery', 'factory', 'barracks'];
-        candidates = matureBuildings.filter(b => !critical.includes(b.key));
+        // Use protected buildings set - only sell tech, conyard, and useless refineries
+        candidates = matureBuildings.filter(b => {
+            if (protectedBuildings.has(b.key)) return false;
+            if (b.key === 'refinery') return !isRefineryUseful(b, _state);
+            return true;
+        });
         candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp));
     }
 
     // Condition B: Need Refinery (Strategic Sell)
+    // Priority: tech -> excess production buildings -> factory (if has barracks)
     if (!shouldSell && needsRefinery) {
         shouldSell = true;
-        const powerPlants = buildings.filter(b => b.key === 'power');
+
+        // Count production buildings to identify excess
+        const barracksCount = matureBuildings.filter(b => b.key === 'barracks').length;
+        const factoryCount = matureBuildings.filter(b => b.key === 'factory').length;
+        const hasBarracks = barracksCount > 0;
 
         candidates = matureBuildings.filter(b => {
+            // Always allow selling tech
+            if (b.key === 'tech') return true;
+            // Sell excess barracks (keep at least 1)
+            if (b.key === 'barracks' && barracksCount > 1) return true;
+            // Sell excess factories (keep at least 1)
+            if (b.key === 'factory' && factoryCount > 1) return true;
+            // Sell factory if we have barracks (can still produce infantry)
+            if (b.key === 'factory' && hasBarracks) return true;
+            // Protect everything else
+            if (protectedBuildings.has(b.key)) return false;
             if (b.key === 'conyard') return false;
             if (b.key === 'refinery') return false;
-            if (b.key === 'power' && powerPlants.length <= 1) return false;
             return true;
         });
 
+        // Priority: tech first, then excess production, then factory
+        const refineryPriority = ['tech', 'barracks', 'factory'];
         candidates.sort((a, b) => {
-            const idxA = getPriorityIndex(a.key, sellPriority);
-            const idxB = getPriorityIndex(b.key, sellPriority);
+            const idxA = getPriorityIndex(a.key, refineryPriority);
+            const idxB = getPriorityIndex(b.key, refineryPriority);
             if (idxA !== idxB) return idxA - idxB;
             const costA = RULES.buildings[a.key]?.cost || 0;
             const costB = RULES.buildings[b.key]?.cost || 0;
@@ -706,6 +755,86 @@ export function handleEmergencySell(
             }
         });
     }
+
+    return actions;
+}
+
+/**
+ * Last Resort Mode: When the AI has no army, is under attack, has no income,
+ * and cannot produce anything, sell everything except barracks and power
+ * to fund a desperate infantry spam.
+ */
+export function handleLastResortSell(
+    state: GameState,
+    playerId: number,
+    buildings: Entity[],
+    player: PlayerState,
+    aiState: AIPlayerState
+): Action[] {
+    const actions: Action[] = [];
+    const LAST_RESORT_CREDIT_THRESHOLD = 100;
+
+    // All conditions must be true:
+    // 1. Very low credits
+    if (player.credits >= LAST_RESORT_CREDIT_THRESHOLD) return actions;
+
+    // 2. Under attack
+    if (aiState.threatsNearBase.length === 0) return actions;
+
+    // 3. No combat units (no army)
+    const combatUnits = Object.values(state.entities).filter(e =>
+        e.owner === playerId &&
+        e.type === 'UNIT' &&
+        e.key !== 'harvester' &&
+        e.key !== 'mcv' &&
+        !e.dead
+    );
+    if (combatUnits.length > 0) return actions;
+
+    // 4. No income (no harvesters OR no refinery)
+    const harvesters = Object.values(state.entities).filter(e =>
+        e.owner === playerId && e.key === 'harvester' && !e.dead
+    );
+    const hasRefinery = buildings.some(b => b.key === 'refinery' && !b.dead);
+    if (harvesters.length > 0 && hasRefinery) return actions;
+
+    // 5. Has barracks (can produce infantry to make use of funds)
+    if (!hasProductionBuildingFor('infantry', buildings)) return actions;
+
+    // === LAST RESORT MODE ===
+    const LAST_RESORT_SELL_COOLDOWN = 30; // Faster selling in last resort (0.5s)
+    if (state.tick - aiState.lastSellTick < LAST_RESORT_SELL_COOLDOWN) return actions;
+
+    const BUILDING_GRACE_PERIOD = 300;
+    const matureBuildings = buildings.filter(b => {
+        const bldEntity = b as BuildingEntity;
+        const age = state.tick - (bldEntity.building.placedTick || 0);
+        return age >= BUILDING_GRACE_PERIOD;
+    });
+
+    // Keep only barracks and power
+    const keepInLastResort = new Set(['barracks', 'power']);
+    // Sell highest value buildings first for quicker cash
+    const sellOrder = ['conyard', 'tech', 'factory', 'refinery', 'turret', 'pillbox', 'sam_site', 'obelisk'];
+
+    const candidates = matureBuildings.filter(b => !b.dead && !keepInLastResort.has(b.key));
+    if (candidates.length === 0) return actions;
+
+    candidates.sort((a, b) => {
+        const idxA = getPriorityIndex(a.key, sellOrder);
+        const idxB = getPriorityIndex(b.key, sellOrder);
+        if (idxA !== idxB) return idxA - idxB;
+        // Secondary: sell more damaged buildings first (less refund lost)
+        return (a.hp / a.maxHp) - (b.hp / b.maxHp);
+    });
+
+    const toSell = candidates[0];
+    aiState.lastSellTick = state.tick;
+
+    actions.push({
+        type: 'SELL_BUILDING',
+        payload: { buildingId: toSell.id, playerId }
+    });
 
     return actions;
 }

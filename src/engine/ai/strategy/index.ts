@@ -47,6 +47,10 @@ export function updateStrategy(
     const attackThreshold = personality.attack_threshold || ATTACK_GROUP_MIN_SIZE;
     const harassThreshold = personality.harass_threshold || HARASS_GROUP_SIZE;
 
+    // In doomed mode, we need to accumulate a larger army before attacking
+    // No trickling units - wait until we have enough for a proper push
+    const DOOMED_ATTACK_THRESHOLD = 8;
+
     // Priority 1: Defend if threats near base (ALWAYS immediate, no cooldown)
     if (threatsNearBase.length > 0) {
         aiState.peaceTicks = 0;
@@ -144,7 +148,34 @@ export function updateStrategy(
         }
     }
 
+    // Priority 2.6: Doomed mode - accumulate army before attacking
+    // When doomed (no income, no way to recover), we need to mass units and attack together
+    // Don't trickle units to death - wait for a proper push
+    if (aiState.isDoomed && enemies.length > 0) {
+        // Clear harass group - don't waste units
+        aiState.harassGroup = [];
+
+        if (armySize >= DOOMED_ATTACK_THRESHOLD) {
+            // We have enough units - launch all-in attack
+            aiState.strategy = 'all_in';
+            aiState.lastStrategyChange = tick;
+            if (aiState.allInStartTick === 0) aiState.allInStartTick = tick;
+            aiState.attackGroup = combatUnits.map(u => u.id);
+            return;
+        }
+
+        // Not enough units yet - stay in buildup, rally units together
+        if (aiState.strategy !== 'buildup' && aiState.strategy !== 'defend') {
+            aiState.strategy = 'buildup';
+            aiState.lastStrategyChange = tick;
+            aiState.attackGroup = [];
+            aiState.offensiveGroups = [];
+        }
+        return;
+    }
+
     // Priority 3: Harass if we have some units but not enough for full attack
+    // Skip harass when doomed (handled above)
     const harassCapableUnits = combatUnits.filter(u => u.key === 'rifle' || u.key === 'light');
     if (harassCapableUnits.length >= harassThreshold && (hasFactory || hasBarracks) && enemies.length > 0) {
         if (aiState.strategy !== 'harass') {

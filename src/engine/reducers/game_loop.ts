@@ -385,16 +385,36 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                 }
             }
         } else if (currentEnt.type === 'BUILDING' && currentEnt.combat) {
+            let combat = currentEnt.combat;
             // Update cooldown and flash for defense buildings
-            if (currentEnt.combat.cooldown > 0 || currentEnt.combat.flash > 0) {
-                nextEntities[id] = {
-                    ...currentEnt,
-                    combat: {
-                        ...currentEnt.combat,
-                        cooldown: Math.max(0, currentEnt.combat.cooldown - 1),
-                        flash: Math.max(0, currentEnt.combat.flash - 1)
-                    }
+            if (combat.cooldown > 0 || combat.flash > 0) {
+                combat = {
+                    ...combat,
+                    cooldown: Math.max(0, combat.cooldown - 1),
+                    flash: Math.max(0, combat.flash - 1)
                 };
+                nextEntities[id] = { ...currentEnt, combat };
+            }
+
+            // Update turret angle to track target for defense buildings
+            if (combat.targetId) {
+                const target = nextEntities[combat.targetId];
+                if (target && !target.dead) {
+                    const deltaX = target.pos.x - currentEnt.pos.x;
+                    const deltaY = target.pos.y - currentEnt.pos.y;
+                    // Add π/2 offset because building turret SVGs point UP, not RIGHT
+                    const targetTurretAngle = Math.atan2(deltaY, deltaX) + Math.PI / 2;
+
+                    let angleDiff = targetTurretAngle - combat.turretAngle;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                    const newTurretAngle = combat.turretAngle + angleDiff * 0.25;
+                    nextEntities[id] = {
+                        ...currentEnt,
+                        combat: { ...combat, turretAngle: newTurretAngle }
+                    };
+                }
             }
         }
     }

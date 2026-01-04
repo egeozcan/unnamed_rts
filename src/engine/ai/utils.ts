@@ -135,6 +135,21 @@ export function getRefineries(buildings: Entity[]): Entity[] {
     return buildings.filter(b => b.key === 'refinery' && !b.dead);
 }
 
+// ===== UNIT FILTER UTILITIES =====
+
+/**
+ * Check if player has any combat units (excludes harvesters and MCVs)
+ */
+export function hasCombatUnits(state: GameState, playerId: number): boolean {
+    return Object.values(state.entities).some(e =>
+        e.owner === playerId &&
+        e.type === 'UNIT' &&
+        e.key !== 'harvester' &&
+        e.key !== 'mcv' &&
+        !e.dead
+    );
+}
+
 // ===== RESOURCE UTILITIES =====
 
 export function getAllOre(state: GameState): Entity[] {

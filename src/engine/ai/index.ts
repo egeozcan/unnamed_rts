@@ -51,6 +51,7 @@ import {
 import {
     handleEconomy,
     handleEmergencySell,
+    handleLastResortSell,
     handleAllInSell,
     handleBuildingPlacement,
     handleBuildingRepair,
@@ -173,6 +174,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     }
 
     actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
+    actions.push(...handleLastResortSell(state, playerId, myBuildings, player, aiState));
     actions.push(...handleAllInSell(state, playerId, myBuildings, aiState));
     actions.push(...handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies));
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));

@@ -100,7 +100,8 @@ describe('AI Overhaul Tests', () => {
             const entities: Record<EntityId, Entity> = {};
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 100, 100, { placedTick: 0, hp: 3000, maxHp: 3000 });
             // Building placed at tick 0 - 600 ticks old at tick 600
-            entities['old_power'] = createEntity('old_power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
+            // Use 'tech' instead of 'power' - power is now protected under normal pressure
+            entities['old_tech'] = createEntity('old_tech', 1, 'BUILDING', 'tech', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities, 600);
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 10 } } };
@@ -109,7 +110,7 @@ describe('AI Overhaul Tests', () => {
             aiState.threatsNearBase = ['enemy'];
             aiState.lastSellTick = 0; // Not on cooldown
 
-            const actions = handleEmergencySell(state, 1, [entities['old_power']], state.players[1], aiState);
+            const actions = handleEmergencySell(state, 1, [entities['old_tech']], state.players[1], aiState);
 
             // Should sell - building is mature (600 ticks > 300 grace period)
             expect(actions.length).toBe(1);
@@ -118,10 +119,11 @@ describe('AI Overhaul Tests', () => {
     });
 
     // ===== ISSUE #2: SELL COOLDOWN =====
+    // Use 'tech' instead of 'power' - power is now protected under normal pressure
     describe('Issue #2: Sell Cooldown', () => {
         it('should NOT sell if cooldown is active', () => {
             const entities: Record<EntityId, Entity> = {};
-            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
+            entities['tech'] = createEntity('tech', 1, 'BUILDING', 'tech', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities, 600);
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 10 } } };
@@ -130,7 +132,7 @@ describe('AI Overhaul Tests', () => {
             aiState.threatsNearBase = ['enemy'];
             aiState.lastSellTick = 550; // Sold 50 ticks ago (< 120 cooldown)
 
-            const actions = handleEmergencySell(state, 1, [entities['power']], state.players[1], aiState);
+            const actions = handleEmergencySell(state, 1, [entities['tech']], state.players[1], aiState);
 
             // Should NOT sell - still on cooldown
             expect(actions.length).toBe(0);
@@ -138,7 +140,7 @@ describe('AI Overhaul Tests', () => {
 
         it('should sell when cooldown has expired', () => {
             const entities: Record<EntityId, Entity> = {};
-            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
+            entities['tech'] = createEntity('tech', 1, 'BUILDING', 'tech', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities, 600);
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 10 } } };
@@ -147,7 +149,7 @@ describe('AI Overhaul Tests', () => {
             aiState.threatsNearBase = ['enemy'];
             aiState.lastSellTick = 400; // Sold 200 ticks ago (> 120 cooldown)
 
-            const actions = handleEmergencySell(state, 1, [entities['power']], state.players[1], aiState);
+            const actions = handleEmergencySell(state, 1, [entities['tech']], state.players[1], aiState);
 
             // Should sell - cooldown expired
             expect(actions.length).toBe(1);
@@ -155,7 +157,7 @@ describe('AI Overhaul Tests', () => {
 
         it('should update lastSellTick when selling', () => {
             const entities: Record<EntityId, Entity> = {};
-            entities['power'] = createEntity('power', 1, 'BUILDING', 'power', 200, 100, { placedTick: 0 });
+            entities['tech'] = createEntity('tech', 1, 'BUILDING', 'tech', 200, 100, { placedTick: 0 });
 
             let state = createTestState(entities, 600);
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 10 } } };
@@ -164,7 +166,7 @@ describe('AI Overhaul Tests', () => {
             aiState.threatsNearBase = ['enemy'];
             aiState.lastSellTick = 0;
 
-            handleEmergencySell(state, 1, [entities['power']], state.players[1], aiState);
+            handleEmergencySell(state, 1, [entities['tech']], state.players[1], aiState);
 
             // lastSellTick should be updated to current tick
             expect(aiState.lastSellTick).toBe(600);

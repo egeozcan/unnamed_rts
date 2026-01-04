@@ -76,9 +76,10 @@ describe('AI Emergency Selling', () => {
         // Use tick 600 to be past the 300 tick building grace period
         state = { ...state, tick: 600 };
 
+        // Use 'tech' instead of 'power' - power is now protected under normal pressure
         const building = createTestBuilding({
-            id: 'b_ai', owner: 1, key: 'power',
-            x: 2000, y: 2000, hp: 400, maxHp: 800, radius: 30,
+            id: 'b_ai', owner: 1, key: 'tech',
+            x: 2000, y: 2000, hp: 500, maxHp: 1000, radius: 30,
             placedTick: 0  // Building is "mature" (placed at tick 0, now at tick 600)
         });
 
