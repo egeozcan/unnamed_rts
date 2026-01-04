@@ -35,6 +35,7 @@ export const INITIAL_STATE: GameState = {
     config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
     debugMode: false,
     showMinimap: true,
+    showBirdsEye: false,
     notification: null
 };
 
@@ -68,6 +69,8 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, debugMode: !state.debugMode };
         case 'TOGGLE_MINIMAP':
             return { ...state, showMinimap: !state.showMinimap };
+        case 'TOGGLE_BIRDS_EYE':
+            return { ...state, showBirdsEye: !state.showBirdsEye };
         case 'DEPLOY_MCV':
             return deployMCV(state, action.payload);
         case 'QUEUE_UNIT':

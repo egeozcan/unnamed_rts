@@ -256,6 +256,7 @@ export interface GameState {
 
     readonly debugMode: boolean;
     readonly showMinimap: boolean;
+    readonly showBirdsEye: boolean;
     readonly notification?: { text: string; type: 'info' | 'error'; tick: number } | null;
 }
 
@@ -275,6 +276,7 @@ export type Action =
     | { type: 'STOP_REPAIR'; payload: { buildingId: EntityId; playerId: number } }
     | { type: 'TOGGLE_DEBUG' }
     | { type: 'TOGGLE_MINIMAP' }
+    | { type: 'TOGGLE_BIRDS_EYE' }
     | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } }
     | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } };

@@ -51,6 +51,7 @@ let onRightClick: ((wx: number, wy: number) => void) | null = null;
 let onDeployMCV: (() => void) | null = null;
 let onToggleDebug: (() => void) | null = null;
 let onToggleMinimap: (() => void) | null = null;
+let onToggleBirdsEye: (() => void) | null = null;
 let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
@@ -63,6 +64,7 @@ export function initInput(
         onDeployMCV: () => void;
         onToggleDebug: () => void;
         onToggleMinimap: () => void;
+        onToggleBirdsEye: () => void;
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
@@ -74,6 +76,7 @@ export function initInput(
     onDeployMCV = callbacks.onDeployMCV;
     onToggleDebug = callbacks.onToggleDebug;
     onToggleMinimap = callbacks.onToggleMinimap;
+    onToggleBirdsEye = callbacks.onToggleBirdsEye;
     onSetSpeed = callbacks.onSetSpeed;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
@@ -97,6 +100,9 @@ function setupEventListeners() {
         }
         if (e.key === 'm' || e.key === 'M') {
             onToggleMinimap?.();
+        }
+        if (e.key === 'b' || e.key === 'B') {
+            onToggleBirdsEye?.();
         }
         // Game speed controls (1 = slow, 2 = normal, 3 = fast, 4 = very fast, 5 = lightspeed)
         if (e.key === '1') {

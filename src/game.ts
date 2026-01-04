@@ -12,6 +12,7 @@ import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
+import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
@@ -492,9 +493,10 @@ function startGameWithConfig(config: SkirmishConfig) {
         updateButtonsUI();
     });
 
-    // Initialize UI  
+    // Initialize UI
     initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);
     initMinimap();
+    initBirdsEye();
 
     // Set observer mode if all players are AI
     setObserverMode(isObserverMode);
@@ -513,6 +515,9 @@ function startGameWithConfig(config: SkirmishConfig) {
             if (currentState.mode === 'demo') {
                 currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
             }
+        },
+        onToggleBirdsEye: () => {
+            currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
         },
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
             setGameSpeed(speed);
@@ -536,6 +541,28 @@ function startGameWithConfig(config: SkirmishConfig) {
             ...currentState,
             camera: { x: newX, y: newY }
         };
+    });
+
+    // Set up bird's eye view click handler to pan camera and close
+    setBirdsEyeClickHandler((worldX, worldY) => {
+        const size = renderer.getSize();
+        const mapWidth = currentState.config.width;
+        const mapHeight = currentState.config.height;
+        const zoom = currentState.zoom;
+
+        // Center camera on clicked point
+        const newX = Math.max(0, Math.min(mapWidth - size.width / zoom, worldX - size.width / zoom / 2));
+        const newY = Math.max(0, Math.min(mapHeight - size.height / zoom, worldY - size.height / zoom / 2));
+
+        currentState = {
+            ...currentState,
+            camera: { x: newX, y: newY }
+        };
+    });
+
+    // Set up bird's eye close handler
+    setBirdsEyeCloseHandler(() => {
+        currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
     });
 
     // Start game loop
@@ -912,6 +939,9 @@ function gameLoop(timestamp: number = 0) {
             observerMinimap.style.display = currentState.showMinimap ? 'block' : 'none';
         }
     }
+
+    // Bird's Eye View
+    renderBirdsEye(currentState, size.width, size.height);
 
     // Debug UI
     updateDebugUI(currentState);
