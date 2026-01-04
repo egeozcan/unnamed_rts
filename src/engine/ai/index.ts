@@ -216,7 +216,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     }
 
     actions.push(...handleScouting(state, playerId, aiState, combatUnits, enemies, baseCenter));
-    actions.push(...handleMicro(state, combatUnits, enemies, baseCenter));
+    actions.push(...handleMicro(state, combatUnits, enemies, baseCenter, personality));
 
     return actions;
 }

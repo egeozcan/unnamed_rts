@@ -24,7 +24,12 @@
                     "flame_tank",
                     "heavy"
                 ]
-            }
+            },
+            "harvester_ratio": 1.5,
+            "credit_buffer": 200,
+            "kite_aggressiveness": 0.3,
+            "defense_investment": 2,
+            "max_chase_distance": 500
         },
         "turtle": {
             "aggression_bias": 0.5,
@@ -54,7 +59,12 @@
                     "mlrs",
                     "mammoth"
                 ]
-            }
+            },
+            "harvester_ratio": 2.5,
+            "credit_buffer": 600,
+            "kite_aggressiveness": 0.8,
+            "defense_investment": 5,
+            "max_chase_distance": 300
         },
         "balanced": {
             "aggression_bias": 1.0,
@@ -82,7 +92,12 @@
                     "heavy",
                     "artillery"
                 ]
-            }
+            },
+            "harvester_ratio": 2.0,
+            "credit_buffer": 400,
+            "kite_aggressiveness": 0.5,
+            "defense_investment": 3,
+            "max_chase_distance": 400
         }
     },
     "strategies": {

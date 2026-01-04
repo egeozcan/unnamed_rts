@@ -103,8 +103,9 @@ export function handleEconomy(
             }
         }
 
-        // 1. Build harvesters if we have too few (need 2 per refinery)
-        const idealHarvesters = Math.max(refineries.length * 2, 2);
+        // 1. Build harvesters if we have too few (personality-driven ratio)
+        const harvRatio = personality.harvester_ratio ?? 2;
+        const idealHarvesters = Math.max(Math.ceil(refineries.length * harvRatio), 2);
         const canBuildHarvester = refineries.length > 0; // Need refinery for harvesters
         if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
             const harvData = RULES.units['harvester'];
@@ -213,8 +214,9 @@ export function handleEconomy(
         (aiState.investmentPriority === 'balanced' || aiState.investmentPriority === 'warfare');
 
     if (isPeacetime) {
-        // 1. Build harvesters if below ideal (2 per refinery)
-        const idealHarvesters = Math.max(refineries.length * 2, 2);
+        // 1. Build harvesters if below ideal (personality-driven ratio)
+        const harvRatioPeace = personality.harvester_ratio ?? 2;
+        const idealHarvesters = Math.max(Math.ceil(refineries.length * harvRatioPeace), 2);
         const canBuildHarvester = refineries.length > 0;
 
         if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
@@ -283,7 +285,8 @@ export function handleEconomy(
         }).length;
 
         // Build more defenses if we have surplus and not too many already
-        if (existingTurrets < MAX_SURPLUS_TURRETS) {
+        const maxDefenses = personality.defense_investment ?? MAX_SURPLUS_TURRETS;
+        if (existingTurrets < maxDefenses) {
             const canBuildTurret = checkPrerequisites('turret', buildings);
             const turretData = RULES.buildings['turret'];
 
@@ -416,12 +419,12 @@ export function handleEconomy(
     // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
 
-    // Strategy-based credit thresholds
-    let creditThreshold = aiState.strategy === 'attack' ? 500 :
-        aiState.strategy === 'defend' ? 600 : 800;
-
-    // Reserve buffer - never drop below this
-    let creditBuffer = aiState.strategy === 'attack' ? 300 : 500;
+    // Personality-based credit buffer with strategy modifiers
+    const baseBuffer = personality.credit_buffer ?? 400;
+    const stratMult = aiState.strategy === 'attack' ? 0.5 :
+        aiState.strategy === 'defend' ? 1.2 : 1.0;
+    let creditBuffer = Math.floor(baseBuffer * stratMult);
+    let creditThreshold = creditBuffer + 400;
 
     // Override for Panic Mode
     if (isPanic) {

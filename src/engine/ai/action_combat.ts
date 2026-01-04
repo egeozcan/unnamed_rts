@@ -592,11 +592,16 @@ export function handleMicro(
     _state: GameState,
     combatUnits: Entity[],
     enemies: Entity[],
-    baseCenter: Vector
+    baseCenter: Vector,
+    personality: AIPersonality
 ): Action[] {
     const actions: Action[] = [];
-    const RETREAT_THRESHOLD = 0.25;
-    const KITE_RANGE_MINIMUM = 200;
+    // Use personality's retreat threshold (rusher: 0.1, balanced: 0.3, turtle: 0.5)
+    const RETREAT_THRESHOLD = personality.retreat_threshold;
+    // Derive kite range from personality's kite_aggressiveness
+    // Higher kite_aggressiveness = lower threshold = more likely to kite
+    const kiteAggr = personality.kite_aggressiveness ?? 0.5;
+    const KITE_RANGE_MINIMUM = 150 + Math.round((1 - kiteAggr) * 100);
     const KITE_DISTANCE_RATIO = 0.6;
 
     for (const unit of combatUnits) {

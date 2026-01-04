@@ -166,8 +166,10 @@ describe('AI Economy - Peacetime Expansion', () => {
                 'refinery_ai': createEntity('refinery_ai', 1, 'BUILDING', 'refinery', 300, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
+                // 3 harvesters to satisfy all personalities (turtle needs 2.5 per refinery)
                 'harvester_ai1': createEntity('harvester_ai1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harvester_ai2': createEntity('harvester_ai2', 1, 'UNIT', 'harvester', 450, 400, { maxHp: 150, hp: 150 }),
+                'harvester_ai3': createEntity('harvester_ai3', 1, 'UNIT', 'harvester', 500, 400, { maxHp: 150, hp: 150 }),
                 // Ore near current refinery
                 'ore1': createEntity('ore1', -1, 'RESOURCE', 'ore', 400, 350, { maxHp: 1000, hp: 1000 }),
                 // Remote ore within build range but no refinery nearby

@@ -480,10 +480,11 @@ describe('AI System', () => {
             // AI buildings (base)
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
 
-            // Damaged harass group
-            entities['rifle0'] = createEntity('rifle0', 1, 'UNIT', 'rifle', 1500, 1500, { hp: 20, maxHp: 100 });
-            entities['rifle1'] = createEntity('rifle1', 1, 'UNIT', 'rifle', 1520, 1500, { hp: 10, maxHp: 100 });
-            entities['rifle2'] = createEntity('rifle2', 1, 'UNIT', 'rifle', 1510, 1510, { hp: 30, maxHp: 100 });
+            // Critically damaged harass group - HP below 10% to trigger retreat for all personalities
+            // Rusher has lowest retreat threshold (0.1), so units need < 10% HP
+            entities['rifle0'] = createEntity('rifle0', 1, 'UNIT', 'rifle', 1500, 1500, { hp: 8, maxHp: 100 });
+            entities['rifle1'] = createEntity('rifle1', 1, 'UNIT', 'rifle', 1520, 1500, { hp: 5, maxHp: 100 });
+            entities['rifle2'] = createEntity('rifle2', 1, 'UNIT', 'rifle', 1510, 1510, { hp: 7, maxHp: 100 });
 
             // Enemy
             entities['enemy_tank'] = createEntity('enemy_tank', 0, 'UNIT', 'tank', 1600, 1600);

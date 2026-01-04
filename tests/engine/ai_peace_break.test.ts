@@ -104,9 +104,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'refinery_ai': createEntity('refinery_ai', 1, 'BUILDING', 'refinery', 300, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
-                // Good economy - enough harvesters
+                // Good economy - enough harvesters (3 to satisfy all personalities, including turtle with 2.5 ratio)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Minimal army
                 'tank1': createEntity('tank1', 1, 'UNIT', 'light', 350, 400, { maxHp: 150, hp: 150 }),
                 // Ore
@@ -184,9 +185,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'refinery_ai': createEntity('refinery_ai', 1, 'BUILDING', 'refinery', 300, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
-                // Good harvester count
+                // Good harvester count (3 to satisfy all personalities)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Some combat units
                 'tank1': createEntity('tank1', 1, 'UNIT', 'light', 350, 400, { maxHp: 150, hp: 150 }),
                 'tank2': createEntity('tank2', 1, 'UNIT', 'light', 370, 400, { maxHp: 150, hp: 150 }),
@@ -222,9 +224,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
                 'turret_ai': createEntity('turret_ai', 1, 'BUILDING', 'turret', 200, 300, { maxHp: 200, hp: 200 }),
-                // Good harvester count
+                // Good harvester count (3 to satisfy all personalities)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Small army
                 'tank1': createEntity('tank1', 1, 'UNIT', 'light', 350, 400, { maxHp: 150, hp: 150 }),
                 // Ore
@@ -258,9 +261,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'refinery_ai': createEntity('refinery_ai', 1, 'BUILDING', 'refinery', 300, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
-                // Good economy
+                // Good economy (3 harvesters to satisfy all personalities)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Moderate army - not at attack threshold
                 'tank1': createEntity('tank1', 1, 'UNIT', 'heavy', 350, 400, { maxHp: 300, hp: 300 }),
                 'tank2': createEntity('tank2', 1, 'UNIT', 'heavy', 370, 400, { maxHp: 300, hp: 300 }),
@@ -304,9 +308,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'refinery_ai': createEntity('refinery_ai', 1, 'BUILDING', 'refinery', 300, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai': createEntity('factory_ai', 1, 'BUILDING', 'factory', 350, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
-                // Harvesters
+                // Harvesters (3 to satisfy all personalities)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Ore
                 'ore1': createEntity('ore1', -1, 'RESOURCE', 'ore', 500, 400, { maxHp: 1000, hp: 1000 }),
                 // Enemy far away
@@ -338,9 +343,10 @@ describe('AI Peace Break - Surplus Resource Spending', () => {
                 'factory_ai2': createEntity('factory_ai2', 1, 'BUILDING', 'factory', 400, 350, { maxHp: 400, hp: 400 }),
                 'factory_ai3': createEntity('factory_ai3', 1, 'BUILDING', 'factory', 450, 350, { maxHp: 400, hp: 400 }),
                 'barracks_ai': createEntity('barracks_ai', 1, 'BUILDING', 'barracks', 400, 300, { maxHp: 300, hp: 300 }),
-                // Harvesters
+                // Harvesters (3 to satisfy all personalities)
                 'harv1': createEntity('harv1', 1, 'UNIT', 'harvester', 400, 400, { maxHp: 150, hp: 150 }),
                 'harv2': createEntity('harv2', 1, 'UNIT', 'harvester', 420, 400, { maxHp: 150, hp: 150 }),
+                'harv3': createEntity('harv3', 1, 'UNIT', 'harvester', 440, 400, { maxHp: 150, hp: 150 }),
                 // Ore
                 'ore1': createEntity('ore1', -1, 'RESOURCE', 'ore', 500, 400, { maxHp: 1000, hp: 1000 }),
                 // Enemy far away

@@ -12,6 +12,13 @@ export const AIPersonalitySchema = z.object({
     infantry: z.array(z.string()),
     vehicle: z.array(z.string()),
   }),
+  // Economy parameters
+  harvester_ratio: z.number().positive().optional(),      // Harvesters per refinery (default: 2)
+  credit_buffer: z.number().nonnegative().optional(),     // Min credits to hold (default: 400)
+  // Combat parameters
+  kite_aggressiveness: z.number().min(0).max(1).optional(), // How aggressively to kite (default: 0.5)
+  defense_investment: z.number().positive().optional(),   // Max turrets to build (default: 3)
+  max_chase_distance: z.number().positive().optional(),   // How far to chase enemies (default: 400)
 });
 export type AIPersonality = z.infer<typeof AIPersonalitySchema>;
 
