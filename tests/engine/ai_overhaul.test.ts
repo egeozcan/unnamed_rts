@@ -61,11 +61,11 @@ function createEntity(
     }
 }
 
-function createTestState(entities: Record<EntityId, Entity>, tick: number = 600): GameState {
+function createTestState(entities: Record<EntityId, Entity>, tick: number = 601): GameState {
     return {
         ...INITIAL_STATE,
         running: true,
-        tick, // Default to 600 to be past grace periods
+        tick, // Default to 601 to be past grace periods and tick % 3 === 1 for player 1 AI
         entities
     };
 }
@@ -238,7 +238,8 @@ describe('AI Overhaul Tests', () => {
             // Far enemy (1000+ units away - beyond leash)
             entities['far_enemy'] = createEntity('far_enemy', 0, 'BUILDING', 'conyard', 2500, 2500, { hp: 3000, maxHp: 3000 });
 
-            let state = createTestState(entities, 600);
+            // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
+            let state = createTestState(entities, 601);
 
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
@@ -278,7 +279,8 @@ describe('AI Overhaul Tests', () => {
             // Low HP enemy (same distance)
             entities['low_hp'] = createEntity('low_hp', 0, 'UNIT', 'tank', 1100, 1050, { hp: 15, maxHp: 100 });
 
-            let state = createTestState(entities, 600);
+            // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
+            let state = createTestState(entities, 601);
 
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
@@ -317,7 +319,8 @@ describe('AI Overhaul Tests', () => {
             entities['enemy1'] = createEntity('enemy1', 0, 'UNIT', 'tank', 1100, 1100);
             entities['enemy2'] = createEntity('enemy2', 0, 'UNIT', 'tank', 1100, 900);
 
-            let state = createTestState(entities, 600);
+            // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
+            let state = createTestState(entities, 601);
 
             const aiState = getAIState(1);
             aiState.personality = 'rusher'; // Set consistent personality for test
@@ -458,7 +461,8 @@ describe('AI Overhaul Tests', () => {
 
             entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000);
 
-            let state = createTestState(entities, 3600);
+            // Use tick 3601 so player 1 runs full AI compute (tick % 3 === 1)
+            let state = createTestState(entities, 3601);
             // High credits (surplus)
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 6000 } } };
 
@@ -515,7 +519,8 @@ describe('AI Overhaul Tests', () => {
 
             entities['enemy'] = createEntity('enemy', 0, 'BUILDING', 'conyard', 2000, 2000);
 
-            let state = createTestState(entities, 600);
+            // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
+            let state = createTestState(entities, 601);
             // Very high credits - should still build economy
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 10000 } } };
 
