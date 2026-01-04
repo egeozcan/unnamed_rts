@@ -815,9 +815,15 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
     let pathIdx = entity.movement.pathIdx || 0;
     let finalDest = entity.movement.finalDest;
 
-    const needNewPath = !path || path.length === 0 ||
+    // OPTIMIZATION: Skip pathfinding for very close targets - direct steering is sufficient
+    const isCloseTarget = distToTarget < 80;
+
+    const needNewPath = !isCloseTarget && (
+        !path || path.length === 0 ||
         (finalDest && finalDest.dist(target) > 20) ||
-        (stuckTimer > 30);
+        // OPTIMIZATION: Stagger path recalculation when stuck (every 10 ticks)
+        (stuckTimer > 30 && stuckTimer % 10 === 0)
+    );
 
     if (needNewPath) {
         const newPath = findPath(entity.pos, target, entity.radius, entity.owner);
@@ -831,6 +837,10 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
             pathIdx = 0;
             finalDest = target;
         }
+    } else if (isCloseTarget) {
+        // Clear path for close targets - use direct steering
+        path = null;
+        pathIdx = 0;
     }
 
     let immediateTarget = target;
@@ -904,45 +914,68 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
     }
 
     const hasValidPath = path && path.length > 0;
-    let avoidance = new Vector(0, 0);
+    let avoidanceX = 0;
+    let avoidanceY = 0;
 
-    if (!skipWhiskerAvoidance) {
+    // OPTIMIZATION: Skip whisker avoidance for stationary units or when explicitly skipped
+    // Also skip if we have a valid path (pathfinding already avoids obstacles)
+    const shouldSkipWhiskers = skipWhiskerAvoidance || (!entity.movement.moveTarget && !entity.combat.targetId && !hasValidPath);
+
+    if (!shouldSkipWhiskers) {
         const angles = hasValidPath ? [0, 0.3, -0.3] : [0, 0.4, -0.4, 0.8, -0.8];
+        const gridW = getGridW();
+        const gridH = getGridH();
+        const checkDist = entity.radius + (hasValidPath ? 10 : 15);
 
         for (const a of angles) {
             const cos = Math.cos(a);
             const sin = Math.sin(a);
+            // OPTIMIZATION: Inline vector math to avoid object allocation
             const wx = dir.x * cos - dir.y * sin;
             const wy = dir.x * sin + dir.y * cos;
-            const whisker = new Vector(wx, wy).norm();
+            const mag = Math.sqrt(wx * wx + wy * wy);
+            const whiskerX = mag > 0.001 ? wx / mag : 0;
+            const whiskerY = mag > 0.001 ? wy / mag : 0;
 
-            const checkDist = entity.radius + (hasValidPath ? 10 : 15);
-            const checkPos = entity.pos.add(whisker.scale(checkDist));
+            const checkPosX = entity.pos.x + whiskerX * checkDist;
+            const checkPosY = entity.pos.y + whiskerY * checkDist;
 
-            const gx = Math.floor(checkPos.x / TILE_SIZE);
-            const gy = Math.floor(checkPos.y / TILE_SIZE);
+            const gx = Math.floor(checkPosX / TILE_SIZE);
+            const gy = Math.floor(checkPosY / TILE_SIZE);
 
-            if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
-                if (collisionGrid[gy * getGridW() + gx] === 1) {
+            if (gx >= 0 && gx < gridW && gy >= 0 && gy < gridH) {
+                if (collisionGrid[gy * gridW + gx] === 1) {
                     const baseWeight = hasValidPath ? 1.0 : 2.5;
                     const weight = a === 0 ? baseWeight : baseWeight * 0.6;
-                    avoidance = avoidance.sub(whisker.scale(weight));
+                    avoidanceX -= whiskerX * weight;
+                    avoidanceY -= whiskerY * weight;
                 }
             }
         }
     }
 
     let finalDir = dir;
-    if (entityCount > 0 || avoidance.mag() > 0.001) {
-        const right = new Vector(-dir.y, dir.x);
+    const avoidanceMag = Math.sqrt(avoidanceX * avoidanceX + avoidanceY * avoidanceY);
+    if (entityCount > 0 || avoidanceMag > 0.001) {
+        // OPTIMIZATION: Inline vector operations to reduce allocations
+        const rightX = -dir.y;
+        const rightY = dir.x;
         const rightBias = entityCount > 0 ? 0.4 : 0;
 
-        finalDir = dir.add(separation.scale(0.8)).add(avoidance).add(right.scale(rightBias)).norm();
+        // finalDir = dir + separation*0.8 + avoidance + right*rightBias
+        let fdX = dir.x + separation.x * 0.8 + avoidanceX + rightX * rightBias;
+        let fdY = dir.y + separation.y * 0.8 + avoidanceY + rightY * rightBias;
+        const fdMag = Math.sqrt(fdX * fdX + fdY * fdY);
+        if (fdMag > 0.001) {
+            fdX /= fdMag;
+            fdY /= fdMag;
+        }
+        finalDir = new Vector(fdX, fdY);
 
-        const dotProduct = finalDir.dot(dir);
+        const dotProduct = fdX * dir.x + fdY * dir.y;
         if (dotProduct < 0) {
-            const perpendicular = right.scale(finalDir.dot(right) >= 0 ? 1 : -1);
-            finalDir = perpendicular;
+            const rightDot = fdX * rightX + fdY * rightY;
+            finalDir = new Vector(rightX * (rightDot >= 0 ? 1 : -1), rightY * (rightDot >= 0 ? 1 : -1));
         }
     }
 

@@ -12,7 +12,7 @@ interface PathCacheEntry {
 }
 const pathCache = new Map<string, PathCacheEntry>();
 const PATH_CACHE_TTL = 300; // Valid for 300 ticks (~250ms at lightning speed, 5s at normal)
-const PATH_CACHE_MAX_SIZE = 1000; // Support 400+ entities with path variations
+const PATH_CACHE_MAX_SIZE = 2000; // Support 400+ entities with path variations
 let currentPathTick = 0;
 
 // Update the current tick for path caching (call from game loop)

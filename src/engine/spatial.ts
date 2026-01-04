@@ -93,14 +93,21 @@ export class SpatialGrid {
      * Returns entities whose bounding boxes may overlap - caller should do precise distance check.
      */
     queryRadius(x: number, y: number, radius: number): Entity[] {
-        const result: Entity[] = [];
-        const seen = new Set<EntityId>();
-
         // Calculate which cells to check
         const minCx = Math.floor((x - radius) / this.cellSize);
         const maxCx = Math.floor((x + radius) / this.cellSize);
         const minCy = Math.floor((y - radius) / this.cellSize);
         const maxCy = Math.floor((y + radius) / this.cellSize);
+
+        // OPTIMIZATION: For single-cell queries (common case), skip Set overhead
+        if (minCx === maxCx && minCy === maxCy) {
+            const cell = this.cells.get(`${minCx},${minCy}`);
+            return cell ? [...cell] : [];
+        }
+
+        // Multi-cell query: use Set to deduplicate entities spanning multiple cells
+        const result: Entity[] = [];
+        const seen = new Set<EntityId>();
 
         for (let cx = minCx; cx <= maxCx; cx++) {
             for (let cy = minCy; cy <= maxCy; cy++) {
