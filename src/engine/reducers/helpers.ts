@@ -4,6 +4,7 @@ import {
 } from '../types';
 import { RULES, Building, Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState } from '../entity-helpers';
+import { type EntityCache } from '../perf';
 
 // Power calculation cache - keyed by tick to auto-invalidate
 let powerCache: Map<number, { in: number, out: number }> = new Map();
@@ -33,11 +34,13 @@ function hasProductionBuilding(category: string, playerBuildings: Entity[]): boo
 
 /**
  * Check if a player can build a specific item (has prerequisites and production building).
+ * Accepts EntityCache for optimized lookups.
  */
-export function canBuild(key: string, category: string, playerId: number, entities: Record<EntityId, Entity>): boolean {
-    const playerBuildings = Object.values(entities).filter(
-        e => e.owner === playerId && e.type === 'BUILDING' && !e.dead
-    );
+export function canBuild(key: string, category: string, playerId: number, entities: Record<EntityId, Entity> | EntityCache): boolean {
+    // Support both EntityCache and entities record for backward compatibility
+    const playerBuildings = ('buildingsByOwner' in entities && entities.buildingsByOwner instanceof Map)
+        ? (entities.buildingsByOwner.get(playerId) || [])
+        : Object.values(entities as Record<EntityId, Entity>).filter(e => e.owner === playerId && e.type === 'BUILDING' && !e.dead);
 
     // Check production building requirement
     if (!hasProductionBuilding(category, playerBuildings)) {
@@ -67,7 +70,7 @@ export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' 
     };
 }
 
-export function calculatePower(playerId: number, entities: Record<EntityId, Entity>, tick?: number): { in: number, out: number } {
+export function calculatePower(playerId: number, entities: Record<EntityId, Entity> | EntityCache, tick?: number): { in: number, out: number } {
     // Use cache if available for current tick
     if (tick !== undefined) {
         if (tick !== powerCacheTick) {
@@ -82,13 +85,29 @@ export function calculatePower(playerId: number, entities: Record<EntityId, Enti
     }
 
     let p = { in: 0, out: 0 };
-    for (const id in entities) {
-        const e = entities[id];
-        if (e.owner === playerId && !e.dead) {
+
+    // Support both EntityCache and entities record
+    if ('buildingsByOwner' in entities) {
+        // Using EntityCache - much faster
+        const cache = entities as EntityCache;
+        const buildings = cache.buildingsByOwner.get(playerId) || [];
+        for (const e of buildings) {
             const data = RULES.buildings[e.key];
             if (data) {
                 if (data.power) p.out += data.power;
                 if (data.drain) p.in += data.drain;
+            }
+        }
+    } else {
+        // Fallback to entities record
+        for (const id in entities) {
+            const e = entities[id];
+            if (e.owner === playerId && !e.dead) {
+                const data = RULES.buildings[e.key];
+                if (data) {
+                    if (data.power) p.out += data.power;
+                    if (data.drain) p.in += data.drain;
+                }
             }
         }
     }

@@ -2,20 +2,17 @@ import { GameState, PlayerState, Entity, EntityId, Vector } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { canBuild, calculatePower, getRuleData, createEntity } from './helpers';
 import { getDifficultyModifiers } from '../ai/utils';
+import { type EntityCache } from '../perf';
 
-export function updateProduction(player: PlayerState, entities: Record<EntityId, Entity>, state: GameState): { player: PlayerState, createdEntities: Entity[] } {
+export function updateProduction(player: PlayerState, _entities: Record<EntityId, Entity>, state: GameState, cache: EntityCache): { player: PlayerState, createdEntities: Entity[] } {
     let nextPlayer = { ...player, queues: { ...player.queues } };
     let createdEntities: Entity[] = [];
 
     // Check if player is eliminated (no buildings AND no MCV)
     // This matches the win condition check in tick()
     // Eliminated players cannot produce anything
-    const playerBuildings = Object.values(entities).filter(e =>
-        e.owner === player.id && e.type === 'BUILDING' && !e.dead
-    );
-    const hasMCV = Object.values(entities).some(e =>
-        e.owner === player.id && e.key === 'mcv' && !e.dead
-    );
+    const playerBuildings = cache.buildingsByOwner.get(player.id) || [];
+    const hasMCV = cache.mcvs.some(e => e.owner === player.id);
 
     // If player is eliminated (no buildings AND no MCV), cancel all their production queues
     if (playerBuildings.length === 0 && !hasMCV) {
@@ -33,8 +30,8 @@ export function updateProduction(player: PlayerState, entities: Record<EntityId,
         return { player: nextPlayer, createdEntities };
     }
 
-    // Calculate power (cached per tick)
-    const power = calculatePower(player.id, entities, state.tick);
+    // Calculate power (cached per tick) - pass cache for optimized lookup
+    const power = calculatePower(player.id, cache, state.tick);
     const speedFactor = (power.out < power.in) ? 0.25 : 1.0;
 
 
@@ -48,7 +45,7 @@ export function updateProduction(player: PlayerState, entities: Record<EntityId,
 
         // Check if player still has the required production building for a category
         // If not, cancel production and refund invested credits
-        if (!canBuild(q.current, cat, player.id, entities)) {
+        if (!canBuild(q.current, cat, player.id, cache)) {
             nextPlayer = {
                 ...nextPlayer,
                 credits: nextPlayer.credits + (q.invested || 0),
@@ -65,8 +62,8 @@ export function updateProduction(player: PlayerState, entities: Record<EntityId,
         // Calculate production speed multiplier based on number of production buildings
         // Each additional production building of the relevant type adds 50% speed
         const validBuildings: string[] = RULES.productionBuildings?.[cat] || [];
-        const productionBuildingCount = Object.values(entities).filter(e =>
-            e.owner === player.id && validBuildings.includes(e.key) && !e.dead
+        const productionBuildingCount = playerBuildings.filter(e =>
+            validBuildings.includes(e.key)
         ).length || 1;
         // Speed multiplier: 1.0 for 1 building, 1.5 for 2, 2.0 for 3, etc.
         const speedMult = 1 + (productionBuildingCount - 1) * 0.5;
@@ -118,13 +115,13 @@ export function updateProduction(player: PlayerState, entities: Record<EntityId,
 
                     let spawnPos = new Vector(100, 100); // Default fallback
 
-                    const factories = Object.values(entities).filter(e => e.owner === player.id && e.key === spawnBuildingKey && !e.dead);
+                    const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
                     if (factories.length > 0) {
                         const factory = factories[0];
                         spawnPos = factory.pos.add(new Vector(0, factory.h / 2 + 20));
                     } else {
                         // Fallback to conyard
-                        const conyards = Object.values(entities).filter(e => e.owner === player.id && e.key === 'conyard' && !e.dead);
+                        const conyards = playerBuildings.filter(e => e.key === 'conyard');
                         if (conyards.length > 0) spawnPos = conyards[0].pos.add(new Vector(0, 60));
                     }
 

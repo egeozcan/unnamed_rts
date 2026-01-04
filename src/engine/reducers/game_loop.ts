@@ -5,6 +5,7 @@ import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
 import { setPathCacheTick, refreshCollisionGrid } from '../utils';
 import { rebuildSpatialGrid, getSpatialGrid } from '../spatial';
+import { createEntityCache } from '../perf';
 import { updateProduction } from './production';
 import { updateWells, updateBuilding } from './buildings';
 import { updateUnit } from './units';
@@ -27,9 +28,12 @@ export function tick(state: GameState): GameState {
     let nextEntities = { ...state.entities };
     let nextPlayers = { ...state.players };
 
+    // PERFORMANCE: Create entity cache once per tick for optimized lookups
+    const entityCache = createEntityCache(state.entities);
+
     // Update Production
     for (const pid in nextPlayers) {
-        const res = updateProduction(nextPlayers[pid], state.entities, state);
+        const res = updateProduction(nextPlayers[pid], state.entities, state, entityCache);
         nextPlayers[pid] = res.player;
         res.createdEntities.forEach(e => {
             nextEntities[e.id] = e;

@@ -33,6 +33,21 @@ export interface EntityCache {
     /** Resources (ore) */
     readonly resources: Entity[];
 
+    /** Harvesters (frequently queried in AI) */
+    readonly harvesters: Entity[];
+
+    /** Combat units (non-harvester, non-MCV units) */
+    readonly combatUnits: Entity[];
+
+    /** MCVs (Mobile Construction Vehicles) */
+    readonly mcvs: Entity[];
+
+    /** Wells (ore generators) */
+    readonly wells: Entity[];
+
+    /** Rocks (impassable obstacles) */
+    readonly rocks: Entity[];
+
     /** Quick lookup helpers */
     readonly hasBuildingByOwner: Map<number, Set<string>>;
 }
@@ -49,6 +64,11 @@ export function createEntityCache(entities: Record<EntityId, Entity>): EntityCac
     const buildingsByOwner = new Map<number, Entity[]>();
     const unitsByOwner = new Map<number, Entity[]>();
     const resources: Entity[] = [];
+    const harvesters: Entity[] = [];
+    const combatUnits: Entity[] = [];
+    const mcvs: Entity[] = [];
+    const wells: Entity[] = [];
+    const rocks: Entity[] = [];
     const hasBuildingByOwner = new Map<number, Set<string>>();
 
     // Single pass through all entities
@@ -78,15 +98,35 @@ export function createEntityCache(entities: Record<EntityId, Entity>): EntityCac
             hasBuildingByOwner.get(e.owner)!.add(e.key);
         }
 
-        // Units by owner
+        // Units by owner and specific unit types
         if (e.type === 'UNIT') {
             if (!unitsByOwner.has(e.owner)) unitsByOwner.set(e.owner, []);
             unitsByOwner.get(e.owner)!.push(e);
+
+            // Categorize units by key for frequent AI queries
+            if (e.key === 'harvester') {
+                harvesters.push(e);
+            } else if (e.key === 'mcv') {
+                mcvs.push(e);
+            } else {
+                // All other units are combat units
+                combatUnits.push(e);
+            }
         }
 
         // Resources
         if (e.type === 'RESOURCE') {
             resources.push(e);
+        }
+
+        // Wells
+        if (e.type === 'WELL') {
+            wells.push(e);
+        }
+
+        // Rocks
+        if (e.type === 'ROCK') {
+            rocks.push(e);
         }
     }
 
@@ -98,6 +138,11 @@ export function createEntityCache(entities: Record<EntityId, Entity>): EntityCac
         buildingsByOwner,
         unitsByOwner,
         resources,
+        harvesters,
+        combatUnits,
+        mcvs,
+        wells,
+        rocks,
         hasBuildingByOwner
     };
 }
