@@ -16,7 +16,8 @@ const {
 
     updateEnemyBaseLocation,
     getPersonalityForPlayer,
-    DIFFICULTY_TO_PERSONALITY,
+    DIFFICULTY_MODIFIERS,
+    getDifficultyModifiers,
     ATTACK_GROUP_MIN_SIZE,
     HARASS_GROUP_SIZE
 } = _testUtils;
@@ -133,35 +134,57 @@ describe('AI System', () => {
         });
     });
 
-    describe('Difficulty to Personality Mapping', () => {
-        it('should map easy difficulty to turtle personality', () => {
-            const player = { difficulty: 'easy' as const };
-            const personality = getPersonalityForPlayer(player);
-            // Turtle has lower aggression (0.5) and higher retreat threshold (0.5)
-            expect(personality.aggression_bias).toBe(0.5);
-            expect(personality.retreat_threshold).toBe(0.5);
+    describe('Difficulty Modifiers', () => {
+        it('should have correct modifiers for easy difficulty', () => {
+            const modifiers = getDifficultyModifiers('easy');
+            expect(modifiers.resourceBonus).toBe(0.8);
+            expect(modifiers.buildSpeedBonus).toBe(0.9);
+            expect(modifiers.reactionDelay).toBe(120);
         });
 
-        it('should map medium difficulty to balanced personality', () => {
-            const player = { difficulty: 'medium' as const };
-            const personality = getPersonalityForPlayer(player);
-            // Balanced has moderate aggression (1.0) and mid retreat threshold (0.3)
-            expect(personality.aggression_bias).toBe(1.0);
-            expect(personality.retreat_threshold).toBe(0.3);
+        it('should have correct modifiers for medium difficulty', () => {
+            const modifiers = getDifficultyModifiers('medium');
+            expect(modifiers.resourceBonus).toBe(1.0);
+            expect(modifiers.buildSpeedBonus).toBe(1.0);
+            expect(modifiers.reactionDelay).toBe(0);
         });
 
-        it('should map hard difficulty to rusher personality', () => {
-            const player = { difficulty: 'hard' as const };
-            const personality = getPersonalityForPlayer(player);
-            // Rusher has high aggression (1.5) and low retreat threshold (0.1)
-            expect(personality.aggression_bias).toBe(1.5);
-            expect(personality.retreat_threshold).toBe(0.1);
+        it('should have correct modifiers for hard difficulty', () => {
+            const modifiers = getDifficultyModifiers('hard');
+            expect(modifiers.resourceBonus).toBe(1.2);
+            expect(modifiers.buildSpeedBonus).toBe(1.15);
+            expect(modifiers.reactionDelay).toBe(0);
         });
 
-        it('should have correct difficulty to personality mapping', () => {
-            expect(DIFFICULTY_TO_PERSONALITY['easy']).toBe('turtle');
-            expect(DIFFICULTY_TO_PERSONALITY['medium']).toBe('balanced');
-            expect(DIFFICULTY_TO_PERSONALITY['hard']).toBe('rusher');
+        it('should have all difficulty levels defined', () => {
+            expect(DIFFICULTY_MODIFIERS['easy']).toBeDefined();
+            expect(DIFFICULTY_MODIFIERS['medium']).toBeDefined();
+            expect(DIFFICULTY_MODIFIERS['hard']).toBeDefined();
+        });
+    });
+
+    describe('Personality Selection', () => {
+        it('should assign a random personality to AI at initialization', () => {
+            const aiState = getAIState(1);
+            // Personality should be one of the valid options
+            expect(['rusher', 'turtle', 'balanced']).toContain(aiState.personality);
+        });
+
+        it('should return personality config via getPersonalityForPlayer', () => {
+            const aiState = getAIState(2);
+            const personality = getPersonalityForPlayer(2);
+            // Personality should have required fields
+            expect(personality.aggression_bias).toBeDefined();
+            expect(personality.retreat_threshold).toBeDefined();
+            expect(personality.attack_threshold).toBeDefined();
+        });
+
+        it('should keep the same personality on subsequent calls', () => {
+            const aiState1 = getAIState(3);
+            const personality1 = aiState1.personality;
+            const aiState2 = getAIState(3);
+            const personality2 = aiState2.personality;
+            expect(personality1).toBe(personality2);
         });
     });
 
@@ -270,6 +293,7 @@ describe('AI System', () => {
 
             // Set lastStrategyChange to past so cooldown is met (cooldown is 300 ticks)
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = -300;
 
             // Run AI - strategy should now be able to change
@@ -343,6 +367,7 @@ describe('AI System', () => {
 
             // Force attack strategy with group
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0;
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'];
@@ -376,6 +401,7 @@ describe('AI System', () => {
 
             // Set up attack state without lateJoiner
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0;
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
@@ -407,6 +433,7 @@ describe('AI System', () => {
             const state = createTestState(entities);
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = -300;
 
             // Run AI multiple times
@@ -435,6 +462,7 @@ describe('AI System', () => {
 
             // Force harass strategy
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'harass';
             aiState.harassGroup = ['rifle0', 'rifle1', 'rifle2'];
 
@@ -708,6 +736,7 @@ describe('AI System', () => {
 
             // Set lastStrategyChange to past so cooldown is met
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = -300;
 
             // Run AI
@@ -735,6 +764,7 @@ describe('AI System', () => {
             const state = createTestState(entities);
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = -300;
 
             computeAiActions({ ...state, tick: 30 }, 1);

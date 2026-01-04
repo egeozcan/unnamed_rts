@@ -12,8 +12,8 @@
 
 import { Entity, EntityId } from '../../types.js';
 import { AIPersonality } from '../../../data/schemas/index.js';
-import { AIPlayerState, AI_CONSTANTS } from '../types.js';
-import { hasProductionBuildingFor } from '../utils/production.js';
+import { AIPlayerState } from '../types.js';
+import { AI_CONSTANTS, hasProductionBuildingFor } from '../utils.js';
 
 const {
     ATTACK_GROUP_MIN_SIZE,

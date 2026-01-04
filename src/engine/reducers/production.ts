@@ -1,6 +1,7 @@
 import { GameState, PlayerState, Entity, EntityId, Vector } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { canBuild, calculatePower, getRuleData, createEntity } from './helpers';
+import { getDifficultyModifiers } from '../ai/utils';
 
 export function updateProduction(player: PlayerState, entities: Record<EntityId, Entity>, state: GameState): { player: PlayerState, createdEntities: Entity[] } {
     let nextPlayer = { ...player, queues: { ...player.queues } };
@@ -70,7 +71,10 @@ export function updateProduction(player: PlayerState, entities: Record<EntityId,
         // Speed multiplier: 1.0 for 1 building, 1.5 for 2, 2.0 for 3, etc.
         const speedMult = 1 + (productionBuildingCount - 1) * 0.5;
 
-        const costPerTick = (totalCost / 600) * speedMult * speedFactor;
+        // Apply difficulty build speed bonus for AI players
+        const difficultySpeedMult = player.isAi ? getDifficultyModifiers(player.difficulty).buildSpeedBonus : 1.0;
+
+        const costPerTick = (totalCost / 600) * speedMult * speedFactor * difficultySpeedMult;
 
         // Linear cost deduction: spend only what we can afford
         const affordableCost = Math.min(costPerTick, nextPlayer.credits);

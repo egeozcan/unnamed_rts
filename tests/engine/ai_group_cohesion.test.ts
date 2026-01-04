@@ -78,6 +78,7 @@ describe('AI Attack Group Cohesion', () => {
 
         const state = createTestState(entities);
         const aiState = getAIState(1);
+        aiState.personality = 'rusher'; // Set consistent personality for test
         aiState.lastStrategyChange = -300;
         aiState.enemyBaseLocation = new Vector(2500, 2500);
 
@@ -263,6 +264,7 @@ describe('AI Attack Regroup', () => {
 
         const state = createTestState(entities);
         const aiState = getAIState(1);
+        aiState.personality = 'rusher'; // Set consistent personality for test
         aiState.strategy = 'attack';
         aiState.lastStrategyChange = -100;
         aiState.enemyBaseLocation = new Vector(3000, 3000);
@@ -613,6 +615,7 @@ describe('AI Smart Combat Targeting', () => {
         }
 
         const aiState = getAIState(1);
+        aiState.personality = 'rusher'; // Set consistent personality for test
         aiState.strategy = 'attack';
         aiState.lastStrategyChange = state.tick; // Prevent strategy switch due to low count
         // Initial group formation

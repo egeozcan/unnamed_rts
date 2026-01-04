@@ -1,5 +1,5 @@
 import { GameState, Entity, EntityId, Vector } from '../types.js';
-import { RULES, AI_CONFIG, PersonalityName } from '../../data/schemas/index.js';
+import { RULES } from '../../data/schemas/index.js';
 import { CounterUnits } from './types.js';
 
 // ===== AI CONSTANTS =====
@@ -30,6 +30,7 @@ export const AI_CONSTANTS = {
     // === PEACE-BREAK (triggers aggressive behavior when wealthy and peaceful) ===
     SURPLUS_CREDIT_THRESHOLD: 4000, // Credits considered "surplus"
     PEACE_BREAK_TICKS: 600,         // 10 seconds of peace before considering attack
+    GUARANTEED_PEACE_BREAK_TICKS: 1200, // 20 seconds guaranteed attack after peace
     SURPLUS_DEFENSE_THRESHOLD: 5000, // Credits to trigger extra defense building
     MAX_SURPLUS_TURRETS: 4,         // Maximum turrets to build from surplus
 
@@ -85,17 +86,32 @@ export function isUnit(entity: Entity): boolean {
     return entity.type === 'UNIT';
 }
 
-// Difficulty to personality mapping
-export const DIFFICULTY_TO_PERSONALITY: Record<'easy' | 'medium' | 'hard', PersonalityName> = {
-    'easy': 'turtle',
-    'medium': 'balanced',
-    'hard': 'rusher'
-};
+// Difficulty modifiers - affect gameplay independently of personality
+export const DIFFICULTY_MODIFIERS = {
+    easy: {
+        resourceBonus: 0.8,      // 80% resource gain from harvesting
+        buildSpeedBonus: 0.9,    // 90% build speed
+        reactionDelay: 120,      // 2 seconds slower to react to threats (in ticks)
+    },
+    medium: {
+        resourceBonus: 1.0,      // Normal resource gain
+        buildSpeedBonus: 1.0,    // Normal build speed
+        reactionDelay: 0,        // No delay
+    },
+    hard: {
+        resourceBonus: 1.2,      // 120% resource gain from harvesting
+        buildSpeedBonus: 1.15,   // 15% faster builds
+        reactionDelay: 0,        // No delay
+    }
+} as const;
 
-export function getPersonalityForPlayer(player: { difficulty: 'easy' | 'medium' | 'hard' }) {
-    const personalityKey = DIFFICULTY_TO_PERSONALITY[player.difficulty] || 'balanced';
-    return AI_CONFIG.personalities[personalityKey] || AI_CONFIG.personalities['balanced'];
+export type DifficultyModifiers = typeof DIFFICULTY_MODIFIERS[keyof typeof DIFFICULTY_MODIFIERS];
+
+export function getDifficultyModifiers(difficulty: 'easy' | 'medium' | 'hard'): DifficultyModifiers {
+    return DIFFICULTY_MODIFIERS[difficulty];
 }
+
+// Note: getPersonalityForPlayer has been moved to state.ts to avoid circular dependencies
 
 // ===== BUILDING FILTER UTILITIES =====
 

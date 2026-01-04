@@ -276,6 +276,7 @@ describe('AI Strategic Approach', () => {
             const state = createTestState(entities);
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
             // Pre-set group to attacking state (bypass rally)

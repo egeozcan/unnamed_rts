@@ -6,7 +6,7 @@
 
 import { Entity, Vector } from '../../types.js';
 import { RULES } from '../../../data/schemas/index.js';
-import { AI_CONSTANTS } from '../types.js';
+import { AI_CONSTANTS } from '../utils.js';
 
 // ============ BUILDING FILTERS ============
 

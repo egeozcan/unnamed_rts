@@ -318,6 +318,7 @@ describe('AI Overhaul Tests', () => {
             let state = createTestState(entities, 600);
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4'];
             aiState.offensiveGroups = [{
@@ -460,6 +461,7 @@ describe('AI Overhaul Tests', () => {
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 6000 } } };
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.lastStrategyChange = 0;
             aiState.peaceTicks = 1200; // 20 seconds at peace
             aiState.threatLevel = 0;
@@ -489,6 +491,7 @@ describe('AI Overhaul Tests', () => {
             state = { ...state, players: { ...state.players, 1: { ...state.players[1], credits: 2000 } } };
 
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'];
 

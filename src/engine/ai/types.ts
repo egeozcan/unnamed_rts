@@ -1,4 +1,5 @@
 import { EntityId, Vector } from '../types.js';
+import { PersonalityName } from '../../data/schemas/index.js';
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';
@@ -17,6 +18,7 @@ export interface OffensiveGroup {
 export type InvestmentPriority = 'economy' | 'warfare' | 'defense' | 'balanced';
 
 export interface AIPlayerState {
+    personality: PersonalityName;  // Randomly selected at game start, independent of difficulty
     strategy: AIStrategy;
     lastStrategyChange: number;
     attackGroup: EntityId[];

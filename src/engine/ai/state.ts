@@ -1,8 +1,20 @@
 import { GameState, Entity, EntityId, Vector } from '../types.js';
-import { RULES } from '../../data/schemas/index.js';
+import { RULES, AI_CONFIG, PersonalityName } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
 import { VENGEANCE_DECAY, VENGEANCE_PER_HIT } from './utils.js';
 import { isUnit } from '../type-guards.js';
+
+// Select a random personality from available personalities
+function selectRandomPersonality(): PersonalityName {
+    const personalities = Object.keys(AI_CONFIG.personalities) as PersonalityName[];
+    return personalities[Math.floor(Math.random() * personalities.length)];
+}
+
+// Get the personality config for an AI player from their stored AI state
+export function getPersonalityForPlayer(playerId: number) {
+    const aiState = getAIState(playerId);
+    return AI_CONFIG.personalities[aiState.personality] || AI_CONFIG.personalities['balanced'];
+}
 
 // Store AI states (keyed by playerId)
 const aiStates: Record<number, AIPlayerState> = {};
@@ -10,6 +22,7 @@ const aiStates: Record<number, AIPlayerState> = {};
 export function getAIState(playerId: number): AIPlayerState {
     if (!aiStates[playerId]) {
         aiStates[playerId] = {
+            personality: selectRandomPersonality(),
             strategy: 'buildup',
             lastStrategyChange: 0,
             attackGroup: [],

@@ -16,11 +16,11 @@ import {
     updateEnemyBaseLocation,
     updateEnemyIntelligence,
     updateVengeance,
-    getGroupCenter
+    getGroupCenter,
+    getPersonalityForPlayer
 } from './state.js';
 
 import {
-    getPersonalityForPlayer,
     getNonDefenseBuildings,
     getDefenseBuildings,
     getRefineries,
@@ -31,7 +31,8 @@ import {
     findNearestBuilding,
     getCounterUnits,
     AI_CONSTANTS,
-    DIFFICULTY_TO_PERSONALITY,
+    DIFFICULTY_MODIFIERS,
+    getDifficultyModifiers,
     ATTACK_GROUP_MIN_SIZE,
     HARASS_GROUP_SIZE,
     BASE_DEFENSE_RADIUS,
@@ -79,7 +80,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     if (!player) return actions;
 
     const aiState = getAIState(playerId);
-    const personality = getPersonalityForPlayer(player);
+    const personality = getPersonalityForPlayer(playerId);
 
     // PERFORMANCE OPTIMIZATION: Use cached entity lookups
     const cache = createEntityCache(state.entities);
@@ -200,7 +201,8 @@ export const _testUtils = {
     getGroupCenter,
     updateEnemyBaseLocation,
     getPersonalityForPlayer,
-    DIFFICULTY_TO_PERSONALITY,
+    DIFFICULTY_MODIFIERS,
+    getDifficultyModifiers,
     AI_CONSTANTS,
     getNonDefenseBuildings,
     getDefenseBuildings,

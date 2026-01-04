@@ -203,6 +203,7 @@ describe('Staggered Unit Production', () => {
             // Rifle costs ~100, so with 600 credits, 600-100=500 > 300 buffer
             const state = createTestState(entities, 600);
             const aiState = getAIState(1);
+            aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0; // Prevent immediate strategy re-evaluation
             aiState.lastProductionType = 'vehicle'; // Set to vehicle so next should be infantry

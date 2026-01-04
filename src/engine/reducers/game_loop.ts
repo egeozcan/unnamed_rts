@@ -8,6 +8,7 @@ import { rebuildSpatialGrid, getSpatialGrid } from '../spatial';
 import { updateProduction } from './production';
 import { updateWells, updateBuilding } from './buildings';
 import { updateUnit } from './units';
+import { getDifficultyModifiers } from '../ai/utils';
 
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
@@ -45,13 +46,17 @@ export function tick(state: GameState): GameState {
     const updateState = { ...state, players: nextPlayers, entities: nextEntities };
     const { entities: updatedEntities, projectiles: newProjs, creditsEarned } = updateEntities(updateState);
 
-    // Apply Credits
+    // Apply Credits (with difficulty modifier for AI players)
     for (const pidStr in creditsEarned) {
         const pid = parseInt(pidStr);
-        if (nextPlayers[pid]) {
+        const player = nextPlayers[pid];
+        if (player) {
+            // Apply difficulty resource bonus for AI players
+            const modifier = player.isAi ? getDifficultyModifiers(player.difficulty).resourceBonus : 1.0;
+            const adjustedCredits = Math.floor(creditsEarned[pid] * modifier);
             nextPlayers[pid] = {
-                ...nextPlayers[pid],
-                credits: nextPlayers[pid].credits + creditsEarned[pid]
+                ...player,
+                credits: player.credits + adjustedCredits
             };
         }
     }

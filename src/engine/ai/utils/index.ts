@@ -5,5 +5,3 @@
  */
 
 export * from './spatial.js';
-export * from './targeting.js';
-export * from './production.js';
