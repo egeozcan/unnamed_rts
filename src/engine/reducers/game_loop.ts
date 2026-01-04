@@ -412,27 +412,50 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     // Create a mutable lookup for working copies
     const workingEntities: Record<EntityId, MutableEntity> = {};
     const units: MutableEntity[] = [];
+    const movingUnits: MutableEntity[] = []; // OPTIMIZATION: Track only units that moved
 
     for (const id in entities) {
         const e: MutableEntity = { ...entities[id] };
         workingEntities[id] = e;
         if (e.type === 'UNIT' && !e.dead) {
             units.push(e);
+
+            // OPTIMIZATION: Only process units that actually moved or have movement intent
+            const unitEntity = e as unknown as UnitEntity;
+            const hasMoveTarget = unitEntity.movement.moveTarget !== null;
+            const hasActivePath = unitEntity.movement.path !== null &&
+                unitEntity.movement.pathIdx < unitEntity.movement.path.length;
+            const hasCombatTarget = unitEntity.combat.targetId !== null;
+            const hasVelocity = unitEntity.movement.vel && unitEntity.movement.vel.mag() > 0.1;
+
+            // Consider a unit "moving" if it has any movement intent or recent velocity
+            if (hasMoveTarget || hasActivePath || hasCombatTarget || hasVelocity) {
+                movingUnits.push(e);
+            }
         }
     }
 
     // Early exit if no units
     if (units.length === 0) return workingEntities as Record<EntityId, Entity>;
 
-    const iterations = 4; // Run a few passes for stability
+    // OPTIMIZATION: Reduce iterations if mostly stationary units
+    // Use fewer iterations when most units aren't moving
+    const movingRatio = movingUnits.length / units.length;
+    const iterations = movingRatio > 0.5 ? 4 : 2; // 4 iterations if >50% moving, else 2
+
     const spatialGrid = getSpatialGrid();
 
     // Max collision check radius (max unit radius ~45 + max other radius ~45 + buffer)
     const MAX_CHECK_RADIUS = 100;
 
     for (let k = 0; k < iterations; k++) {
-        // Only iterate units (at least one entity must be a unit for collision to matter)
-        for (const a of units) {
+        let hadOverlap = false; // OPTIMIZATION: Track if we found any overlaps this iteration
+
+        // OPTIMIZATION: Only iterate moving units for collision checks
+        // Stationary units will still be checked against (via spatial grid), but won't initiate checks
+        const unitsToCheck = movingUnits.length > 0 ? movingUnits : units;
+
+        for (const a of unitsToCheck) {
             if (a.dead) continue;
 
             // Use spatial grid to find nearby entities instead of checking all
@@ -456,6 +479,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 const minDist = a.radius + b.radius - softOverlap;
 
                 if (dist < minDist && dist > 0.001) {
+                    hadOverlap = true; // Found an overlap
                     const overlap = minDist - dist;
                     const dir = b.pos.sub(a.pos).norm();
 
@@ -468,9 +492,9 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 
                         // Check for active path following (has path waypoints remaining)
                         const aHasActivePath = aUnit.movement.path !== null &&
-                                               aUnit.movement.pathIdx < aUnit.movement.path.length;
+                            aUnit.movement.pathIdx < aUnit.movement.path.length;
                         const bHasActivePath = bUnit.movement.path !== null &&
-                                               bUnit.movement.pathIdx < bUnit.movement.path.length;
+                            bUnit.movement.pathIdx < bUnit.movement.path.length;
 
                         // Use avgVel to detect meaningful movement vs stuck oscillation
                         // Units oscillating from collision have low avgVel magnitude
@@ -483,9 +507,9 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                         const movingThreshold = 0.8;
 
                         const aMoving = aUnit.movement.moveTarget !== null ||
-                                        (aHasActivePath && aAvgVelMag > movingThreshold);
+                            (aHasActivePath && aAvgVelMag > movingThreshold);
                         const bMoving = bUnit.movement.moveTarget !== null ||
-                                        (bHasActivePath && bAvgVelMag > movingThreshold);
+                            (bHasActivePath && bAvgVelMag > movingThreshold);
 
                         // Use stronger push to counteract movement speed
                         const pushScale = Math.min(overlap, 2.5);
@@ -526,6 +550,12 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                     }
                 }
             }
+        }
+
+        // OPTIMIZATION: Early exit if no overlaps detected in this iteration
+        // Collision resolution has converged
+        if (!hadOverlap) {
+            break;
         }
     }
 

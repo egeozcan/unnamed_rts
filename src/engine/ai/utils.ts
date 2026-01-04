@@ -21,6 +21,7 @@ export const AI_CONSTANTS = {
     MAX_CHASE_DISTANCE: 400,        // Max distance to chase fleeing enemies
 
     // === TIMINGS (in ticks, 60 ticks = 1 second) ===
+    AI_TICK_INTERVAL: 3,            // AI players compute every N ticks (staggered by player ID)
     STRATEGY_COOLDOWN: 300,         // 5 seconds between strategy changes
     RALLY_TIMEOUT: 300,             // 5 seconds to wait for stragglers at rally point
     SCOUT_INTERVAL: 600,            // 10 seconds between scout attempts
@@ -54,6 +55,7 @@ export const AI_CONSTANTS = {
 // Destructure commonly used constants for local usage if needed, but exports should use AI_CONSTANTS
 // Exporting individual constants for backward compatibility or ease of use
 export const {
+    AI_TICK_INTERVAL,
     BASE_DEFENSE_RADIUS,
     ATTACK_GROUP_MIN_SIZE,
     HARASS_GROUP_SIZE,

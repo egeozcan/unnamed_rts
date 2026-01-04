@@ -73,6 +73,10 @@ import {
 /**
  * Main AI Logic Loop
  * This function determines the actions for an AI player for a given tick.
+ * 
+ * PERFORMANCE OPTIMIZATION: AI computation is staggered across ticks.
+ * Each AI player computes on different ticks (based on playerId % AI_TICK_INTERVAL).
+ * Critical reactions (defense, harvester safety) run every tick for responsiveness.
  */
 export function computeAiActions(state: GameState, playerId: number): Action[] {
     const actions: Action[] = [];
@@ -99,12 +103,20 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     const baseCenter = findBaseCenter(myBuildings);
 
-    // 2. Update Intelligence & State
+    // CRITICAL INTELLIGENCE: Update every tick for accurate decision-making
     updateEnemyBaseLocation(aiState, enemies);
     updateEnemyIntelligence(aiState, enemies, state.tick);
     updateVengeance(state, playerId, aiState, [...myBuildings, ...myUnits]);
 
-    // Detect threats
+    // PERFORMANCE: Stagger AI computation across ticks
+    // Each AI player computes on different ticks to distribute CPU load
+    // Always compute on early ticks (< AI_TICK_INTERVAL) to ensure immediate game start response
+    const tickOffset = playerId % AI_CONSTANTS.AI_TICK_INTERVAL;
+    const isFullComputeTick = state.tick < AI_CONSTANTS.AI_TICK_INTERVAL ||
+        state.tick % AI_CONSTANTS.AI_TICK_INTERVAL === tickOffset;
+
+    // CRITICAL REACTIONS: Always run these for responsiveness
+    // Detect threats every tick for immediate response
     const { threatsNearBase, harvestersUnderAttack } = detectThreats(
         baseCenter,
         harvesters,
@@ -113,6 +125,22 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     );
     aiState.threatsNearBase = threatsNearBase;
     aiState.harvestersUnderAttack = harvestersUnderAttack;
+
+    // Always handle critical combat reactions
+    actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState));
+
+    // Defense is critical - run every tick if under attack
+    if (threatsNearBase.length > 0 && combatUnits.length > 0) {
+        actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
+    }
+
+    // FULL AI COMPUTATION: Only on designated ticks
+    if (!isFullComputeTick) {
+        // On non-compute ticks, only run critical reactions (above)
+        return actions;
+    }
+
+    // 2. Full AI Computation (strategy, economy, production)
 
     // Update Strategy
     updateStrategy(
@@ -152,10 +180,11 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack)); // Gather resources
 
     // --- COMBAT & UNIT CONTROL ---
-    actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState));
+    // Defense already handled above for critical response
 
     if (aiState.strategy === 'defend') {
-        actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
+        // Defense group management (non-critical parts)
+        aiState.defenseGroup = aiState.defenseGroup || [];
     } else {
         aiState.defenseGroup = [];
     }
