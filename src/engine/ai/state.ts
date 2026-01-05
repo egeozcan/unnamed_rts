@@ -67,6 +67,12 @@ export function resetAIState(playerId?: number): void {
     }
 }
 
+// Set personality for a player (useful for tests to ensure deterministic behavior)
+export function setPersonalityForPlayer(playerId: number, personality: PersonalityName): void {
+    const aiState = getAIState(playerId);
+    aiState.personality = personality;
+}
+
 // ===== STATE UPDATE HELPERS =====
 
 export function findBaseCenter(buildings: Entity[]): Vector {

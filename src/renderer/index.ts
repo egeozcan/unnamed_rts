@@ -3,6 +3,7 @@ import { getAsset, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
+import { isAirUnit } from '../engine/entity-helpers.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -163,6 +164,11 @@ export class Renderer {
     }
 
     private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null) {
+        // Skip docked harriers - they are invisible while docked at base
+        if (isAirUnit(entity) && entity.airUnit.state === 'docked') {
+            return;
+        }
+
         const ctx = this.ctx;
         const sc = this.worldToScreen(entity.pos, camera, zoom);
 
@@ -340,6 +346,42 @@ export class Renderer {
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20, 3);
                 ctx.fillStyle = '#0ff';
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20 * ratio, 3);
+            }
+
+            // Air-Force Command: draw docked harrier indicators
+            if (entity.type === 'BUILDING' && entity.key === 'airforce_command' && isBuilding(entity) && entity.airBase) {
+                const slotPositions = [
+                    { x: -30, y: -20 }, { x: 0, y: -20 }, { x: 30, y: -20 },
+                    { x: -30, y: 10 }, { x: 0, y: 10 }, { x: 30, y: 10 }
+                ];
+                for (let i = 0; i < entity.airBase.slots.length; i++) {
+                    const slotId = entity.airBase.slots[i];
+                    const pos = slotPositions[i] || { x: 0, y: 0 };
+                    if (slotId) {
+                        // Draw small harrier icon at slot
+                        ctx.save();
+                        ctx.translate(pos.x, pos.y);
+                        ctx.fillStyle = playerColor;
+                        // Simple jet shape
+                        ctx.beginPath();
+                        ctx.moveTo(0, -8);
+                        ctx.lineTo(6, 6);
+                        ctx.lineTo(0, 3);
+                        ctx.lineTo(-6, 6);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.strokeStyle = '#000';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        ctx.restore();
+                    } else {
+                        // Empty slot indicator
+                        ctx.fillStyle = 'rgba(100, 100, 100, 0.3)';
+                        ctx.beginPath();
+                        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
             }
 
             // Draw turret barrel overlay for units/buildings with turrets

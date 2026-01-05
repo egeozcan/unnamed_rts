@@ -1,12 +1,14 @@
-import { GameState, PlayerState, Entity, EntityId, Vector } from '../types';
+import { GameState, PlayerState, Entity, EntityId, Vector, BuildingEntity, AirUnit } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { canBuild, calculatePower, getRuleData, createEntity } from './helpers';
 import { getDifficultyModifiers } from '../ai/utils';
 import { type EntityCache } from '../perf';
+import { isAirBase } from '../entity-helpers';
 
-export function updateProduction(player: PlayerState, _entities: Record<EntityId, Entity>, state: GameState, cache: EntityCache): { player: PlayerState, createdEntities: Entity[] } {
+export function updateProduction(player: PlayerState, _entities: Record<EntityId, Entity>, state: GameState, cache: EntityCache): { player: PlayerState, createdEntities: Entity[], modifiedEntities: Record<EntityId, Entity> } {
     let nextPlayer = { ...player, queues: { ...player.queues } };
     let createdEntities: Entity[] = [];
+    let modifiedEntities: Record<EntityId, Entity> = {};
 
     // Check if player is eliminated (no buildings AND no MCV)
     // This matches the win condition check in tick()
@@ -27,7 +29,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
             },
             readyToPlace: null
         };
-        return { player: nextPlayer, createdEntities };
+        return { player: nextPlayer, createdEntities, modifiedEntities };
     }
 
     // Calculate power (cached per tick) - pass cache for optimized lookup
@@ -102,59 +104,132 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                     };
                 } else {
                     // Unit complete. Spawn it.
-                    // Find a building that produces this unit (e.g. barracks for infantry)
-                    // For simplicity, spawn at first valid building or construction yard if none found?
-                    // Ideally we look for specific factories.
-                    // RULES.units[q.current] doesn't explicitly say "producedAt".
-                    // But we can infer: infantry -> barracks, vehicle -> factory.
-                    // Or just spawn near any building of the player for now to fix the bug.
-                    // Better: find "barracks" for infantry, "factory" for vehicle.
-
                     const unitType = RULES.units[q.current]?.type || 'infantry';
-                    const spawnBuildingKey = unitType === 'infantry' ? 'barracks' : 'factory';
 
-                    let spawnPos = new Vector(100, 100); // Default fallback
+                    if (unitType === 'air') {
+                        // Air unit production: find Air-Force Command with available slot
+                        const airBases = playerBuildings.filter(isAirBase);
 
-                    const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
-                    if (factories.length > 0) {
-                        const factory = factories[0];
-                        spawnPos = factory.pos.add(new Vector(0, factory.h / 2 + 20));
-                    } else {
-                        // Fallback to conyard
-                        const conyards = playerBuildings.filter(e => e.key === 'conyard');
-                        if (conyards.length > 0) spawnPos = conyards[0].pos.add(new Vector(0, 60));
-                    }
+                        let foundSlot = false;
+                        for (const airBase of airBases) {
+                            const slotIndex = airBase.airBase.slots.findIndex((s: EntityId | null) => s === null);
+                            if (slotIndex !== -1) {
+                                // Create harrier in docked state at this base/slot
+                                const unitData = RULES.units[q.current];
+                                const maxAmmo = unitData?.ammo || 1;
 
-                    const newUnit = createEntity(spawnPos.x, spawnPos.y, player.id, 'UNIT', q.current!, state);
-                    const offset = new Vector((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
-                    const movedUnit = { ...newUnit, pos: newUnit.pos.add(offset) };
+                                const newHarrier = createEntity(
+                                    airBase.pos.x, airBase.pos.y,
+                                    player.id, 'UNIT', q.current!, state
+                                ) as AirUnit;
 
-                    createdEntities.push(movedUnit);
+                                // Set harrier as docked at this base
+                                const dockedHarrier: AirUnit = {
+                                    ...newHarrier,
+                                    airUnit: {
+                                        ...newHarrier.airUnit,
+                                        state: 'docked',
+                                        homeBaseId: airBase.id,
+                                        dockedSlot: slotIndex,
+                                        ammo: maxAmmo,
+                                        maxAmmo: maxAmmo
+                                    },
+                                    movement: {
+                                        ...newHarrier.movement,
+                                        vel: new Vector(0, 0),
+                                        moveTarget: null
+                                    }
+                                };
 
-                    // Start next unit in queue if available
-                    const currentQueue = nextPlayer.queues[cat];
-                    const queuedItems = currentQueue.queued || [];
-                    const nextInQueue = queuedItems[0] || null;
-                    const remainingQueue = queuedItems.slice(1);
+                                createdEntities.push(dockedHarrier);
 
-                    nextPlayer = {
-                        ...nextPlayer,
-                        queues: {
-                            ...nextPlayer.queues,
-                            [cat]: {
-                                current: nextInQueue,
-                                progress: 0,
-                                invested: 0,
-                                queued: remainingQueue
+                                // Update air base slots to include this harrier
+                                const newSlots = [...airBase.airBase.slots];
+                                newSlots[slotIndex] = dockedHarrier.id;
+                                modifiedEntities[airBase.id] = {
+                                    ...airBase,
+                                    airBase: {
+                                        ...airBase.airBase,
+                                        slots: newSlots
+                                    }
+                                } as BuildingEntity;
+
+                                foundSlot = true;
+                                break;
                             }
                         }
-                    };
+
+                        if (!foundSlot) {
+                            // No slot available - keep at 100% progress, don't complete
+                            // Production is effectively paused until a slot opens
+                            continue;
+                        }
+
+                        // Start next unit in queue if available
+                        const currentQueue = nextPlayer.queues[cat];
+                        const queuedItems = currentQueue.queued || [];
+                        const nextInQueue = queuedItems[0] || null;
+                        const remainingQueue = queuedItems.slice(1);
+
+                        nextPlayer = {
+                            ...nextPlayer,
+                            queues: {
+                                ...nextPlayer.queues,
+                                [cat]: {
+                                    current: nextInQueue,
+                                    progress: 0,
+                                    invested: 0,
+                                    queued: remainingQueue
+                                }
+                            }
+                        };
+                    } else {
+                        // Ground unit production (infantry/vehicle)
+                        const spawnBuildingKey = unitType === 'infantry' ? 'barracks' : 'factory';
+
+                        let spawnPos = new Vector(100, 100); // Default fallback
+
+                        const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
+                        if (factories.length > 0) {
+                            const factory = factories[0];
+                            spawnPos = factory.pos.add(new Vector(0, factory.h / 2 + 20));
+                        } else {
+                            // Fallback to conyard
+                            const conyards = playerBuildings.filter(e => e.key === 'conyard');
+                            if (conyards.length > 0) spawnPos = conyards[0].pos.add(new Vector(0, 60));
+                        }
+
+                        const newUnit = createEntity(spawnPos.x, spawnPos.y, player.id, 'UNIT', q.current!, state);
+                        const offset = new Vector((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+                        const movedUnit = { ...newUnit, pos: newUnit.pos.add(offset) };
+
+                        createdEntities.push(movedUnit);
+
+                        // Start next unit in queue if available
+                        const currentQueue = nextPlayer.queues[cat];
+                        const queuedItems = currentQueue.queued || [];
+                        const nextInQueue = queuedItems[0] || null;
+                        const remainingQueue = queuedItems.slice(1);
+
+                        nextPlayer = {
+                            ...nextPlayer,
+                            queues: {
+                                ...nextPlayer.queues,
+                                [cat]: {
+                                    current: nextInQueue,
+                                    progress: 0,
+                                    invested: 0,
+                                    queued: remainingQueue
+                                }
+                            }
+                        };
+                    }
                 }
             }
         }
         // When credits are 0, production simply pauses (no change to queue)
     }
-    return { player: nextPlayer, createdEntities };
+    return { player: nextPlayer, createdEntities, modifiedEntities };
 }
 
 export function startBuild(state: GameState, payload: { category: string; key: string; playerId: number }): GameState {
@@ -162,8 +237,8 @@ export function startBuild(state: GameState, payload: { category: string; key: s
     const player = state.players[playerId];
     if (!player) return state;
 
-    // For units (infantry/vehicle), use the queue system (AI compatibility)
-    if (category === 'infantry' || category === 'vehicle') {
+    // For units (infantry/vehicle/air), use the queue system (AI compatibility)
+    if (category === 'infantry' || category === 'vehicle' || category === 'air') {
         return queueUnit(state, { category, key, playerId, count: 1 });
     }
 
@@ -203,8 +278,8 @@ export function queueUnit(state: GameState, payload: { category: string; key: st
     const player = state.players[playerId];
     if (!player) return state;
 
-    // Only infantry and vehicle can be queued
-    if (category !== 'infantry' && category !== 'vehicle') return state;
+    // Only infantry, vehicle, and air can be queued
+    if (category !== 'infantry' && category !== 'vehicle' && category !== 'air') return state;
 
     // Validate the key exists
     if (!RULES.units[key]) return state;
@@ -216,6 +291,24 @@ export function queueUnit(state: GameState, payload: { category: string; key: st
 
     const q = player.queues[category as keyof typeof player.queues];
     const existingQueued = q.queued || [];
+
+    // Special slot limit for air units (harriers)
+    // Cannot build more than total available slots across all Air-Force Commands
+    if (category === 'air') {
+        const playerEntities = Object.values(state.entities).filter(e => e.owner === playerId && !e.dead);
+        const airBases = playerEntities.filter(e => e.type === 'BUILDING' && e.key === 'airforce_command' && isAirBase(e));
+        const totalSlots = airBases.length * 6;
+
+        // Count existing harriers (any state)
+        const existingHarriers = playerEntities.filter(e => e.type === 'UNIT' && e.key === 'harrier').length;
+
+        // Count harriers in queue (current + queued)
+        const harrisersInQueue = (q.current === 'harrier' ? 1 : 0) +
+            existingQueued.filter(k => k === 'harrier').length;
+
+        const availableSlots = totalSlots - existingHarriers - harrisersInQueue;
+        if (availableSlots <= 0) return state;
+    }
 
     // Calculate how many we can add (max 99 total including current)
     const currentTotal = (q.current ? 1 : 0) + existingQueued.length;
@@ -271,8 +364,8 @@ export function dequeueUnit(state: GameState, payload: { category: string; key: 
     const player = state.players[playerId];
     if (!player) return state;
 
-    // Only infantry and vehicle can be dequeued
-    if (category !== 'infantry' && category !== 'vehicle') return state;
+    // Only infantry, vehicle, and air can be dequeued
+    if (category !== 'infantry' && category !== 'vehicle' && category !== 'air') return state;
 
     const q = player.queues[category as keyof typeof player.queues];
     const existingQueued = q.queued || [];

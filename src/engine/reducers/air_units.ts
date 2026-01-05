@@ -1,0 +1,275 @@
+/**
+ * Air Unit State Machine
+ * Handles harrier-type air units that dock at Air-Force Command buildings.
+ *
+ * States:
+ * - docked: Unit is at base, invisible, being reloaded
+ * - flying: Unit is moving toward target
+ * - attacking: Unit is in range and firing
+ * - returning: Unit is heading back to base after firing
+ */
+
+import {
+    Entity, EntityId, BuildingEntity, AirUnit, Vector, Projectile
+} from '../types';
+import { RULES } from '../../data/schemas/index';
+import { getRuleData, createProjectile } from './helpers';
+import { isAirUnit, updateAirUnit } from '../entity-helpers';
+import { moveToward } from './units';
+
+/**
+ * Update an air unit's state machine.
+ * Called from the game loop for harrier units.
+ */
+export function updateAirUnitState(
+    entity: AirUnit,
+    allEntities: Record<EntityId, Entity>,
+    entityList: Entity[]
+): { entity: AirUnit, projectile?: Projectile | null, modifiedEntities?: Record<EntityId, Entity> } {
+    const data = getRuleData(entity.key);
+    let nextEntity = entity;
+    let projectile: Projectile | null = null;
+    let modifiedEntities: Record<EntityId, Entity> | undefined;
+
+    switch (entity.airUnit.state) {
+        case 'docked':
+            // Docked harriers are invisible and handled by the base
+            // They don't move or do anything - just wait to be launched
+            // Reload is handled by the base building
+            break;
+
+        case 'flying':
+            // Flying toward target
+            if (entity.combat.targetId) {
+                const target = allEntities[entity.combat.targetId];
+                if (target && !target.dead) {
+                    const dist = entity.pos.dist(target.pos);
+                    const range = data?.range || 200;
+
+                    if (dist <= range) {
+                        // In range, switch to attacking state
+                        nextEntity = updateAirUnit(nextEntity, { state: 'attacking' });
+                    } else {
+                        // Move toward target
+                        nextEntity = moveToward(nextEntity, target.pos, entityList) as AirUnit;
+                    }
+                } else {
+                    // Target dead or gone, return to base
+                    nextEntity = {
+                        ...nextEntity,
+                        combat: { ...nextEntity.combat, targetId: null },
+                        airUnit: { ...nextEntity.airUnit, state: 'returning' }
+                    };
+                }
+            } else {
+                // No target, return to base
+                nextEntity = updateAirUnit(nextEntity, { state: 'returning' });
+            }
+            break;
+
+        case 'attacking':
+            // In attack position, fire when ready
+            if (entity.airUnit.ammo > 0 && entity.combat.cooldown <= 0) {
+                const target = allEntities[entity.combat.targetId!];
+                if (target && !target.dead) {
+                    // Fire missile
+                    projectile = createProjectile(entity, target);
+                    nextEntity = {
+                        ...nextEntity,
+                        combat: { ...nextEntity.combat, cooldown: data?.rate || 60 },
+                        airUnit: {
+                            ...nextEntity.airUnit,
+                            ammo: nextEntity.airUnit.ammo - 1,
+                            state: 'returning'  // Auto-return after firing
+                        }
+                    };
+                } else {
+                    // Target gone, return
+                    nextEntity = {
+                        ...nextEntity,
+                        combat: { ...nextEntity.combat, targetId: null },
+                        airUnit: { ...nextEntity.airUnit, state: 'returning' }
+                    };
+                }
+            } else if (entity.airUnit.ammo <= 0) {
+                // Out of ammo, return to base
+                nextEntity = {
+                    ...nextEntity,
+                    combat: { ...nextEntity.combat, targetId: null },
+                    airUnit: { ...nextEntity.airUnit, state: 'returning' }
+                };
+            }
+            break;
+
+        case 'returning':
+            // Head back to home base
+            const homeBase = entity.airUnit.homeBaseId
+                ? allEntities[entity.airUnit.homeBaseId] as BuildingEntity
+                : null;
+
+            if (homeBase && !homeBase.dead && homeBase.airBase) {
+                const dist = entity.pos.dist(homeBase.pos);
+                if (dist < 50) {
+                    // Arrived at base - find available slot and dock
+                    const slotIndex = homeBase.airBase.slots.findIndex(s => s === null);
+                    if (slotIndex !== -1) {
+                        nextEntity = {
+                            ...nextEntity,
+                            airUnit: {
+                                ...nextEntity.airUnit,
+                                state: 'docked',
+                                dockedSlot: slotIndex
+                            },
+                            combat: { ...nextEntity.combat, targetId: null },
+                            movement: {
+                                ...nextEntity.movement,
+                                vel: new Vector(0, 0),
+                                moveTarget: null
+                            }
+                        };
+                        // Update air base slots to include this harrier
+                        const newSlots = [...homeBase.airBase.slots];
+                        newSlots[slotIndex] = entity.id;
+                        modifiedEntities = {
+                            [homeBase.id]: {
+                                ...homeBase,
+                                airBase: {
+                                    ...homeBase.airBase,
+                                    slots: newSlots
+                                }
+                            }
+                        };
+                    } else {
+                        // No slot available - hover and wait (shouldn't happen normally)
+                        nextEntity = {
+                            ...nextEntity,
+                            movement: {
+                                ...nextEntity.movement,
+                                vel: new Vector(0, 0)
+                            }
+                        };
+                    }
+                } else {
+                    // Move toward base
+                    nextEntity = moveToward(nextEntity, homeBase.pos, entityList) as AirUnit;
+                }
+            } else {
+                // Base destroyed - find a new base
+                nextEntity = findNewHomeBase(nextEntity, allEntities);
+            }
+            break;
+    }
+
+    return { entity: nextEntity, projectile, modifiedEntities };
+}
+
+/**
+ * Find a new home base for a stranded harrier.
+ */
+function findNewHomeBase(entity: AirUnit, allEntities: Record<EntityId, Entity>): AirUnit {
+    // Find another Air-Force Command owned by same player
+    for (const id in allEntities) {
+        const e = allEntities[id];
+        if (e.type === 'BUILDING' && e.key === 'airforce_command' &&
+            e.owner === entity.owner && !e.dead && e.airBase) {
+            // Check for available slot
+            const availableSlot = e.airBase.slots.findIndex(s => s === null);
+            if (availableSlot !== -1) {
+                // Found a new home - head there
+                return {
+                    ...entity,
+                    airUnit: {
+                        ...entity.airUnit,
+                        homeBaseId: e.id,
+                        state: 'returning'
+                    }
+                };
+            }
+        }
+    }
+
+    // No base found - harrier stays in returning state but has no valid destination
+    // Eventually could crash or self-destruct, but for now just hover
+    return {
+        ...entity,
+        movement: {
+            ...entity.movement,
+            vel: new Vector(0, 0)
+        }
+    };
+}
+
+/**
+ * Update Air-Force Command building - handles harrier reload.
+ * Returns updated harriers that need their ammo restored.
+ */
+export function updateAirBase(
+    entity: BuildingEntity,
+    allEntities: Record<EntityId, Entity>,
+    _currentTick: number
+): { entity: BuildingEntity, updatedHarriers: Record<EntityId, AirUnit> } {
+    if (!entity.airBase || entity.key !== 'airforce_command') {
+        return { entity, updatedHarriers: {} };
+    }
+
+    const airBase = entity.airBase; // Extract to keep type narrowed
+    let nextAirBase = airBase;
+    const updatedHarriers: Record<EntityId, AirUnit> = {};
+    const reloadTicks = RULES.buildings['airforce_command']?.reloadTicks || 120;
+
+    // Process reload - find a docked harrier that needs ammo
+    let foundHarrierNeedingReload = false;
+
+    for (const slotId of airBase.slots) {
+        if (!slotId) continue;
+
+        const harrier = allEntities[slotId];
+        if (!harrier || harrier.dead || !isAirUnit(harrier)) continue;
+
+        if (harrier.airUnit.state === 'docked' && harrier.airUnit.ammo < harrier.airUnit.maxAmmo) {
+            foundHarrierNeedingReload = true;
+
+            // Decrement reload progress
+            const newProgress = nextAirBase.reloadProgress - 1;
+
+            if (newProgress <= 0) {
+                // Reload complete - restore ammo
+                updatedHarriers[harrier.id] = {
+                    ...harrier,
+                    airUnit: {
+                        ...harrier.airUnit,
+                        ammo: harrier.airUnit.maxAmmo
+                    }
+                };
+
+                // Reset reload progress for next harrier
+                nextAirBase = {
+                    slots: nextAirBase.slots,
+                    reloadProgress: reloadTicks
+                };
+            } else {
+                nextAirBase = {
+                    slots: nextAirBase.slots,
+                    reloadProgress: newProgress
+                };
+            }
+
+            break; // Only process one harrier at a time
+        }
+    }
+
+    // If no harrier needs reload, reset progress
+    if (!foundHarrierNeedingReload && nextAirBase.reloadProgress !== reloadTicks) {
+        nextAirBase = {
+            slots: nextAirBase.slots,
+            reloadProgress: reloadTicks
+        };
+    }
+
+    const nextEntity: BuildingEntity = {
+        ...entity,
+        airBase: nextAirBase
+    };
+
+    return { entity: nextEntity, updatedHarriers };
+}

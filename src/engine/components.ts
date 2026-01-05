@@ -75,3 +75,24 @@ export interface WellComponent {
     readonly totalSpawned: number;       // Lifetime counter
     readonly isBlocked: boolean;         // True if no valid spawn positions (area occupied by units/buildings)
 }
+
+// ============ AIR UNIT COMPONENT ============
+// Properties specific to harrier-type air units that dock/reload
+
+export type AirUnitState = 'docked' | 'flying' | 'attacking' | 'returning';
+
+export interface AirUnitComponent {
+    readonly ammo: number;                    // Current ammo (0 = needs reload)
+    readonly maxAmmo: number;                 // Maximum ammo capacity
+    readonly state: AirUnitState;             // Current state in the state machine
+    readonly homeBaseId: EntityId | null;     // Air-Force Command this unit belongs to
+    readonly dockedSlot: number | null;       // Slot index when docked (0-5)
+}
+
+// ============ AIR BASE COMPONENT ============
+// Properties specific to Air-Force Command buildings
+
+export interface AirBaseComponent {
+    readonly slots: readonly (EntityId | null)[];  // 6 slots, each holds a harrier ID or null
+    readonly reloadProgress: number;               // Ticks remaining for current reload
+}

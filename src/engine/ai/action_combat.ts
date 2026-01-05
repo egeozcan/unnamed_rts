@@ -1,4 +1,4 @@
-import { GameState, Action, Entity, UnitEntity, Vector, HarvesterUnit, EntityId } from '../types.js';
+import { GameState, Action, Entity, UnitEntity, Vector, HarvesterUnit, EntityId, AirUnit } from '../types.js';
 import { RULES, AIPersonality } from '../../data/schemas/index.js';
 import { AIPlayerState, OffensiveGroup } from './types.js';
 import {
@@ -14,6 +14,7 @@ import {
     getRefineries
 } from './utils.js';
 import { getGroupCenter } from './state.js';
+import { isAirUnit } from '../entity-helpers.js';
 
 export function handleAttack(
     state: GameState,
@@ -886,4 +887,91 @@ export function findNearestDefender(
     }
 
     return nearest;
+}
+
+/**
+ * Handle air strikes with harriers.
+ * Launches docked harriers at high-value targets like harvesters and production buildings.
+ */
+export function handleAirStrikes(
+    state: GameState,
+    playerId: number,
+    enemies: Entity[],
+    aiState: AIPlayerState
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find all docked harriers with ammo
+    const dockedHarriers: AirUnit[] = [];
+    for (const id in state.entities) {
+        const entity = state.entities[id];
+        if (entity.owner === playerId && !entity.dead && isAirUnit(entity)) {
+            if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0) {
+                dockedHarriers.push(entity);
+            }
+        }
+    }
+
+    if (dockedHarriers.length === 0 || enemies.length === 0) {
+        return actions;
+    }
+
+    // Define high-value target priorities for air strikes
+    const airStrikePriorities = ['harvester', 'conyard', 'factory', 'barracks', 'refinery', 'power'];
+
+    // Find best target for air strike
+    let bestTarget: Entity | null = null;
+    let bestScore = -Infinity;
+
+    for (const enemy of enemies) {
+        let score = 0;
+
+        // Priority based on type
+        if (enemy.type === 'UNIT' && enemy.key === 'harvester') {
+            score += 150; // Harvesters are high-value targets for harriers
+        } else if (enemy.type === 'BUILDING') {
+            const priorityIndex = airStrikePriorities.indexOf(enemy.key);
+            if (priorityIndex >= 0) {
+                score += 100 - priorityIndex * 15;
+            }
+        }
+
+        // Low HP bonus - finish off weakened targets
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio < 0.3) score += 80;
+        else if (hpRatio < 0.5) score += 50;
+
+        // Avoid targets with anti-air defenses nearby
+        const hasNearbyAA = enemies.some(e =>
+            e.type === 'BUILDING' &&
+            (e.key === 'sam_site') &&
+            e.pos.dist(enemy.pos) < 400
+        );
+        if (hasNearbyAA) score -= 100;
+
+        // Prefer targets the enemy base location if known
+        if (aiState.enemyBaseLocation) {
+            const distToBase = enemy.pos.dist(aiState.enemyBaseLocation);
+            if (distToBase < 500) score += 30; // Bonus for targets near enemy base
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestTarget = enemy;
+        }
+    }
+
+    if (bestTarget && bestScore > 0) {
+        // Launch one harrier per tick to avoid overwhelming
+        const harrierToLaunch = dockedHarriers[0];
+        actions.push({
+            type: 'COMMAND_ATTACK',
+            payload: {
+                unitIds: [harrierToLaunch.id],
+                targetId: bestTarget.id
+            }
+        });
+    }
+
+    return actions;
 }

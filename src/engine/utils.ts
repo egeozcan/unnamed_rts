@@ -239,6 +239,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
 
     if (isBuilding) {
         const isDefense = ['turret', 'sam_site', 'pillbox', 'obelisk'].includes(statsKey);
+        const isAirBase = statsKey === 'airforce_command';
         return {
             ...baseProps,
             type: 'BUILDING' as const,
@@ -254,7 +255,11 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
             building: {
                 isRepairing: undefined,
                 placedTick: undefined
-            }
+            },
+            airBase: isAirBase ? {
+                slots: [null, null, null, null, null, null] as readonly (string | null)[],
+                reloadProgress: 0
+            } : undefined
         };
     }
 
@@ -303,10 +308,27 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         };
     }
 
+    if (statsKey === 'harrier') {
+        return {
+            ...baseProps,
+            type: 'UNIT' as const,
+            key: 'harrier' as const,
+            movement,
+            combat,
+            airUnit: {
+                ammo: 1,
+                maxAmmo: 1,
+                state: 'docked' as const,
+                homeBaseId: null,
+                dockedSlot: null
+            }
+        };
+    }
+
     return {
         ...baseProps,
         type: 'UNIT' as const,
-        key: statsKey as Exclude<UnitKey, 'harvester'>,
+        key: statsKey as Exclude<UnitKey, 'harvester' | 'harrier'>,
         movement,
         combat
     };

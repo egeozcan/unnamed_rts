@@ -29,7 +29,7 @@ export interface AIPlayerState {
     offensiveGroups: OffensiveGroup[];
     enemyBaseLocation: Vector | null;
     lastScoutTick: number;
-    lastProductionType: 'infantry' | 'vehicle' | null;
+    lastProductionType: 'infantry' | 'vehicle' | 'air' | null;
     // Dynamic resource allocation
     investmentPriority: InvestmentPriority;
     economyScore: number;      // 0-100 economic health rating

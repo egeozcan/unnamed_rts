@@ -17,7 +17,8 @@ import {
     updateEnemyIntelligence,
     updateVengeance,
     getGroupCenter,
-    getPersonalityForPlayer
+    getPersonalityForPlayer,
+    setPersonalityForPlayer
 } from './state.js';
 
 import {
@@ -68,7 +69,8 @@ import {
     handleMicro,
     handleHarvesterSafety,
     handleHarvesterSuicideAttack,
-    findNearestDefender
+    findNearestDefender,
+    handleAirStrikes
 } from './action_combat.js';
 
 /**
@@ -218,6 +220,12 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleScouting(state, playerId, aiState, combatUnits, enemies, baseCenter));
     actions.push(...handleMicro(state, combatUnits, enemies, baseCenter, personality));
 
+    // Air strikes with harriers - can trigger regardless of ground strategy
+    // Harriers are opportunistic and don't require ground army coordination
+    if (enemies.length > 0) {
+        actions.push(...handleAirStrikes(state, playerId, enemies, aiState));
+    }
+
     return actions;
 }
 
@@ -239,6 +247,7 @@ export const _testUtils = {
     getGroupCenter,
     updateEnemyBaseLocation,
     getPersonalityForPlayer,
+    setPersonalityForPlayer,
     DIFFICULTY_MODIFIERS,
     getDifficultyModifiers,
     AI_CONSTANTS,

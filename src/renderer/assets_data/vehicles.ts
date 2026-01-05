@@ -178,17 +178,17 @@ export const vehicles: Record<string, string> = {
         <g filter="url(#shadow)">
             <!-- Shadow of Rotor (Static) -->
             <circle cx="50" cy="50" r="45" fill="#000" opacity="0.2"/>
-            
+
             <!-- Body -->
             <ellipse cx="50" cy="50" rx="25" ry="15" fill="COL_PRIMARY" stroke="#000"/>
             <path d="M40 38 L60 38 L60 62 L40 62" fill="none" stroke="#222"/>
-            
+
             <!-- Tail -->
             <rect x="10" y="48" width="20" height="4" fill="COL_PRIMARY" stroke="#000"/>
-            
+
             <!-- Cockpit -->
             <path d="M65 42 Q75 50 65 58" fill="#acf" stroke="#345"/>
-            
+
             <!-- Rotor Blades Animation -->
             <g>
                 <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="0.1s" repeatCount="indefinite"/>
@@ -196,6 +196,39 @@ export const vehicles: Record<string, string> = {
                 <rect x="5" y="42" width="90" height="16" fill="#111" opacity="0.6"/>
                 <circle cx="50" cy="50" r="5" fill="#333"/>
             </g>
+        </g>
+    </svg>`,
+
+    'harrier': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            <!-- Shadow below aircraft (altitude indicator) -->
+            <ellipse cx="50" cy="55" rx="30" ry="10" fill="#000" opacity="0.3"/>
+
+            <!-- Delta Wing Shape - main body pointing right (facing direction) -->
+            <path d="M85 50 L35 25 L20 50 L35 75 Z" fill="COL_PRIMARY" stroke="#111" stroke-width="2"/>
+
+            <!-- Fuselage center line -->
+            <path d="M85 50 L20 50" fill="none" stroke="#333" stroke-width="3"/>
+
+            <!-- Canopy/Cockpit -->
+            <path d="M65 47 L75 50 L65 53 Q60 50 65 47" fill="#acf" stroke="#345"/>
+
+            <!-- Wing detail lines -->
+            <path d="M55 40 L40 32" fill="none" stroke="#222" stroke-width="1"/>
+            <path d="M55 60 L40 68" fill="none" stroke="#222" stroke-width="1"/>
+
+            <!-- Tail fins -->
+            <path d="M25 42 L20 50 L25 58" fill="none" stroke="COL_PRIMARY" stroke-width="4"/>
+
+            <!-- Afterburner/Engine glow -->
+            <ellipse cx="15" cy="50" rx="5" ry="4" fill="#f80" opacity="0.8">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.15s" repeatCount="indefinite"/>
+            </ellipse>
+
+            <!-- Missile hardpoint indicators -->
+            <circle cx="45" cy="38" r="3" fill="#222"/>
+            <circle cx="45" cy="62" r="3" fill="#222"/>
         </g>
     </svg>`,
 };

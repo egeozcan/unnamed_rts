@@ -301,10 +301,12 @@ export function handleEconomy(
     const SURPLUS_PRODUCTION_THRESHOLD = 6000; // Higher threshold for production buildings
     const MAX_SURPLUS_BARRACKS = 3;
     const MAX_SURPLUS_FACTORIES = 3;
+    const MAX_AIRFORCE_COMMANDS = 1;
 
     if (hasConyard && player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
         const existingBarracks = countProductionBuildings('infantry', buildings);
         const existingFactories = countProductionBuildings('vehicle', buildings);
+        const existingAirforce = countProductionBuildings('air', buildings);
 
         // Prefer factories over barracks (vehicles are stronger)
         if (existingFactories < MAX_SURPLUS_FACTORIES) {
@@ -318,6 +320,13 @@ export function handleEconomy(
             const barracksReqsMet = checkPrerequisites('barracks', buildings);
             if (barracksData && barracksReqsMet && player.credits >= barracksData.cost + 2000) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
+            }
+        } else if (existingAirforce < MAX_AIRFORCE_COMMANDS) {
+            // Build airforce_command for harrier production
+            const airforceData = RULES.buildings['airforce_command'];
+            const airforceReqsMet = checkPrerequisites('airforce_command', buildings);
+            if (airforceData && airforceReqsMet && player.credits >= airforceData.cost + 2000) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'airforce_command', playerId } });
             }
         }
     }
@@ -543,6 +552,23 @@ export function handleEconomy(
                     creditsRemaining -= cost; // Track locally for subsequent checks
                     break;
                 }
+            }
+        }
+
+        // ===== AIR UNIT PRODUCTION =====
+        // Produce harriers when airforce_command is available and we have surplus credits
+        const hasAirforce = hasProductionBuildingFor('air', buildings);
+        const airQueueEmpty = !player.queues.air.current;
+
+        if (hasAirforce && airQueueEmpty && !isPanic && creditsRemaining > creditBuffer + 1500) {
+            const harrierData = RULES.units['harrier'];
+            const harrierReqsMet = checkPrerequisites('harrier', buildings);
+            const cost = harrierData?.cost || 0;
+
+            if (harrierReqsMet && creditsRemaining >= cost && (creditsRemaining - cost) >= creditBuffer) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'air', key: 'harrier', playerId } });
+                aiState.lastProductionType = 'air';
+                creditsRemaining -= cost;
             }
         }
     }

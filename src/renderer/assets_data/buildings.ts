@@ -143,22 +143,60 @@ export const buildings: Record<string, string> = {
             <!-- Main Lab -->
             <rect x="10" y="10" width="80" height="80" rx="10" fill="url(#glassGrad)" stroke="#fff" stroke-width="2"/>
             <rect x="10" y="10" width="80" height="80" rx="10" fill="COL_PRIMARY" opacity="0.3"/>
-            
+
             <!-- Dish Support -->
             <path d="M30 20 L50 50 L70 20" fill="#333" opacity="0.5"/>
-            
+
             <!-- Radar Dish -->
             <circle cx="50" cy="50" r="25" fill="#222" stroke="#aaa" stroke-width="2"/>
             <circle cx="50" cy="50" r="20" fill="#333"/>
             <circle cx="50" cy="50" r="8" fill="#0ff" opacity="0.8">
                  <animate attributeName="opacity" values="0.4;1;0.4" dur="1.5s" repeatCount="indefinite" />
             </circle>
-            
+
             <!-- Antenna -->
             <line x1="50" y1="50" x2="85" y2="15" stroke="#fff" stroke-width="3"/>
             <circle cx="85" cy="15" r="3" fill="#f00">
                  <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" />
             </circle>
+        </g>
+    </svg>`,
+
+    'airforce_command': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            <!-- Runway/Tarmac Base -->
+            <rect x="2" y="2" width="96" height="96" rx="2" fill="#333" stroke="#111"/>
+
+            <!-- Runway Markings -->
+            <rect x="45" y="5" width="10" height="90" fill="#444"/>
+            <line x1="50" y1="10" x2="50" y2="25" stroke="#fff" stroke-width="2" stroke-dasharray="4,4"/>
+            <line x1="50" y1="75" x2="50" y2="90" stroke="#fff" stroke-width="2" stroke-dasharray="4,4"/>
+
+            <!-- Control Tower -->
+            <rect x="5" y="25" width="30" height="50" fill="COL_PRIMARY" stroke="#111"/>
+            <rect x="5" y="25" width="30" height="50" fill="url(#metalGrad)" opacity="0.4"/>
+            <rect x="8" y="30" width="24" height="20" fill="#acf" stroke="#345"/>
+            <rect x="10" y="60" width="8" height="15" fill="#222"/>
+
+            <!-- Hangar Structure -->
+            <path d="M60 20 L60 80 L95 80 L95 20 Q78 10 60 20" fill="url(#darkMetal)" stroke="#111"/>
+            <rect x="65" y="50" width="25" height="30" fill="#1a1a1a" stroke="#444"/>
+
+            <!-- Landing Pad Indicators (6 slots in 2 rows of 3) -->
+            <circle cx="20" cy="80" r="4" fill="#0f0" opacity="0.6"/>
+            <circle cx="35" cy="80" r="4" fill="#0f0" opacity="0.6"/>
+            <circle cx="50" cy="80" r="4" fill="#0f0" opacity="0.6"/>
+
+            <!-- Radar Dish -->
+            <ellipse cx="20" cy="25" rx="10" ry="5" fill="#555" stroke="#333"/>
+            <line x1="20" y1="20" x2="20" y2="25" stroke="#888" stroke-width="2"/>
+            <circle cx="20" cy="18" r="3" fill="#0f0" opacity="0.8">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="1s" repeatCount="indefinite"/>
+            </circle>
+
+            <!-- Player Color Band -->
+            <rect x="2" y="2" width="96" height="5" fill="COL_PRIMARY"/>
         </g>
     </svg>`,
 };

@@ -4,7 +4,9 @@ import {
     HarvesterComponent,
     EngineerComponent,
     BuildingStateComponent,
-    WellComponent
+    WellComponent,
+    AirUnitComponent,
+    AirBaseComponent
 } from './components.js';
 
 export type PlayerId = string;
@@ -61,11 +63,11 @@ export type UnitKey =
     | 'harvester'
     | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando'
     | 'jeep' | 'apc' | 'light' | 'heavy' | 'flame_tank' | 'stealth' | 'artillery' | 'mlrs' | 'mammoth'
-    | 'heli' | 'mcv';
+    | 'heli' | 'harrier' | 'mcv';
 
 export type BuildingKey =
     | 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory'
-    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech';
+    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech' | 'airforce_command';
 
 export type ResourceKey = 'ore';
 export type RockKey = 'rock';
@@ -91,10 +93,10 @@ export interface BaseEntity {
 
 // ============ UNIT ENTITIES ============
 
-// Combat units (all units except harvester)
+// Combat units (all units except harvester and harrier which have their own interfaces)
 export interface CombatUnit extends BaseEntity {
     readonly type: 'UNIT';
-    readonly key: Exclude<UnitKey, 'harvester'>;
+    readonly key: Exclude<UnitKey, 'harvester' | 'harrier'>;
     readonly movement: MovementComponent;
     readonly combat: CombatComponent;
     readonly engineer?: EngineerComponent; // Only for engineer units
@@ -109,7 +111,16 @@ export interface HarvesterUnit extends BaseEntity {
     readonly harvester: HarvesterComponent;
 }
 
-export type UnitEntity = CombatUnit | HarvesterUnit;
+// Air units (harriers that dock and reload)
+export interface AirUnit extends BaseEntity {
+    readonly type: 'UNIT';
+    readonly key: 'harrier';  // Can be extended for more air unit types later
+    readonly movement: MovementComponent;
+    readonly combat: CombatComponent;
+    readonly airUnit: AirUnitComponent;
+}
+
+export type UnitEntity = CombatUnit | HarvesterUnit | AirUnit;
 
 // ============ BUILDING ENTITIES ============
 
@@ -118,6 +129,7 @@ export interface BuildingEntity extends BaseEntity {
     readonly key: BuildingKey;
     readonly combat?: CombatComponent; // Only for defense buildings (turret, sam_site, etc.)
     readonly building: BuildingStateComponent;
+    readonly airBase?: AirBaseComponent; // Only for airforce_command
 }
 
 // ============ STATIC ENTITIES ============
@@ -149,7 +161,10 @@ export type {
     HarvesterComponent,
     EngineerComponent,
     BuildingStateComponent,
-    WellComponent
+    WellComponent,
+    AirUnitComponent,
+    AirBaseComponent,
+    AirUnitState
 } from './components.js';
 
 export interface Projectile {

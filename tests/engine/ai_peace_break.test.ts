@@ -4,7 +4,7 @@ import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { GameState, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource } from '../../src/engine/test-utils';
 
-const { getAIState } = _testUtils;
+const { getAIState, setPersonalityForPlayer } = _testUtils;
 
 // Helper functions
 function createEntity(
@@ -46,6 +46,8 @@ function createTestState(entities: Record<EntityId, Entity>, aiCredits: number =
 describe('AI Peace Break - Surplus Resource Spending', () => {
     beforeEach(() => {
         resetAIState();
+        // Set deterministic personality to avoid flaky tests due to random personality selection
+        setPersonalityForPlayer(1, 'balanced');
     });
 
     describe('Surplus attack wave', () => {

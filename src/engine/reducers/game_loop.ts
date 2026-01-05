@@ -9,7 +9,9 @@ import { createEntityCache } from '../perf';
 import { updateProduction } from './production';
 import { updateWells, updateBuilding } from './buildings';
 import { updateUnit } from './units';
+import { updateAirUnitState, updateAirBase } from './air_units';
 import { getDifficultyModifiers } from '../ai/utils';
+import { isAirUnit } from '../entity-helpers';
 
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
@@ -38,6 +40,10 @@ export function tick(state: GameState): GameState {
         res.createdEntities.forEach(e => {
             nextEntities[e.id] = e;
         });
+        // Apply modified entities (e.g., air base slots updated when harrier spawns docked)
+        for (const entityId in res.modifiedEntities) {
+            nextEntities[entityId] = res.modifiedEntities[entityId];
+        }
     }
 
     // Rebuild spatial grid for updateWells usage (it needs to query nearby ores/blockers)
@@ -269,27 +275,40 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
         if (entity.dead) continue;
 
         if (entity.type === 'UNIT') {
-            const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts);
-            nextEntities[id] = res.entity;
-            if (res.projectile) newProjectiles.push(res.projectile);
-            if (res.creditsEarned > 0) {
-                creditsEarned[entity.owner] = (creditsEarned[entity.owner] || 0) + res.creditsEarned;
-            }
-            if (res.resourceDamage) {
-                const target = nextEntities[res.resourceDamage.id];
-                if (target) {
-                    const newHp = target.hp - res.resourceDamage.amount;
-                    nextEntities[res.resourceDamage.id] = {
-                        ...target,
-                        hp: newHp,
-                        dead: newHp <= 0
-                    };
+            // Check if this is an air unit (harrier) - use different state machine
+            if (isAirUnit(entity)) {
+                const airRes = updateAirUnitState(entity, state.entities, entityList);
+                nextEntities[id] = airRes.entity;
+                if (airRes.projectile) newProjectiles.push(airRes.projectile);
+                // Apply modified entities (e.g., air base slots updated when harrier docks)
+                if (airRes.modifiedEntities) {
+                    for (const modId in airRes.modifiedEntities) {
+                        nextEntities[modId] = airRes.modifiedEntities[modId];
+                    }
+                }
+            } else {
+                const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts);
+                nextEntities[id] = res.entity;
+                if (res.projectile) newProjectiles.push(res.projectile);
+                if (res.creditsEarned > 0) {
+                    creditsEarned[entity.owner] = (creditsEarned[entity.owner] || 0) + res.creditsEarned;
+                }
+                if (res.resourceDamage) {
+                    const target = nextEntities[res.resourceDamage.id];
+                    if (target) {
+                        const newHp = target.hp - res.resourceDamage.amount;
+                        nextEntities[res.resourceDamage.id] = {
+                            ...target,
+                            hp: newHp,
+                            dead: newHp <= 0
+                        };
+                    }
                 }
             }
 
-            // Handle Engineer Capture/Repair
+            // Handle Engineer Capture/Repair (only for CombatUnit, not harvester or harrier)
             const ent = nextEntities[id] as UnitEntity;
-            if (ent.key !== 'harvester' && ent.engineer?.captureTargetId) {
+            if (ent.key !== 'harvester' && ent.key !== 'harrier' && 'engineer' in ent && ent.engineer?.captureTargetId) {
                 const engTargetId = ent.engineer.captureTargetId;
                 const engTarget = nextEntities[engTargetId];
                 if (engTarget && engTarget.type === 'BUILDING') {
@@ -305,7 +324,7 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                         engineer: { ...ent.engineer, captureTargetId: null }
                     };
                 }
-            } else if (ent.key !== 'harvester' && ent.engineer?.repairTargetId) {
+            } else if (ent.key !== 'harvester' && ent.key !== 'harrier' && 'engineer' in ent && ent.engineer?.repairTargetId) {
                 const engTargetId = ent.engineer.repairTargetId;
                 const engTarget = nextEntities[engTargetId];
                 if (engTarget && engTarget.type === 'BUILDING' && engTarget.hp < engTarget.maxHp) {
@@ -325,6 +344,17 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
             const res = updateBuilding(entity, state.entities, entityList);
             nextEntities[id] = res.entity;
             if (res.projectile) newProjectiles.push(res.projectile);
+
+            // Handle Air-Force Command building reload
+            if (res.entity.key === 'airforce_command' && res.entity.airBase) {
+                const airBaseRes = updateAirBase(res.entity, nextEntities, state.tick);
+                nextEntities[id] = airBaseRes.entity;
+
+                // Apply harrier ammo updates
+                for (const harrierId in airBaseRes.updatedHarriers) {
+                    nextEntities[harrierId] = airBaseRes.updatedHarriers[harrierId];
+                }
+            }
         }
 
         // Movement, rotation, cooldown, flash, turret updates (units only)
@@ -435,14 +465,19 @@ type MutableEntity = { -readonly [K in keyof Entity]: Entity[K] };
 function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId, Entity> {
     // Create a mutable lookup for working copies
     const workingEntities: Record<EntityId, MutableEntity> = {};
-    const units: MutableEntity[] = [];
+    const groundUnits: MutableEntity[] = [];  // Ground units only (not flying)
     const movingUnits: MutableEntity[] = []; // OPTIMIZATION: Track only units that moved
 
     for (const id in entities) {
         const e: MutableEntity = { ...entities[id] };
         workingEntities[id] = e;
         if (e.type === 'UNIT' && !e.dead) {
-            units.push(e);
+            // Skip flying units from ground collision - they fly above everything
+            const unitData = getRuleData(e.key);
+            const canFly = unitData && isUnitData(unitData) && unitData.fly === true;
+            if (canFly) continue; // Air units don't participate in ground collision
+
+            groundUnits.push(e);
 
             // OPTIMIZATION: Only process units that actually moved or have movement intent
             const unitEntity = e as unknown as UnitEntity;
@@ -459,12 +494,12 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         }
     }
 
-    // Early exit if no units
-    if (units.length === 0) return workingEntities as Record<EntityId, Entity>;
+    // Early exit if no ground units to process
+    if (groundUnits.length === 0) return workingEntities as Record<EntityId, Entity>;
 
     // OPTIMIZATION: Reduce iterations if mostly stationary units
     // Use fewer iterations when most units aren't moving
-    const movingRatio = movingUnits.length / units.length;
+    const movingRatio = movingUnits.length / groundUnits.length;
     const iterations = movingRatio > 0.5 ? 4 : 2; // 4 iterations if >50% moving, else 2
 
     const spatialGrid = getSpatialGrid();
@@ -477,7 +512,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 
         // OPTIMIZATION: Only iterate moving units for collision checks
         // Stationary units will still be checked against (via spatial grid), but won't initiate checks
-        const unitsToCheck = movingUnits.length > 0 ? movingUnits : units;
+        const unitsToCheck = movingUnits.length > 0 ? movingUnits : groundUnits;
 
         for (const a of unitsToCheck) {
             if (a.dead) continue;
@@ -496,6 +531,12 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 const isUnitB = b.type === 'UNIT';
                 // a is always a unit, skip if b is not a unit and not a building/resource that matters
                 if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') continue;
+
+                // Skip flying units in collision checks - they fly above ground units
+                if (isUnitB) {
+                    const bData = getRuleData(b.key);
+                    if (bData && isUnitData(bData) && bData.fly === true) continue;
+                }
 
                 const dist = a.pos.dist(b.pos);
                 // Allow slight soft overlap to reduce jittering

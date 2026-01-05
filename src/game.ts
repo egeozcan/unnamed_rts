@@ -17,6 +17,7 @@ import { initInput, getInputState, getDragSelection, handleCameraInput, handleZo
 import { computeAiActions } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
+import { isAirUnit } from './engine/entity-helpers.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
 type GameSpeed = 1 | 2 | 3 | 4 | 5;
@@ -704,6 +705,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
                 attemptMCVDeploy();
                 return;
             }
+
             newSelection.push(clicked.id);
         }
     }
@@ -754,11 +756,38 @@ function handleRightClick(wx: number, wy: number) {
     const selectedIds = currentState.selection;
     if (selectedIds.length === 0) return;
 
+    // Special handling for Air-Force Command: launch all docked harriers with ammo
     if (targetId) {
-        currentState = update(currentState, {
-            type: 'COMMAND_ATTACK',
-            payload: { unitIds: selectedIds, targetId }
-        });
+        const harrierIds: EntityId[] = [];
+        for (const id of selectedIds) {
+            const entity = currentState.entities[id];
+            if (entity && entity.type === 'BUILDING' && entity.key === 'airforce_command' && isBuilding(entity) && entity.airBase) {
+                // Find all docked harriers with ammo in this air base
+                for (const slotId of entity.airBase.slots) {
+                    if (slotId) {
+                        const harrier = currentState.entities[slotId];
+                        if (harrier && !harrier.dead && isAirUnit(harrier) &&
+                            harrier.airUnit.state === 'docked' && harrier.airUnit.ammo > 0) {
+                            harrierIds.push(slotId);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we have harriers to launch, issue attack command for them
+        if (harrierIds.length > 0) {
+            currentState = update(currentState, {
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: harrierIds, targetId }
+            });
+        } else {
+            // Normal attack command for other units
+            currentState = update(currentState, {
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: selectedIds, targetId }
+            });
+        }
     } else {
         currentState = update(currentState, {
             type: 'COMMAND_MOVE',

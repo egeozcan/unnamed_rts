@@ -1,13 +1,18 @@
 import {
     Vector,
+    EntityId,
+    Entity,
     UnitEntity,
     BuildingEntity,
     HarvesterUnit,
+    AirUnit,
     MovementComponent,
     CombatComponent,
     HarvesterComponent,
     BuildingStateComponent,
-    WellComponent
+    WellComponent,
+    AirUnitComponent,
+    AirBaseComponent
 } from './types.js';
 
 // ============ COMPONENT DEFAULTS ============
@@ -162,4 +167,68 @@ export function updateHarvesterFull(
     }
 
     return result;
+}
+
+// ============ AIR UNIT COMPONENT DEFAULTS ============
+
+export function createDefaultAirUnit(homeBaseId: EntityId | null, slot: number | null, maxAmmo: number = 1): AirUnitComponent {
+    return {
+        ammo: maxAmmo,
+        maxAmmo,
+        state: 'docked',
+        homeBaseId,
+        dockedSlot: slot
+    };
+}
+
+export function createDefaultAirBase(slotCount: number = 6): AirBaseComponent {
+    return {
+        slots: Array(slotCount).fill(null) as readonly (EntityId | null)[],
+        reloadProgress: 0
+    };
+}
+
+// ============ AIR UNIT UPDATE HELPERS ============
+
+export function updateAirUnit(
+    entity: AirUnit,
+    updates: Partial<AirUnitComponent>
+): AirUnit {
+    return {
+        ...entity,
+        airUnit: { ...entity.airUnit, ...updates }
+    };
+}
+
+export function updateAirBase(
+    entity: BuildingEntity,
+    updates: Partial<AirBaseComponent>
+): BuildingEntity {
+    if (!entity.airBase) return entity;
+    return {
+        ...entity,
+        airBase: { ...entity.airBase, ...updates }
+    };
+}
+
+// ============ TYPE GUARDS ============
+
+export function isAirUnit(entity: Entity): entity is AirUnit {
+    return entity.type === 'UNIT' && entity.key === 'harrier';
+}
+
+export function isHarvester(entity: Entity): entity is HarvesterUnit {
+    return entity.type === 'UNIT' && entity.key === 'harvester';
+}
+
+export function isUnit(entity: Entity): entity is UnitEntity {
+    return entity.type === 'UNIT';
+}
+
+export function isBuilding(entity: Entity): entity is BuildingEntity {
+    return entity.type === 'BUILDING';
+}
+
+export function isAirBase(entity: Entity): entity is BuildingEntity & { airBase: AirBaseComponent } {
+    return entity.type === 'BUILDING' && entity.key === 'airforce_command' && !!(entity as BuildingEntity).airBase;
 }

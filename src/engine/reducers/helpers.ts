@@ -3,7 +3,7 @@ import {
     UnitKey, BuildingKey, Projectile
 } from '../types';
 import { RULES, Building, Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
-import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState } from '../entity-helpers';
+import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState, createDefaultAirUnit, createDefaultAirBase } from '../entity-helpers';
 import { type EntityCache } from '../perf';
 
 // Power calculation cache - keyed by tick to auto-invalidate
@@ -161,11 +161,22 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
                 combat: createDefaultCombat(),
                 harvester: createDefaultHarvester()
             };
+        } else if (key === 'harrier') {
+            // Harrier is created through production system which assigns home base
+            // This is a fallback for direct creation (shouldn't normally happen)
+            return {
+                ...baseProps,
+                type: 'UNIT' as const,
+                key: 'harrier' as const,
+                movement: createDefaultMovement(),
+                combat: createDefaultCombat(),
+                airUnit: createDefaultAirUnit(null as unknown as string, -1, 1)
+            };
         } else {
             return {
                 ...baseProps,
                 type: 'UNIT' as const,
-                key: key as Exclude<UnitKey, 'harvester'>,
+                key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
                 movement: createDefaultMovement(),
                 combat: createDefaultCombat(),
                 engineer: key === 'engineer' ? { captureTargetId: null, repairTargetId: null } : undefined
@@ -173,6 +184,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         }
     } else if (type === 'BUILDING') {
         const isDefense = ['turret', 'sam_site', 'pillbox', 'obelisk'].includes(key);
+        const isAirBase = key === 'airforce_command';
         return {
             ...baseProps,
             type: 'BUILDING' as const,
@@ -181,7 +193,8 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
             building: {
                 ...createDefaultBuildingState(),
                 placedTick: state.tick
-            }
+            },
+            airBase: isAirBase ? createDefaultAirBase(6) : undefined
         };
     } else {
         // RESOURCE

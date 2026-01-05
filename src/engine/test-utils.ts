@@ -8,6 +8,7 @@ import {
     WellEntity,
     HarvesterUnit,
     CombatUnit,
+    AirUnit,
     UnitKey,
     BuildingKey,
     GameState
@@ -17,7 +18,9 @@ import {
     createDefaultCombat,
     createDefaultHarvester,
     createDefaultBuildingState,
-    createDefaultWellComponent
+    createDefaultWellComponent,
+    createDefaultAirUnit,
+    createDefaultAirBase
 } from './entity-helpers.js';
 
 // ============ TEST ENTITY ID GENERATION ============
@@ -97,7 +100,7 @@ export function createTestHarvester(options: HarvesterOptions = {}): HarvesterUn
 export interface CombatUnitOptions {
     id?: EntityId;
     owner?: number;
-    key?: Exclude<UnitKey, 'harvester'>;
+    key?: Exclude<UnitKey, 'harvester' | 'harrier'>;
     x?: number;
     y?: number;
     hp?: number;
@@ -148,6 +151,107 @@ export function createTestCombatUnit(options: CombatUnitOptions = {}): CombatUni
             lastAttackerId: options.lastAttackerId ?? null,
             lastDamageTick: options.lastDamageTick,
             cooldown: options.cooldown ?? 0
+        }
+    };
+}
+
+// ============ AIR UNIT (HARRIER) BUILDER ============
+
+export interface HarrierOptions {
+    id?: EntityId;
+    owner?: number;
+    x?: number;
+    y?: number;
+    hp?: number;
+    maxHp?: number;
+    ammo?: number;
+    maxAmmo?: number;
+    state?: 'docked' | 'flying' | 'attacking' | 'returning';
+    homeBaseId?: EntityId | null;
+    dockedSlot?: number | null;
+    targetId?: EntityId | null;
+    cooldown?: number;
+    dead?: boolean;
+}
+
+export function createTestHarrier(options: HarrierOptions = {}): AirUnit {
+    const id = options.id ?? createTestId('harrier');
+    const x = options.x ?? 500;
+    const y = options.y ?? 500;
+    const hp = options.hp ?? 200;
+    const maxAmmo = options.maxAmmo ?? 1;
+
+    return {
+        id,
+        owner: options.owner ?? 0,
+        type: 'UNIT',
+        key: 'harrier',
+        pos: new Vector(x, y),
+        prevPos: new Vector(x, y),
+        hp,
+        maxHp: options.maxHp ?? hp,
+        w: 25,
+        h: 25,
+        radius: 12,
+        dead: options.dead ?? false,
+        movement: {
+            ...createDefaultMovement(),
+            vel: new Vector(0, 0),
+            moveTarget: null
+        },
+        combat: {
+            ...createDefaultCombat(),
+            targetId: options.targetId ?? null,
+            cooldown: options.cooldown ?? 0
+        },
+        airUnit: {
+            ...createDefaultAirUnit(options.homeBaseId ?? null, options.dockedSlot ?? null, maxAmmo),
+            ammo: options.ammo ?? maxAmmo,
+            maxAmmo,
+            state: options.state ?? 'docked',
+            homeBaseId: options.homeBaseId ?? null,
+            dockedSlot: options.dockedSlot ?? null
+        }
+    };
+}
+
+// ============ AIRFORCE COMMAND BUILDER ============
+
+export interface AirforceCommandOptions {
+    id?: EntityId;
+    owner?: number;
+    x?: number;
+    y?: number;
+    hp?: number;
+    maxHp?: number;
+    slots?: (EntityId | null)[];
+    reloadProgress?: number;
+    dead?: boolean;
+}
+
+export function createTestAirforceCommand(options: AirforceCommandOptions = {}): BuildingEntity {
+    const id = options.id ?? createTestId('airforce');
+    const x = options.x ?? 500;
+    const y = options.y ?? 500;
+    const hp = options.hp ?? 1500;
+
+    return {
+        id,
+        owner: options.owner ?? 0,
+        type: 'BUILDING',
+        key: 'airforce_command',
+        pos: new Vector(x, y),
+        prevPos: new Vector(x, y),
+        hp,
+        maxHp: options.maxHp ?? hp,
+        w: 100,
+        h: 80,
+        radius: 40,
+        dead: options.dead ?? false,
+        building: createDefaultBuildingState(),
+        airBase: {
+            slots: options.slots ?? createDefaultAirBase().slots,
+            reloadProgress: options.reloadProgress ?? 120
         }
     };
 }
@@ -401,7 +505,7 @@ export function createTestEntity(options: GenericEntityOptions): Entity {
                 return createTestCombatUnit({
                     id: options.id,
                     owner: options.owner,
-                    key: options.key as Exclude<UnitKey, 'harvester'>,
+                    key: options.key as Exclude<UnitKey, 'harvester' | 'harrier'>,
                     x: options.x,
                     y: options.y,
                     hp: options.hp,

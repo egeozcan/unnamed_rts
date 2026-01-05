@@ -1,10 +1,11 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, TILE_SIZE
+    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, TILE_SIZE, AirUnit, BuildingEntity
 } from '../types';
-import { isUnitData } from '../../data/schemas/index';
+import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
 import { findPath, getGridW, getGridH, collisionGrid } from '../utils';
 import { getSpatialGrid } from '../spatial';
+import { isAirUnit } from '../entity-helpers';
 
 export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number; y: number }): GameState {
     const { unitIds, x, y } = payload;
@@ -22,6 +23,11 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
                     combat: { ...entity.combat, targetId: null },
                     harvester: { ...entity.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
                 };
+            } else if (isAirUnit(entity)) {
+                // Air units (harriers) can only be controlled via attack commands
+                // Docked harriers ignore move commands - they must be launched with an attack
+                // Flying/returning harriers also ignore move commands
+                continue;
             } else {
                 // Combat unit
                 nextEntities[id] = {
@@ -77,6 +83,43 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                         combat: { ...entity.combat, targetId: null }
                     };
                 }
+            } else if (isAirUnit(entity)) {
+                // Special handling for air units (harriers)
+                // Only launch if docked and has ammo
+                if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target) {
+                    // Launch harrier - set to flying, assign target, clear slot on air base
+                    const homeBaseId = entity.airUnit.homeBaseId;
+                    const dockedSlot = entity.airUnit.dockedSlot;
+
+                    // Update harrier to flying state
+                    const launchedHarrier: AirUnit = {
+                        ...entity,
+                        airUnit: {
+                            ...entity.airUnit,
+                            state: 'flying',
+                            dockedSlot: null
+                        },
+                        combat: { ...entity.combat, targetId: targetId }
+                    };
+                    nextEntities[id] = launchedHarrier;
+
+                    // Clear slot on air base
+                    if (homeBaseId && dockedSlot !== null) {
+                        const airBase = nextEntities[homeBaseId] as BuildingEntity;
+                        if (airBase && airBase.airBase) {
+                            const newSlots = [...airBase.airBase.slots];
+                            newSlots[dockedSlot] = null;
+                            nextEntities[homeBaseId] = {
+                                ...airBase,
+                                airBase: {
+                                    ...airBase.airBase,
+                                    slots: newSlots
+                                }
+                            };
+                        }
+                    }
+                }
+                // Otherwise (not docked, no ammo, or no target): ignore command
             } else {
                 // Normal combat unit attack behavior
                 nextEntities[id] = {
@@ -608,8 +651,18 @@ export function updateUnit(
             let bestTargetId: EntityId | null = null;
 
             // Define predicate for search
+            const weaponType = data.weaponType || 'bullet';
+            const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
+
             const predicate = (other: Entity) => {
                 if (other.dead || other.owner === -1) return false;
+
+                // Check weapon targeting capabilities (air vs ground)
+                const otherData = getRuleData(other.key);
+                const isTargetAir = otherData && isUnitData(otherData) && otherData.fly === true;
+                if (isTargetAir && !targeting.canTargetAir) return false;
+                if (!isTargetAir && !targeting.canTargetGround) return false;
+
                 if (isHealer) {
                     return other.owner === combatUnit.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== combatUnit.id;
                 } else if (isEngineer) {
@@ -788,11 +841,6 @@ export function updateUnit(
 }
 
 export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[], skipWhiskerAvoidance = false): UnitEntity {
-    // ... keep moveToward mostly as is but ensure efficient neighbor query ...
-    // moveToward already uses `getSpatialGrid().queryRadius`!
-
-    // Copying the existing moveToward logic for completeness
-
     const distToTarget = entity.pos.dist(target);
     if (distToTarget < 2) {
         return {
@@ -803,6 +851,26 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
 
     const unitData = getRuleData(entity.key);
     const speed = (unitData && isUnitData(unitData)) ? unitData.speed : 1;
+
+    // Flying units move directly to target - no pathfinding, no collision avoidance
+    const canFly = unitData && isUnitData(unitData) && unitData.fly === true;
+    if (canFly) {
+        const dir = target.sub(entity.pos).norm();
+        const vel = dir.scale(Math.min(speed, distToTarget));
+        return {
+            ...entity,
+            movement: {
+                ...entity.movement,
+                vel,
+                path: null,
+                pathIdx: 0,
+                finalDest: target,
+                stuckTimer: 0
+            }
+        };
+    }
+
+    // Ground units use pathfinding and collision avoidance
 
     let avgVel = entity.movement.avgVel || new Vector(0, 0);
     const effectiveVel = entity.pos.sub(entity.prevPos);

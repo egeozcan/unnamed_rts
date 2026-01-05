@@ -29,7 +29,8 @@
                 "refinery",
                 "barracks",
                 "factory",
-                "tech"
+                "tech",
+                "airforce_command"
             ],
             "defense": [
                 "turret",
@@ -43,7 +44,7 @@
         "building": ["conyard"],
         "infantry": ["barracks"],
         "vehicle": ["factory"],
-        "air": ["tech"]
+        "air": ["airforce_command"]
     },
     "buildings": {
         "conyard": {
@@ -172,6 +173,19 @@
             "drain": 50,
             "armor": "building",
             "prerequisites": ["conyard", "factory"]
+        },
+        "airforce_command": {
+            "name": "Air-Force Command",
+            "hp": 1500,
+            "cost": 2000,
+            "w": 100,
+            "h": 80,
+            "drain": 50,
+            "provides": "air",
+            "armor": "building",
+            "prerequisites": ["conyard", "power", "barracks"],
+            "landingSlots": 6,
+            "reloadTicks": 120
         }
     },
     "units": {
@@ -450,6 +464,22 @@
             "weaponType": "rocket",
             "prerequisites": ["tech"]
         },
+        "harrier": {
+            "name": "Harrier",
+            "type": "air",
+            "hp": 200,
+            "cost": 1200,
+            "speed": 8,
+            "range": 250,
+            "damage": 120,
+            "rate": 60,
+            "w": 25,
+            "fly": true,
+            "armor": "light",
+            "weaponType": "air_missile",
+            "ammo": 1,
+            "prerequisites": ["airforce_command"]
+        },
         "mcv": {
             "name": "MCV",
             "type": "vehicle",
@@ -559,6 +589,28 @@
             "medium": 1.0,
             "heavy": 1.0,
             "building": 1.0
+        },
+        "air_missile": {
+            "none": 1.0,
+            "infantry": 0.3,
+            "light": 1.5,
+            "medium": 1.25,
+            "heavy": 1.0,
+            "building": 1.5
         }
+    },
+    "weaponTargeting": {
+        "bullet": { "canTargetGround": true, "canTargetAir": false },
+        "ap_bullet": { "canTargetGround": true, "canTargetAir": false },
+        "cannon": { "canTargetGround": true, "canTargetAir": false },
+        "heavy_cannon": { "canTargetGround": true, "canTargetAir": false },
+        "rocket": { "canTargetGround": true, "canTargetAir": true },
+        "missile": { "canTargetGround": false, "canTargetAir": true },
+        "air_missile": { "canTargetGround": true, "canTargetAir": false },
+        "flame": { "canTargetGround": true, "canTargetAir": false },
+        "sniper": { "canTargetGround": true, "canTargetAir": false },
+        "laser": { "canTargetGround": true, "canTargetAir": true },
+        "grenade": { "canTargetGround": true, "canTargetAir": false },
+        "heal": { "canTargetGround": true, "canTargetAir": true }
     }
 }

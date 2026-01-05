@@ -57,7 +57,7 @@ export function setTab(tab: string) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.btn-grid').forEach(g => g.classList.remove('active'));
 
-    const tabIndex = ['buildings', 'defense', 'infantry', 'vehicles'].indexOf(tab);
+    const tabIndex = ['buildings', 'defense', 'infantry', 'vehicles', 'air'].indexOf(tab);
     if (tabIndex >= 0) {
         document.querySelectorAll('.tab')[tabIndex]?.classList.add('active');
     }
@@ -69,11 +69,13 @@ function setupButtons() {
     const bd = document.getElementById('tab-defense')!;
     const bi = document.getElementById('tab-infantry')!;
     const bv = document.getElementById('tab-vehicles')!;
+    const ba = document.getElementById('tab-air')!;
 
     bb.innerHTML = '';
     bd.innerHTML = '';
     bi.innerHTML = '';
     bv.innerHTML = '';
+    ba.innerHTML = '';
 
     for (const k in RULES.buildings) {
         const data = RULES.buildings[k];
@@ -91,6 +93,8 @@ function setupButtons() {
         const u = RULES.units[k];
         if (u.type === 'infantry') {
             createBtn(bi, k, u.name, u.cost, 'infantry');
+        } else if (u.type === 'air') {
+            createBtn(ba, k, u.name, u.cost, 'air');
         } else {
             createBtn(bv, k, u.name, u.cost, 'vehicle');
         }
@@ -122,7 +126,7 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
         const count = e.shiftKey ? 10 : 1;
 
         // For units: use dequeue behavior
-        if (category === 'infantry' || category === 'vehicle') {
+        if (category === 'infantry' || category === 'vehicle' || category === 'air') {
             if (btn.classList.contains('building') || btn.classList.contains('queued')) {
                 if (onDequeueUnit) {
                     onDequeueUnit(category, key, count);
@@ -165,13 +169,14 @@ export function updateButtons(
         }
     }
 
-    // Units (infantry and vehicles)
+    // Units (infantry, vehicles, and air)
     for (const k of Object.keys(RULES.units)) {
         const el = document.getElementById('btn-' + k);
         if (!el) continue;
 
         const unitData = RULES.units[k];
-        const category = unitData.type === 'infantry' ? 'infantry' : 'vehicle';
+        const category = unitData.type === 'infantry' ? 'infantry' :
+                         unitData.type === 'air' ? 'air' : 'vehicle';
 
         if (canBuild(k, category, owner, entities)) {
             el.classList.remove('disabled');
@@ -181,12 +186,13 @@ export function updateButtons(
     }
 
     // Update production states
-    const categories = ['building', 'infantry', 'vehicle'] as const;
+    const categories = ['building', 'infantry', 'vehicle', 'air'] as const;
 
     for (const cat of categories) {
         const q = queues[cat];
         const containerIds = cat === 'building' ? ['tab-buildings', 'tab-defense'] :
-            cat === 'infantry' ? ['tab-infantry'] : ['tab-vehicles'];
+            cat === 'infantry' ? ['tab-infantry'] :
+            cat === 'air' ? ['tab-air'] : ['tab-vehicles'];
 
         for (const containerId of containerIds) {
             const container = document.getElementById(containerId);

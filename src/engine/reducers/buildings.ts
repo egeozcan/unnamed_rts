@@ -224,7 +224,10 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
         if (!nextEntity.combat.targetId) {
             const range = data.range || 200;
             let bestTargetId: EntityId | null = null;
-            let targetIsAir = false;
+
+            // Get weapon targeting capabilities from rules
+            const weaponType = data.weaponType || 'bullet';
+            const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
 
             // Use spatial grid to query enemies in range
             const enemiesInRange = spatialGrid.queryEnemiesInRadius(entity.pos.x, entity.pos.y, range, entity.owner);
@@ -237,22 +240,13 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
                 const otherData = getRuleData(other.key);
                 const isAir = otherData && isUnitData(otherData) && otherData.fly === true;
 
-                if (nextEntity.key === 'sam_site') {
-                    if (isAir && !targetIsAir) {
-                        bestTargetId = other.id;
-                        targetIsAir = true;
-                    } else if (!bestTargetId) {
-                        // Fallback for SAM site (ideally shouldn't shoot ground but if rules allow?)
-                        // Assuming SAM site prefers air but can shoot ground? 
-                        // Or if SAM site ONLY shoots air, we should enforce that.
-                        // For now, mirroring previous logic which just prioritized air.
-                        bestTargetId = other.id;
-                    }
-                } else {
-                    // Default: take first target in range
-                    bestTargetId = other.id;
-                    break;
-                }
+                // Check if weapon can target this unit type
+                if (isAir && !targeting.canTargetAir) continue;
+                if (!isAir && !targeting.canTargetGround) continue;
+
+                // Take first valid target
+                bestTargetId = other.id;
+                break;
             }
 
             if (bestTargetId) {

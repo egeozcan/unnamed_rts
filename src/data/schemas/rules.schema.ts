@@ -9,7 +9,7 @@ export type ArmorType = z.infer<typeof ArmorTypeSchema>;
 // Weapon types enum
 export const WeaponTypeSchema = z.enum([
   'bullet', 'ap_bullet', 'cannon', 'heavy_cannon', 'rocket',
-  'missile', 'flame', 'sniper', 'laser', 'grenade', 'heal'
+  'missile', 'flame', 'sniper', 'laser', 'grenade', 'heal', 'air_missile'
 ]);
 export type WeaponType = z.infer<typeof WeaponTypeSchema>;
 
@@ -63,6 +63,9 @@ export const BuildingSchema = z.object({
   damage: z.number().optional(),
   rate: z.number().optional(),
   weaponType: WeaponTypeSchema.optional(),
+  // Air base fields
+  landingSlots: z.number().positive().optional(),
+  reloadTicks: z.number().positive().optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
@@ -86,6 +89,8 @@ export const UnitSchema = z.object({
   fly: z.boolean().optional(),
   canCaptureEnemyBuildings: z.boolean().optional(),
   canRepairFriendlyBuildings: z.boolean().optional(),
+  // Air unit ammo field
+  ammo: z.number().positive().optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 
@@ -97,6 +102,13 @@ export type ArmorTypeDefinition = z.infer<typeof ArmorTypeDefinitionSchema>;
 // Uses string keys to allow dynamic access with runtime-determined weapon/armor types
 export const DamageModifierSchema = z.record(z.string(), z.number());
 export type DamageModifier = z.infer<typeof DamageModifierSchema>;
+
+// Weapon targeting capabilities (air vs ground)
+export const WeaponTargetingSchema = z.object({
+  canTargetGround: z.boolean(),
+  canTargetAir: z.boolean(),
+});
+export type WeaponTargeting = z.infer<typeof WeaponTargetingSchema>;
 
 // Well definition (ore generator)
 export const WellSchema = z.object({
@@ -123,6 +135,7 @@ export const RulesSchema = z.object({
   armorTypes: z.record(z.string(), ArmorTypeDefinitionSchema),
   damageModifiers: z.record(z.string(), DamageModifierSchema),
   wells: z.record(z.string(), WellSchema).optional(),
+  weaponTargeting: z.record(z.string(), WeaponTargetingSchema).optional(),
 });
 export type Rules = z.infer<typeof RulesSchema>;
 
