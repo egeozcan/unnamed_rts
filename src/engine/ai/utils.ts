@@ -14,6 +14,7 @@ export const AI_CONSTANTS = {
     ALLY_DANGER_RADIUS: 120,        // Distance to check for allies under fire (~3 tiles)
     ORE_COVERAGE_RADIUS: 250,       // Refinery considers ore "covered" within this
     ORE_ACCESSIBLE_RADIUS: 600,     // Ore considered accessible within this from buildings
+    REFINERY_COVERAGE_RADIUS: 500,  // Distance within which a refinery "covers" a conyard
 
     // === COMBAT ===
     ATTACK_GROUP_MIN_SIZE: 5,       // Minimum units needed for attack group
@@ -27,6 +28,21 @@ export const AI_CONSTANTS = {
     SCOUT_INTERVAL: 600,            // 10 seconds between scout attempts
     RECENT_DAMAGE_WINDOW: 60,       // 1 second - time window to consider "under fire"
     INTEL_UPDATE_INTERVAL: 300,     // 5 seconds between enemy intelligence updates
+    SELL_COOLDOWN: 120,             // 2 seconds between sell actions
+    SELL_COOLDOWN_ALL_IN: 60,       // 1 second cooldown for all_in mode (faster)
+    SELL_COOLDOWN_LAST_RESORT: 30,  // 0.5 second cooldown for last resort (fastest)
+    BUILDING_GRACE_PERIOD: 300,     // 5 seconds - building age before allowing sell
+
+    // === ECONOMY ===
+    MAX_REFINERIES: 4,              // Maximum refineries per player
+    MAX_POWER_FOR_EXPANSION: 4,     // Limit building walk to this many power plants
+    MAX_ORE_DISTANCE: 550,          // Max distance from ore to nearby building
+    MAX_BASES: 2,                   // Maximum expansion bases
+    SURPLUS_PRODUCTION_THRESHOLD: 6000, // Credits to trigger surplus production
+    MAX_SURPLUS_BARRACKS: 3,        // Maximum barracks to build from surplus
+    MAX_SURPLUS_FACTORIES: 3,       // Maximum factories to build from surplus
+    MAX_AIRFORCE_COMMANDS: 1,       // Maximum airforce command buildings
+    LAST_RESORT_CREDIT_THRESHOLD: 100, // Credits below which last resort triggers
 
     // === PEACE-BREAK (triggers aggressive behavior when wealthy and peaceful) ===
     SURPLUS_CREDIT_THRESHOLD: 4000, // Credits considered "surplus"
@@ -81,7 +97,23 @@ export const {
     ALL_IN_PHASE3_TICKS,
     VENGEANCE_PER_HIT,
     VENGEANCE_DECAY,
-    MAX_CHASE_DISTANCE
+    MAX_CHASE_DISTANCE,
+    // Economy constants
+    BUILD_RADIUS,
+    REFINERY_COVERAGE_RADIUS,
+    SELL_COOLDOWN,
+    SELL_COOLDOWN_ALL_IN,
+    SELL_COOLDOWN_LAST_RESORT,
+    BUILDING_GRACE_PERIOD,
+    MAX_REFINERIES,
+    MAX_POWER_FOR_EXPANSION,
+    MAX_ORE_DISTANCE,
+    MAX_BASES,
+    SURPLUS_PRODUCTION_THRESHOLD,
+    MAX_SURPLUS_BARRACKS,
+    MAX_SURPLUS_FACTORIES,
+    MAX_AIRFORCE_COMMANDS,
+    LAST_RESORT_CREDIT_THRESHOLD
 } = AI_CONSTANTS;
 
 export function isUnit(entity: Entity): boolean {

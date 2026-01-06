@@ -7,17 +7,17 @@ import {
     countProductionBuildings,
     getProductionBuildingsFor,
     getCounterUnits,
+    isRefineryUseful,
+    getPriorityIndex,
+    isValidPlacement,
+    // Constants (some duplicated locally for now - see AI_CONSTANTS in utils.ts for central definitions)
     SURPLUS_DEFENSE_THRESHOLD,
     MAX_SURPLUS_TURRETS,
     ALL_IN_PHASE1_TICKS,
     ALL_IN_PHASE2_TICKS,
-    ALL_IN_PHASE3_TICKS,
-    isRefineryUseful,
-    getPriorityIndex,
-    isValidPlacement
+    ALL_IN_PHASE3_TICKS
 } from './utils.js';
 import { getAIState, findBaseCenter } from './state.js';
-
 export function handleEconomy(
     state: GameState,
     playerId: number,
