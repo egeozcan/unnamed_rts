@@ -331,6 +331,32 @@ export function handleEconomy(
         }
     }
 
+    // ===== SERVICE DEPOT PRIORITY =====
+    // Build service depot when we have many damaged units
+    if (hasConyard && buildingQueueEmpty && !isPanic && hasFactory) {
+        const hasServiceDepot = buildings.some(b => b.key === 'service_depot' && !b.dead);
+        if (!hasServiceDepot) {
+            const serviceDepotReqsMet = checkPrerequisites('service_depot', buildings);
+            const serviceDepotData = RULES.buildings['service_depot'];
+
+            if (serviceDepotReqsMet && serviceDepotData) {
+                // Count damaged combat units (below 70% HP)
+                const damagedUnits = Object.values(state.entities).filter(e =>
+                    e.owner === playerId &&
+                    e.type === 'UNIT' &&
+                    !e.dead &&
+                    e.key !== 'harvester' &&
+                    e.hp < e.maxHp * 0.7
+                );
+
+                // Build if we have 3+ damaged units and can afford it with buffer
+                if (damagedUnits.length >= 3 && player.credits >= serviceDepotData.cost + 1000) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'service_depot', playerId } });
+                }
+            }
+        }
+    }
+
     // ===== EXPANSION REFINERY PRIORITY =====
     // After deploying an MCV at an expansion, prioritize building a refinery there.
     // CRITICAL FIX: Only if below max refineries
@@ -1324,10 +1350,11 @@ export function handleBuildingRepair(
         'refinery': { threshold: 0.6, priority: 2 },
         'factory': { threshold: 0.5, priority: 3 },
         'barracks': { threshold: 0.5, priority: 4 },
-        'power': { threshold: 0.4, priority: 5 },
-        'turret': { threshold: 0.4, priority: 6 },
-        'pillbox': { threshold: 0.4, priority: 7 },
-        'sam_site': { threshold: 0.4, priority: 8 },
+        'service_depot': { threshold: 0.5, priority: 5 },
+        'power': { threshold: 0.4, priority: 6 },
+        'turret': { threshold: 0.4, priority: 7 },
+        'pillbox': { threshold: 0.4, priority: 8 },
+        'sam_site': { threshold: 0.4, priority: 9 },
     };
 
     const damagedBuildings: { entity: Entity; priority: number; threshold: number }[] = [];

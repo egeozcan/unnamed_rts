@@ -67,7 +67,7 @@ export type UnitKey =
 
 export type BuildingKey =
     | 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory'
-    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech' | 'airforce_command';
+    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech' | 'airforce_command' | 'service_depot';
 
 export type ResourceKey = 'ore';
 export type RockKey = 'rock';

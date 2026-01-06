@@ -70,7 +70,8 @@ import {
     handleHarvesterSafety,
     handleHarvesterSuicideAttack,
     findNearestDefender,
-    handleAirStrikes
+    handleAirStrikes,
+    handleUnitRepair
 } from './action_combat.js';
 
 /**
@@ -219,6 +220,9 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     actions.push(...handleScouting(state, playerId, aiState, combatUnits, enemies, baseCenter));
     actions.push(...handleMicro(state, combatUnits, enemies, baseCenter, personality));
+
+    // Retreat critically damaged units to service depot for repairs
+    actions.push(...handleUnitRepair(state, playerId, combatUnits, myBuildings));
 
     // Air strikes with harriers - can trigger regardless of ground strategy
     // Harriers are opportunistic and don't require ground army coordination

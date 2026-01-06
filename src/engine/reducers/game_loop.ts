@@ -177,6 +177,38 @@ export function tick(state: GameState): GameState {
         }
     }
 
+    // Process Service Depot Repair Aura
+    for (const id in updatedEntities) {
+        const ent = updatedEntities[id];
+        if (ent.type === 'BUILDING' && ent.key === 'service_depot' && !ent.dead) {
+            const depotData = RULES.buildings['service_depot'];
+            if (!depotData) continue;
+
+            const repairRadius = depotData.repairRadius || 60;
+            const repairRate = depotData.repairRate || 1;
+
+            // Skip if player has low power
+            const player = nextPlayers[ent.owner];
+            if (!player || player.usedPower > player.maxPower) continue;
+
+            // Heal nearby friendly units
+            for (const unitId in updatedEntities) {
+                const unit = updatedEntities[unitId];
+                if (unit.type !== 'UNIT' || unit.dead) continue;
+                if (unit.owner !== ent.owner) continue;
+                if (unit.hp >= unit.maxHp) continue;
+
+                const dist = unit.pos.dist(ent.pos);
+                if (dist <= repairRadius + unit.radius) {
+                    updatedEntities[unitId] = {
+                        ...unit,
+                        hp: Math.min(unit.maxHp, unit.hp + repairRate)
+                    };
+                }
+            }
+        }
+    }
+
     // Filter dead entities
     let finalEntities: Record<EntityId, Entity> = {};
     const buildingCounts: Record<number, number> = {};

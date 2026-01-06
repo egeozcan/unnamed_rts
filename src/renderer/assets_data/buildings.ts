@@ -199,4 +199,53 @@ export const buildings: Record<string, string> = {
             <rect x="2" y="2" width="96" height="5" fill="COL_PRIMARY"/>
         </g>
     </svg>`,
+
+    'service_depot': `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            <!-- Large Base Pad with Workshop Floor -->
+            <rect x="2" y="2" width="116" height="116" rx="4" fill="#333" stroke="#111"/>
+
+            <!-- Hazard Stripes on Edges -->
+            <rect x="5" y="5" width="110" height="10" fill="url(#caution)"/>
+            <rect x="5" y="105" width="110" height="10" fill="url(#caution)"/>
+
+            <!-- Main Workshop Structure -->
+            <rect x="10" y="25" width="100" height="80" fill="COL_PRIMARY" stroke="#111" stroke-width="2"/>
+            <rect x="10" y="25" width="100" height="80" fill="url(#metalGrad)" opacity="0.4" style="mix-blend-mode: multiply"/>
+
+            <!-- Repair Bay Opening (Large Door) -->
+            <rect x="25" y="40" width="70" height="65" fill="#1a1a1a" stroke="#444" stroke-width="2"/>
+            <rect x="30" y="45" width="60" height="55" fill="#222"/>
+
+            <!-- Hydraulic Lift Platform Inside -->
+            <rect x="35" y="55" width="50" height="40" fill="#444" stroke="#333"/>
+            <rect x="40" y="60" width="40" height="30" fill="#555"/>
+
+            <!-- Crane/Arm Structure -->
+            <path d="M95 30 L108 18 L112 22 L102 35 Z" fill="#666" stroke="#222" stroke-width="1"/>
+            <circle cx="95" cy="30" r="6" fill="#444" stroke="#222" stroke-width="2"/>
+
+            <!-- Tool Rack on Left -->
+            <rect x="12" y="50" width="10" height="40" fill="#222"/>
+            <line x1="17" y1="55" x2="17" y2="60" stroke="#888" stroke-width="2"/>
+            <line x1="17" y1="65" x2="17" y2="70" stroke="#888" stroke-width="2"/>
+            <line x1="17" y1="75" x2="17" y2="80" stroke="#888" stroke-width="2"/>
+
+            <!-- Repair Icon (Wrench) at Top Border - Main Visual Indicator -->
+            <g transform="translate(60, 17)">
+                <circle r="12" fill="#0a0" stroke="#060" stroke-width="2">
+                    <animate attributeName="fill" values="#0a0;#0f0;#0a0" dur="1.5s" repeatCount="indefinite"/>
+                </circle>
+                <path d="M-5,-7 L-3,-5 L-3,5 L-5,7 L5,7 L3,5 L3,-5 L5,-7 Z" fill="#fff" stroke="#060" stroke-width="1"/>
+            </g>
+
+            <!-- Status Lights -->
+            <circle cx="15" cy="30" r="3" fill="#0f0" opacity="0.8"/>
+            <circle cx="105" cy="30" r="3" fill="#0f0" opacity="0.8"/>
+
+            <!-- Player Color Band at Bottom -->
+            <rect x="2" y="112" width="116" height="6" fill="COL_PRIMARY"/>
+        </g>
+    </svg>`,
 };

@@ -30,7 +30,8 @@
                 "barracks",
                 "factory",
                 "tech",
-                "airforce_command"
+                "airforce_command",
+                "service_depot"
             ],
             "defense": [
                 "turret",
@@ -186,6 +187,18 @@
             "prerequisites": ["conyard", "power", "barracks"],
             "landingSlots": 6,
             "reloadTicks": 120
+        },
+        "service_depot": {
+            "name": "Service Depot",
+            "hp": 1500,
+            "cost": 1500,
+            "w": 120,
+            "h": 120,
+            "drain": 50,
+            "armor": "building",
+            "prerequisites": ["conyard", "barracks", "factory"],
+            "repairRadius": 60,
+            "repairRate": 1
         }
     },
     "units": {

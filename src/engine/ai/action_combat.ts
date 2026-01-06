@@ -992,3 +992,68 @@ export function handleAirStrikes(
 
     return actions;
 }
+
+/**
+ * Handle unit repair - move critically damaged units to service depot
+ */
+export function handleUnitRepair(
+    _state: GameState,
+    playerId: number,
+    combatUnits: Entity[],
+    buildings: Entity[]
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find service depots
+    const serviceDepots = buildings.filter(b =>
+        b.key === 'service_depot' &&
+        !b.dead &&
+        b.owner === playerId
+    );
+
+    if (serviceDepots.length === 0) return actions;
+
+    const RETREAT_THRESHOLD = 0.4; // Below 40% HP
+    const DEPOT_PROXIMITY = 80; // Already at depot if within this distance
+
+    for (const unit of combatUnits) {
+        if (unit.dead || unit.type !== 'UNIT') continue;
+
+        // Skip harvesters (they have their own behavior)
+        if (unit.key === 'harvester') continue;
+
+        // Skip air units (they need different handling)
+        if (isAirUnit(unit as UnitEntity)) continue;
+
+        const hpRatio = unit.hp / unit.maxHp;
+
+        // If unit is critically damaged
+        if (hpRatio < RETREAT_THRESHOLD) {
+            // Find nearest service depot
+            let nearestDepot: Entity | null = null;
+            let nearestDist = Infinity;
+
+            for (const depot of serviceDepots) {
+                const dist = unit.pos.dist(depot.pos);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestDepot = depot;
+                }
+            }
+
+            // Move to depot if not already there
+            if (nearestDepot && nearestDist > DEPOT_PROXIMITY) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: [unit.id],
+                        x: nearestDepot.pos.x,
+                        y: nearestDepot.pos.y
+                    }
+                });
+            }
+        }
+    }
+
+    return actions;
+}

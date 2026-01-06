@@ -384,6 +384,22 @@ export class Renderer {
                 }
             }
 
+            // Service Depot: draw repair aura radius when selected
+            if (entity.type === 'BUILDING' && entity.key === 'service_depot' && isSelected) {
+                const depotData = RULES.buildings['service_depot'];
+                if (depotData && depotData.repairRadius) {
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+                    ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, depotData.repairRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
             // Draw turret barrel overlay for units/buildings with turrets
             const turretEntities = ['light', 'heavy', 'mammoth', 'artillery', 'flame_tank', 'turret', 'sam_site', 'pillbox', 'jeep'];
             if (turretEntities.includes(entity.key) && entity.combat) {

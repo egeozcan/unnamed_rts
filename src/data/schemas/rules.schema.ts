@@ -66,6 +66,9 @@ export const BuildingSchema = z.object({
   // Air base fields
   landingSlots: z.number().positive().optional(),
   reloadTicks: z.number().positive().optional(),
+  // Service depot fields
+  repairRadius: z.number().positive().optional(),
+  repairRate: z.number().positive().optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
