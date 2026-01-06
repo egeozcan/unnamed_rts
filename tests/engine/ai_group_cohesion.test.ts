@@ -248,17 +248,18 @@ describe('AI Scouting', () => {
 describe('AI Attack Regroup', () => {
     beforeEach(() => { resetAIState(); });
 
-    it('should regroup scattered units during attack', () => {
+    it('should attack with front-line units when army is scattered', () => {
         const entities: Record<EntityId, Entity> = {};
         entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
         entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 600, 500);
 
         // Units very spread out (> 500 from center)
-        entities['tank0'] = createEntity('tank0', 1, 'UNIT', 'light', 1000, 1000);
-        entities['tank1'] = createEntity('tank1', 1, 'UNIT', 'light', 2000, 1000);  // Far from center
-        entities['tank2'] = createEntity('tank2', 1, 'UNIT', 'light', 1000, 2000);  // Far from center
-        entities['tank3'] = createEntity('tank3', 1, 'UNIT', 'light', 1100, 1100);
-        entities['tank4'] = createEntity('tank4', 1, 'UNIT', 'light', 1050, 1050);
+        // Group center will be around (1230, 1230)
+        entities['tank0'] = createEntity('tank0', 1, 'UNIT', 'light', 1000, 1000);  // ~325 from center (front-line)
+        entities['tank1'] = createEntity('tank1', 1, 'UNIT', 'light', 2000, 1000);  // ~803 from center (straggler)
+        entities['tank2'] = createEntity('tank2', 1, 'UNIT', 'light', 1000, 2000);  // ~803 from center (straggler)
+        entities['tank3'] = createEntity('tank3', 1, 'UNIT', 'light', 1100, 1100);  // ~184 from center (front-line)
+        entities['tank4'] = createEntity('tank4', 1, 'UNIT', 'light', 1050, 1050);  // ~254 from center (front-line)
 
         entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 3000, 3000);
 
@@ -282,9 +283,17 @@ describe('AI Attack Regroup', () => {
 
         const actions = computeAiActions(state, 1);
 
-        // Should regroup (COMMAND_MOVE) instead of attacking since units are scattered
-        const moveAction = actions.find(a => a.type === 'COMMAND_MOVE');
-        expect(moveAction).toBeDefined();
+        // Should attack with front-line units instead of regrouping
+        // Front-line units (within straggle threshold of ~400) should attack
+        // Stragglers (tank1, tank2) will catch up naturally
+        const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
+        expect(attackAction).toBeDefined();
+
+        // Attack group should be filtered to front-line units only
+        // tank1 and tank2 are far stragglers (~803 from center), should be excluded
+        expect(aiState.attackGroup.length).toBeLessThanOrEqual(3);
+        expect(aiState.attackGroup).not.toContain('tank1');
+        expect(aiState.attackGroup).not.toContain('tank2');
     });
 });
 

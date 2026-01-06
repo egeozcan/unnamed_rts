@@ -148,12 +148,41 @@ export function updateStrategy(
         aiState.peaceTicks = 0;
     }
 
+    // ===== ARMY ADVANTAGE CALCULATION =====
+    // Count enemy combat units (exclude harvesters/MCVs)
+    const enemyCombatUnits = enemies.filter(e =>
+        e.type === 'UNIT' && e.key !== 'harvester' && e.key !== 'mcv'
+    );
+    const enemyArmySize = enemyCombatUnits.length;
+    const armyRatio = enemyArmySize > 0 ? armySize / enemyArmySize : (armySize > 0 ? 10 : 0);
+
     // Check if we need to abort an offensive strategy immediately due to army loss
-    const abortOffense = (aiState.strategy === 'attack' && armySize < attackThreshold) ||
+    // Don't abort if we still have overwhelming advantage (1.5x+ enemy with at least 1 enemy unit)
+    const stillHasAdvantage = armySize >= 2 && enemyArmySize >= 1 && armyRatio >= 1.5;
+    const abortOffense = (aiState.strategy === 'attack' && armySize < attackThreshold && !stillHasAdvantage) ||
         (aiState.strategy === 'harass' && armySize < harassThreshold);
 
     // Other strategy changes have cooldown (unless aborting offense)
     if (!abortOffense && tick - aiState.lastStrategyChange < STRATEGY_COOLDOWN) return;
+
+    // Priority 1.5: OVERWHELMING ADVANTAGE - Attack immediately if we significantly outmatch enemy
+    // Don't wait to build up if we already have 2x+ their army and at least 3 units
+    // Only applies when enemy has an actual army to overwhelm (at least 1 combat unit)
+    const MIN_ATTACK_ARMY = 3;
+    const OVERWHELMING_RATIO = 2.0;
+    const hasOverwhelmingAdvantage = armySize >= MIN_ATTACK_ARMY &&
+        enemyArmySize >= 1 && // Enemy must have at least 1 combat unit
+        armyRatio >= OVERWHELMING_RATIO &&
+        enemies.length > 0;
+
+    if (hasOverwhelmingAdvantage && (hasFactory || hasBarracks)) {
+        if (aiState.strategy !== 'attack') {
+            aiState.strategy = 'attack';
+            aiState.lastStrategyChange = tick;
+            aiState.attackGroup = combatUnits.map(u => u.id);
+        }
+        return;
+    }
 
     // Priority 2: Full attack if we have a strong army
     if (armySize >= attackThreshold && hasFactory && enemies.length > 0) {

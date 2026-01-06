@@ -556,11 +556,12 @@ export function handleEconomy(
         }
 
         // ===== AIR UNIT PRODUCTION =====
-        // Produce harriers when airforce_command is available and we have surplus credits
+        // Produce harriers when airforce_command is available - prioritize air power
         const hasAirforce = hasProductionBuildingFor('air', buildings);
         const airQueueEmpty = !player.queues.air.current;
 
-        if (hasAirforce && airQueueEmpty && !isPanic && creditsRemaining > creditBuffer + 1500) {
+        // Lower threshold for harrier production (800 instead of 1500) to build air power faster
+        if (hasAirforce && airQueueEmpty && !isPanic && creditsRemaining > creditBuffer + 800) {
             const harrierData = RULES.units['harrier'];
             const harrierReqsMet = checkPrerequisites('harrier', buildings);
             const cost = harrierData?.cost || 0;
@@ -678,6 +679,22 @@ export function handleEmergencySell(
 
     const needsRefinery = hasConyard && !hasRefinery && player.credits < REFINERY_COST;
 
+    // ===== ARMY AND THREAT ASSESSMENT =====
+    // Count our combat units (excluding harvesters and MCVs)
+    const combatUnits = Object.values(_state.entities).filter(e =>
+        e.owner === playerId &&
+        e.type === 'UNIT' &&
+        e.key !== 'harvester' &&
+        e.key !== 'mcv' &&
+        !e.dead
+    );
+    const armySize = combatUnits.length;
+    const hasSignificantArmy = armySize >= 3; // We can defend with 3+ units
+
+    // Assess threat significance - not just presence but actual danger
+    const threatCount = aiState.threatsNearBase.length;
+    const isSignificantThreat = threatCount >= 3 || aiState.threatLevel >= 50;
+
     // 2. Define Protected Buildings
     // Protect defense, production (barracks/factory), and power under normal pressure
     const protectedBuildings = new Set([
@@ -760,10 +777,17 @@ export function handleEmergencySell(
     }
 
     // Condition A: Critical Low Funds (Classic Emergency)
+    // REWORKED: Only trigger when under SIGNIFICANT threat AND we lack army to defend
     const criticalLow = player.credits <= 200;
     const underAttack = aiState.threatsNearBase.length > 0 || aiState.harvestersUnderAttack.length > 0;
 
-    if (!shouldSell && criticalLow && (underAttack || player.credits <= 50)) {
+    // Emergency sell requires:
+    // 1. Very low credits (<=50) OR (low credits AND significant threat AND no army to defend)
+    // If we have an army, let them fight - don't panic sell
+    const isRealEmergency = player.credits <= 50 ||
+        (criticalLow && isSignificantThreat && !hasSignificantArmy);
+
+    if (!shouldSell && isRealEmergency && underAttack) {
         shouldSell = true;
         // Use protected buildings set - only sell tech, conyard, and useless refineries
         candidates = matureBuildings.filter(b => {

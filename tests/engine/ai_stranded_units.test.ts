@@ -278,6 +278,35 @@ describe('AI Stranded Units', () => {
                 maxHp: 3000
             });
 
+            // Add enemy army so AI doesn't have overwhelming advantage
+            const enemyTank1 = createTestEntity({
+                id: 'enemy_tank1',
+                owner: 0,
+                type: 'UNIT',
+                key: 'heavy',
+                pos: new Vector(2400, 2400),
+                hp: 600,
+                maxHp: 600
+            });
+            const enemyTank2 = createTestEntity({
+                id: 'enemy_tank2',
+                owner: 0,
+                type: 'UNIT',
+                key: 'heavy',
+                pos: new Vector(2450, 2450),
+                hp: 600,
+                maxHp: 600
+            });
+            const enemyTank3 = createTestEntity({
+                id: 'enemy_tank3',
+                owner: 0,
+                type: 'UNIT',
+                key: 'heavy',
+                pos: new Vector(2350, 2350),
+                hp: 600,
+                maxHp: 600
+            });
+
             const state: GameState = {
                 running: true,
                 mode: 'game',
@@ -290,7 +319,10 @@ describe('AI Stranded Units', () => {
                     [tank2.id]: tank2,
                     [conyard.id]: conyard,
                     [factory.id]: factory,
-                    [enemyConyard.id]: enemyConyard
+                    [enemyConyard.id]: enemyConyard,
+                    [enemyTank1.id]: enemyTank1,
+                    [enemyTank2.id]: enemyTank2,
+                    [enemyTank3.id]: enemyTank3
                 },
                 projectiles: [],
                 particles: [],

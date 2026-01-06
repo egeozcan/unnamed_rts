@@ -101,7 +101,7 @@ export function handleAttack(
     }
 
     // Handle Group State Machine (Forming -> Rallying -> Attacking)
-    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter);
+    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter, aiState);
     if (cohesionActions.length > 0) {
         actions.push(...cohesionActions);
         return actions; // Busy rallying or regrouping
@@ -153,7 +153,7 @@ export function handleAttack(
     return actions;
 }
 
-function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCenter: Vector): Action[] {
+function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCenter: Vector, aiState: AIPlayerState): Action[] {
     const actions: Action[] = [];
     // RALLY_TIMEOUT is imported
 
@@ -183,7 +183,12 @@ function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCente
     }
 
     if (group.status === 'rallying') {
-        if (isCohesive || timedOut) {
+        // Check if army has PASSED the rally point (closer to enemy than to rally)
+        // In this case, skip rally and go straight to attacking
+        const armyPastRallyPoint = group.rallyPoint && aiState.enemyBaseLocation &&
+            groupCenter.dist(aiState.enemyBaseLocation) < groupCenter.dist(group.rallyPoint);
+
+        if (isCohesive || timedOut || armyPastRallyPoint) {
             group.status = 'attacking';
         } else {
             // Move ALL units to rally point
@@ -208,35 +213,33 @@ function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCente
         }
     }
 
-    // Regrouping logic during attack
+    // Regrouping logic during attack - identify stragglers but DON'T block attacking
+    // Stragglers will be handled in handleAttack after attack commands are issued
     if (group.status === 'attacking') {
         let MAX_ATTACK_SPREAD = 500;
 
         // Relax spread check if we have a large army (likely multi-front)
-        // This prevents regrouping when we intentionally split the army
-        if (aliveUnits.length >= 10) { // MULTI_FRONT_THRESHOLD
+        if (aliveUnits.length >= 10) {
             MAX_ATTACK_SPREAD = 2000;
         }
 
-        // Check if we need to regroup (only if single front)
-        if (maxSpread > MAX_ATTACK_SPREAD) {
-            const unitsToRegroup = aliveUnits.filter(id => {
+        const REGROUP_HYSTERESIS = 1.25;
+
+        // If spread is too large, identify stragglers to exclude from attack
+        if (maxSpread > MAX_ATTACK_SPREAD * REGROUP_HYSTERESIS) {
+            const straggleThreshold = Math.max(400, maxSpread * 0.4);
+            const frontLineUnits = aliveUnits.filter(id => {
                 const unit = state.entities[id];
-                if (unit && unit.pos.dist(groupCenter) > 200) return true;
-                return false;
+                return unit && unit.pos.dist(groupCenter) <= straggleThreshold;
             });
 
-            if (unitsToRegroup.length > 0) {
-                actions.push({
-                    type: 'COMMAND_MOVE',
-                    payload: {
-                        unitIds: unitsToRegroup,
-                        x: groupCenter.x,
-                        y: groupCenter.y
-                    }
-                });
-                return actions;
+            // Update group AND attackGroup to only include front-line units for attack
+            // Stragglers will catch up naturally
+            if (frontLineUnits.length > 0) {
+                group.unitIds = frontLineUnits;
+                aiState.attackGroup = frontLineUnits;
             }
+            // If ALL units are stragglers, don't block - let them attack anyway
         }
     }
 
@@ -917,7 +920,9 @@ export function handleAirStrikes(
     }
 
     // Define high-value target priorities for air strikes
-    const airStrikePriorities = ['harvester', 'conyard', 'factory', 'barracks', 'refinery', 'power'];
+    const buildingPriorities = ['conyard', 'factory', 'refinery', 'airforce_command', 'barracks', 'power', 'sam_site', 'turret'];
+    // High-value combat units to target
+    const unitPriorities = ['harvester', 'mcv', 'mammoth', 'medium_tank', 'light_tank', 'rocket_soldier', 'minigunner'];
 
     // Find best target for air strike
     let bestTarget: Entity | null = null;
@@ -927,12 +932,22 @@ export function handleAirStrikes(
         let score = 0;
 
         // Priority based on type
-        if (enemy.type === 'UNIT' && enemy.key === 'harvester') {
-            score += 150; // Harvesters are high-value targets for harriers
+        if (enemy.type === 'UNIT') {
+            const unitPriorityIndex = unitPriorities.indexOf(enemy.key);
+            if (unitPriorityIndex >= 0) {
+                // Harvesters and MCVs are highest priority (economic damage)
+                score += 150 - unitPriorityIndex * 15;
+            } else {
+                // Other units still get a base score
+                score += 30;
+            }
         } else if (enemy.type === 'BUILDING') {
-            const priorityIndex = airStrikePriorities.indexOf(enemy.key);
+            const priorityIndex = buildingPriorities.indexOf(enemy.key);
             if (priorityIndex >= 0) {
-                score += 100 - priorityIndex * 15;
+                score += 120 - priorityIndex * 12;
+            } else {
+                // Other buildings still get a base score
+                score += 20;
             }
         }
 
@@ -945,11 +960,11 @@ export function handleAirStrikes(
         const hasNearbyAA = enemies.some(e =>
             e.type === 'BUILDING' &&
             (e.key === 'sam_site') &&
-            e.pos.dist(enemy.pos) < 400
+            e.pos.dist(enemy.pos) < 300
         );
-        if (hasNearbyAA) score -= 100;
+        if (hasNearbyAA) score -= 80; // Reduced penalty to still allow attacks
 
-        // Prefer targets the enemy base location if known
+        // Prefer targets near enemy base location if known
         if (aiState.enemyBaseLocation) {
             const distToBase = enemy.pos.dist(aiState.enemyBaseLocation);
             if (distToBase < 500) score += 30; // Bonus for targets near enemy base
@@ -962,15 +977,17 @@ export function handleAirStrikes(
     }
 
     if (bestTarget && bestScore > 0) {
-        // Launch one harrier per tick to avoid overwhelming
-        const harrierToLaunch = dockedHarriers[0];
-        actions.push({
-            type: 'COMMAND_ATTACK',
-            payload: {
-                unitIds: [harrierToLaunch.id],
-                targetId: bestTarget.id
-            }
-        });
+        // Launch up to 3 harriers at once for coordinated strikes
+        const harriersToLaunch = Math.min(dockedHarriers.length, 3);
+        for (let i = 0; i < harriersToLaunch; i++) {
+            actions.push({
+                type: 'COMMAND_ATTACK',
+                payload: {
+                    unitIds: [dockedHarriers[i].id],
+                    targetId: bestTarget.id
+                }
+            });
+        }
     }
 
     return actions;
