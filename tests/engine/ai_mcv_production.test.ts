@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Vector, PlayerState, isActionType } from '../../src/engine/types';
-import { computeAiActions } from '../../src/engine/ai/index.js';
+import { computeAiActions, resetAIState } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestBuilding, createTestCombatUnit, createTestResource, createTestHarvester } from '../../src/engine/test-utils';
 
@@ -352,6 +352,211 @@ describe('AI MCV Production Limiting', () => {
         const actions = computeAiActions(state, aiPlayerId);
 
         // Should NOT queue another MCV
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(0);
+    });
+});
+
+describe('AI MCV Recovery (rebuilding after losing conyard)', () => {
+    const aiPlayerId = 1;
+    const basePos = new Vector(500, 500);
+
+    function setupRecoveryState(): GameState {
+        const state = { ...createMockState(), tick: 31 }; // tick % 3 === 1 for player 1 AI
+
+        // Setup AI player with enough credits for recovery MCV (cost 3000) + buffer (500)
+        state.players[aiPlayerId] = {
+            ...createPlayerState(aiPlayerId, true, 'medium'),
+            credits: 5000
+        };
+
+        // NO conyard - this is the recovery scenario
+
+        // Add factory (required for MCV production)
+        state.entities['ai_factory'] = createTestBuilding({
+            id: 'ai_factory',
+            owner: aiPlayerId,
+            key: 'factory',
+            x: basePos.x,
+            y: basePos.y
+        });
+
+        // Add refinery (needed for economy)
+        state.entities['ai_refinery'] = createTestBuilding({
+            id: 'ai_refinery',
+            owner: aiPlayerId,
+            key: 'refinery',
+            x: basePos.x - 100,
+            y: basePos.y
+        });
+
+        // Add harvesters (so AI has income)
+        state.entities['ai_harv1'] = createTestHarvester({
+            id: 'ai_harv1',
+            owner: aiPlayerId,
+            x: basePos.x - 50,
+            y: basePos.y + 50
+        });
+
+        // Add ore near base
+        state.entities['base_ore'] = createTestResource({
+            id: 'base_ore',
+            x: basePos.x - 150,
+            y: basePos.y
+        });
+
+        // Vehicle queue is building something so we can isolate MCV decision
+        state.players[aiPlayerId].queues.vehicle = {
+            current: null,
+            progress: 0,
+            invested: 0,
+            queued: []
+        };
+
+        return state;
+    }
+
+    it('should queue MCV for recovery when no conyard exists and situation is stable', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // Set vehicle queue to already building something so combat unit isn't queued first
+        // (which would block MCV via alreadyQueuedVehicleThisTick)
+        state.players[aiPlayerId].queues.vehicle = {
+            current: 'light',
+            progress: 99, // Almost done
+            invested: 500,
+            queued: []
+        };
+
+        // Situation is stable - no threats
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should have START_BUILD for MCV (queued behind the light tank)
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(1);
+    });
+
+    it('should NOT queue recovery MCV when under heavy threat (panic mode)', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // Set vehicle queue to already building something
+        state.players[aiPlayerId].queues.vehicle = {
+            current: 'light',
+            progress: 99,
+            invested: 500,
+            queued: []
+        };
+
+        // Add many enemy units near base to trigger panic (threat level > 60)
+        for (let i = 0; i < 6; i++) {
+            state.entities[`enemy_${i}`] = createTestCombatUnit({
+                id: `enemy_${i}`,
+                owner: 2,
+                key: 'light',
+                x: basePos.x + 100 + i * 20,
+                y: basePos.y
+            });
+        }
+
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should NOT have START_BUILD for MCV - situation not stable
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(0);
+    });
+
+    it('should NOT queue recovery MCV when credits are too low', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // Set credits below recovery threshold (mcvCost 3000 + 500 buffer = 3500)
+        state.players[aiPlayerId] = { ...state.players[aiPlayerId], credits: 3000 };
+
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should NOT have START_BUILD for MCV
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(0);
+    });
+
+    it('should NOT queue recovery MCV when no factory exists', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // Remove the factory
+        delete state.entities['ai_factory'];
+
+        // Add barracks instead (can't build MCVs)
+        state.entities['ai_barracks'] = createTestBuilding({
+            id: 'ai_barracks',
+            owner: aiPlayerId,
+            key: 'barracks',
+            x: basePos.x,
+            y: basePos.y
+        });
+
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should NOT have START_BUILD for MCV
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(0);
+    });
+
+    it('should NOT queue recovery MCV if MCV already exists', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // Add an existing MCV entity
+        state.entities['ai_mcv'] = createTestCombatUnit({
+            id: 'ai_mcv',
+            owner: aiPlayerId,
+            key: 'mcv',
+            x: basePos.x + 200,
+            y: basePos.y
+        });
+
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should NOT have START_BUILD for MCV
+        const mcvBuildActions = actions.filter(a =>
+            isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
+        );
+
+        expect(mcvBuildActions.length).toBe(0);
+    });
+
+    it('should NOT queue recovery MCV if already building one', () => {
+        resetAIState(aiPlayerId);
+        const state = setupRecoveryState();
+
+        // MCV is already being built
+        state.players[aiPlayerId].queues.vehicle = {
+            current: 'mcv',
+            progress: 50,
+            invested: 1500,
+            queued: []
+        };
+
+        const actions = computeAiActions(state, aiPlayerId);
+
+        // Should NOT have START_BUILD for MCV
         const mcvBuildActions = actions.filter(a =>
             isActionType(a, 'START_BUILD') && a.payload.key === 'mcv'
         );

@@ -1276,12 +1276,16 @@ describe('AI System', () => {
             expect(sellAction).toBeUndefined();
         });
 
-        it('should sell Conyard if Factory exists in stalemate', () => {
+        it('should sell Conyard if Factory exists in stalemate AND overwhelmed by enemy', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
             // Set placedTick to make buildings "mature"
             entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
+            // Add enemy units near base to trigger "overwhelmed" condition (need 3+ threats, more than our army of 0)
+            entities['enemy1'] = createEntity('enemy1', 2, 'UNIT', 'light', 150, 150);
+            entities['enemy2'] = createEntity('enemy2', 2, 'UNIT', 'light', 160, 150);
+            entities['enemy3'] = createEntity('enemy3', 2, 'UNIT', 'light', 170, 150);
 
             let state = createTestState(entities);
             // Use tick 601 for grace period AND player 1 AI compute (player 1 computes on tick % 3 === 1)
@@ -1293,6 +1297,23 @@ describe('AI System', () => {
             if (sellAction) {
                 expect(sellAction.payload.buildingId).toBe('conyard');
             }
+        });
+
+        it('should NOT sell Conyard in stalemate if NOT overwhelmed by enemy', () => {
+            resetAIState(1);
+            const entities: Record<EntityId, Entity> = {};
+            // Set placedTick to make buildings "mature"
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 100, 100, { placedTick: 0 });
+            entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 200, 100, { placedTick: 0 });
+            // No enemy threats - AI should not panic sell even in stalemate
+
+            let state = createTestState(entities);
+            state = { ...state, tick: 601, players: { ...state.players, 1: { ...state.players[1], credits: 0 } } };
+
+            const actions = computeAiActions(state, 1);
+            const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
+            // Should NOT sell because not overwhelmed by enemy
+            expect(sellAction).toBeUndefined();
         });
     });
 });

@@ -600,7 +600,7 @@ export function handleEconomy(
         }
     }
 
-    // ========== MCV PRODUCTION FOR EXPANSION ==========
+    // ========== MCV PRODUCTION FOR RECOVERY & EXPANSION ==========
     const mcvCost = RULES.units.mcv?.cost || 3000;
     const vehicleQueue = player.queues.vehicle;
     const alreadyBuildingMcv = vehicleQueue.current === 'mcv';
@@ -619,13 +619,31 @@ export function handleEconomy(
     const existingConyards = buildings.filter(b => b.key === 'conyard' && !b.dead);
     const MAX_BASES = 2;
 
-    // Guards - return early if any condition fails
+    // Common guards for both recovery and expansion
     if (!hasFactory) return actions;
     if (alreadyBuildingMcv || mcvInQueued) return actions;
     if (alreadyQueuedVehicleThisTick) return actions;
     if (existingMcvs.length > 0) return actions;
+
+    // ===== RECOVERY: Build MCV if we lost our conyard =====
+    // Conditions: No conyard, have factory, situation is stable (not under heavy attack)
+    if (existingConyards.length === 0) {
+        const mcvReqsMet = checkPrerequisites('mcv', buildings);
+        // Lower credit threshold for recovery - this is critical
+        const canAffordRecoveryMcv = player.credits >= mcvCost + 500;
+        // Only build if not in panic mode (situation is looking better)
+        const situationStable = !isPanic && aiState.threatLevel < 60;
+
+        if (mcvReqsMet && canAffordRecoveryMcv && situationStable) {
+            console.log(`[MCV] P${playerId} queueing MCV for RECOVERY (no conyard, threat=${aiState.threatLevel})`);
+            actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
+        }
+        return actions;
+    }
+
+    // ===== EXPANSION: Build MCV to expand to distant ore =====
+    // Guards specific to expansion
     if (existingConyards.length >= MAX_BASES) return actions;
-    if (existingConyards.length === 0) return actions;
     if (player.credits <= mcvCost + 2000) return actions;
 
     // Find distant ore for expansion
@@ -723,6 +741,10 @@ export function handleEmergencySell(
     const threatCount = aiState.threatsNearBase.length;
     const isSignificantThreat = threatCount >= 3 || aiState.threatLevel >= 50;
 
+    // Check if enemy army attacking our base is larger than ours
+    // Only consider selling when we're truly overwhelmed
+    const isOverwhelmedByEnemy = threatCount > armySize && threatCount >= 3;
+
     // 2. Define Protected Buildings
     // Protect defense, production (barracks/factory), and power under normal pressure
     const protectedBuildings = new Set([
@@ -750,8 +772,11 @@ export function handleEmergencySell(
 
     // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
     // Priority: tech -> conyard -> excess production -> factory (if has barracks)
-    // CRITICAL: Only trigger if we have NO army - if we have troops, fight with them instead of selling
-    if (!shouldSell && isStalemate && !hasSignificantArmy) {
+    // CRITICAL: Only trigger when truly desperate:
+    // - No income and broke (stalemate)
+    // - No significant army to fight with
+    // - AND base is under attack by a larger force (overwhelmed)
+    if (!shouldSell && isStalemate && !hasSignificantArmy && isOverwhelmedByEnemy) {
         const hasFactory = hasProductionBuildingFor('vehicle', buildings);
         const hasBarracks = hasProductionBuildingFor('infantry', buildings);
         const hasAnyProduction = hasFactory || hasBarracks;
