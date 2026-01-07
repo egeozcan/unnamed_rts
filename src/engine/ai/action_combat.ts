@@ -597,7 +597,8 @@ export function handleMicro(
     combatUnits: Entity[],
     enemies: Entity[],
     baseCenter: Vector,
-    personality: AIPersonality
+    personality: AIPersonality,
+    buildings: Entity[] = []
 ): Action[] {
     const actions: Action[] = [];
     // Use personality's retreat threshold (rusher: 0.1, balanced: 0.3, turtle: 0.5)
@@ -607,6 +608,10 @@ export function handleMicro(
     const kiteAggr = personality.kite_aggressiveness ?? 0.5;
     const KITE_RANGE_MINIMUM = 150 + Math.round((1 - kiteAggr) * 100);
     const KITE_DISTANCE_RATIO = 0.6;
+
+    // DESPERATION MODE: Check if service depot exists
+    // If no depot, damaged units should attack instead of retreating (no oscillation)
+    const hasServiceDepot = buildings.some(b => b.key === 'service_depot' && !b.dead);
 
     for (const unit of combatUnits) {
         const u = unit as UnitEntity;
@@ -632,6 +637,12 @@ export function handleMicro(
         }
 
         if (hpRatio < RETREAT_THRESHOLD) {
+            // DESPERATION MODE: If no service depot, skip retreat - commit to attack
+            // This prevents oscillation between retreat and attack
+            if (!hasServiceDepot) {
+                continue; // Don't retreat, let attack logic handle this unit
+            }
+
             const toBase = baseCenter.sub(u.pos).norm();
             let enemyDir = new Vector(0, 0);
             for (const e of nearbyEnemies) {

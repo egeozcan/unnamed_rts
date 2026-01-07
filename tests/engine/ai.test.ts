@@ -477,8 +477,12 @@ describe('AI System', () => {
         it('should retreat harass group when damaged', () => {
             const entities: Record<EntityId, Entity> = {};
 
-            // AI buildings (base)
+            // AI buildings (base) - include service depot for retreat to work
+            // (Without depot, damaged units attack in desperation mode)
             entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
+            entities['barracks'] = createEntity('barracks', 1, 'BUILDING', 'barracks', 600, 500);
+            entities['factory'] = createEntity('factory', 1, 'BUILDING', 'factory', 700, 500);
+            entities['service_depot'] = createEntity('service_depot', 1, 'BUILDING', 'service_depot', 400, 500);
 
             // Critically damaged harass group - HP below 10% to trigger retreat for all personalities
             // Rusher has lowest retreat threshold (0.1), so units need < 10% HP

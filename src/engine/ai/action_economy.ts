@@ -349,8 +349,8 @@ export function handleEconomy(
                     e.hp < e.maxHp * 0.7
                 );
 
-                // Build if we have 3+ damaged units and can afford it with buffer
-                if (damagedUnits.length >= 3 && player.credits >= serviceDepotData.cost + 1000) {
+                // Build if we have 2+ damaged units and can afford it with buffer
+                if (damagedUnits.length >= 2 && player.credits >= serviceDepotData.cost + 500) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'service_depot', playerId } });
                 }
             }
