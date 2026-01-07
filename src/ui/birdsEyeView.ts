@@ -9,6 +9,8 @@ let onBirdsEyeClick: ((worldX: number, worldY: number) => void) | null = null;
 let onClose: (() => void) | null = null;
 let currentMapWidth = 3000;
 let currentMapHeight = 3000;
+let mousePos: { x: number; y: number } | null = null;
+let hoveredEntity: Entity | null = null;
 
 // Entity categorization
 type EntityCategory = 'infantry' | 'vehicle' | 'air' | 'building_base' | 'building_defense' | 'resource' | 'rock' | 'well';
@@ -97,6 +99,7 @@ function drawShape(
 interface PlayerStats {
     infantry: number;
     vehicles: number;
+    air: number;
     buildings: number;
     defenses: number;
 }
@@ -108,6 +111,7 @@ function computePlayerStats(entities: Record<EntityId, Entity>, players: Record<
         stats[parseInt(pid)] = {
             infantry: 0,
             vehicles: 0,
+            air: 0,
             buildings: 0,
             defenses: 0,
         };
@@ -126,8 +130,10 @@ function computePlayerStats(entities: Record<EntityId, Entity>, players: Record<
                 s.infantry++;
                 break;
             case 'vehicle':
-            case 'air':
                 s.vehicles++;
+                break;
+            case 'air':
+                s.air++;
                 break;
             case 'building_base':
                 s.buildings++;
@@ -157,14 +163,35 @@ function renderLegend(stats: Record<number, PlayerStats>, players: Record<number
         const s = stats[pid];
         const color = player.color || PLAYER_COLORS[pid] || '#888';
 
+        // Determine if player is defeated (no buildings or units)
+        const totalUnits = s.infantry + s.vehicles + s.air;
+        const totalBuildings = s.buildings + s.defenses;
+        const isDefeated = totalUnits === 0 && totalBuildings === 0;
+
+        // Power status
+        const powerOut = player.maxPower;
+        const powerIn = player.usedPower;
+        const lowPower = powerIn > powerOut;
+        const powerClass = lowPower ? 'low-power' : '';
+
+        // Format credits
+        const credits = Math.floor(player.credits);
+
         html += `
-            <div class="legend-player" style="border-left: 4px solid ${color}">
-                <div class="legend-player-name" style="color: ${color}">P${pid + 1}</div>
+            <div class="legend-player${isDefeated ? ' defeated' : ''}" style="border-left: 4px solid ${color}">
+                <div class="legend-player-header">
+                    <div class="legend-player-name" style="color: ${color}">P${pid + 1}${player.isAi ? ' (AI)' : ''}${isDefeated ? ' - DEFEATED' : ''}</div>
+                    <div class="legend-player-resources">
+                        <span class="legend-credits" title="Credits">$${credits}</span>
+                        <span class="legend-power ${powerClass}" title="Power (Generated/Used)">⚡${powerOut}/${powerIn}</span>
+                    </div>
+                </div>
                 <div class="legend-stats">
-                    <span title="Infantry">Inf: ${s.infantry}</span>
-                    <span title="Vehicles">Veh: ${s.vehicles}</span>
-                    <span title="Buildings">Bld: ${s.buildings}</span>
-                    <span title="Defenses">Def: ${s.defenses}</span>
+                    <span title="Infantry">🚶${s.infantry}</span>
+                    <span title="Vehicles">🚗${s.vehicles}</span>
+                    <span title="Aircraft">✈️${s.air}</span>
+                    <span title="Buildings">🏠${s.buildings}</span>
+                    <span title="Defenses">🗼${s.defenses}</span>
                 </div>
             </div>
         `;
@@ -219,6 +246,20 @@ function setupClickHandler() {
         if (onClose) {
             onClose();
         }
+    });
+
+    // Track mouse position for tooltips
+    birdsEyeCanvas.addEventListener('mousemove', (e) => {
+        const rect = birdsEyeCanvas!.getBoundingClientRect();
+        mousePos = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    });
+
+    birdsEyeCanvas.addEventListener('mouseleave', () => {
+        mousePos = null;
+        hoveredEntity = null;
     });
 
     // Close on Escape key
@@ -362,4 +403,105 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
     // Update legend with player stats
     const stats = computePlayerStats(state.entities, state.players);
     renderLegend(stats, state.players);
+
+    // Handle tooltip hover detection and drawing
+    if (mousePos && birdsEyeCanvas) {
+        // Convert mouse position to world coordinates
+        const worldX = (mousePos.x / viewWidth) * currentMapWidth;
+        const worldY = (mousePos.y / viewHeight) * currentMapHeight;
+
+        // Find entity under mouse cursor
+        hoveredEntity = null;
+        let closestDist = Infinity;
+
+        for (const e of sortedEntities) {
+            // Only show tooltips for units and buildings
+            if (e.type !== 'UNIT' && e.type !== 'BUILDING') continue;
+
+            const dist = Math.sqrt(Math.pow(e.pos.x - worldX, 2) + Math.pow(e.pos.y - worldY, 2));
+            const category = categorizeEntity(e);
+            const config = SHAPE_CONFIG[category];
+            // Use a reasonable hit radius based on entity size
+            const hitRadius = Math.max(config.size * 2, 20);
+
+            if (dist < hitRadius && dist < closestDist) {
+                closestDist = dist;
+                hoveredEntity = e;
+            }
+        }
+
+        // Draw tooltip if hovering over an entity
+        if (hoveredEntity) {
+            drawTooltip(ctx, hoveredEntity, mousePos, viewWidth, viewHeight);
+        }
+    }
+}
+
+function drawTooltip(
+    ctx: CanvasRenderingContext2D,
+    entity: Entity,
+    mouse: { x: number; y: number },
+    canvasWidth: number,
+    canvasHeight: number
+) {
+    let name = '';
+    if (entity.type === 'BUILDING' && RULES.buildings[entity.key]) {
+        name = RULES.buildings[entity.key].name;
+    } else if (entity.type === 'UNIT' && RULES.units[entity.key]) {
+        name = RULES.units[entity.key].name;
+    }
+
+    if (!name) return;
+
+    ctx.save();
+    ctx.font = '12px "Segoe UI", Arial, sans-serif';
+
+    // Show entity info
+    const healthPercent = entity.maxHp > 0 ? Math.round((entity.hp / entity.maxHp) * 100) : 100;
+    const healthLine = `HP: ${Math.round(entity.hp)}/${entity.maxHp} (${healthPercent}%)`;
+    const ownerLine = `Player ${entity.owner + 1}`;
+
+    const metrics = ctx.measureText(name);
+    const healthMetrics = ctx.measureText(healthLine);
+    const ownerMetrics = ctx.measureText(ownerLine);
+    const padding = 8;
+    const w = Math.max(metrics.width, healthMetrics.width, ownerMetrics.width) + padding * 2;
+    const h = 56;
+    const x = mouse.x + 16;
+    const y = mouse.y + 16;
+
+    // Keep tooltip on screen
+    const finalX = Math.min(x, canvasWidth - w - 10);
+    const finalY = Math.min(y, canvasHeight - h - 10);
+
+    // Background
+    const playerColor = entity.owner >= 0 && entity.owner < PLAYER_COLORS.length
+        ? PLAYER_COLORS[entity.owner]
+        : '#888';
+    ctx.fillStyle = 'rgba(20, 30, 40, 0.95)';
+    ctx.strokeStyle = playerColor;
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.roundRect(finalX, finalY, w, h, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // Name
+    ctx.fillStyle = playerColor;
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(name, finalX + padding, finalY + 12);
+
+    // Owner
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '11px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(ownerLine, finalX + padding, finalY + 28);
+
+    // Health
+    const healthColor = healthPercent > 50 ? '#88ff88' : healthPercent > 25 ? '#ffff88' : '#ff8888';
+    ctx.fillStyle = healthColor;
+    ctx.fillText(healthLine, finalX + padding, finalY + 44);
+
+    ctx.restore();
 }

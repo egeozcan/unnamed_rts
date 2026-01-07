@@ -1185,29 +1185,67 @@ canvas#gameCanvas {
 .legend-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 15px;
+    gap: 12px;
     justify-content: center;
 }
 
 .legend-player {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 4px;
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
+    min-width: 180px;
+}
+
+.legend-player.defeated {
+    opacity: 0.5;
+}
+
+.legend-player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
 }
 
 .legend-player-name {
     font-weight: bold;
-    font-size: 14px;
-    min-width: 30px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.legend-player-resources {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+}
+
+.legend-credits {
+    color: #ffd700;
+    font-family: 'Courier New', monospace;
+}
+
+.legend-power {
+    color: #88ff88;
+    font-family: 'Courier New', monospace;
+}
+
+.legend-power.low-power {
+    color: #ff6666;
+    animation: pulse-power 1s ease-in-out infinite;
+}
+
+@keyframes pulse-power {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 .legend-stats {
     display: flex;
-    gap: 12px;
-    font-size: 12px;
+    gap: 8px;
+    font-size: 11px;
     color: #aaa;
     font-family: 'Courier New', monospace;
 }
