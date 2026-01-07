@@ -715,7 +715,9 @@ export function handleEmergencySell(
         !e.dead
     );
     const armySize = combatUnits.length;
-    const hasSignificantArmy = armySize >= 3; // We can defend with 3+ units
+    // Require a larger army (5+ units) before we consider it "significant" enough to avoid panic selling
+    // With a real army, the AI should fight, not sell buildings
+    const hasSignificantArmy = armySize >= 5;
 
     // Assess threat significance - not just presence but actual danger
     const threatCount = aiState.threatsNearBase.length;
@@ -748,7 +750,8 @@ export function handleEmergencySell(
 
     // Condition C: Stalemate / "Fire Sale" (Aggressive Sell)
     // Priority: tech -> conyard -> excess production -> factory (if has barracks)
-    if (!shouldSell && isStalemate) {
+    // CRITICAL: Only trigger if we have NO army - if we have troops, fight with them instead of selling
+    if (!shouldSell && isStalemate && !hasSignificantArmy) {
         const hasFactory = hasProductionBuildingFor('vehicle', buildings);
         const hasBarracks = hasProductionBuildingFor('infantry', buildings);
         const hasAnyProduction = hasFactory || hasBarracks;
