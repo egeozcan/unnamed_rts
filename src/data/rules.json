@@ -197,8 +197,8 @@
             "drain": 50,
             "armor": "building",
             "prerequisites": ["conyard", "barracks", "factory"],
-            "repairRadius": 60,
-            "repairRate": 1
+            "repairRadius": 90,
+            "repairRate": 2
         }
     },
     "units": {
