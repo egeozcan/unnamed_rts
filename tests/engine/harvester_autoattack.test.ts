@@ -17,7 +17,7 @@ describe('Harvester Auto-Attack', () => {
     function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
         const unit = key === 'harvester'
             ? createTestHarvester({ id, owner, x, y })
-            : createTestCombatUnit({ id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y });
+            : createTestCombatUnit({ id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y });
         return {
             ...state,
             entities: {

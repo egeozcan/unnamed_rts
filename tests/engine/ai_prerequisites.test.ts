@@ -47,7 +47,7 @@ function createEntity(
         });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp
         });
     }

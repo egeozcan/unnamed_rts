@@ -15,7 +15,7 @@ describe('Harvester Economic Pressure', () => {
             const unit = createTestHarvester({ id, owner, x, y });
             return addEntityToState(state, unit);
         } else {
-            const unit = createTestCombatUnit({ id, owner, x, y, key: key as Exclude<UnitKey, 'harvester'> });
+            const unit = createTestCombatUnit({ id, owner, x, y, key: key as Exclude<UnitKey, 'harvester' | 'harrier'> });
             return addEntityToState(state, unit);
         }
     }

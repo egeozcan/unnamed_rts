@@ -42,7 +42,7 @@ function createTestEntity(overrides: TestEntityOverrides = {}): Entity {
     return createTestCombatUnit({
         id,
         owner: overrides.owner ?? 0,
-        key: (overrides.key ?? 'heavy') as Exclude<UnitKey, 'harvester'>,
+        key: (overrides.key ?? 'heavy') as Exclude<UnitKey, 'harvester' | 'harrier'>,
         x, y,
         hp: overrides.hp ?? 400,
         maxHp: overrides.maxHp ?? 400,
@@ -185,7 +185,8 @@ describe('AI Stranded Units', () => {
                 winner: null,
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
-                showMinimap: true
+                showMinimap: true,
+                showBirdsEye: false
             };
 
             // First, simulate that these units were previously in attack group
@@ -337,7 +338,8 @@ describe('AI Stranded Units', () => {
                 winner: null,
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
-                showMinimap: true
+                showMinimap: true,
+                showBirdsEye: false
             };
 
             // Setup AI state as if it was previously attacking
@@ -426,7 +428,8 @@ describe('AI Stranded Units', () => {
                 winner: null,
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
-                showMinimap: true
+                showMinimap: true,
+                showBirdsEye: false
             };
 
             // Setup: units were in attack group, but strategy is now buildup
@@ -507,7 +510,8 @@ describe('AI Stranded Units', () => {
                 winner: null,
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
-                showMinimap: true
+                showMinimap: true,
+                showBirdsEye: false
             };
 
             const aiState = getAIState(aiPlayerId);

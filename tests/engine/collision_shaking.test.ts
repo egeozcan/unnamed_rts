@@ -23,7 +23,7 @@ describe('Collision Resolution - Unit Shaking', () => {
         return createTestCombatUnit({
             id,
             owner,
-            key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>,
+            key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier'>,
             x: pos.x,
             y: pos.y
         });
@@ -318,7 +318,7 @@ describe('Collision Resolution - Unit Shaking', () => {
 
             // Mover should have an active path
             expect(mover.movement.moveTarget !== null ||
-                   (mover.movement.path !== null && mover.movement.pathIdx < mover.movement.path.length)
+                (mover.movement.path !== null && mover.movement.pathIdx < mover.movement.path.length)
             ).toBe(true);
         });
     });
