@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background -->
+  <rect width="32" height="32" rx="4" fill="#1a1a2e"/>
+
+  <!-- Stylized tank top-down view -->
+  <g fill="#4488ff">
+    <!-- Tank body -->
+    <rect x="9" y="10" width="14" height="16" rx="2"/>
+    <!-- Tank turret -->
+    <circle cx="16" cy="18" r="5"/>
+    <!-- Tank barrel -->
+    <rect x="14" y="4" width="4" height="10" rx="1"/>
+  </g>
+
+  <!-- Highlight details -->
+  <circle cx="16" cy="18" r="2" fill="#1a1a2e"/>
+</svg>

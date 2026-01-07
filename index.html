@@ -4,131 +4,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JS Command: Red Browser Alert</title>
+  <title>Unnamed RTS</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/src/styles.css">
 </head>
 
 <body>
 
   <div id="menu">
-    <div class="logo">JS COMMAND</div>
+    <div class="logo">UNNAMED<span>RTS</span></div>
 
     <div class="skirmish-container">
       <!-- Player Slots -->
-      <div class="skirmish-section">
-        <div class="section-title">PLAYERS</div>
+      <div class="skirmish-section players-section">
+        <div class="section-title">Players</div>
         <div class="player-slots">
-          <!-- Player 1 -->
           <div class="player-slot" data-slot="0">
-            <div class="player-color" style="background: #4488ff"></div>
-            <span class="player-label">Player 1</span>
+            <div class="player-color" style="--player-color: #4488ff"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none">Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none">—</option>
             </select>
           </div>
-          <!-- Player 2 -->
           <div class="player-slot" data-slot="1">
-            <div class="player-color" style="background: #ff4444"></div>
-            <span class="player-label">Player 2</span>
+            <div class="player-color" style="--player-color: #ff4444"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium" selected>AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none">Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none">—</option>
             </select>
           </div>
-          <!-- Player 3 -->
           <div class="player-slot" data-slot="2">
-            <div class="player-color" style="background: #44ff88"></div>
-            <span class="player-label">Player 3</span>
+            <div class="player-color" style="--player-color: #44ff88"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
-          <!-- Player 4 -->
           <div class="player-slot" data-slot="3">
-            <div class="player-color" style="background: #ffcc44"></div>
-            <span class="player-label">Player 4</span>
+            <div class="player-color" style="--player-color: #ffcc44"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
-          <!-- Player 5 -->
           <div class="player-slot" data-slot="4">
-            <div class="player-color" style="background: #ff44ff"></div>
-            <span class="player-label">Player 5</span>
+            <div class="player-color" style="--player-color: #ff44ff"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
-          <!-- Player 6 -->
           <div class="player-slot" data-slot="5">
-            <div class="player-color" style="background: #44ffff"></div>
-            <span class="player-label">Player 6</span>
+            <div class="player-color" style="--player-color: #44ffff"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
-          <!-- Player 7 -->
           <div class="player-slot" data-slot="6">
-            <div class="player-color" style="background: #ff8844"></div>
-            <span class="player-label">Player 7</span>
+            <div class="player-color" style="--player-color: #ff8844"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
-          <!-- Player 8 -->
           <div class="player-slot" data-slot="7">
-            <div class="player-color" style="background: #8844ff"></div>
-            <span class="player-label">Player 8</span>
+            <div class="player-color" style="--player-color: #8844ff"></div>
             <select class="player-type">
               <option value="human">Human</option>
-              <option value="easy">AI - Easy</option>
-              <option value="medium">AI - Medium</option>
-              <option value="hard">AI - Hard</option>
-              <option value="none" selected>Closed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="none" selected>—</option>
             </select>
           </div>
         </div>
-        <div id="observer-mode" class="observer-indicator">👁 OBSERVER MODE</div>
+        <div id="observer-mode" class="observer-indicator">Observer Mode</div>
       </div>
 
       <!-- Map Parameters -->
-      <div class="skirmish-section">
-        <div class="section-title">MAP</div>
+      <div class="skirmish-section map-section">
+        <div class="section-title">Map</div>
         <div class="map-params">
           <div class="param-row">
             <label>Size</label>
             <select id="map-size">
-              <option value="small">Small (2000x2000)</option>
-              <option value="medium" selected>Medium (3000x3000)</option>
-              <option value="large">Large (4000x4000)</option>
-              <option value="huge">Huge (5000x5000)</option>
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+              <option value="huge">Huge</option>
             </select>
           </div>
           <div class="param-row">
@@ -151,7 +136,7 @@
       </div>
     </div>
 
-    <button id="start-skirmish-btn" class="menu-btn start-btn">START BATTLE</button>
+    <button id="start-skirmish-btn" class="start-btn">Start Battle</button>
   </div>
 
   <div id="end-screen">
