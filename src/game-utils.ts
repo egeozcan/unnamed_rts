@@ -107,15 +107,13 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
     const density = DENSITY_SETTINGS[config.resourceDensity];
     const rockSettings = DENSITY_SETTINGS[config.rockDensity];
 
-    // Calculate spawn zones to avoid for rocks
-    const margin = 350;
+    // Get actual player count and starting positions
+    const numPlayers = config.players.filter(p => p.type !== 'none').length;
+    const playerPositions = getStartingPositions(mapWidth, mapHeight, numPlayers);
+
+    // Calculate spawn zones to avoid for rocks (use all player positions)
     const spawnRadius = 200; // Keep rocks away from spawn areas
-    const spawnZones = [
-        new Vector(margin, margin),                          // Top-left
-        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right
-        new Vector(mapWidth - margin, margin),               // Top-right
-        new Vector(margin, mapHeight - margin)               // Bottom-left
-    ];
+    const spawnZones = playerPositions;
 
     // Helper to check if position is near any spawn zone
     function isNearSpawnZone(x: number, y: number): boolean {
@@ -210,54 +208,88 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
     }
 
     // Generate ore wells (neutral resource generators)
-    const wellCount = WELL_DENSITY_SETTINGS[config.resourceDensity]; // Use resource density for wells
-    let wellsPlaced = 0;
-    let wellAttempts = 0;
-    const maxWellAttempts = wellCount * 20;
+    // Distribute fairly based on player starting positions with some variance
+    const wellCount = WELL_DENSITY_SETTINGS[config.resourceDensity];
+    const placedWells: Vector[] = [];
 
-    while (wellsPlaced < wellCount && wellAttempts < maxWellAttempts) {
-        wellAttempts++;
+    // Helper to score a position based on fairness
+    // Higher score = more fair (equidistant from players)
+    function scoreWellPosition(pos: Vector): number {
+        if (playerPositions.length <= 1) return 1; // No fairness concern with 1 player
 
-        // Place wells in middle area of map (600px from edges)
-        const x = 600 + Math.random() * (mapWidth - 1200);
-        const y = 600 + Math.random() * (mapHeight - 1200);
+        // Calculate distances to all players
+        const distances = playerPositions.map(p => pos.dist(p));
+        const minDist = Math.min(...distances);
+        const maxDist = Math.max(...distances);
 
-        // Skip if too close to a spawn zone
-        if (isNearSpawnZone(x, y)) {
-            continue;
-        }
+        // Penalize if too close to any player (< 400px) or too far from all (> 1500px)
+        if (minDist < 400) return 0;
+        if (minDist > 1500) return 0.3;
 
-        // Check not too close to existing wells (min 400px apart)
-        let tooClose = false;
-        for (const id in entities) {
-            const e = entities[id];
-            if (e.type === 'WELL') {
-                if (new Vector(x, y).dist(e.pos) < 400) {
-                    tooClose = true;
+        // Score based on how equal the distances are (low variance = fair)
+        // Ratio of min/max distance - closer to 1 is more fair
+        const fairnessRatio = minDist / maxDist;
+
+        // Add some randomness for variance (0.7 to 1.0 multiplier)
+        const variance = 0.7 + Math.random() * 0.3;
+
+        return fairnessRatio * variance;
+    }
+
+    // Generate candidate positions and pick the best ones
+    for (let w = 0; w < wellCount; w++) {
+        let bestPos: Vector | null = null;
+        let bestScore = -1;
+        const candidateCount = 30; // Try 30 random positions, pick best
+
+        for (let attempt = 0; attempt < candidateCount; attempt++) {
+            // Place wells in middle area of map (500px from edges for more options)
+            const x = 500 + Math.random() * (mapWidth - 1000);
+            const y = 500 + Math.random() * (mapHeight - 1000);
+            const pos = new Vector(x, y);
+
+            // Skip if too close to a spawn zone
+            if (isNearSpawnZone(x, y)) continue;
+
+            // Check not too close to existing wells (min 400px apart)
+            let tooCloseToWell = false;
+            for (const existingWell of placedWells) {
+                if (pos.dist(existingWell) < 400) {
+                    tooCloseToWell = true;
                     break;
                 }
             }
-        }
-        if (tooClose) continue;
+            if (tooCloseToWell) continue;
 
-        const id = 'well_' + wellsPlaced;
-        const well: WellEntity = {
-            id,
-            owner: -1,
-            type: 'WELL',
-            key: 'well',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 9999,
-            maxHp: 9999,
-            w: 50,
-            h: 50,
-            radius: 25,
-            dead: false,
-            well: createDefaultWellComponent()
-        };
-        entities[id] = well;
-        wellsPlaced++;
+            // Score this position
+            const score = scoreWellPosition(pos);
+            if (score > bestScore) {
+                bestScore = score;
+                bestPos = pos;
+            }
+        }
+
+        // If we found a valid position, place the well
+        if (bestPos && bestScore > 0) {
+            const id = 'well_' + w;
+            const well: WellEntity = {
+                id,
+                owner: -1,
+                type: 'WELL',
+                key: 'well',
+                pos: bestPos,
+                prevPos: new Vector(bestPos.x, bestPos.y),
+                hp: 9999,
+                maxHp: 9999,
+                w: 50,
+                h: 50,
+                radius: 25,
+                dead: false,
+                well: createDefaultWellComponent()
+            };
+            entities[id] = well;
+            placedWells.push(bestPos);
+        }
     }
 
     return { entities, mapWidth, mapHeight };

@@ -384,14 +384,9 @@ describe('Game Logic', () => {
             const result = generateMap(config);
             const rocks = Object.values(result.entities).filter(e => e.type === 'ROCK');
 
-            // Spawn zones
-            const margin = 350;
-            const spawnZones = [
-                new Vector(margin, margin),
-                new Vector(result.mapWidth - margin, result.mapHeight - margin),
-                new Vector(result.mapWidth - margin, margin),
-                new Vector(margin, result.mapHeight - margin)
-            ];
+            // Get actual spawn zones based on player count (2 players in this config)
+            const numPlayers = config.players.filter(p => p.type !== 'none').length;
+            const spawnZones = getStartingPositions(result.mapWidth, result.mapHeight, numPlayers);
             const spawnRadius = 200;
 
             // No rocks should be within 200 units of spawn zones
