@@ -38,7 +38,7 @@ function createTestState(entities: Record<EntityId, Entity>, aiCredits: number =
     state.entities = entities;
     state.players = {
         0: { ...createPlayerState(0, false, 'medium', '#0088FF'), credits: playerCredits },
-        1: { ...createPlayerState(1, true, 'medium', '#FFCC00'), credits: aiCredits }
+        1: { ...createPlayerState(1, true, 'hard', '#FFCC00'), credits: aiCredits }  // Use hard for baseline AI behavior
     };
     return state;
 }

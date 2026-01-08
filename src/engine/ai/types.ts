@@ -26,6 +26,7 @@ export interface AIPlayerState {
     defenseGroup: EntityId[];
     threatsNearBase: EntityId[];
     harvestersUnderAttack: EntityId[];
+    lastThreatDetectedTick: number;  // When threats were first detected (for reaction delay)
     offensiveGroups: OffensiveGroup[];
     enemyBaseLocation: Vector | null;
     lastScoutTick: number;

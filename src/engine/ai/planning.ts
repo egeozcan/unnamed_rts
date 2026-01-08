@@ -14,26 +14,33 @@ import {
     SURPLUS_CREDIT_THRESHOLD,
     PEACE_BREAK_TICKS,
     STRATEGY_COOLDOWN,
-    hasProductionBuildingFor
+    hasProductionBuildingFor,
+    getDifficultyModifiers
 } from './utils.js';
 
 export function detectThreats(
     baseCenter: Vector,
     harvesters: Entity[],
     enemies: Entity[],
-    myBuildings: Entity[]
+    myBuildings: Entity[],
+    difficulty: 'easy' | 'medium' | 'hard' = 'hard'
 ): { threatsNearBase: EntityId[], harvestersUnderAttack: EntityId[] } {
     const threatsNearBase: EntityId[] = [];
     const harvestersUnderAttack: EntityId[] = [];
 
+    // Scale detection radii by difficulty (easy AI has blind spots)
+    const diffMods = getDifficultyModifiers(difficulty);
+    const scaledBaseDefenseRadius = BASE_DEFENSE_RADIUS * diffMods.threatDetectionMultiplier;
+    const scaledThreatDetectionRadius = THREAT_DETECTION_RADIUS * diffMods.threatDetectionMultiplier;
+
     // Find enemies near base
     for (const enemy of enemies) {
-        if (enemy.pos.dist(baseCenter) < BASE_DEFENSE_RADIUS) {
+        if (enemy.pos.dist(baseCenter) < scaledBaseDefenseRadius) {
             threatsNearBase.push(enemy.id);
         }
         // Also check if enemies are near any building
         for (const building of myBuildings) {
-            if (enemy.pos.dist(building.pos) < THREAT_DETECTION_RADIUS) {
+            if (enemy.pos.dist(building.pos) < scaledThreatDetectionRadius) {
                 if (!threatsNearBase.includes(enemy.id)) {
                     threatsNearBase.push(enemy.id);
                 }
@@ -68,13 +75,22 @@ export function updateStrategy(
     enemies: Entity[],
     threatsNearBase: EntityId[],
     personality: AIPersonality,
-    credits: number = 0
+    credits: number = 0,
+    difficulty: 'easy' | 'medium' | 'hard' = 'hard'
 ): void {
     const hasFactory = hasProductionBuildingFor('vehicle', buildings);
     const hasBarracks = hasProductionBuildingFor('infantry', buildings);
     const armySize = combatUnits.length;
-    const attackThreshold = personality.attack_threshold || ATTACK_GROUP_MIN_SIZE;
-    const harassThreshold = personality.harass_threshold || HARASS_GROUP_SIZE;
+
+    // Apply difficulty multipliers to thresholds
+    const diffMods = getDifficultyModifiers(difficulty);
+    const baseAttackThreshold = personality.attack_threshold || ATTACK_GROUP_MIN_SIZE;
+    const baseHarassThreshold = personality.harass_threshold || HARASS_GROUP_SIZE;
+    const attackThreshold = Math.ceil(baseAttackThreshold * diffMods.attackGroupSizeMultiplier);
+    const harassThreshold = Math.ceil(baseHarassThreshold * diffMods.attackGroupSizeMultiplier);
+
+    // Scale strategy cooldown by difficulty (easy AI adapts slower)
+    const scaledStrategyCooldown = Math.floor(STRATEGY_COOLDOWN * diffMods.strategyCooldownMultiplier);
 
     // Priority 1: Defend if threats near base (ALWAYS immediate, no cooldown)
     if (threatsNearBase.length > 0) {
@@ -163,7 +179,8 @@ export function updateStrategy(
         (aiState.strategy === 'harass' && armySize < harassThreshold);
 
     // Other strategy changes have cooldown (unless aborting offense)
-    if (!abortOffense && tick - aiState.lastStrategyChange < STRATEGY_COOLDOWN) return;
+    // Easy AI takes longer to adapt (scaledStrategyCooldown)
+    if (!abortOffense && tick - aiState.lastStrategyChange < scaledStrategyCooldown) return;
 
     // Priority 1.5: OVERWHELMING ADVANTAGE - Attack immediately if we significantly outmatch enemy
     // Don't wait to build up if we already have 2x+ their army and at least 3 units

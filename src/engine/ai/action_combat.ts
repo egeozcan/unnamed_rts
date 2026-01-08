@@ -11,7 +11,8 @@ import {
     RECENT_DAMAGE_WINDOW,
     ALLY_DANGER_RADIUS,
     isUnit,
-    getRefineries
+    getRefineries,
+    getDifficultyModifiers
 } from './utils.js';
 import { getGroupCenter } from './state.js';
 import { isAirUnit } from '../entity-helpers.js';
@@ -598,11 +599,23 @@ export function handleMicro(
     enemies: Entity[],
     baseCenter: Vector,
     personality: AIPersonality,
-    buildings: Entity[] = []
+    buildings: Entity[] = [],
+    difficulty: 'easy' | 'medium' | 'hard' = 'hard'
 ): Action[] {
     const actions: Action[] = [];
-    // Use personality's retreat threshold (rusher: 0.1, balanced: 0.3, turtle: 0.5)
-    const RETREAT_THRESHOLD = personality.retreat_threshold;
+
+    // Get difficulty modifiers
+    const diffMods = getDifficultyModifiers(difficulty);
+
+    // Easy AI has no micro - skip kiting and smart retreating entirely
+    if (!diffMods.microEnabled) {
+        return actions;
+    }
+
+    // Use personality's retreat threshold, scaled by difficulty
+    // Easy AI retreats at higher HP (more cowardly), hard AI at intended threshold
+    const baseRetreatThreshold = personality.retreat_threshold;
+    const RETREAT_THRESHOLD = Math.min(0.8, baseRetreatThreshold * diffMods.retreatThresholdMultiplier);
     // Derive kite range from personality's kite_aggressiveness
     // Higher kite_aggressiveness = lower threshold = more likely to kite
     const kiteAggr = personality.kite_aggressiveness ?? 0.5;

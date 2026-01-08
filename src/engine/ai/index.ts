@@ -119,6 +119,9 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     const isFullComputeTick = state.tick < AI_CONSTANTS.AI_TICK_INTERVAL ||
         state.tick % AI_CONSTANTS.AI_TICK_INTERVAL === tickOffset;
 
+    // Get difficulty modifiers for this player
+    const difficultyMods = getDifficultyModifiers(player.difficulty);
+
     // CRITICAL REACTIONS: Detect threats on compute ticks or when threats exist
     // Skip expensive O(enemies × buildings) calculation when idle
     const shouldDetectThreats = isFullComputeTick ||
@@ -130,18 +133,29 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
             baseCenter,
             harvesters,
             enemies,
-            myBuildings
+            myBuildings,
+            player.difficulty  // Pass difficulty for threat detection radius scaling
         );
         aiState.threatsNearBase = threats.threatsNearBase;
         aiState.harvestersUnderAttack = threats.harvestersUnderAttack;
     }
     const threatsNearBase = aiState.threatsNearBase;
 
+    // Track when threats first appeared (for reaction delay)
+    if (threatsNearBase.length > 0 && aiState.lastThreatDetectedTick === 0) {
+        aiState.lastThreatDetectedTick = state.tick;
+    } else if (threatsNearBase.length === 0) {
+        aiState.lastThreatDetectedTick = 0;  // Reset when threats clear
+    }
+
     // Always handle critical combat reactions
     actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState));
 
-    // Defense is critical - run every tick if under attack
-    if (threatsNearBase.length > 0 && combatUnits.length > 0) {
+    // Defense with reaction delay - easier AI takes longer to respond
+    const reactionDelayPassed = threatsNearBase.length > 0 &&
+        (state.tick - aiState.lastThreatDetectedTick >= difficultyMods.reactionDelay);
+
+    if (reactionDelayPassed && combatUnits.length > 0) {
         actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
     }
 
@@ -162,7 +176,8 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
         enemies,
         threatsNearBase,
         personality,
-        player.credits
+        player.credits,
+        player.difficulty  // Pass difficulty for strategy cooldown and attack threshold scaling
     );
 
     // Evaluate Investment Priority
@@ -219,7 +234,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     }
 
     actions.push(...handleScouting(state, playerId, aiState, combatUnits, enemies, baseCenter));
-    actions.push(...handleMicro(state, combatUnits, enemies, baseCenter, personality, myBuildings));
+    actions.push(...handleMicro(state, combatUnits, enemies, baseCenter, personality, myBuildings, player.difficulty));
 
     // Retreat critically damaged units to service depot for repairs
     actions.push(...handleUnitRepair(state, playerId, combatUnits, myBuildings));

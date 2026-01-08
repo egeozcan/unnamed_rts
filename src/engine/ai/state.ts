@@ -30,6 +30,7 @@ export function getAIState(playerId: number): AIPlayerState {
             defenseGroup: [],
             threatsNearBase: [],
             harvestersUnderAttack: [],
+            lastThreatDetectedTick: 0,
             offensiveGroups: [],
             enemyBaseLocation: null,
             lastScoutTick: 0,

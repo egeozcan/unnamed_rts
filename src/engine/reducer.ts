@@ -29,7 +29,7 @@ export const INITIAL_STATE: GameState = {
     repairMode: false,
     players: {
         0: createPlayerState(0, false, 'medium', PLAYER_COLORS[0]),
-        1: createPlayerState(1, true, 'medium', PLAYER_COLORS[1])
+        1: createPlayerState(1, true, 'hard', PLAYER_COLORS[1])  // AI uses hard for baseline behavior
     },
     winner: null,
     config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },

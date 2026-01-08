@@ -140,6 +140,12 @@ describe('AI System', () => {
             expect(modifiers.resourceBonus).toBe(0.7);
             expect(modifiers.buildSpeedBonus).toBe(0.75);
             expect(modifiers.reactionDelay).toBe(120);
+            // Combat intelligence modifiers
+            expect(modifiers.attackGroupSizeMultiplier).toBe(1.5);
+            expect(modifiers.threatDetectionMultiplier).toBe(0.6);
+            expect(modifiers.retreatThresholdMultiplier).toBe(1.5);
+            expect(modifiers.strategyCooldownMultiplier).toBe(2.0);
+            expect(modifiers.microEnabled).toBe(false);
         });
 
         it('should have correct modifiers for medium difficulty', () => {
@@ -147,6 +153,12 @@ describe('AI System', () => {
             expect(modifiers.resourceBonus).toBe(0.85);
             expect(modifiers.buildSpeedBonus).toBe(0.9);
             expect(modifiers.reactionDelay).toBe(60);
+            // Combat intelligence modifiers
+            expect(modifiers.attackGroupSizeMultiplier).toBe(1.2);
+            expect(modifiers.threatDetectionMultiplier).toBe(0.85);
+            expect(modifiers.retreatThresholdMultiplier).toBe(1.2);
+            expect(modifiers.strategyCooldownMultiplier).toBe(1.5);
+            expect(modifiers.microEnabled).toBe(true);
         });
 
         it('should have correct modifiers for hard difficulty', () => {
@@ -154,6 +166,12 @@ describe('AI System', () => {
             expect(modifiers.resourceBonus).toBe(1.0);
             expect(modifiers.buildSpeedBonus).toBe(1.0);
             expect(modifiers.reactionDelay).toBe(0);
+            // Combat intelligence modifiers
+            expect(modifiers.attackGroupSizeMultiplier).toBe(1.0);
+            expect(modifiers.threatDetectionMultiplier).toBe(1.0);
+            expect(modifiers.retreatThresholdMultiplier).toBe(1.0);
+            expect(modifiers.strategyCooldownMultiplier).toBe(1.0);
+            expect(modifiers.microEnabled).toBe(true);
         });
 
         it('should have all difficulty levels defined', () => {

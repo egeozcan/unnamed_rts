@@ -127,16 +127,34 @@ export const DIFFICULTY_MODIFIERS = {
         resourceBonus: 0.7,      // 70% resource gain from harvesting
         buildSpeedBonus: 0.75,   // 75% build speed
         reactionDelay: 120,      // 2 seconds slower to react to threats (in ticks)
+        // Combat intelligence
+        attackGroupSizeMultiplier: 1.5,   // Requires 50% more units to attack (more cautious)
+        threatDetectionMultiplier: 0.6,   // 40% smaller threat detection radius (blind spots)
+        retreatThresholdMultiplier: 1.5,  // Retreats at 50% higher HP (more cowardly)
+        strategyCooldownMultiplier: 2.0,  // Takes 2x longer to adapt strategy
+        microEnabled: false,              // No kiting or retreat micro
     },
     medium: {
         resourceBonus: 0.85,     // 85% resource gain
         buildSpeedBonus: 0.9,    // 90% build speed
         reactionDelay: 60,       // 1 second slower to react
+        // Combat intelligence
+        attackGroupSizeMultiplier: 1.2,
+        threatDetectionMultiplier: 0.85,
+        retreatThresholdMultiplier: 1.2,
+        strategyCooldownMultiplier: 1.5,
+        microEnabled: true,
     },
     hard: {
         resourceBonus: 1.0,      // Normal resource gain (fair play)
         buildSpeedBonus: 1.0,    // Normal build speed (no cheats)
         reactionDelay: 0,        // No delay
+        // Combat intelligence
+        attackGroupSizeMultiplier: 1.0,   // Normal attack thresholds
+        threatDetectionMultiplier: 1.0,   // Full detection range
+        retreatThresholdMultiplier: 1.0,  // Normal retreat behavior
+        strategyCooldownMultiplier: 1.0,  // Fast adaptation
+        microEnabled: true,
     }
 } as const;
 
