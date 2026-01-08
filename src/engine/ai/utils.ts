@@ -121,20 +121,21 @@ export function isUnit(entity: Entity): boolean {
 }
 
 // Difficulty modifiers - affect gameplay independently of personality
+// Hard = fair play (no cheats), lower difficulties get handicaps
 export const DIFFICULTY_MODIFIERS = {
     easy: {
-        resourceBonus: 0.8,      // 80% resource gain from harvesting
-        buildSpeedBonus: 0.9,    // 90% build speed
+        resourceBonus: 0.7,      // 70% resource gain from harvesting
+        buildSpeedBonus: 0.75,   // 75% build speed
         reactionDelay: 120,      // 2 seconds slower to react to threats (in ticks)
     },
     medium: {
-        resourceBonus: 1.0,      // Normal resource gain
-        buildSpeedBonus: 1.0,    // Normal build speed
-        reactionDelay: 0,        // No delay
+        resourceBonus: 0.85,     // 85% resource gain
+        buildSpeedBonus: 0.9,    // 90% build speed
+        reactionDelay: 60,       // 1 second slower to react
     },
     hard: {
-        resourceBonus: 1.2,      // 120% resource gain from harvesting
-        buildSpeedBonus: 1.15,   // 15% faster builds
+        resourceBonus: 1.0,      // Normal resource gain (fair play)
+        buildSpeedBonus: 1.0,    // Normal build speed (no cheats)
         reactionDelay: 0,        // No delay
     }
 } as const;

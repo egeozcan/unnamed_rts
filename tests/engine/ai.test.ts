@@ -137,22 +137,22 @@ describe('AI System', () => {
     describe('Difficulty Modifiers', () => {
         it('should have correct modifiers for easy difficulty', () => {
             const modifiers = getDifficultyModifiers('easy');
-            expect(modifiers.resourceBonus).toBe(0.8);
-            expect(modifiers.buildSpeedBonus).toBe(0.9);
+            expect(modifiers.resourceBonus).toBe(0.7);
+            expect(modifiers.buildSpeedBonus).toBe(0.75);
             expect(modifiers.reactionDelay).toBe(120);
         });
 
         it('should have correct modifiers for medium difficulty', () => {
             const modifiers = getDifficultyModifiers('medium');
-            expect(modifiers.resourceBonus).toBe(1.0);
-            expect(modifiers.buildSpeedBonus).toBe(1.0);
-            expect(modifiers.reactionDelay).toBe(0);
+            expect(modifiers.resourceBonus).toBe(0.85);
+            expect(modifiers.buildSpeedBonus).toBe(0.9);
+            expect(modifiers.reactionDelay).toBe(60);
         });
 
         it('should have correct modifiers for hard difficulty', () => {
             const modifiers = getDifficultyModifiers('hard');
-            expect(modifiers.resourceBonus).toBe(1.2);
-            expect(modifiers.buildSpeedBonus).toBe(1.15);
+            expect(modifiers.resourceBonus).toBe(1.0);
+            expect(modifiers.buildSpeedBonus).toBe(1.0);
             expect(modifiers.reactionDelay).toBe(0);
         });
 
