@@ -746,10 +746,11 @@ export function handleEmergencySell(
     const isOverwhelmedByEnemy = threatCount > armySize && threatCount >= 3;
 
     // 2. Define Protected Buildings
-    // Protect defense, production (barracks/factory), and power under normal pressure
+    // Protect defense, production (barracks/factory), conyard, and power under normal pressure
     const protectedBuildings = new Set([
         'turret', 'pillbox', 'sam_site', 'obelisk',  // Defense
         'barracks', 'factory',                        // Production
+        'conyard',                                    // Construction (recovery potential)
         'power'                                       // Power
     ]);
 
@@ -788,8 +789,9 @@ export function handleEmergencySell(
         candidates = matureBuildings.filter(b => {
             // Always allow selling tech
             if (b.key === 'tech') return true;
-            // Sell conyard if we have another production building
-            if (b.key === 'conyard' && hasAnyProduction) return true;
+            // Never sell conyard in stalemate - keep for recovery potential
+            // (Last Resort will handle truly desperate situations)
+            if (b.key === 'conyard') return false;
             // Sell excess barracks (keep at least 1)
             if (b.key === 'barracks' && barracksCount > 1) return true;
             // Sell excess factories (keep at least 1)
@@ -805,8 +807,8 @@ export function handleEmergencySell(
 
         if (candidates.length > 0) {
             shouldSell = true;
-            // Priority: tech, conyard, excess barracks, factory
-            const stalematePriority = ['tech', 'conyard', 'barracks', 'factory'];
+            // Priority: tech, excess barracks, factory
+            const stalematePriority = ['tech', 'barracks', 'factory'];
             candidates.sort((a, b) => {
                 const idxA = getPriorityIndex(a.key, stalematePriority);
                 const idxB = getPriorityIndex(b.key, stalematePriority);

@@ -1294,7 +1294,7 @@ describe('AI System', () => {
             expect(sellAction).toBeUndefined();
         });
 
-        it('should sell Conyard if Factory exists in stalemate AND overwhelmed by enemy', () => {
+        it('should NOT sell Conyard in stalemate even if Factory exists AND overwhelmed by enemy', () => {
             resetAIState(1);
             const entities: Record<EntityId, Entity> = {};
             // Set placedTick to make buildings "mature"
@@ -1311,9 +1311,10 @@ describe('AI System', () => {
 
             const actions = computeAiActions(state, 1);
             const sellAction = actions.find(a => a.type === 'SELL_BUILDING');
-            expect(sellAction).toBeDefined();
+            // Conyard should never be sold in stalemate - keep for recovery potential
+            // Last Resort handles truly desperate situations
             if (sellAction) {
-                expect(sellAction.payload.buildingId).toBe('conyard');
+                expect(sellAction.payload.buildingId).not.toBe('conyard');
             }
         });
 
