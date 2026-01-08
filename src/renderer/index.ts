@@ -4,6 +4,7 @@ import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
+import { calculatePlayerScores } from '../engine/scores.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -43,6 +44,9 @@ export class Renderer {
         // Clear
         ctx.fillStyle = '#2d3322';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw map boundary indicator lines
+        this.drawMapBorder(camera, zoom, state.config.width, state.config.height);
 
         ctx.save();
 
@@ -152,6 +156,60 @@ export class Renderer {
 
         // Draw tooltips
         this.drawTooltip(mousePos, sortedEntities, camera, zoom, localPlayerId);
+
+        // Draw player scores
+        this.drawScores(state);
+
+        ctx.restore();
+    }
+
+    private drawMapBorder(camera: { x: number; y: number }, zoom: number, mapWidth: number, mapHeight: number) {
+        const ctx = this.ctx;
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+
+        // Convert map boundaries to screen coordinates
+        const leftEdge = (0 - camera.x) * zoom;
+        const rightEdge = (mapWidth - camera.x) * zoom;
+        const topEdge = (0 - camera.y) * zoom;
+        const bottomEdge = (mapHeight - camera.y) * zoom;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+
+        // Draw left edge if visible
+        if (leftEdge > 0 && leftEdge < canvasWidth) {
+            ctx.beginPath();
+            ctx.moveTo(leftEdge, Math.max(0, topEdge));
+            ctx.lineTo(leftEdge, Math.min(canvasHeight, bottomEdge));
+            ctx.stroke();
+        }
+
+        // Draw right edge if visible
+        if (rightEdge > 0 && rightEdge < canvasWidth) {
+            ctx.beginPath();
+            ctx.moveTo(rightEdge, Math.max(0, topEdge));
+            ctx.lineTo(rightEdge, Math.min(canvasHeight, bottomEdge));
+            ctx.stroke();
+        }
+
+        // Draw top edge if visible
+        if (topEdge > 0 && topEdge < canvasHeight) {
+            ctx.beginPath();
+            ctx.moveTo(Math.max(0, leftEdge), topEdge);
+            ctx.lineTo(Math.min(canvasWidth, rightEdge), topEdge);
+            ctx.stroke();
+        }
+
+        // Draw bottom edge if visible
+        if (bottomEdge > 0 && bottomEdge < canvasHeight) {
+            ctx.beginPath();
+            ctx.moveTo(Math.max(0, leftEdge), bottomEdge);
+            ctx.lineTo(Math.min(canvasWidth, rightEdge), bottomEdge);
+            ctx.stroke();
+        }
 
         ctx.restore();
     }
@@ -605,5 +663,67 @@ export class Renderer {
                 }
             }
         }
+    }
+
+    private drawScores(state: GameState) {
+        const scores = calculatePlayerScores(state);
+        if (scores.length === 0) return;
+
+        const ctx = this.ctx;
+        const padding = 10;
+        const barWidth = 100;
+        const barHeight = 8;
+        const rowHeight = 28;
+        const panelWidth = 240;
+        const panelHeight = padding * 2 + scores.length * rowHeight;
+
+        // Position in bottom-left corner
+        const x = padding;
+        const y = this.canvas.height - panelHeight - padding;
+
+        ctx.save();
+
+        // Semi-transparent background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, panelWidth, panelHeight, 6);
+        ctx.fill();
+
+        // Find max score for scaling bars
+        const maxScore = Math.max(...scores.map(s => Math.max(s.military, s.economy)), 1);
+
+        // Draw each player's scores
+        for (let i = 0; i < scores.length; i++) {
+            const score = scores[i];
+            const rowY = y + padding + i * rowHeight;
+
+            // Player color indicator
+            ctx.fillStyle = score.color;
+            ctx.beginPath();
+            ctx.arc(x + padding + 6, rowY + 10, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Military bar (red)
+            const militaryWidth = (score.military / maxScore) * barWidth;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x + padding + 20, rowY + 2, barWidth, barHeight);
+            ctx.fillStyle = '#cc4444';
+            ctx.fillRect(x + padding + 20, rowY + 2, militaryWidth, barHeight);
+
+            // Economy bar (green/gold)
+            const economyWidth = (score.economy / maxScore) * barWidth;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x + padding + 20, rowY + 12, barWidth, barHeight);
+            ctx.fillStyle = '#44aa44';
+            ctx.fillRect(x + padding + 20, rowY + 12, economyWidth, barHeight);
+
+            // Total score text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '11px Arial';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${Math.round(score.total / 100) / 10}k`, x + padding + 125, rowY + 11);
+        }
+
+        ctx.restore();
     }
 }

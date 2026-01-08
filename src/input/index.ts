@@ -314,9 +314,11 @@ export function handleCameraInput(
     inputState.wheelDeltaX = 0;
     inputState.wheelDeltaY = 0;
 
+    // Allow panning 300px past map edges to see units under UI panels
+    const panBuffer = 300;
     return {
-        x: Math.max(0, Math.min(mapWidth - canvasWidth / zoom, camera.x + dx)),
-        y: Math.max(0, Math.min(mapHeight - canvasHeight / zoom, camera.y + dy))
+        x: Math.max(-panBuffer / zoom, Math.min(mapWidth - canvasWidth / zoom + panBuffer / zoom, camera.x + dx)),
+        y: Math.max(-panBuffer / zoom, Math.min(mapHeight - canvasHeight / zoom + panBuffer / zoom, camera.y + dy))
     };
 }
 

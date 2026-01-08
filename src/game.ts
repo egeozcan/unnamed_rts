@@ -921,13 +921,14 @@ function gameLoop(timestamp: number = 0) {
 
         const mapWidth = currentState.config.width;
         const mapHeight = currentState.config.height;
+        const panBuffer = 300;
 
         currentState = {
             ...currentState,
             zoom: newZoom,
             camera: {
-                x: Math.max(0, Math.min(mapWidth - canvas.width / newZoom, newCameraX)),
-                y: Math.max(0, Math.min(mapHeight - canvas.height / newZoom, newCameraY))
+                x: Math.max(-panBuffer / newZoom, Math.min(mapWidth - canvas.width / newZoom + panBuffer / newZoom, newCameraX)),
+                y: Math.max(-panBuffer / newZoom, Math.min(mapHeight - canvas.height / newZoom + panBuffer / newZoom, newCameraY))
             }
         };
     }
