@@ -778,9 +778,7 @@ export function handleEmergencySell(
     // - No significant army to fight with
     // - AND base is under attack by a larger force (overwhelmed)
     if (!shouldSell && isStalemate && !hasSignificantArmy && isOverwhelmedByEnemy) {
-        const hasFactory = hasProductionBuildingFor('vehicle', buildings);
         const hasBarracks = hasProductionBuildingFor('infantry', buildings);
-        const hasAnyProduction = hasFactory || hasBarracks;
 
         // Count production buildings to identify excess
         const barracksCount = matureBuildings.filter(b => b.key === 'barracks').length;

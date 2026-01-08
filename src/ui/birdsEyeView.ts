@@ -1,5 +1,6 @@
-import { Entity, GameState, PLAYER_COLORS, PlayerState, EntityId } from '../engine/types.js';
+import { Entity, GameState, GameMode, PLAYER_COLORS, PlayerState, EntityId } from '../engine/types.js';
 import { RULES } from '../data/schemas/index.js';
+import { getAIState } from '../engine/ai/index.js';
 
 // Module state
 let birdsEyeOverlay: HTMLDivElement | null = null;
@@ -147,10 +148,27 @@ function computePlayerStats(entities: Record<EntityId, Entity>, players: Record<
     return stats;
 }
 
-function renderLegend(stats: Record<number, PlayerStats>, players: Record<number, PlayerState>) {
+// Strategy display colors
+const STRATEGY_COLORS: Record<string, string> = {
+    'buildup': '#4af',
+    'attack': '#f44',
+    'defend': '#ff4',
+    'harass': '#f84',
+    'all_in': '#f00'
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+    'economy': '#4f4',
+    'warfare': '#f44',
+    'defense': '#ff4',
+    'balanced': '#aaa'
+};
+
+function renderLegend(stats: Record<number, PlayerStats>, players: Record<number, PlayerState>, mode: GameMode) {
     const legendEl = document.getElementById('birds-eye-legend');
     if (!legendEl) return;
 
+    const isObserver = mode === 'demo';
     let html = '<div class="legend-grid">';
 
     // Sort players by ID
@@ -177,8 +195,29 @@ function renderLegend(stats: Record<number, PlayerStats>, players: Record<number
         // Format credits
         const credits = Math.floor(player.credits);
 
+        // AI state info for observer mode
+        let aiStateHtml = '';
+        let tooltipData = '';
+        if (player.isAi && isObserver && !isDefeated) {
+            const aiState = getAIState(pid);
+            const strategyColor = STRATEGY_COLORS[aiState.strategy] || '#888';
+            const priorityColor = PRIORITY_COLORS[aiState.investmentPriority] || '#888';
+
+            // Compact AI state display
+            aiStateHtml = `
+                <div class="legend-ai-state">
+                    <span class="ai-badge" style="background: ${strategyColor}" title="Strategy">${aiState.strategy.toUpperCase()}</span>
+                    <span class="ai-badge" style="background: ${priorityColor}" title="Priority">${aiState.investmentPriority.slice(0, 4).toUpperCase()}</span>
+                    <span class="ai-personality" title="Personality">${aiState.personality}</span>
+                </div>
+            `;
+
+            // Tooltip data for hover (detailed AI state)
+            tooltipData = `data-ai-tooltip="Strategy: ${aiState.strategy}&#10;Priority: ${aiState.investmentPriority}&#10;Personality: ${aiState.personality}&#10;Threat: ${aiState.threatLevel}%&#10;Economy: ${aiState.economyScore}%&#10;Attack Group: ${aiState.attackGroup.length}&#10;Defense Group: ${aiState.defenseGroup.length}&#10;Threats Near Base: ${aiState.threatsNearBase.length}"`;
+        }
+
         html += `
-            <div class="legend-player${isDefeated ? ' defeated' : ''}" style="border-left: 4px solid ${color}">
+            <div class="legend-player${isDefeated ? ' defeated' : ''}" style="border-left: 4px solid ${color}" ${tooltipData}>
                 <div class="legend-player-header">
                     <div class="legend-player-name" style="color: ${color}">P${pid + 1}${player.isAi ? ' (AI)' : ''}${isDefeated ? ' - DEFEATED' : ''}</div>
                     <div class="legend-player-resources">
@@ -193,6 +232,7 @@ function renderLegend(stats: Record<number, PlayerStats>, players: Record<number
                     <span title="Buildings">🏠${s.buildings}</span>
                     <span title="Defenses">🗼${s.defenses}</span>
                 </div>
+                ${aiStateHtml}
             </div>
         `;
     }
@@ -402,7 +442,7 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
 
     // Update legend with player stats
     const stats = computePlayerStats(state.entities, state.players);
-    renderLegend(stats, state.players);
+    renderLegend(stats, state.players, state.mode);
 
     // Handle tooltip hover detection and drawing
     if (mousePos && birdsEyeCanvas) {

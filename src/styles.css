@@ -1254,6 +1254,56 @@ canvas#gameCanvas {
     cursor: help;
 }
 
+/* AI State Display (Observer Mode) */
+.legend-ai-state {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ai-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: bold;
+    color: #000;
+    text-transform: uppercase;
+    font-family: 'Courier New', monospace;
+}
+
+.ai-personality {
+    font-size: 10px;
+    color: #888;
+    font-style: italic;
+}
+
+/* Tooltip for AI state on hover */
+.legend-player[data-ai-tooltip] {
+    cursor: help;
+    position: relative;
+}
+
+.legend-player[data-ai-tooltip]:hover::after {
+    content: attr(data-ai-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: rgba(20, 30, 40, 0.95);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: pre-line;
+    z-index: 1000;
+    border: 1px solid #444;
+    min-width: 180px;
+    font-family: 'Courier New', monospace;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
 /* ==================== */
 /* Responsive Styles    */
 /* ==================== */
