@@ -89,8 +89,8 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                 }
             } else if (isAirUnit(entity)) {
                 // Special handling for air units (harriers)
-                // Only launch if docked and has ammo
-                if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target) {
+                // Only launch if docked and has ammo, and target is enemy
+                if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== entity.owner) {
                     // Launch harrier - set to flying, assign target, clear slot on air base
                     const homeBaseId = entity.airUnit.homeBaseId;
                     const dockedSlot = entity.airUnit.dockedSlot;
@@ -125,12 +125,14 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                 }
                 // Otherwise (not docked, no ammo, or no target): ignore command
             } else {
-                // Normal combat unit attack behavior
-                nextEntities[id] = {
-                    ...entity,
-                    movement: { ...entity.movement, moveTarget: null, path: null },
-                    combat: { ...entity.combat, targetId: targetId }
-                };
+                // Normal combat unit attack behavior - only target enemies
+                if (target && target.owner !== entity.owner) {
+                    nextEntities[id] = {
+                        ...entity,
+                        movement: { ...entity.movement, moveTarget: null, path: null },
+                        combat: { ...entity.combat, targetId: targetId }
+                    };
+                }
             }
         }
     }
