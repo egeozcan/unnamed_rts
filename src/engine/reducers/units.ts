@@ -423,8 +423,8 @@ export function updateUnit(
             const isFleeTimedOut = moveTargetTicks > absoluteFleeTimeout;
 
             if (nextEntity.pos.dist(result.entity.movement.moveTarget!) < clearDistance || isStuckOnFlee || isFleeTimedOut) {
-                const shouldDisableManualMode = isFleeTimedOut || isStuckOnFlee;
-                const fleeCooldownDuration = 300;
+                // Keep manualMode - harvesters should stay idle after reaching destination or getting stuck
+                // Only explicitly commanding to harvest (right-click ore) should disable manual mode
                 nextEntity = {
                     ...nextEntity,
                     movement: {
@@ -436,11 +436,6 @@ export function updateUnit(
                         lastDistToMoveTarget: undefined,
                         bestDistToMoveTarget: undefined,
                         moveTargetNoProgressTicks: undefined
-                    },
-                    harvester: {
-                        ...nextEntity.harvester,
-                        manualMode: shouldDisableManualMode ? false : nextEntity.harvester.manualMode,
-                        fleeCooldownUntilTick: shouldDisableManualMode ? (currentTick + fleeCooldownDuration) : undefined
                     }
                 };
             } else {

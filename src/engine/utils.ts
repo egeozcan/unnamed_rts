@@ -298,7 +298,7 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
                 resourceTargetId: null,
                 baseTargetId: null,
                 dockPos: undefined,
-                manualMode: undefined,
+                manualMode: false,  // New harvesters auto-harvest by default
                 harvestAttemptTicks: undefined,
                 lastDistToOre: undefined,
                 bestDistToOre: undefined,

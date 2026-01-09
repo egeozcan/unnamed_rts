@@ -49,7 +49,7 @@ export function createDefaultHarvester(): HarvesterComponent {
         resourceTargetId: null,
         baseTargetId: null,
         dockPos: undefined,
-        manualMode: undefined,
+        manualMode: false,  // New harvesters auto-harvest by default
         harvestAttemptTicks: undefined,
         lastDistToOre: undefined,
         bestDistToOre: undefined,
