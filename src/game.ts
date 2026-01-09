@@ -824,7 +824,8 @@ function updateButtonsUI() {
         currentState.entities,
         player.queues,
         player.readyToPlace,
-        currentState.placingBuilding
+        currentState.placingBuilding,
+        pid
     );
     updateSellModeUI(currentState);
     updateRepairModeUI(currentState);

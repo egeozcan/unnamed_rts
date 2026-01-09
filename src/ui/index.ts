@@ -152,9 +152,10 @@ export function updateButtons(
     entities: Record<EntityId, Entity>,
     queues: Record<string, { current: string | null; progress: number; queued?: readonly string[] }>,
     readyToPlace: string | null,
-    placingBuilding: string | null
+    placingBuilding: string | null,
+    playerId: number = 0
 ) {
-    const owner = 0;
+    const owner = playerId;
 
     // Update prerequisites using canBuild from reducer
     // Buildings
