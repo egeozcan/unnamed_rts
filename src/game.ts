@@ -30,6 +30,13 @@ const renderer = new Renderer(canvas);
 let currentState: GameState = INITIAL_STATE;
 let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
 
+// HMR: Restore state from previous hot reload if available
+if (import.meta.hot?.data?.gameState) {
+    currentState = reconstructVectors(import.meta.hot.data.gameState);
+    humanPlayerId = import.meta.hot.data.humanPlayerId;
+    console.log('[HMR] Restored game state from hot reload');
+}
+
 // OPTIMIZATION: Cache power calculations to avoid recalculating every frame
 let cachedPower: { out: number; in: number } = { out: 0, in: 0 };
 let cachedPowerTick: number = -1;
@@ -1024,6 +1031,19 @@ function checkWinCondition() {
 }
 
 window.startGame = startGameWithConfig;
+
+// HMR: Save state before module is replaced
+if (import.meta.hot) {
+    import.meta.hot.accept();
+    import.meta.hot.dispose((data) => {
+        // Only save if game is running (not in menu)
+        if (currentState.mode !== 'menu') {
+            data.gameState = currentState;
+            data.humanPlayerId = humanPlayerId;
+            console.log('[HMR] Saved game state for hot reload');
+        }
+    });
+}
 
 // Export pure functions for testing
 export const _testUtils = {
