@@ -11,35 +11,102 @@ import { moveToward } from './movement';
 // Re-export for backwards compatibility
 export { moveToward };
 
+/**
+ * Calculate formation positions for a group of units moving to a target.
+ * Uses a box/grid formation that grows with unit count.
+ */
+function calculateFormationPositions(center: Vector, unitCount: number, unitRadius: number): Vector[] {
+    if (unitCount <= 1) return [center];
+
+    // Spacing between units (based on typical unit radius + buffer)
+    const spacing = unitRadius * 2.5;
+
+    // Calculate grid dimensions - prefer wider than tall formations
+    const cols = Math.ceil(Math.sqrt(unitCount * 1.5));
+    const rows = Math.ceil(unitCount / cols);
+
+    // Calculate offset to center the formation on the target
+    const offsetX = ((cols - 1) * spacing) / 2;
+    const offsetY = ((rows - 1) * spacing) / 2;
+
+    const positions: Vector[] = [];
+    for (let i = 0; i < unitCount; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        positions.push(new Vector(
+            center.x - offsetX + col * spacing,
+            center.y - offsetY + row * spacing
+        ));
+    }
+
+    return positions;
+}
+
 export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x: number; y: number }): GameState {
     const { unitIds, x, y } = payload;
     const target = new Vector(x, y);
 
-    let nextEntities = { ...state.entities };
+    // Filter to valid movable units
+    const movableUnits: UnitEntity[] = [];
     for (const id of unitIds) {
-        const entity = nextEntities[id];
-        if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
-            if (entity.key === 'harvester') {
-                // Harvester: clear harvesting targets and enable manual mode
-                nextEntities[id] = {
-                    ...entity,
-                    movement: { ...entity.movement, moveTarget: target, path: null },
-                    combat: { ...entity.combat, targetId: null },
-                    harvester: { ...entity.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
-                };
-            } else if (isAirUnit(entity)) {
-                // Air units (harriers) can only be controlled via attack commands
-                // Docked harriers ignore move commands - they must be launched with an attack
-                // Flying/returning harriers also ignore move commands
-                continue;
-            } else {
-                // Combat unit
-                nextEntities[id] = {
-                    ...entity,
-                    movement: { ...entity.movement, moveTarget: target, path: null },
-                    combat: { ...entity.combat, targetId: null }
-                };
+        const entity = state.entities[id];
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT' && !isAirUnit(entity)) {
+            movableUnits.push(entity);
+        }
+    }
+
+    if (movableUnits.length === 0) {
+        return state;
+    }
+
+    // Calculate formation positions based on average unit radius
+    const avgRadius = movableUnits.reduce((sum, u) => sum + u.radius, 0) / movableUnits.length;
+    const formationPositions = calculateFormationPositions(target, movableUnits.length, avgRadius);
+
+    // Sort units by distance to target center for efficient position assignment
+    // Units closest to target get positions closest to center
+    const sortedUnits = [...movableUnits].sort((a, b) =>
+        a.pos.dist(target) - b.pos.dist(target)
+    );
+
+    // Assign positions - match each unit to the closest available formation slot
+    const assignedPositions = new Map<EntityId, Vector>();
+    const availablePositions = [...formationPositions];
+
+    for (const unit of sortedUnits) {
+        // Find closest available position to this unit's current position
+        let bestIdx = 0;
+        let bestDist = unit.pos.dist(availablePositions[0]);
+        for (let i = 1; i < availablePositions.length; i++) {
+            const dist = unit.pos.dist(availablePositions[i]);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
             }
+        }
+        assignedPositions.set(unit.id, availablePositions[bestIdx]);
+        availablePositions.splice(bestIdx, 1);
+    }
+
+    let nextEntities = { ...state.entities };
+    for (const unit of movableUnits) {
+        const formationTarget = assignedPositions.get(unit.id) || target;
+
+        if (unit.key === 'harvester') {
+            // Harvester: clear harvesting targets and enable manual mode
+            nextEntities[unit.id] = {
+                ...unit,
+                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                combat: { ...unit.combat, targetId: null },
+                harvester: { ...unit.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
+            };
+        } else {
+            // Combat unit
+            nextEntities[unit.id] = {
+                ...unit,
+                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                combat: { ...unit.combat, targetId: null }
+            };
         }
     }
     return { ...state, entities: nextEntities };
