@@ -488,6 +488,22 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     currentState = state;
 
+    // Center camera on human player's starting position
+    if (humanPlayerId !== null) {
+        const humanIndex = config.players.findIndex(p => p.slot === humanPlayerId);
+        if (humanIndex >= 0 && humanIndex < positions.length) {
+            const startPos = positions[humanIndex];
+            // Center the camera on the player's base
+            currentState = {
+                ...currentState,
+                camera: {
+                    x: startPos.x - canvas.width / 2,
+                    y: startPos.y - canvas.height / 2
+                }
+            };
+        }
+    }
+
     // Set up callback for loading game state from debug UI
     setLoadGameStateCallback((loadedState) => {
         // Reconstruct Vector objects from plain {x, y} objects
