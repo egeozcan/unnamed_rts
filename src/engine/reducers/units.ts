@@ -112,9 +112,82 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
     return { ...state, entities: nextEntities };
 }
 
+/**
+ * Calculate spread positions around a target for attack commands.
+ * Units spread in a ring around the target to avoid bunching up.
+ */
+function calculateAttackSpreadPositions(targetPos: Vector, attackerPositions: Vector[], approachRange: number): Vector[] {
+    const count = attackerPositions.length;
+    if (count <= 1) return [targetPos];
+
+    // Calculate average direction from attackers to target
+    let avgDir = new Vector(0, 0);
+    for (const pos of attackerPositions) {
+        avgDir = avgDir.add(targetPos.sub(pos).norm());
+    }
+    avgDir = avgDir.norm();
+
+    // Spread units in an arc facing the target
+    // Arc widens based on number of units
+    const arcAngle = Math.min(Math.PI * 0.8, (count - 1) * 0.3); // Max 144 degrees
+    const startAngle = Math.atan2(avgDir.y, avgDir.x) - arcAngle / 2;
+
+    const positions: Vector[] = [];
+    for (let i = 0; i < count; i++) {
+        const angle = count > 1 ? startAngle + (arcAngle * i) / (count - 1) : startAngle;
+        // Position units at approach range from target
+        positions.push(new Vector(
+            targetPos.x - Math.cos(angle) * approachRange,
+            targetPos.y - Math.sin(angle) * approachRange
+        ));
+    }
+
+    return positions;
+}
+
 export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetId: EntityId }): GameState {
     const { unitIds, targetId } = payload;
     const target = state.entities[targetId];
+
+    if (!target) {
+        return state;
+    }
+
+    // Collect combat units that will attack
+    const attackers: UnitEntity[] = [];
+    for (const id of unitIds) {
+        const entity = state.entities[id];
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT' &&
+            entity.key !== 'harvester' && !isAirUnit(entity) &&
+            target.owner !== entity.owner) {
+            attackers.push(entity);
+        }
+    }
+
+    // Calculate spread positions for attackers
+    const attackerPositions = attackers.map(u => u.pos);
+    const approachRange = 80; // Distance from target to spread to
+    const spreadPositions = calculateAttackSpreadPositions(target.pos, attackerPositions, approachRange);
+
+    // Assign spread positions to attackers (closest unit to closest position)
+    const assignedSpread = new Map<EntityId, Vector>();
+    const availableSpread = [...spreadPositions];
+    const sortedAttackers = [...attackers].sort((a, b) => a.pos.dist(target.pos) - b.pos.dist(target.pos));
+
+    for (const unit of sortedAttackers) {
+        if (availableSpread.length === 0) break;
+        let bestIdx = 0;
+        let bestDist = unit.pos.dist(availableSpread[0]);
+        for (let i = 1; i < availableSpread.length; i++) {
+            const dist = unit.pos.dist(availableSpread[i]);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        assignedSpread.set(unit.id, availableSpread[bestIdx]);
+        availableSpread.splice(bestIdx, 1);
+    }
 
     let nextEntities = { ...state.entities };
     for (const id of unitIds) {
@@ -194,9 +267,11 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
             } else {
                 // Normal combat unit attack behavior - only target enemies
                 if (target && target.owner !== entity.owner) {
+                    // Use spread position if assigned, otherwise approach directly
+                    const spreadPos = assignedSpread.get(id);
                     nextEntities[id] = {
                         ...entity,
-                        movement: { ...entity.movement, moveTarget: null, path: null },
+                        movement: { ...entity.movement, moveTarget: spreadPos || null, path: null },
                         combat: { ...entity.combat, targetId: targetId }
                     };
                 }
