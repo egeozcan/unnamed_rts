@@ -56,9 +56,13 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
     // OPTIMIZATION: Skip pathfinding for very close targets - direct steering is sufficient
     const isCloseTarget = distToTarget < 80;
 
+    // OPTIMIZATION: Increase re-path threshold to reduce pathfinding when chasing moving targets
+    // Units will re-path only if target moved >120 units (significant change) or they're stuck
+    const targetMovedSignificantly = finalDest && finalDest.dist(target) > 120;
+
     const needNewPath = !isCloseTarget && (
         !path || path.length === 0 ||
-        (finalDest && finalDest.dist(target) > 20) ||
+        targetMovedSignificantly ||
         // OPTIMIZATION: Stagger path recalculation when stuck (every 10 ticks)
         (stuckTimer > 30 && stuckTimer % 10 === 0)
     );

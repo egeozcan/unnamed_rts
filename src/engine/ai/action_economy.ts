@@ -12,10 +12,8 @@ import {
     isValidPlacement,
     isAtMaxCount,
     // Well utilities for Induction Rig
-    getAllWells,
     getAccessibleWells,
     getUnoccupiedWells,
-    findNearestAccessibleUnoccupiedWell,
     getInductionRigs,
     getDeployedInductionRigs,
     getNonDefenseBuildings,
@@ -1726,7 +1724,7 @@ export function handleHarvesterGathering(
  */
 export function handleInductionRigOperations(
     state: GameState,
-    playerId: number,
+    _playerId: number,
     myBuildings: Entity[],
     myUnits: Entity[]
 ): Action[] {

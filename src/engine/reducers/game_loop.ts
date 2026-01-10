@@ -92,7 +92,7 @@ export function tick(state: GameState): GameState {
     let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
 
     [...state.projectiles, ...newProjs].forEach(p => {
-        const res = updateProjectile(p, updatedEntities);
+        const res = updateProjectile(p, updatedEntities, state.config.width, state.config.height);
         if (!res.proj.dead) {
             nextProjectiles.push(res.proj);
         }
@@ -717,13 +717,28 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     return workingEntities as Record<EntityId, Entity>;
 }
 
-export function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId } } {
+export function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId } } {
     const nextPos = proj.pos.add(proj.vel);
     let nextProj = { ...proj, pos: nextPos };
     let damageEvent = undefined;
 
+    // Kill projectiles that go out of bounds (with margin for edge cases)
+    const MARGIN = 200;
+    if (nextPos.x < -MARGIN || nextPos.x > mapWidth + MARGIN ||
+        nextPos.y < -MARGIN || nextPos.y > mapHeight + MARGIN) {
+        nextProj.dead = true;
+        return { proj: nextProj, damage: damageEvent };
+    }
+
     const target = entities[proj.targetId];
-    if (target && !target.dead) {
+
+    // Kill projectile if target no longer exists
+    if (!target) {
+        nextProj.dead = true;
+        return { proj: nextProj, damage: damageEvent };
+    }
+
+    if (!target.dead) {
         if (nextPos.dist(target.pos) < target.radius + 15) {
             nextProj.dead = true;
 
@@ -740,7 +755,8 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
                 attackerId: proj.ownerId
             };
         }
-    } else if (target && target.dead && nextPos.dist(target.pos) < 20) {
+    } else if (nextPos.dist(target.pos) < 20) {
+        // Target is dead, kill projectile when it reaches where target was
         nextProj.dead = true;
     }
 

@@ -527,44 +527,48 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
         }
     }
 
-    // A* algorithm
+    // A* algorithm - OPTIMIZED: Use numeric keys and typed arrays
+    const gridW = getGridW();
+    const gridH = getGridH();
+    const gridSize = gridW * gridH;
+
     const openSet = new MinHeap();
-    const closedSet = new Set<string>();
-    const openMap = new Map<string, PathNode>();
+    const closedSet = new Uint8Array(gridSize); // 0 = open, 1 = closed
+    const openMap = new Map<number, PathNode>(); // numeric key = y * gridW + x
     const dangerGrid = ownerId !== undefined ? dangerGrids[ownerId] : null;
+    const collisionGrid = gridManager.collisionGrid;
+
+    // Octile heuristic for 8-directional movement (more accurate than Manhattan)
+    const dx0 = Math.abs(actualGoalGx - startGx);
+    const dy0 = Math.abs(actualGoalGy - startGy);
+    const startH = Math.max(dx0, dy0) + 0.41 * Math.min(dx0, dy0);
 
     const startNode: PathNode = {
         x: startGx,
         y: startGy,
         g: 0,
-        h: Math.abs(actualGoalGx - startGx) + Math.abs(actualGoalGy - startGy),
-        f: 0,
+        h: startH,
+        f: startH,
         parent: null
     };
-    startNode.f = startNode.g + startNode.h;
 
+    const startKey = startGy * gridW + startGx;
     openSet.push(startNode);
-    openMap.set(`${startGx},${startGy}`, startNode);
+    openMap.set(startKey, startNode);
 
-    // 8-directional movement
-    const directions = [
-        { dx: 0, dy: -1, cost: 1 },    // N
-        { dx: 1, dy: -1, cost: 1.41 }, // NE
-        { dx: 1, dy: 0, cost: 1 },     // E
-        { dx: 1, dy: 1, cost: 1.41 },  // SE
-        { dx: 0, dy: 1, cost: 1 },     // S
-        { dx: -1, dy: 1, cost: 1.41 }, // SW
-        { dx: -1, dy: 0, cost: 1 },    // W
-        { dx: -1, dy: -1, cost: 1.41 } // NW
-    ];
+    // 8 directions: [dx, dy, cost] - N, NE, E, SE, S, SW, W, NW (moved outside loop)
+    const dirs: [number, number, number][] = [[0,-1,1], [1,-1,1.41], [1,0,1], [1,1,1.41], [0,1,1], [-1,1,1.41], [-1,0,1], [-1,-1,1.41]];
 
     let iterations = 0;
-    const maxIterations = 8000; // Must handle cross-map paths on large maps (125x125+ grids)
+    const maxIterations = 4000;
 
     while (!openSet.isEmpty() && iterations < maxIterations) {
         iterations++;
         const current = openSet.pop()!;
-        const currentKey = `${current.x},${current.y}`;
+        const currentKey = current.y * gridW + current.x;
+
+        // Skip if already processed (can happen with duplicate heap entries)
+        if (closedSet[currentKey] === 1) continue;
 
         if (current.x === actualGoalGx && current.y === actualGoalGy) {
             // Reconstruct path
@@ -587,10 +591,18 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
             // Add actual goal position
             path.push(goal);
 
-            // Smooth path - remove intermediate waypoints that are in direct line of sight
-            // NOTE: Smoothing might cut through danger zones if not careful.
-            // For now, keep smoothing but maybe basic hasLineOfSight should check danger?
-            // If I omit danger check in LoS, units might smooth "across" a danger zone.
+            // OPTIMIZATION: Skip smoothing for short paths - not worth the hasLineOfSight cost
+            if (path.length <= 4) {
+                // Cache and return unsmoothed short path
+                if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
+                    const firstKey = pathCache.keys().next().value;
+                    if (firstKey) pathCache.delete(firstKey);
+                }
+                pathCache.set(cacheKey, { path, tick: currentPathTick });
+                return path;
+            }
+
+            // Smooth longer paths - remove intermediate waypoints that are in direct line of sight
             const smoothedPath = smoothPath(path, entityRadius, ownerId);
 
             // Cache the result
@@ -604,36 +616,44 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
             return smoothedPath;
         }
 
-        closedSet.add(currentKey);
+        closedSet[currentKey] = 1;
         openMap.delete(currentKey);
 
-        for (const dir of directions) {
-            const nx = current.x + dir.dx;
-            const ny = current.y + dir.dy;
-            const neighborKey = `${nx},${ny}`;
+        // Process neighbors
+        const cx = current.x;
+        const cy = current.y;
+        const cg = current.g;
 
-            if (nx < 0 || nx >= getGridW() || ny < 0 || ny >= getGridH()) continue;
-            if (closedSet.has(neighborKey)) continue;
-            if (gridManager.collisionGrid[ny * getGridW() + nx] === 1) continue;
+        for (let d = 0; d < 8; d++) {
+            const dx = dirs[d][0];
+            const dy = dirs[d][1];
+            const cost = dirs[d][2];
+
+            const nx = cx + dx;
+            const ny = cy + dy;
+
+            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH) continue;
+
+            const neighborKey = ny * gridW + nx;
+            if (closedSet[neighborKey] === 1) continue;
+            if (collisionGrid[neighborKey] === 1) continue;
 
             // Check diagonal corner cutting
-            if (dir.dx !== 0 && dir.dy !== 0) {
-                const corner1 = gridManager.collisionGrid[current.y * getGridW() + nx];
-                const corner2 = gridManager.collisionGrid[ny * getGridW() + current.x];
-                if (corner1 === 1 || corner2 === 1) continue; // Don't cut corners
+            if (dx !== 0 && dy !== 0) {
+                if (collisionGrid[cy * gridW + nx] === 1 || collisionGrid[ny * gridW + cx] === 1) continue;
             }
 
-            // Calculate heuristic cost modifier for danger
-            let dangerCost = 0;
-            if (dangerGrid) {
-                dangerCost = dangerGrid[ny * getGridW() + nx];
-            }
-
-            const g = current.g + dir.cost + dangerCost;
+            // Danger cost
+            const dangerCost = dangerGrid ? dangerGrid[neighborKey] : 0;
+            const g = cg + cost + dangerCost;
             const existingNode = openMap.get(neighborKey);
 
             if (!existingNode || g < existingNode.g) {
-                const h = Math.abs(actualGoalGx - nx) + Math.abs(actualGoalGy - ny);
+                // Octile heuristic
+                const hdx = Math.abs(actualGoalGx - nx);
+                const hdy = Math.abs(actualGoalGy - ny);
+                const h = Math.max(hdx, hdy) + 0.41 * Math.min(hdx, hdy);
+
                 const newNode: PathNode = {
                     x: nx,
                     y: ny,
@@ -647,7 +667,6 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
                     openSet.push(newNode);
                     openMap.set(neighborKey, newNode);
                 } else {
-                    // Update existing node (heap doesn't reorder, but this is acceptable for game pathfinding)
                     existingNode.g = g;
                     existingNode.f = g + h;
                     existingNode.parent = current;
