@@ -104,9 +104,24 @@ function handleFullCargo(
         // Fallback to wider search if nothing nearby
         if (!bestRef) {
             bestRef = spatialGrid.findNearest(
-                nextHarvester.pos.x, nextHarvester.pos.y, 3000,
+                nextHarvester.pos.x, nextHarvester.pos.y, 5000,
                 (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead
             );
+        }
+        // Final fallback: search all entities if spatial query still fails
+        // This handles edge cases where harvester is very far from base
+        if (!bestRef) {
+            let minDist = Infinity;
+            for (const id in allEntities) {
+                const e = allEntities[id];
+                if (e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead) {
+                    const dist = nextHarvester.pos.dist(e.pos);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestRef = e;
+                    }
+                }
+            }
         }
         if (bestRef) {
             nextHarvester = {
