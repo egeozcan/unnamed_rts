@@ -652,6 +652,23 @@ function handleDequeueUnit(category: string, key: string, count: number) {
 }
 
 function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x1: number; y1: number; x2: number; y2: number }) {
+    // Debug Mode - copy clicked entity as JSON (works in any mode)
+    if (currentState.debugMode && !isDrag) {
+        const entityList = Object.values(currentState.entities);
+        const clicked = entityList.find(e =>
+            !e.dead && e.pos.dist(new Vector(wx, wy)) < e.radius + 20
+        );
+        if (clicked) {
+            const json = JSON.stringify(clicked);
+            navigator.clipboard.writeText(json).then(() => {
+                console.log(`[DEBUG] Copied entity ${clicked.id} to clipboard`);
+            }).catch(err => {
+                console.error('[DEBUG] Failed to copy to clipboard:', err);
+            });
+        }
+        return;
+    }
+
     if (currentState.mode === 'demo') return;
 
     // Sell Mode
