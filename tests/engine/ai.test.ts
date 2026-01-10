@@ -263,18 +263,40 @@ describe('AI System', () => {
             expect(threatsNearBase).not.toContain('enemy1');
         });
 
-        it('should detect harvesters under attack', () => {
+        it('should detect harvesters under attack (recent damage)', () => {
             const baseCenter = new Vector(500, 500);
+            const currentTick = 100;
             const harvesters = [
-                createEntity('harv1', 1, 'UNIT', 'harvester', 800, 800, { lastAttackerId: 'enemy1' })
+                createEntity('harv1', 1, 'UNIT', 'harvester', 800, 800, {
+                    lastAttackerId: 'enemy1',
+                    lastDamageTick: currentTick - 50 // Damaged 50 ticks ago (within 120 threshold)
+                })
             ];
             const enemies = [
                 createEntity('enemy1', 2, 'UNIT', 'tank', 850, 850)
             ];
             const myBuildings: Entity[] = [];
 
-            const { harvestersUnderAttack } = detectThreats(baseCenter, harvesters, enemies, myBuildings);
+            const { harvestersUnderAttack } = detectThreats(baseCenter, harvesters, enemies, myBuildings, 'hard', currentTick);
             expect(harvestersUnderAttack).toContain('harv1');
+        });
+
+        it('should NOT detect harvesters as under attack if damage was long ago', () => {
+            const baseCenter = new Vector(500, 500);
+            const currentTick = 1000;
+            const harvesters = [
+                createEntity('harv1', 1, 'UNIT', 'harvester', 800, 800, {
+                    lastAttackerId: 'enemy1',
+                    lastDamageTick: 500 // Damaged 500 ticks ago (outside 120 threshold)
+                })
+            ];
+            const enemies = [
+                createEntity('enemy1', 2, 'UNIT', 'tank', 2000, 2000) // Far away
+            ];
+            const myBuildings: Entity[] = [];
+
+            const { harvestersUnderAttack } = detectThreats(baseCenter, harvesters, enemies, myBuildings, 'hard', currentTick);
+            expect(harvestersUnderAttack).not.toContain('harv1');
         });
 
         it('should detect harvesters with nearby enemies as under threat', () => {

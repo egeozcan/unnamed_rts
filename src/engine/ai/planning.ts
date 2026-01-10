@@ -23,7 +23,8 @@ export function detectThreats(
     harvesters: Entity[],
     enemies: Entity[],
     myBuildings: Entity[],
-    difficulty: 'easy' | 'medium' | 'hard' = 'hard'
+    difficulty: 'easy' | 'medium' | 'hard' = 'hard',
+    currentTick: number = 0
 ): { threatsNearBase: EntityId[], harvestersUnderAttack: EntityId[] } {
     const threatsNearBase: EntityId[] = [];
     const harvestersUnderAttack: EntityId[] = [];
@@ -49,9 +50,19 @@ export function detectThreats(
     }
 
     // Find harvesters under attack
+    // A harvester is "under attack" if:
+    // 1. It was damaged recently (within last 120 ticks / 2 seconds), OR
+    // 2. An enemy unit is within 200 units
+    const RECENT_DAMAGE_THRESHOLD = 120; // 2 seconds
+
     for (const harv of harvesters) {
         const harvUnit = harv as HarvesterUnit;
-        if (harvUnit.combat.lastAttackerId) {
+
+        // Check if damaged recently
+        const wasRecentlyDamaged = harvUnit.combat.lastDamageTick !== undefined &&
+            (currentTick - harvUnit.combat.lastDamageTick) < RECENT_DAMAGE_THRESHOLD;
+
+        if (wasRecentlyDamaged) {
             harvestersUnderAttack.push(harv.id);
         } else {
             // Check for nearby threats

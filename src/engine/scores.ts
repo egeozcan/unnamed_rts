@@ -13,6 +13,7 @@ export interface PlayerScore {
     military: number;
     economy: number;
     total: number;
+    isEliminated: boolean;
 }
 
 // Cache for score calculation - avoids recalculating every frame
@@ -42,6 +43,8 @@ export function calculatePlayerScores(state: GameState): PlayerScore[] {
         const player = state.players[playerId];
         let military = 0;
         let economy = player.credits; // Start with current credits
+        let hasBuildings = false;
+        let hasMCV = false;
 
         // Iterate through entities once
         for (const id in state.entities) {
@@ -63,11 +66,13 @@ export function calculatePlayerScores(state: GameState): PlayerScore[] {
                 } else if (entity.key === 'mcv') {
                     // MCV is economic (can become a conyard)
                     economy += value;
+                    hasMCV = true;
                 } else {
                     // Combat units contribute to military
                     military += value;
                 }
             } else if (isBuilding(entity)) {
+                hasBuildings = true;
                 const buildingData = RULES.buildings[entity.key];
                 if (!buildingData) continue;
 
@@ -81,12 +86,16 @@ export function calculatePlayerScores(state: GameState): PlayerScore[] {
             }
         }
 
+        // Player is eliminated if they have no buildings AND no MCV
+        const isEliminated = !hasBuildings && !hasMCV;
+
         scores.push({
             playerId,
             color: player.color || PLAYER_COLORS[playerId] || '#888888',
             military: Math.round(military),
             economy: Math.round(economy),
-            total: Math.round(military + economy)
+            total: Math.round(military + economy),
+            isEliminated
         });
     }
 

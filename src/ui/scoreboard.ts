@@ -23,11 +23,13 @@ export function updateScoreboard(state: GameState) {
     lastUpdateTick = state.tick;
 
     const scores = calculatePlayerScores(state);
-    const maxScore = Math.max(...scores.map(s => Math.max(s.military, s.economy)), 1);
+    // Filter out eliminated players (no buildings and no MCV)
+    const activeScores = scores.filter(s => !s.isEliminated);
+    const maxScore = Math.max(...activeScores.map(s => Math.max(s.military, s.economy)), 1);
 
     // Build HTML for the scoreboard
     // We rebuild the innerHTML for simplicity, but could optimize to update individual elements if needed
-    scoreboardContainer.innerHTML = scores.map(score => createPlayerRow(score, maxScore)).join('');
+    scoreboardContainer.innerHTML = activeScores.map(score => createPlayerRow(score, maxScore)).join('');
 }
 
 function createPlayerRow(score: PlayerScore, maxScore: number): string {

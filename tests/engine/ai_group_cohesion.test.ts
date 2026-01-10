@@ -466,6 +466,10 @@ describe('AI Smart Combat Targeting', () => {
         entities['strong_enemy'] = createEntity('strong_enemy', 0, 'UNIT', 'tank', 1650, 1500, { hp: 380, maxHp: 400 });
 
         const state = createTestState(entities);
+
+        // Set personality to 'balanced' which has min_attack_group_size=5
+        setPersonalityForPlayer(1, 'balanced');
+
         const aiState = getAIState(1);
         aiState.strategy = 'attack';
         aiState.lastStrategyChange = -100;

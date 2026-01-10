@@ -134,7 +134,8 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
             harvesters,
             enemies,
             myBuildings,
-            player.difficulty  // Pass difficulty for threat detection radius scaling
+            player.difficulty,  // Pass difficulty for threat detection radius scaling
+            state.tick  // Pass current tick to determine recent attacks
         );
         aiState.threatsNearBase = threats.threatsNearBase;
         aiState.harvestersUnderAttack = threats.harvestersUnderAttack;
