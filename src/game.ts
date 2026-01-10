@@ -12,6 +12,7 @@ import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
+import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai/index.js';
@@ -520,6 +521,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     // Initialize UI
     initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);
     initMinimap();
+    initScoreboard();
     initBirdsEye();
 
     // Set observer mode if all players are AI
@@ -985,6 +987,9 @@ function gameLoop(timestamp: number = 0) {
         currentState.config.width,
         currentState.config.height
     );
+
+    // Scoreboard
+    updateScoreboard(currentState);
 
     // Observer Minimap Toggle
     if (currentState.mode === 'demo') {

@@ -800,6 +800,100 @@ canvas#gameCanvas {
     color: #4a9eff;
 }
 
+/* Scoreboard */
+/* Premium Glassmorphism Look */
+.scoreboard {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 260px;
+    padding: 16px;
+    background: rgba(10, 12, 16, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    z-index: 50;
+    transition: opacity 0.3s ease;
+    pointer-events: none; /* Let clicks pass through */
+}
+
+.score-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 32px;
+}
+
+.player-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.score-bars {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.score-bar-container {
+    height: 6px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.score-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease-out;
+    position: relative;
+}
+
+/* Add a subtle shine effect */
+.score-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+    opacity: 0.5;
+}
+
+.score-bar.military {
+    background: linear-gradient(90deg, #ff4444, #ff2222);
+    box-shadow: 0 0 8px rgba(255, 68, 68, 0.4);
+}
+
+.score-bar.economy {
+    background: linear-gradient(90deg, #44cc44, #22aa22);
+    box-shadow: 0 0 8px rgba(68, 204, 68, 0.4);
+}
+
+.total-score {
+    width: 45px;
+    text-align: right;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e0e0e0;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+
 .debug-stats-container {
     display: flex;
     flex-wrap: wrap;
