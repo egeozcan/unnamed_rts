@@ -9,7 +9,7 @@ import {
     createTestResource
 } from '../../src/engine/test-utils';
 
-const { getAIState, ATTACK_GROUP_MIN_SIZE } = _testUtils;
+const { getAIState, setPersonalityForPlayer, ATTACK_GROUP_MIN_SIZE } = _testUtils;
 
 // Helper functions
 function createEntity(
@@ -423,6 +423,10 @@ describe('AI Smart Combat Targeting', () => {
         entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2000, 2000, { hp: 3000, maxHp: 3000 });
 
         const state = createTestState(entities);
+
+        // Set personality to 'balanced' which has min_attack_group_size=5
+        setPersonalityForPlayer(1, 'balanced');
+
         const aiState = getAIState(1);
         aiState.strategy = 'attack';
         aiState.lastStrategyChange = -100;

@@ -9,7 +9,7 @@ import {
     createTestResource
 } from '../../src/engine/test-utils';
 
-const { getAIState, handleEmergencySell, updateEnemyIntelligence, handleMCVOperations } = _testUtils;
+const { getAIState, setPersonalityForPlayer, handleEmergencySell, updateEnemyIntelligence, handleMCVOperations } = _testUtils;
 
 // Helper functions
 function createEntity(
@@ -241,6 +241,9 @@ describe('AI Overhaul Tests', () => {
             // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
             let state = createTestState(entities, 601);
 
+            // Set personality to 'balanced' which has min_attack_group_size=5
+            setPersonalityForPlayer(1, 'balanced');
+
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0;
@@ -281,6 +284,9 @@ describe('AI Overhaul Tests', () => {
 
             // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
             let state = createTestState(entities, 601);
+
+            // Set personality to 'balanced' which has min_attack_group_size=5
+            setPersonalityForPlayer(1, 'balanced');
 
             const aiState = getAIState(1);
             aiState.strategy = 'attack';

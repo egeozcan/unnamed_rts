@@ -19,6 +19,9 @@ export const AIPersonalitySchema = z.object({
   kite_aggressiveness: z.number().min(0).max(1).optional(), // How aggressively to kite (default: 0.5)
   defense_investment: z.number().positive().optional(),   // Max turrets to build (default: 3)
   max_chase_distance: z.number().positive().optional(),   // How far to chase enemies (default: 400)
+  // Attack group sizing
+  min_attack_group_size: z.number().positive().optional(), // Minimum units to start attack (default: 5)
+  max_attack_group_size: z.number().positive().optional(), // Maximum units in attack group (default: 15)
 });
 export type AIPersonality = z.infer<typeof AIPersonalitySchema>;
 

@@ -29,7 +29,9 @@
             "credit_buffer": 200,
             "kite_aggressiveness": 0.3,
             "defense_investment": 2,
-            "max_chase_distance": 500
+            "max_chase_distance": 500,
+            "min_attack_group_size": 3,
+            "max_attack_group_size": 8
         },
         "turtle": {
             "aggression_bias": 0.5,
@@ -64,7 +66,9 @@
             "credit_buffer": 600,
             "kite_aggressiveness": 0.8,
             "defense_investment": 5,
-            "max_chase_distance": 300
+            "max_chase_distance": 300,
+            "min_attack_group_size": 8,
+            "max_attack_group_size": 20
         },
         "balanced": {
             "aggression_bias": 1.0,
@@ -97,7 +101,9 @@
             "credit_buffer": 400,
             "kite_aggressiveness": 0.5,
             "defense_investment": 3,
-            "max_chase_distance": 400
+            "max_chase_distance": 400,
+            "min_attack_group_size": 5,
+            "max_attack_group_size": 12
         }
     },
     "strategies": {

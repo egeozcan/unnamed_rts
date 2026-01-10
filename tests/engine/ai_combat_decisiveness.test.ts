@@ -15,7 +15,7 @@ import {
     createTestResource
 } from '../../src/engine/test-utils';
 
-const { getAIState, ATTACK_GROUP_MIN_SIZE } = _testUtils;
+const { getAIState, setPersonalityForPlayer, ATTACK_GROUP_MIN_SIZE } = _testUtils;
 
 // Helper functions
 function createEntity(
@@ -91,6 +91,10 @@ describe('AI Combat Decisiveness', () => {
             entities['enemy'] = createEntity('enemy', 0, 'UNIT', 'tank', 1600, 1500);
 
             const state = createTestState(entities);
+
+            // Set personality to 'balanced' which has min_attack_group_size=5
+            setPersonalityForPlayer(1, 'balanced');
+
             const aiState = getAIState(1);
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = -100;

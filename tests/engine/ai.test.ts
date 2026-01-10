@@ -16,6 +16,7 @@ const {
 
     updateEnemyBaseLocation,
     getPersonalityForPlayer,
+    setPersonalityForPlayer,
     DIFFICULTY_MODIFIERS,
     getDifficultyModifiers,
     ATTACK_GROUP_MIN_SIZE,
@@ -338,6 +339,9 @@ describe('AI System', () => {
             entities['enemy_tank'] = createEntity('enemy_tank', 0, 'UNIT', 'tank', 1500, 1500);
 
             const state = createTestState(entities);
+
+            // Set personality to 'balanced' which has min_attack_group_size=5
+            setPersonalityForPlayer(1, 'balanced');
 
             // Force attack strategy and set group to attacking state
             const aiState = getAIState(1);
@@ -851,6 +855,9 @@ describe('AI System', () => {
             entities['enemy2'] = createEntity('enemy2', 0, 'UNIT', 'tank', 1100, 900);
 
             const state = createTestState(entities);
+
+            // Set personality to 'balanced' which has min_attack_group_size=5
+            setPersonalityForPlayer(1, 'balanced');
 
             const aiState = getAIState(1);
             aiState.strategy = 'attack';

@@ -32,12 +32,16 @@ export function handleAttack(
     combatUnits: Entity[],
     enemies: Entity[],
     baseCenter: Vector,
-    _personality: AIPersonality,
+    personality: AIPersonality,
     ignoreSizeLimit: boolean = false
 ): Action[] {
     const actions: Action[] = [];
 
     if (enemies.length === 0) return actions;
+
+    // Get personality-specific group size limits
+    const minGroupSize = personality.min_attack_group_size || ATTACK_GROUP_MIN_SIZE;
+    const maxGroupSize = personality.max_attack_group_size || 15; // Default max
 
     // Clean up attack group - remove dead units
     aiState.attackGroup = aiState.attackGroup.filter(id => {
@@ -45,11 +49,10 @@ export function handleAttack(
         return unit && !unit.dead;
     });
 
-    // Add ALL available combat units to attack group during attack phase
-    // ensuring we don't steal units from other specialized groups if needed
-    // But original logic just added everything not in other groups (or even all combat units?)
-    // Original: "Add ALL available combat units to attack group"
+    // Add available combat units to attack group (up to max size)
+    // Respects personality's max_attack_group_size limit
     for (const unit of combatUnits) {
+        if (aiState.attackGroup.length >= maxGroupSize) break; // Respect max size
         if (!aiState.attackGroup.includes(unit.id) &&
             !aiState.defenseGroup.includes(unit.id) &&
             !aiState.harassGroup.includes(unit.id)) {
@@ -57,8 +60,8 @@ export function handleAttack(
         }
     }
 
-    // Only attack with a group of minimum size
-    if (!ignoreSizeLimit && aiState.attackGroup.length < ATTACK_GROUP_MIN_SIZE) {
+    // Only attack with a group of minimum size (personality-specific)
+    if (!ignoreSizeLimit && aiState.attackGroup.length < minGroupSize) {
         // Disband group if too small so units can be rallied/used elsewhere
         aiState.attackGroup = [];
         aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
@@ -81,7 +84,7 @@ export function handleAttack(
     // If we switched strategy and came back, need a fresh group
     if (mainGroup && mainGroup.status === 'attacking') {
         const aliveUnits = mainGroup.unitIds.filter(id => state.entities[id] && !state.entities[id].dead);
-        if (!ignoreSizeLimit && aliveUnits.length < ATTACK_GROUP_MIN_SIZE) {
+        if (!ignoreSizeLimit && aliveUnits.length < minGroupSize) {
             aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
             mainGroup = undefined;
         }
