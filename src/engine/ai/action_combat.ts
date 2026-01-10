@@ -76,9 +76,31 @@ export function handleAttack(
     // Manage offensive group (create if doesn't exist or was cleared)
     let mainGroup = aiState.offensiveGroups.find(g => g.id === 'main_attack');
 
-    // Update group members immediately
+    // Prevent "trickle attacks" by controlling when new units join the group
+    // Only accept new units during safe phases OR when group critically needs them
     if (mainGroup) {
-        mainGroup.unitIds = [...aiState.attackGroup];
+        const canFreelyAcceptUnits = mainGroup.status === 'forming' ||
+            mainGroup.status === 'rallying' ||
+            mainGroup.status === 'retreating';
+
+        // Count alive units currently in the group
+        const aliveExistingUnits = mainGroup.unitIds.filter(id =>
+            state.entities[id] && !state.entities[id].dead
+        );
+
+        // Check if group critically needs reinforcements (would disband otherwise)
+        const needsCriticalReinforcements = aliveExistingUnits.length < minGroupSize;
+
+        if (canFreelyAcceptUnits || needsCriticalReinforcements) {
+            // Accept new units - group is safe or needs help
+            mainGroup.unitIds = [...aiState.attackGroup];
+        } else {
+            // Group is actively attacking/moving with enough units
+            // Don't add new units - they stay at base to avoid trickling
+            mainGroup.unitIds = aliveExistingUnits;
+            // Sync attackGroup to only include units actually in the active group
+            aiState.attackGroup = aliveExistingUnits;
+        }
     }
 
     // If we switched strategy and came back, need a fresh group

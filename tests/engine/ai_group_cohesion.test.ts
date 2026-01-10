@@ -671,7 +671,14 @@ describe('AI Smart Combat Targeting', () => {
         const newGroup = aiState.offensiveGroups.find(g => g.id === 'main_attack');
         expect(newGroup).toBeDefined();
         expect(newGroup?.status).toBe('attacking'); // Should NOT be 'forming' or 'rallying'
-        expect(newGroup?.unitIds).toContain('u8'); // Should contain new units
+        // New units should NOT join active attack (anti-trickle)
+        // They stay at base to avoid being picked off one by one
+        expect(newGroup?.unitIds).toContain('u3');
+        expect(newGroup?.unitIds).toContain('u4');
+        expect(newGroup?.unitIds).toContain('u5');
+        expect(newGroup?.unitIds).not.toContain('u6'); // New units stay at base
+        expect(newGroup?.unitIds).not.toContain('u7');
+        expect(newGroup?.unitIds).not.toContain('u8');
     });
 });
 
