@@ -3,7 +3,7 @@ import {
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
-import { setPathCacheTick, refreshCollisionGrid } from '../utils';
+import { setPathCacheTick, refreshCollisionGrid, syncGridsToWorker } from '../utils';
 import { rebuildSpatialGrid, getSpatialGrid } from '../spatial';
 import { createEntityCache } from '../perf';
 import { updateProduction } from './production';
@@ -316,7 +316,11 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
     let creditsEarned: Record<number, number> = {};
 
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
-    refreshCollisionGrid(state.entities, state.config);
+    const playerIds = Object.keys(state.players).map(Number);
+    refreshCollisionGrid(state.entities, state.config, playerIds);
+
+    // Sync grids to pathfinding web worker (if enabled)
+    syncGridsToWorker(playerIds);
 
     // NOTE: Spatial grid was already rebuilt in tick() before updateWells
     // No need to rebuild again - new ore from wells is rare and minor

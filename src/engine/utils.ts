@@ -1,5 +1,6 @@
 import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle, BuildingKey, UnitKey } from './types.js';
 import { RULES } from '../data/schemas/index.js';
+import { pathfindingWorker } from './pathfinding-worker-manager.js';
 
 // Default grid dimensions based on default map size
 const DEFAULT_GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
@@ -188,6 +189,83 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
         }
     }
 }
+
+// ============================================================================
+// Pathfinding Worker Integration
+// ============================================================================
+
+/**
+ * Initialize the pathfinding web worker.
+ * Should be called once when game starts.
+ */
+export async function initPathfindingWorker(mapWidth: number, mapHeight: number): Promise<void> {
+    const gridW = Math.ceil(mapWidth / TILE_SIZE);
+    const gridH = Math.ceil(mapHeight / TILE_SIZE);
+    await pathfindingWorker.init(gridW, gridH);
+}
+
+/**
+ * Sync collision and danger grids to the pathfinding worker.
+ * Should be called after refreshCollisionGrid.
+ */
+export function syncGridsToWorker(playerIds: number[]): void {
+    if (!pathfindingWorker.isEnabled()) return;
+
+    // Sync collision grid
+    pathfindingWorker.updateCollisionGrid(
+        gridManager.collisionGrid,
+        gridManager.gridW,
+        gridManager.gridH
+    );
+
+    // Sync danger grids for each player
+    for (const playerId of playerIds) {
+        const dangerGrid = gridManager.dangerGrids[playerId];
+        if (dangerGrid) {
+            pathfindingWorker.updateDangerGrid(playerId, dangerGrid);
+        }
+    }
+}
+
+/**
+ * Check if pathfinding worker is enabled and ready
+ */
+export function isPathfindingWorkerEnabled(): boolean {
+    return pathfindingWorker.isEnabled();
+}
+
+/**
+ * Request a path asynchronously via the web worker.
+ * Returns a promise that resolves with the path or null.
+ * Falls back to sync pathfinding if worker is not available.
+ */
+export async function findPathAsync(
+    start: Vector,
+    goal: Vector,
+    entityRadius: number = 10,
+    ownerId?: number
+): Promise<Vector[] | null> {
+    if (pathfindingWorker.isEnabled()) {
+        try {
+            return await pathfindingWorker.requestPath(start, goal, entityRadius, ownerId);
+        } catch {
+            // Worker not ready or failed, fall back to sync
+            return findPath(start, goal, entityRadius, ownerId);
+        }
+    }
+    // Worker not available, use sync
+    return findPath(start, goal, entityRadius, ownerId);
+}
+
+/**
+ * Get number of pending pathfinding requests
+ */
+export function getPendingPathRequests(): number {
+    return pathfindingWorker.getPendingCount();
+}
+
+// Re-export for direct access
+export { pathfindingWorker };
 
 
 let nextEntityId = 1;

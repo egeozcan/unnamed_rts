@@ -131,8 +131,51 @@ function handleCombatTarget(
         return { entity: unit, projectile: null };
     }
 
+    // Check if this unit can actually attack the target type (air vs ground)
+    const targetData = getRuleData(target.key);
+    const isTargetAir = targetData && isUnitData(targetData) && targetData.fly === true;
+    const weaponType = data.weaponType || 'bullet';
+    const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
+
+    if (isTargetAir && !targeting.canTargetAir) {
+        // Can't attack air targets - clear target and stop chasing
+        return {
+            entity: {
+                ...unit,
+                combat: { ...unit.combat, targetId: null },
+                movement: { ...unit.movement, moveTarget: null, path: null, pathIdx: 0 }
+            },
+            projectile: null
+        };
+    }
+    if (!isTargetAir && !targeting.canTargetGround) {
+        // Can't attack ground targets - clear target
+        return {
+            entity: {
+                ...unit,
+                combat: { ...unit.combat, targetId: null },
+                movement: { ...unit.movement, moveTarget: null, path: null, pathIdx: 0 }
+            },
+            projectile: null
+        };
+    }
+
     const dist = unit.pos.dist(target.pos);
     const range = data.range || 100;
+
+    // Ground units should NEVER chase air units - only attack if already in range
+    // If air target is out of range, clear target and move on
+    if (isTargetAir && dist > range) {
+        return {
+            entity: {
+                ...unit,
+                combat: { ...unit.combat, targetId: null }
+                // Don't clear moveTarget - let unit continue to original destination
+            },
+            projectile: null
+        };
+    }
+
     let nextUnit = unit;
     let projectile: Projectile | null = null;
 

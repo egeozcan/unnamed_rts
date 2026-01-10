@@ -1,5 +1,6 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, UnitEntity, CombatUnit, PlayerState } from './engine/types.js';
+import { initPathfindingWorker } from './engine/utils.js';
 
 declare global {
     interface Window {
@@ -516,6 +517,11 @@ function startGameWithConfig(config: SkirmishConfig) {
     setCloseDebugCallback(() => {
         currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
         updateButtonsUI();
+    });
+
+    // Initialize pathfinding web worker (async, will fall back to sync until ready)
+    initPathfindingWorker(mapWidth, mapHeight).catch(err => {
+        console.warn('[PathWorker] Failed to initialize:', err);
     });
 
     // Initialize UI
