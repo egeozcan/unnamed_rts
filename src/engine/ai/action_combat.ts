@@ -745,12 +745,40 @@ export function handleRally(
     // Don't let them wander off attacking individually
     const isDoomedBuildup = aiState.isDoomed && aiState.strategy === 'buildup';
 
+    const mapCenter = new Vector(state.config.width / 2, state.config.height / 2);
+    const rallyPoint = baseCenter.add(mapCenter.sub(baseCenter).norm().scale(300));
+
+    // ALWAYS check for stranded units, regardless of strategy
+    // Stranded = idle, far from base (>1500), not in any active group
+    const STRANDED_DISTANCE = 1500;
+    const strandedUnits = combatUnits.filter(u => {
+        const unit = u as UnitEntity;
+        // Must be idle (no move target, no attack target)
+        if (unit.movement.moveTarget || unit.combat.targetId) return false;
+        // Must be far from base
+        if (unit.pos.dist(baseCenter) < STRANDED_DISTANCE) return false;
+        // Must not be in any active group
+        if (aiState.attackGroup.includes(u.id)) return false;
+        if (aiState.harassGroup.includes(u.id)) return false;
+        if (aiState.defenseGroup.includes(u.id)) return false;
+        return true;
+    });
+
+    if (strandedUnits.length > 0) {
+        actions.push({
+            type: 'COMMAND_MOVE',
+            payload: {
+                unitIds: strandedUnits.map(u => u.id),
+                x: rallyPoint.x,
+                y: rallyPoint.y
+            }
+        });
+    }
+
+    // Skip normal rally logic during active strategies (attack/defend/harass)
     if (!isDoomedBuildup && (aiState.strategy === 'attack' || aiState.strategy === 'defend' || aiState.strategy === 'harass' || aiState.strategy === 'all_in')) {
         return actions;
     }
-
-    const mapCenter = new Vector(state.config.width / 2, state.config.height / 2);
-    const rallyPoint = baseCenter.add(mapCenter.sub(baseCenter).norm().scale(300));
 
     const freeUnits = combatUnits.filter(u =>
         !aiState.harassGroup.includes(u.id) &&
