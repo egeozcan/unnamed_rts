@@ -98,6 +98,8 @@ export const UnitSchema = z.object({
   ammo: z.number().positive().optional(),
   // Limit fields - AI will not build more than this count per player
   maxCount: z.number().positive().optional(),
+  // Combat mobility - can fire while moving (light vehicles, strafing aircraft)
+  canAttackWhileMoving: z.boolean().optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 

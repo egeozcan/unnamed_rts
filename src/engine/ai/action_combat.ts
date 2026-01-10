@@ -902,18 +902,49 @@ export function handleMicro(
             const enemyRange = enemyData.range || 100;
             const hasRangeAdvantage = unitRange > enemyRange + 50;
             const kiteThreshold = unitRange * KITE_DISTANCE_RATIO;
+            const canAttackWhileMoving = unitData.canAttackWhileMoving === true;
 
             if (hasRangeAdvantage && closestDest < kiteThreshold) {
                 const awayFromEnemy = unit.pos.sub(closestEnemy.pos).norm();
                 const optimalRange = unitRange * 0.8;
                 const kitePos = closestEnemy.pos.add(awayFromEnemy.scale(optimalRange));
 
-                // Only kite if we improve position (simple check)
-                if (unit.pos.dist(closestEnemy.pos) < optimalRange - 30) {
-                    actions.push({
-                        type: 'COMMAND_MOVE',
-                        payload: { unitIds: [unit.id], x: kitePos.x, y: kitePos.y }
-                    });
+                if (canAttackWhileMoving) {
+                    // Units that can attack while moving: continuous kiting
+                    // Only kite if we improve position (simple check)
+                    if (unit.pos.dist(closestEnemy.pos) < optimalRange - 30) {
+                        actions.push({
+                            type: 'COMMAND_MOVE',
+                            payload: { unitIds: [unit.id], x: kitePos.x, y: kitePos.y }
+                        });
+                    }
+                } else {
+                    // Units that cannot attack while moving: stop-fire-move pattern
+                    // CRITICAL: Don't interrupt unit if it's about to fire (cooldown == 0)
+                    // Only move in these cases:
+                    // 1. Just fired (cooldown > 90% of rate) - time to reposition
+                    // 2. Dangerously close (< 30% of range) - emergency retreat
+                    const unitRate = unitData.rate || 30;
+                    const justFired = u.combat.cooldown >= unitRate * 0.9;
+                    const isCriticallyClose = closestDest < unitRange * 0.3;
+                    const readyToFire = u.combat.cooldown === 0;
+
+                    // Never move if ready to fire (let unit shoot first)
+                    if (readyToFire) {
+                        continue;
+                    }
+
+                    // Only reposition after firing or in emergency
+                    if (justFired || isCriticallyClose) {
+                        // Only move if we're not already at optimal range
+                        if (unit.pos.dist(closestEnemy.pos) < optimalRange - 50) {
+                            actions.push({
+                                type: 'COMMAND_MOVE',
+                                payload: { unitIds: [unit.id], x: kitePos.x, y: kitePos.y }
+                            });
+                        }
+                    }
+                    // Otherwise stay put and let unit wait for cooldown
                 }
             }
         }

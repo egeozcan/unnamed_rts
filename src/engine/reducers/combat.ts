@@ -171,10 +171,14 @@ function handleCombatTarget(
     // Normal combat behavior
     if (dist <= range) {
         // In range - attack
-        nextUnit = {
-            ...nextUnit,
-            movement: { ...nextUnit.movement, moveTarget: null }
-        };
+        // Only stop moving if this unit cannot attack while moving
+        const canAttackWhileMoving = data.canAttackWhileMoving === true;
+        if (!canAttackWhileMoving) {
+            nextUnit = {
+                ...nextUnit,
+                movement: { ...nextUnit.movement, moveTarget: null }
+            };
+        }
 
         if (unit.combat.cooldown <= 0) {
             projectile = createProjectile(unit, target);
