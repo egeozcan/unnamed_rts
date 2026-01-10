@@ -7,6 +7,7 @@ import { isAirUnit } from '../entity-helpers';
 import { updateHarvesterBehavior } from './harvester';
 import { updateCombatUnitBehavior } from './combat';
 import { moveToward } from './movement';
+import { getSpatialGrid } from '../spatial';
 
 // Re-export for backwards compatibility
 export { moveToward };
@@ -495,9 +496,23 @@ export function updateUnit(
             const absoluteFleeTimeout = 90;
             const isFleeTimedOut = moveTargetTicks > absoluteFleeTimeout;
 
-            if (nextEntity.pos.dist(result.entity.movement.moveTarget!) < clearDistance || isStuckOnFlee || isFleeTimedOut) {
+            // Check if target is unreachable (inside a building)
+            const spatialGrid = getSpatialGrid();
+            const target = result.entity.movement.moveTarget!;
+            // Check entities near the target
+            const nearbyBlockers = spatialGrid.queryRadius(target.x, target.y, 60);
+            const isTargetBlocked = nearbyBlockers.some(e =>
+                (e.type === 'BUILDING' || e.type === 'ROCK') &&
+                !e.dead &&
+                target.dist(e.pos) < e.radius
+            );
+
+            if (nextEntity.pos.dist(result.entity.movement.moveTarget!) < clearDistance || isStuckOnFlee || isFleeTimedOut || isTargetBlocked) {
                 // Keep manualMode - harvesters should stay idle after reaching destination or getting stuck
                 // Only explicitly commanding to harvest (right-click ore) should disable manual mode
+                // EXCEPTION: If blocked by building (e.g. user clicked refinery), clear manualMode to allow auto-docking/harvesting
+                const shouldClearManual = isTargetBlocked;
+
                 nextEntity = {
                     ...nextEntity,
                     movement: {
@@ -508,7 +523,12 @@ export function updateUnit(
                         stuckTimer: 0,
                         lastDistToMoveTarget: undefined,
                         bestDistToMoveTarget: undefined,
-                        moveTargetNoProgressTicks: undefined
+                        moveTargetNoProgressTicks: undefined,
+                        vel: isTargetBlocked ? new Vector(0, 0) : nextEntity.movement.vel
+                    },
+                    harvester: {
+                        ...nextEntity.harvester,
+                        manualMode: shouldClearManual ? false : nextEntity.harvester.manualMode
                     }
                 };
             } else {
