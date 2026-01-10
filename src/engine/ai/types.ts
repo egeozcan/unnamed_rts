@@ -10,8 +10,20 @@ export interface OffensiveGroup {
     unitIds: EntityId[];
     target: EntityId | null;
     rallyPoint: Vector | null;
-    status: 'forming' | 'rallying' | 'attacking' | 'retreating';
+    status: 'forming' | 'rallying' | 'moving' | 'engaging' | 'attacking' | 'retreating' | 'reinforcing';
     lastOrderTick: number;
+    // Group health and combat state
+    lastHealthCheck: number;           // Tick when health was last evaluated
+    avgHealthPercent: number;          // Average HP % of group (0-100)
+    // Movement tracking
+    moveTarget: Vector | null;         // Current movement destination
+    lastRegroupTick: number;           // Last tick when group regrouped
+    // En-route combat
+    engagedEnemies: EntityId[];        // Enemies currently being fought en route
+    preEngageTarget: Vector | null;    // Where we were going before engaging
+    // Reinforcement
+    needsReinforcements: boolean;      // Group is requesting backup
+    reinforcementIds: EntityId[];      // Units en route to reinforce
 }
 
 // AI State tracking (per player, stored separately since GameState is immutable)

@@ -21,6 +21,16 @@ export const AI_CONSTANTS = {
     HARASS_GROUP_SIZE: 3,           // Size of harass squad
     MAX_CHASE_DISTANCE: 400,        // Max distance to chase fleeing enemies
 
+    // === GROUP BEHAVIOR ===
+    GROUP_COHESION_RADIUS: 200,     // Units within this radius are considered grouped
+    GROUP_REGROUP_INTERVAL: 90,     // Ticks between regroup checks (1.5 seconds)
+    GROUP_MOVE_SPREAD_MAX: 350,     // Max spread before group waits for stragglers
+    GROUP_RETREAT_HEALTH: 40,       // Retreat when avg group HP drops below this %
+    GROUP_REINFORCE_HEALTH: 60,     // Request reinforcements below this %
+    GROUP_ENGAGE_RADIUS: 300,       // Distance at which group detects en-route threats
+    GROUP_DISENGAGE_RADIUS: 400,    // Distance at which group can disengage from threat
+    GROUP_HEALTH_CHECK_INTERVAL: 30, // Ticks between health evaluations
+
     // === TIMINGS (in ticks, 60 ticks = 1 second) ===
     AI_TICK_INTERVAL: 3,            // AI players compute every N ticks (staggered by player ID)
     STRATEGY_COOLDOWN: 300,         // 5 seconds between strategy changes
@@ -98,6 +108,15 @@ export const {
     VENGEANCE_PER_HIT,
     VENGEANCE_DECAY,
     MAX_CHASE_DISTANCE,
+    // Group behavior constants
+    GROUP_COHESION_RADIUS,
+    GROUP_REGROUP_INTERVAL,
+    GROUP_MOVE_SPREAD_MAX,
+    GROUP_RETREAT_HEALTH,
+    GROUP_REINFORCE_HEALTH,
+    GROUP_ENGAGE_RADIUS,
+    GROUP_DISENGAGE_RADIUS,
+    GROUP_HEALTH_CHECK_INTERVAL,
     // Economy constants
     BUILD_RADIUS,
     REFINERY_COVERAGE_RADIUS,

@@ -10,6 +10,13 @@ import {
     MAX_CHASE_DISTANCE,
     RECENT_DAMAGE_WINDOW,
     ALLY_DANGER_RADIUS,
+    GROUP_COHESION_RADIUS,
+    GROUP_REGROUP_INTERVAL,
+    GROUP_MOVE_SPREAD_MAX,
+    GROUP_RETREAT_HEALTH,
+    GROUP_REINFORCE_HEALTH,
+    GROUP_ENGAGE_RADIUS,
+    GROUP_HEALTH_CHECK_INTERVAL,
     isUnit,
     getRefineries,
     getDifficultyModifiers
@@ -86,7 +93,19 @@ export function handleAttack(
             target: null, // Will be set by selectBestTarget
             rallyPoint: null,
             status: ignoreSizeLimit ? 'attacking' : 'forming',
-            lastOrderTick: state.tick
+            lastOrderTick: state.tick,
+            // Group health tracking
+            lastHealthCheck: state.tick,
+            avgHealthPercent: 100,
+            // Movement tracking
+            moveTarget: null,
+            lastRegroupTick: state.tick,
+            // En-route combat
+            engagedEnemies: [],
+            preEngageTarget: null,
+            // Reinforcement
+            needsReinforcements: false,
+            reinforcementIds: []
         };
         aiState.offensiveGroups.push(mainGroup);
     }
@@ -101,11 +120,19 @@ export function handleAttack(
         mainGroup.rallyPoint = baseCenter.add(new Vector(300, 0));
     }
 
-    // Handle Group State Machine (Forming -> Rallying -> Attacking)
-    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter, aiState);
+    // Handle Group State Machine (Forming -> Rallying -> Moving -> Attacking)
+    // Can also transition to: Engaging (combat en route), Retreating, Reinforcing
+    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter, aiState, enemies, baseCenter);
     if (cohesionActions.length > 0) {
         actions.push(...cohesionActions);
-        return actions; // Busy rallying or regrouping
+        // If retreating or reinforcing, don't continue to attack logic
+        if (mainGroup.status === 'retreating' || mainGroup.status === 'reinforcing') {
+            return actions;
+        }
+        // If rallying, moving, or engaging, also return early
+        if (mainGroup.status !== 'attacking') {
+            return actions;
+        }
     }
 
     // If we are here, we are READY TO ATTACK (status === 'attacking' and cohesive)
@@ -154,50 +181,174 @@ export function handleAttack(
     return actions;
 }
 
-function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCenter: Vector, aiState: AIPlayerState): Action[] {
+function handleGroupCohesion(
+    state: GameState,
+    group: OffensiveGroup,
+    groupCenter: Vector,
+    aiState: AIPlayerState,
+    enemies: Entity[],
+    baseCenter: Vector
+): Action[] {
     const actions: Action[] = [];
-    // RALLY_TIMEOUT is imported
-
-    // Check group cohesion
-    let maxSpread = 0;
-    let atRallyCount = 0;
     const aliveUnits = group.unitIds.filter(id => !state.entities[id]?.dead);
 
-    for (const id of aliveUnits) {
-        const unit = state.entities[id];
-        if (unit) {
-            const d = unit.pos.dist(groupCenter);
-            if (d > maxSpread) maxSpread = d;
-            if (group.rallyPoint && unit.pos.dist(group.rallyPoint) < 200) {
-                atRallyCount++;
+    if (aliveUnits.length === 0) return actions;
+
+    // === HEALTH CHECK (periodic) ===
+    if (state.tick - group.lastHealthCheck >= GROUP_HEALTH_CHECK_INTERVAL) {
+        group.lastHealthCheck = state.tick;
+        let totalHp = 0;
+        let totalMaxHp = 0;
+        for (const id of aliveUnits) {
+            const unit = state.entities[id];
+            if (unit) {
+                totalHp += unit.hp;
+                totalMaxHp += unit.maxHp;
             }
+        }
+        group.avgHealthPercent = totalMaxHp > 0 ? (totalHp / totalMaxHp) * 100 : 0;
+
+        // Check for retreat condition
+        if (group.avgHealthPercent < GROUP_RETREAT_HEALTH && group.status !== 'retreating') {
+            group.status = 'retreating';
+            group.lastOrderTick = state.tick;
+        }
+        // Check for reinforcement request
+        else if (group.avgHealthPercent < GROUP_REINFORCE_HEALTH && !group.needsReinforcements) {
+            group.needsReinforcements = true;
         }
     }
 
-    const isCohesive = atRallyCount >= aliveUnits.length * 0.7;
-    const timedOut = (state.tick - group.lastOrderTick) > RALLY_TIMEOUT;
+    // === DETECT EN-ROUTE THREATS ===
+    const nearbyThreats = enemies.filter(e => {
+        if (e.dead) return false;
+        const dist = e.pos.dist(groupCenter);
+        return dist < GROUP_ENGAGE_RADIUS && e.type === 'UNIT';
+    });
 
-    // State machine transitions
+    // Check if any group member is under attack
+    const unitsUnderAttack = aliveUnits.filter(id => {
+        const unit = state.entities[id] as UnitEntity;
+        if (!unit || !isUnit(unit)) return false;
+        return unit.combat.lastDamageTick && (state.tick - unit.combat.lastDamageTick) < RECENT_DAMAGE_WINDOW;
+    });
+
+    // === STATE MACHINE ===
+
+    // RETREATING: Move back to base
+    if (group.status === 'retreating') {
+        // Check if we've recovered enough to stop retreating
+        if (group.avgHealthPercent >= GROUP_RETREAT_HEALTH + 20) {
+            group.status = 'rallying';
+            group.needsReinforcements = false;
+            group.lastOrderTick = state.tick;
+        } else {
+            // Move all units toward base
+            actions.push({
+                type: 'COMMAND_MOVE',
+                payload: {
+                    unitIds: aliveUnits,
+                    x: baseCenter.x,
+                    y: baseCenter.y
+                }
+            });
+            return actions;
+        }
+    }
+
+    // REINFORCING: Wait at current position for reinforcements
+    if (group.status === 'reinforcing') {
+        // Check if reinforcements have arrived
+        const reinforcementsArrived = group.reinforcementIds.filter(id => {
+            const unit = state.entities[id];
+            return unit && !unit.dead && unit.pos.dist(groupCenter) < GROUP_COHESION_RADIUS;
+        });
+
+        if (reinforcementsArrived.length >= group.reinforcementIds.length * 0.7 ||
+            (state.tick - group.lastOrderTick) > RALLY_TIMEOUT) {
+            // Reinforcements arrived or timed out, resume movement
+            group.status = group.preEngageTarget ? 'moving' : 'attacking';
+            group.reinforcementIds = [];
+            group.needsReinforcements = false;
+        }
+        return actions; // Wait in place
+    }
+
+    // ENGAGING: Fighting enemies encountered en route
+    if (group.status === 'engaging') {
+        // Update engaged enemies (remove dead ones)
+        group.engagedEnemies = group.engagedEnemies.filter(id => {
+            const enemy = state.entities[id];
+            return enemy && !enemy.dead;
+        });
+
+        // Check if engagement is over
+        if (group.engagedEnemies.length === 0 && nearbyThreats.length === 0) {
+            // Resume movement to previous target
+            if (group.preEngageTarget) {
+                group.moveTarget = group.preEngageTarget;
+                group.preEngageTarget = null;
+                group.status = 'moving';
+            } else {
+                group.status = 'attacking';
+            }
+        } else {
+            // Continue engaging - attack nearest threat
+            const sortedThreats = [...nearbyThreats].sort((a, b) =>
+                a.pos.dist(groupCenter) - b.pos.dist(groupCenter)
+            );
+            if (sortedThreats.length > 0) {
+                group.engagedEnemies = sortedThreats.slice(0, 3).map(e => e.id);
+                issueAttackOrders(actions, state, aliveUnits, sortedThreats[0].id);
+            }
+            return actions;
+        }
+    }
+
+    // Check if we should transition to ENGAGING (threat detected while moving/rallying)
+    if ((group.status === 'rallying' || group.status === 'moving') &&
+        (nearbyThreats.length > 0 || unitsUnderAttack.length > 0)) {
+        // Save current destination before engaging
+        group.preEngageTarget = group.moveTarget || group.rallyPoint;
+        group.status = 'engaging';
+        group.engagedEnemies = nearbyThreats.map(e => e.id);
+        group.lastOrderTick = state.tick;
+        // Attack the threats
+        if (nearbyThreats.length > 0) {
+            issueAttackOrders(actions, state, aliveUnits, nearbyThreats[0].id);
+        }
+        return actions;
+    }
+
+    // FORMING -> RALLYING
     if (group.status === 'forming') {
         group.status = 'rallying';
         group.lastOrderTick = state.tick;
     }
 
+    // RALLYING: Gather at rally point before moving out
     if (group.status === 'rallying') {
-        // Check if army has PASSED the rally point (closer to enemy than to rally)
-        // In this case, skip rally and go straight to attacking
-        const armyPastRallyPoint = group.rallyPoint && aiState.enemyBaseLocation &&
-            groupCenter.dist(aiState.enemyBaseLocation) < groupCenter.dist(group.rallyPoint);
+        let atRallyCount = 0;
+        for (const id of aliveUnits) {
+            const unit = state.entities[id];
+            if (unit && group.rallyPoint && unit.pos.dist(group.rallyPoint) < GROUP_COHESION_RADIUS) {
+                atRallyCount++;
+            }
+        }
 
-        if (isCohesive || timedOut || armyPastRallyPoint) {
-            group.status = 'attacking';
+        const isCohesive = atRallyCount >= aliveUnits.length * 0.7;
+        const timedOut = (state.tick - group.lastOrderTick) > RALLY_TIMEOUT;
+
+        if (isCohesive || timedOut) {
+            // Set move target to enemy base and transition to moving
+            group.moveTarget = aiState.enemyBaseLocation || group.rallyPoint;
+            group.status = 'moving';
+            group.lastOrderTick = state.tick;
         } else {
-            // Move ALL units to rally point
+            // Move units to rally point
             const unitsToRally = aliveUnits.filter(id => {
                 const unit = state.entities[id];
-                // Force rally unless already very close
-                if (group.rallyPoint && unit.pos.dist(group.rallyPoint) < 100) return false;
-                return true;
+                return unit && group.rallyPoint && unit.pos.dist(group.rallyPoint) >= 100;
             });
 
             if (unitsToRally.length > 0 && group.rallyPoint) {
@@ -214,33 +365,107 @@ function handleGroupCohesion(state: GameState, group: OffensiveGroup, groupCente
         }
     }
 
-    // Regrouping logic during attack - identify stragglers but DON'T block attacking
-    // Stragglers will be handled in handleAttack after attack commands are issued
-    if (group.status === 'attacking') {
-        let MAX_ATTACK_SPREAD = 500;
-
-        // Relax spread check if we have a large army (likely multi-front)
-        if (aliveUnits.length >= 10) {
-            MAX_ATTACK_SPREAD = 2000;
+    // MOVING: Move as a group toward target, waiting for stragglers
+    if (group.status === 'moving' && group.moveTarget) {
+        // Calculate spread
+        let maxSpread = 0;
+        for (const id of aliveUnits) {
+            const unit = state.entities[id];
+            if (unit) {
+                const d = unit.pos.dist(groupCenter);
+                if (d > maxSpread) maxSpread = d;
+            }
         }
 
-        const REGROUP_HYSTERESIS = 1.25;
+        // Check if group has arrived at target
+        const distToTarget = groupCenter.dist(group.moveTarget);
+        if (distToTarget < GROUP_COHESION_RADIUS) {
+            group.status = 'attacking';
+            group.moveTarget = null;
+            return actions;
+        }
 
-        // If spread is too large, identify stragglers to exclude from attack
-        if (maxSpread > MAX_ATTACK_SPREAD * REGROUP_HYSTERESIS) {
+        // Check if we need to wait for stragglers
+        const needsRegroup = maxSpread > GROUP_MOVE_SPREAD_MAX &&
+            (state.tick - group.lastRegroupTick) >= GROUP_REGROUP_INTERVAL;
+
+        if (needsRegroup) {
+            // Wait for stragglers - move front units slower or have stragglers catch up
+            group.lastRegroupTick = state.tick;
+
+            // Find stragglers (units far from center)
+            const stragglers = aliveUnits.filter(id => {
+                const unit = state.entities[id];
+                return unit && unit.pos.dist(groupCenter) > GROUP_MOVE_SPREAD_MAX * 0.6;
+            });
+
+            // Move stragglers toward group center
+            if (stragglers.length > 0) {
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: stragglers,
+                        x: groupCenter.x,
+                        y: groupCenter.y
+                    }
+                });
+            }
+
+            // Front units continue toward target but slower (by not issuing new commands)
+            const frontUnits = aliveUnits.filter(id => !stragglers.includes(id));
+            if (frontUnits.length > 0 && stragglers.length > aliveUnits.length * 0.3) {
+                // Too many stragglers - have front units wait
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: {
+                        unitIds: frontUnits,
+                        x: groupCenter.x + (group.moveTarget.x - groupCenter.x) * 0.2,
+                        y: groupCenter.y + (group.moveTarget.y - groupCenter.y) * 0.2
+                    }
+                });
+            }
+            return actions;
+        }
+
+        // Group is cohesive - move toward target
+        actions.push({
+            type: 'COMMAND_MOVE',
+            payload: {
+                unitIds: aliveUnits,
+                x: group.moveTarget.x,
+                y: group.moveTarget.y
+            }
+        });
+        return actions;
+    }
+
+    // ATTACKING: Already at target, handled by main handleAttack function
+    // Just manage straggler exclusion here
+    if (group.status === 'attacking') {
+        let maxSpread = 0;
+        for (const id of aliveUnits) {
+            const unit = state.entities[id];
+            if (unit) {
+                const d = unit.pos.dist(groupCenter);
+                if (d > maxSpread) maxSpread = d;
+            }
+        }
+
+        let MAX_ATTACK_SPREAD = 500;
+        if (aliveUnits.length >= 10) MAX_ATTACK_SPREAD = 2000;
+
+        // If spread is too large during attack, trim stragglers
+        if (maxSpread > MAX_ATTACK_SPREAD * 1.25) {
             const straggleThreshold = Math.max(400, maxSpread * 0.4);
             const frontLineUnits = aliveUnits.filter(id => {
                 const unit = state.entities[id];
                 return unit && unit.pos.dist(groupCenter) <= straggleThreshold;
             });
 
-            // Update group AND attackGroup to only include front-line units for attack
-            // Stragglers will catch up naturally
             if (frontLineUnits.length > 0) {
                 group.unitIds = frontLineUnits;
                 aiState.attackGroup = frontLineUnits;
             }
-            // If ALL units are stragglers, don't block - let them attack anyway
         }
     }
 

@@ -383,12 +383,29 @@ describe('AI System', () => {
 
             const state = createTestState(entities);
 
-            // Force attack strategy with group
+            // Force attack strategy with group already in 'attacking' status
             const aiState = getAIState(1);
             aiState.personality = 'rusher'; // Set consistent personality for test
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = 0;
             aiState.attackGroup = ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'];
+            // Set up offensive group already at attacking phase (bypasses rally/move phases)
+            aiState.offensiveGroups = [{
+                id: 'main_attack',
+                unitIds: ['tank0', 'tank1', 'tank2', 'tank3', 'tank4', 'tank5'],
+                target: null,
+                rallyPoint: { x: 750, y: 750 } as any,
+                status: 'attacking',
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
+            }];
 
             const actions = computeAiActions(state, 1);
             const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
