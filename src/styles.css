@@ -808,9 +808,9 @@ canvas#gameCanvas {
     left: 20px;
     width: 260px;
     padding: 16px;
-    background: rgba(10, 12, 16, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(10, 12, 16, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     display: flex;
@@ -818,8 +818,17 @@ canvas#gameCanvas {
     gap: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     z-index: 50;
-    transition: opacity 0.3s ease;
-    pointer-events: none; /* Let clicks pass through */
+    transition: all 0.3s ease;
+    pointer-events: auto;
+}
+
+.scoreboard:hover {
+    background: rgba(10, 12, 16, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
 }
 
 .score-row {
@@ -867,7 +876,7 @@ canvas#gameCanvas {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
     opacity: 0.5;
 }
 
@@ -889,7 +898,7 @@ canvas#gameCanvas {
     color: #e0e0e0;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -1332,8 +1341,15 @@ canvas#gameCanvas {
 }
 
 @keyframes pulse-power {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
 }
 
 .legend-stats {
@@ -1436,6 +1452,7 @@ canvas#gameCanvas {
 
 /* Mobile phones */
 @media (max-width: 400px) {
+
     #menu,
     #end-screen {
         padding: 16px;
