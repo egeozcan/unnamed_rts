@@ -178,29 +178,45 @@ export function tick(state: GameState): GameState {
     }
 
     // Process Service Depot Repair Aura
-    for (const id in updatedEntities) {
-        const ent = updatedEntities[id];
-        if (ent.type === 'BUILDING' && ent.key === 'service_depot' && !ent.dead) {
-            const depotData = RULES.buildings['service_depot'];
-            if (!depotData) continue;
+    // OPTIMIZED: Use spatial grid instead of O(n²) nested loops
+    const depotData = RULES.buildings['service_depot'];
+    if (depotData) {
+        const repairRadius = depotData.repairRadius || 60;
+        const repairRate = depotData.repairRate || 1;
+        const spatialGrid = getSpatialGrid();
 
-            const repairRadius = depotData.repairRadius || 60;
-            const repairRate = depotData.repairRate || 1;
+        // Collect service depots in a single pass
+        const serviceDepots: Entity[] = [];
+        for (const id in updatedEntities) {
+            const ent = updatedEntities[id];
+            if (ent.type === 'BUILDING' && ent.key === 'service_depot' && !ent.dead) {
+                serviceDepots.push(ent);
+            }
+        }
 
+        // For each depot, use spatial query to find nearby units (O(k) instead of O(n))
+        for (const depot of serviceDepots) {
             // Skip if player has low power
-            const player = nextPlayers[ent.owner];
+            const player = nextPlayers[depot.owner];
             if (!player || player.usedPower > player.maxPower) continue;
 
-            // Heal nearby friendly units
-            for (const unitId in updatedEntities) {
-                const unit = updatedEntities[unitId];
-                if (unit.type !== 'UNIT' || unit.dead) continue;
-                if (unit.owner !== ent.owner) continue;
-                if (unit.hp >= unit.maxHp) continue;
+            // Query nearby entities using spatial grid
+            const nearbyEntities = spatialGrid.queryRadius(depot.pos.x, depot.pos.y, repairRadius + 30);
 
-                const dist = unit.pos.dist(ent.pos);
+            for (const entity of nearbyEntities) {
+                // Filter for friendly damaged units
+                if (entity.type !== 'UNIT' || entity.dead) continue;
+                if (entity.owner !== depot.owner) continue;
+                if (entity.hp >= entity.maxHp) continue;
+
+                // Get latest version from updatedEntities (may have been modified this tick)
+                const unit = updatedEntities[entity.id];
+                if (!unit || unit.type !== 'UNIT' || unit.dead || unit.hp >= unit.maxHp) continue;
+
+                // Precise distance check
+                const dist = unit.pos.dist(depot.pos);
                 if (dist <= repairRadius + unit.radius) {
-                    updatedEntities[unitId] = {
+                    updatedEntities[entity.id] = {
                         ...unit,
                         hp: Math.min(unit.maxHp, unit.hp + repairRate)
                     };
@@ -487,6 +503,32 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
 
     // Resolve Hard Collisions
     nextEntities = resolveCollisions(nextEntities);
+
+    // Clamp all unit positions to map boundaries
+    // This ensures units can never leave the map (from movement, collision push, or any other source)
+    const mapWidth = state.config.width;
+    const mapHeight = state.config.height;
+    for (const id in nextEntities) {
+        const ent = nextEntities[id];
+        if (ent.type === 'UNIT' && !ent.dead) {
+            const r = ent.radius;
+            // Clamp position so unit (including radius) stays within map
+            const minX = r;
+            const maxX = mapWidth - r;
+            const minY = r;
+            const maxY = mapHeight - r;
+
+            if (ent.pos.x < minX || ent.pos.x > maxX || ent.pos.y < minY || ent.pos.y > maxY) {
+                nextEntities[id] = {
+                    ...ent,
+                    pos: new Vector(
+                        Math.max(minX, Math.min(maxX, ent.pos.x)),
+                        Math.max(minY, Math.min(maxY, ent.pos.y))
+                    )
+                };
+            }
+        }
+    }
 
     return { entities: nextEntities, projectiles: newProjectiles, particles: newParticles, creditsEarned };
 }

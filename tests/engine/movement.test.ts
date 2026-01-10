@@ -95,4 +95,69 @@ describe('Movement & Pathfinding', () => {
         expect(aSuccess).toBe(3);
         expect(bSuccess).toBe(3);
     });
+
+    it('should clamp units to map boundaries', () => {
+        // Test with a smaller map to make boundary testing easier
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {} as Record<EntityId, Entity>,
+            config: { ...INITIAL_STATE.config, width: 500, height: 500 }
+        };
+
+        // Spawn a unit near the bottom-right corner
+        state = spawnUnit(state, 480, 480, 'corner_unit');
+        const unitRadius = state.entities['corner_unit'].radius;
+
+        // Command it to move far outside the map (to the bottom-right)
+        state = update(state, {
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['corner_unit'], x: 1000, y: 1000 }
+        });
+
+        // Run simulation - unit should try to move toward target but be clamped
+        for (let i = 0; i < 100; i++) {
+            state = update(state, { type: 'TICK' });
+        }
+
+        const ent = state.entities['corner_unit'];
+        expect(ent).toBeDefined();
+
+        // Unit should be at map boundary (accounting for radius)
+        expect(ent.pos.x).toBeLessThanOrEqual(500 - unitRadius + 0.1);
+        expect(ent.pos.y).toBeLessThanOrEqual(500 - unitRadius + 0.1);
+        expect(ent.pos.x).toBeGreaterThanOrEqual(unitRadius - 0.1);
+        expect(ent.pos.y).toBeGreaterThanOrEqual(unitRadius - 0.1);
+    });
+
+    it('should prevent units from crossing top-left boundary', () => {
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {} as Record<EntityId, Entity>,
+            config: { ...INITIAL_STATE.config, width: 500, height: 500 }
+        };
+
+        // Spawn a unit near the top-left corner
+        state = spawnUnit(state, 20, 20, 'tl_unit');
+        const unitRadius = state.entities['tl_unit'].radius;
+
+        // Command it to move far outside the map (to the top-left)
+        state = update(state, {
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['tl_unit'], x: -500, y: -500 }
+        });
+
+        // Run simulation
+        for (let i = 0; i < 100; i++) {
+            state = update(state, { type: 'TICK' });
+        }
+
+        const ent = state.entities['tl_unit'];
+        expect(ent).toBeDefined();
+
+        // Unit should be at map boundary (accounting for radius)
+        expect(ent.pos.x).toBeGreaterThanOrEqual(unitRadius - 0.1);
+        expect(ent.pos.y).toBeGreaterThanOrEqual(unitRadius - 0.1);
+    });
 });

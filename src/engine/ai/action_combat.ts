@@ -23,6 +23,7 @@ import {
 } from './utils.js';
 import { getGroupCenter } from './state.js';
 import { isAirUnit } from '../entity-helpers.js';
+import { EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
 
 export function handleAttack(
     state: GameState,
@@ -190,21 +191,29 @@ function handleGroupCohesion(
     baseCenter: Vector
 ): Action[] {
     const actions: Action[] = [];
-    const aliveUnits = group.unitIds.filter(id => !state.entities[id]?.dead);
 
-    if (aliveUnits.length === 0) return actions;
+    // PERF: Pre-fetch all unit references once instead of repeated lookups
+    const unitRefs: UnitEntity[] = [];
+    const aliveUnits: EntityId[] = [];
+    for (const id of group.unitIds) {
+        const unit = state.entities[id];
+        if (unit && !unit.dead) {
+            unitRefs.push(unit as UnitEntity);
+            aliveUnits.push(id);
+        }
+    }
+
+    if (unitRefs.length === 0) return actions;
 
     // === HEALTH CHECK (periodic) ===
     if (state.tick - group.lastHealthCheck >= GROUP_HEALTH_CHECK_INTERVAL) {
         group.lastHealthCheck = state.tick;
         let totalHp = 0;
         let totalMaxHp = 0;
-        for (const id of aliveUnits) {
-            const unit = state.entities[id];
-            if (unit) {
-                totalHp += unit.hp;
-                totalMaxHp += unit.maxHp;
-            }
+        // PERF: Use pre-fetched refs instead of repeated lookups
+        for (const unit of unitRefs) {
+            totalHp += unit.hp;
+            totalMaxHp += unit.maxHp;
         }
         group.avgHealthPercent = totalMaxHp > 0 ? (totalHp / totalMaxHp) * 100 : 0;
 
@@ -227,11 +236,10 @@ function handleGroupCohesion(
     });
 
     // Check if any group member is under attack
-    const unitsUnderAttack = aliveUnits.filter(id => {
-        const unit = state.entities[id] as UnitEntity;
-        if (!unit || !isUnit(unit)) return false;
-        return unit.combat.lastDamageTick && (state.tick - unit.combat.lastDamageTick) < RECENT_DAMAGE_WINDOW;
-    });
+    // PERF: Use pre-fetched unitRefs
+    const unitsUnderAttack = unitRefs.filter(unit =>
+        unit.combat.lastDamageTick && (state.tick - unit.combat.lastDamageTick) < RECENT_DAMAGE_WINDOW
+    );
 
     // === STATE MACHINE ===
 
@@ -328,15 +336,23 @@ function handleGroupCohesion(
 
     // RALLYING: Gather at rally point before moving out
     if (group.status === 'rallying') {
+        // PERF: Use pre-fetched unitRefs instead of repeated lookups
         let atRallyCount = 0;
-        for (const id of aliveUnits) {
-            const unit = state.entities[id];
-            if (unit && group.rallyPoint && unit.pos.dist(group.rallyPoint) < GROUP_COHESION_RADIUS) {
-                atRallyCount++;
+        const unitsToRallyIds: EntityId[] = [];
+        for (let i = 0; i < unitRefs.length; i++) {
+            const unit = unitRefs[i];
+            if (group.rallyPoint) {
+                const distToRally = unit.pos.dist(group.rallyPoint);
+                if (distToRally < GROUP_COHESION_RADIUS) {
+                    atRallyCount++;
+                }
+                if (distToRally >= 100) {
+                    unitsToRallyIds.push(aliveUnits[i]);
+                }
             }
         }
 
-        const isCohesive = atRallyCount >= aliveUnits.length * 0.7;
+        const isCohesive = atRallyCount >= unitRefs.length * 0.7;
         const timedOut = (state.tick - group.lastOrderTick) > RALLY_TIMEOUT;
 
         if (isCohesive || timedOut) {
@@ -346,16 +362,11 @@ function handleGroupCohesion(
             group.lastOrderTick = state.tick;
         } else {
             // Move units to rally point
-            const unitsToRally = aliveUnits.filter(id => {
-                const unit = state.entities[id];
-                return unit && group.rallyPoint && unit.pos.dist(group.rallyPoint) >= 100;
-            });
-
-            if (unitsToRally.length > 0 && group.rallyPoint) {
+            if (unitsToRallyIds.length > 0 && group.rallyPoint) {
                 actions.push({
                     type: 'COMMAND_MOVE',
                     payload: {
-                        unitIds: unitsToRally,
+                        unitIds: unitsToRallyIds,
                         x: group.rallyPoint.x,
                         y: group.rallyPoint.y
                     }
@@ -367,14 +378,11 @@ function handleGroupCohesion(
 
     // MOVING: Move as a group toward target, waiting for stragglers
     if (group.status === 'moving' && group.moveTarget) {
-        // Calculate spread
+        // PERF: Calculate spread using pre-fetched unitRefs
         let maxSpread = 0;
-        for (const id of aliveUnits) {
-            const unit = state.entities[id];
-            if (unit) {
-                const d = unit.pos.dist(groupCenter);
-                if (d > maxSpread) maxSpread = d;
-            }
+        for (const unit of unitRefs) {
+            const d = unit.pos.dist(groupCenter);
+            if (d > maxSpread) maxSpread = d;
         }
 
         // Check if group has arrived at target
@@ -393,18 +401,24 @@ function handleGroupCohesion(
             // Wait for stragglers - move front units slower or have stragglers catch up
             group.lastRegroupTick = state.tick;
 
-            // Find stragglers (units far from center)
-            const stragglers = aliveUnits.filter(id => {
-                const unit = state.entities[id];
-                return unit && unit.pos.dist(groupCenter) > GROUP_MOVE_SPREAD_MAX * 0.6;
-            });
+            // PERF: Find stragglers using pre-fetched unitRefs (single pass)
+            const stragglerThreshold = GROUP_MOVE_SPREAD_MAX * 0.6;
+            const stragglerIds: EntityId[] = [];
+            const frontUnitIds: EntityId[] = [];
+            for (let i = 0; i < unitRefs.length; i++) {
+                if (unitRefs[i].pos.dist(groupCenter) > stragglerThreshold) {
+                    stragglerIds.push(aliveUnits[i]);
+                } else {
+                    frontUnitIds.push(aliveUnits[i]);
+                }
+            }
 
             // Move stragglers toward group center
-            if (stragglers.length > 0) {
+            if (stragglerIds.length > 0) {
                 actions.push({
                     type: 'COMMAND_MOVE',
                     payload: {
-                        unitIds: stragglers,
+                        unitIds: stragglerIds,
                         x: groupCenter.x,
                         y: groupCenter.y
                     }
@@ -412,13 +426,12 @@ function handleGroupCohesion(
             }
 
             // Front units continue toward target but slower (by not issuing new commands)
-            const frontUnits = aliveUnits.filter(id => !stragglers.includes(id));
-            if (frontUnits.length > 0 && stragglers.length > aliveUnits.length * 0.3) {
+            if (frontUnitIds.length > 0 && stragglerIds.length > unitRefs.length * 0.3) {
                 // Too many stragglers - have front units wait
                 actions.push({
                     type: 'COMMAND_MOVE',
                     payload: {
-                        unitIds: frontUnits,
+                        unitIds: frontUnitIds,
                         x: groupCenter.x + (group.moveTarget.x - groupCenter.x) * 0.2,
                         y: groupCenter.y + (group.moveTarget.y - groupCenter.y) * 0.2
                     }
@@ -442,25 +455,26 @@ function handleGroupCohesion(
     // ATTACKING: Already at target, handled by main handleAttack function
     // Just manage straggler exclusion here
     if (group.status === 'attacking') {
+        // PERF: Use pre-fetched unitRefs
         let maxSpread = 0;
-        for (const id of aliveUnits) {
-            const unit = state.entities[id];
-            if (unit) {
-                const d = unit.pos.dist(groupCenter);
-                if (d > maxSpread) maxSpread = d;
-            }
+        for (const unit of unitRefs) {
+            const d = unit.pos.dist(groupCenter);
+            if (d > maxSpread) maxSpread = d;
         }
 
         let MAX_ATTACK_SPREAD = 500;
-        if (aliveUnits.length >= 10) MAX_ATTACK_SPREAD = 2000;
+        if (unitRefs.length >= 10) MAX_ATTACK_SPREAD = 2000;
 
         // If spread is too large during attack, trim stragglers
         if (maxSpread > MAX_ATTACK_SPREAD * 1.25) {
             const straggleThreshold = Math.max(400, maxSpread * 0.4);
-            const frontLineUnits = aliveUnits.filter(id => {
-                const unit = state.entities[id];
-                return unit && unit.pos.dist(groupCenter) <= straggleThreshold;
-            });
+            // PERF: Single pass using pre-fetched refs
+            const frontLineUnits: EntityId[] = [];
+            for (let i = 0; i < unitRefs.length; i++) {
+                if (unitRefs[i].pos.dist(groupCenter) <= straggleThreshold) {
+                    frontLineUnits.push(aliveUnits[i]);
+                }
+            }
 
             if (frontLineUnits.length > 0) {
                 group.unitIds = frontLineUnits;
@@ -491,6 +505,16 @@ function selectBestTarget(
         const unit = state.entities[id];
         if (unit && !unit.dead && isUnit(unit) && (unit as UnitEntity).combat.lastAttackerId) {
             activeThreats.add((unit as UnitEntity).combat.lastAttackerId!);
+        }
+    }
+
+    // PERF: Pre-compute target counts for focus-fire scoring (O(n) instead of O(n×m))
+    const targetCounts = new Map<EntityId, number>();
+    for (const u of combatUnits) {
+        if (!isUnit(u)) continue;
+        const targetId = (u as UnitEntity).combat.targetId;
+        if (targetId) {
+            targetCounts.set(targetId, (targetCounts.get(targetId) || 0) + 1);
         }
     }
 
@@ -539,7 +563,8 @@ function selectBestTarget(
         score -= distFromGroup / 25;
 
         // Focus Fire Bonus (allies attacking same target)
-        const alliesAttacking = combatUnits.filter(u => isUnit(u) && (u as UnitEntity).combat.targetId === enemy.id).length;
+        // PERF: Use pre-computed target counts instead of filtering
+        const alliesAttacking = targetCounts.get(enemy.id) || 0;
         if (alliesAttacking >= 3) score += 100 + alliesAttacking * 30;
         else score += alliesAttacking * 25;
 
@@ -966,7 +991,8 @@ export function handleHarvesterSafety(
     combatUnits: Entity[],
     baseCenter: Vector,
     enemies: Entity[],
-    _aiState: AIPlayerState
+    _aiState: AIPlayerState,
+    cache?: EntityCache
 ): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
@@ -997,9 +1023,12 @@ export function handleHarvesterSafety(
         const harvesterUnderFire = wasRecentlyDamaged(state, harv);
 
         // Check if any nearby ally (within ALLY_DANGER_RADIUS) was damaged recently
-        const alliedUnits = Object.values(state.entities).filter(
-            e => e.owner === harv.owner && e.type === 'UNIT' && !e.dead && e.id !== harv.id
-        );
+        // PERF: Use cache instead of Object.values() to avoid allocation
+        const alliedUnits = cache
+            ? getUnitsForOwner(cache, harv.owner).filter(e => !e.dead && e.id !== harv.id)
+            : Object.values(state.entities).filter(
+                e => e.owner === harv.owner && e.type === 'UNIT' && !e.dead && e.id !== harv.id
+            );
         const allyNearbyUnderFire = alliedUnits.some(ally => {
             const dist = ally.pos.dist(harv.pos);
             return dist < ALLY_DANGER_RADIUS && wasRecentlyDamaged(state, ally);
@@ -1054,9 +1083,12 @@ export function handleHarvesterSafety(
 
             if (shouldFlee) {
                 // Smart Flee: Try to find a safe refinery
-                const myBuildings = Object.values(state.entities).filter(
-                    e => e.type === 'BUILDING' && e.owner === playerId && !e.dead
-                );
+                // PERF: Use cache instead of Object.values() to avoid allocation
+                const myBuildings = cache
+                    ? getBuildingsForOwner(cache, playerId).filter(e => !e.dead)
+                    : Object.values(state.entities).filter(
+                        e => e.type === 'BUILDING' && e.owner === playerId && !e.dead
+                    );
                 const refineries = getRefineries(myBuildings);
 
                 let safeRefinery: Entity | null = null;
