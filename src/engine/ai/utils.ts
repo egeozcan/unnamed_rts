@@ -41,7 +41,7 @@ export const AI_CONSTANTS = {
     SURPLUS_PRODUCTION_THRESHOLD: 6000, // Credits to trigger surplus production
     MAX_SURPLUS_BARRACKS: 3,        // Maximum barracks to build from surplus
     MAX_SURPLUS_FACTORIES: 3,       // Maximum factories to build from surplus
-    MAX_AIRFORCE_COMMANDS: 1,       // Maximum airforce command buildings
+    // Note: MAX_AIRFORCE_COMMANDS removed - now defined as maxCount in rules.json
     LAST_RESORT_CREDIT_THRESHOLD: 100, // Credits below which last resort triggers
 
     // === PEACE-BREAK (triggers aggressive behavior when wealthy and peaceful) ===
@@ -112,7 +112,7 @@ export const {
     SURPLUS_PRODUCTION_THRESHOLD,
     MAX_SURPLUS_BARRACKS,
     MAX_SURPLUS_FACTORIES,
-    MAX_AIRFORCE_COMMANDS,
+    // Note: MAX_AIRFORCE_COMMANDS removed - now defined as maxCount in rules.json
     LAST_RESORT_CREDIT_THRESHOLD
 } = AI_CONSTANTS;
 
@@ -429,6 +429,37 @@ export function checkPrerequisites(key: string, playerBuildings: Entity[]): bool
     const buildingData = RULES.buildings[key];
     const prereqs = unitData?.prerequisites || buildingData?.prerequisites || [];
     return prereqs.every((req: string) => playerBuildings.some(b => b.key === req));
+}
+
+/**
+ * Check if a building/unit has reached its maxCount limit defined in rules.json
+ * Returns true if at max (cannot build more), false if can build more
+ */
+export function isAtMaxCount(
+    key: string,
+    existingEntities: Entity[],
+    player: { queues: { building: { current: string | null; queued?: readonly string[] } }; readyToPlace: string | null },
+    isBuilding: boolean = true
+): boolean {
+    const data = isBuilding ? RULES.buildings[key] : RULES.units[key];
+    const maxCount = data?.maxCount;
+
+    // No limit defined - can always build more
+    if (maxCount === undefined) return false;
+
+    // Count existing entities of this type
+    const existingCount = existingEntities.filter(e => e.key === key && !e.dead).length;
+
+    // Check if in production or ready to place (for buildings)
+    const bq = player.queues.building;
+    const inProgress = isBuilding && (
+        bq.current === key ||
+        bq.queued?.includes(key) ||
+        player.readyToPlace === key
+    );
+
+    // At max if existing + in progress >= maxCount
+    return existingCount + (inProgress ? 1 : 0) >= maxCount;
 }
 
 export function hasProductionBuildingFor(category: string, playerBuildings: Entity[]): boolean {

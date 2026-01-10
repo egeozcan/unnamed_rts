@@ -173,7 +173,8 @@
             "h": 80,
             "drain": 50,
             "armor": "building",
-            "prerequisites": ["conyard", "factory"]
+            "prerequisites": ["conyard", "factory"],
+            "maxCount": 1
         },
         "airforce_command": {
             "name": "Air-Force Command",
@@ -186,7 +187,8 @@
             "armor": "building",
             "prerequisites": ["conyard", "power", "barracks"],
             "landingSlots": 6,
-            "reloadTicks": 120
+            "reloadTicks": 120,
+            "maxCount": 1
         },
         "service_depot": {
             "name": "Service Depot",
@@ -198,7 +200,8 @@
             "armor": "building",
             "prerequisites": ["conyard", "barracks", "factory"],
             "repairRadius": 90,
-            "repairRate": 2
+            "repairRate": 2,
+            "maxCount": 1
         }
     },
     "units": {

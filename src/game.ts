@@ -13,7 +13,7 @@ import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
-import { initInput, getInputState, getDragSelection, handleCameraInput, handleZoomInput } from './input/index.js';
+import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
@@ -968,7 +968,7 @@ function gameLoop(timestamp: number = 0) {
     currentState = { ...currentState, camera: newCamera };
 
     // Render
-    renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId);
+    renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
 
     // Minimap
     const size = renderer.getSize();

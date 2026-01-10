@@ -21,11 +21,17 @@ interface DragStart {
     y: number;
 }
 
+interface MiddleMouseScroll {
+    originX: number;
+    originY: number;
+}
+
 export interface InputState {
     mouse: Mouse;
     rawMouse: RawMouse;
     keys: Keys;
     dragStart: DragStart | null;
+    middleMouseScroll: MiddleMouseScroll | null;
     touchDist: number;
     wheelDeltaX: number;
     wheelDeltaY: number;
@@ -38,6 +44,7 @@ let inputState: InputState = {
     rawMouse: { x: 0, y: 0 },
     keys: {},
     dragStart: null,
+    middleMouseScroll: null,
     touchDist: 0,
     wheelDeltaX: 0,
     wheelDeltaY: 0,
@@ -90,6 +97,31 @@ function screenToWorld(sx: number, sy: number): Vector {
     return new Vector((sx / zoom) + camera.x, (sy / zoom) + camera.y);
 }
 
+// Dead zone threshold - no scrolling within this radius
+const SCROLL_DEAD_ZONE = 10;
+
+function getScrollCursor(dx: number, dy: number): string {
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < SCROLL_DEAD_ZONE) {
+        return 'all-scroll';
+    }
+
+    // Determine direction based on angle
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    // 8-way directional cursors
+    if (angle >= -22.5 && angle < 22.5) return 'e-resize';
+    if (angle >= 22.5 && angle < 67.5) return 'se-resize';
+    if (angle >= 67.5 && angle < 112.5) return 's-resize';
+    if (angle >= 112.5 && angle < 157.5) return 'sw-resize';
+    if (angle >= 157.5 || angle < -157.5) return 'w-resize';
+    if (angle >= -157.5 && angle < -112.5) return 'nw-resize';
+    if (angle >= -112.5 && angle < -67.5) return 'n-resize';
+    if (angle >= -67.5 && angle < -22.5) return 'ne-resize';
+
+    return 'all-scroll';
+}
+
 function setupEventListeners() {
     // Keyboard
     window.addEventListener('keydown', e => {
@@ -137,6 +169,13 @@ function setupEventListeners() {
         const rect = canvas.getBoundingClientRect();
         inputState.mouse.x = e.clientX - rect.left;
         inputState.mouse.y = e.clientY - rect.top;
+
+        // Update cursor based on scroll direction when middle mouse scrolling
+        if (inputState.middleMouseScroll) {
+            const dx = inputState.mouse.x - inputState.middleMouseScroll.originX;
+            const dy = inputState.mouse.y - inputState.middleMouseScroll.originY;
+            document.body.style.cursor = getScrollCursor(dx, dy);
+        }
     });
 
     // Mouse down
@@ -147,6 +186,13 @@ function setupEventListeners() {
             return;
         }
 
+        // Update mouse position from event (in case mousemove hasn't fired yet)
+        const rect = canvas.getBoundingClientRect();
+        inputState.rawMouse.x = e.clientX;
+        inputState.rawMouse.y = e.clientY;
+        inputState.mouse.x = e.clientX - rect.left;
+        inputState.mouse.y = e.clientY - rect.top;
+
         const worldMouse = screenToWorld(inputState.mouse.x, inputState.mouse.y);
         inputState.mouse.wx = worldMouse.x;
         inputState.mouse.wy = worldMouse.y;
@@ -156,6 +202,14 @@ function setupEventListeners() {
         if (e.button === 0) {
             // Left click - start drag
             inputState.dragStart = { x: inputState.mouse.x, y: inputState.mouse.y };
+        } else if (e.button === 1) {
+            // Middle click - start auto-scroll mode
+            e.preventDefault();
+            inputState.middleMouseScroll = {
+                originX: inputState.mouse.x,
+                originY: inputState.mouse.y
+            };
+            document.body.style.cursor = 'all-scroll';
         } else if (e.button === 2) {
             // Right click
             onRightClick?.(inputState.mouse.wx, inputState.mouse.wy);
@@ -168,6 +222,12 @@ function setupEventListeners() {
         const debugOverlay = document.getElementById('debug-overlay');
         if (debugOverlay && debugOverlay.style.display !== 'none' && debugOverlay.contains(e.target as Node)) {
             return;
+        }
+
+        // Middle mouse button release - end auto-scroll mode
+        if (e.button === 1) {
+            inputState.middleMouseScroll = null;
+            document.body.style.cursor = '';
         }
 
         if (e.button === 0 && inputState.dragStart) {
@@ -285,6 +345,11 @@ export function getDragSelection(): DragStart | null {
     return inputState.dragStart;
 }
 
+export function getMiddleMouseScrollOrigin(): { x: number; y: number } | null {
+    if (!inputState.middleMouseScroll) return null;
+    return { x: inputState.middleMouseScroll.originX, y: inputState.middleMouseScroll.originY };
+}
+
 export function handleCameraInput(
     camera: { x: number; y: number },
     zoom: number,
@@ -313,6 +378,22 @@ export function handleCameraInput(
     dy += inputState.wheelDeltaY / zoom;
     inputState.wheelDeltaX = 0;
     inputState.wheelDeltaY = 0;
+
+    // Middle mouse button auto-scroll: speed based on distance from origin
+    if (inputState.middleMouseScroll) {
+        const scrollDx = inputState.mouse.x - inputState.middleMouseScroll.originX;
+        const scrollDy = inputState.mouse.y - inputState.middleMouseScroll.originY;
+        const dist = Math.sqrt(scrollDx * scrollDx + scrollDy * scrollDy);
+
+        if (dist > SCROLL_DEAD_ZONE) {
+            // Scale factor: the further from origin, the faster the scroll
+            // Subtract dead zone so speed starts at 0 when exiting dead zone
+            const scrollSpeed = (dist - SCROLL_DEAD_ZONE) * 0.15 / zoom;
+            const angle = Math.atan2(scrollDy, scrollDx);
+            dx += Math.cos(angle) * scrollSpeed;
+            dy += Math.sin(angle) * scrollSpeed;
+        }
+    }
 
     // Allow panning 300px past map edges to see units under UI panels
     const panBuffer = 300;

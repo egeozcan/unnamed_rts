@@ -10,6 +10,7 @@ import {
     isRefineryUseful,
     getPriorityIndex,
     isValidPlacement,
+    isAtMaxCount,
     // Constants (some duplicated locally for now - see AI_CONSTANTS in utils.ts for central definitions)
     SURPLUS_DEFENSE_THRESHOLD,
     MAX_SURPLUS_TURRETS,
@@ -301,12 +302,10 @@ export function handleEconomy(
     const SURPLUS_PRODUCTION_THRESHOLD = 6000; // Higher threshold for production buildings
     const MAX_SURPLUS_BARRACKS = 3;
     const MAX_SURPLUS_FACTORIES = 3;
-    const MAX_AIRFORCE_COMMANDS = 1;
 
     if (hasConyard && player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
         const existingBarracks = countProductionBuildings('infantry', buildings);
         const existingFactories = countProductionBuildings('vehicle', buildings);
-        const existingAirforce = countProductionBuildings('air', buildings);
 
         // Prefer factories over barracks (vehicles are stronger)
         if (existingFactories < MAX_SURPLUS_FACTORIES) {
@@ -321,8 +320,8 @@ export function handleEconomy(
             if (barracksData && barracksReqsMet && player.credits >= barracksData.cost + 2000) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
             }
-        } else if (existingAirforce < MAX_AIRFORCE_COMMANDS) {
-            // Build airforce_command for harrier production
+        } else if (!isAtMaxCount('airforce_command', buildings, player)) {
+            // Build airforce_command for harrier production (respects maxCount from rules.json)
             const airforceData = RULES.buildings['airforce_command'];
             const airforceReqsMet = checkPrerequisites('airforce_command', buildings);
             if (airforceData && airforceReqsMet && player.credits >= airforceData.cost + 2000) {
@@ -332,27 +331,24 @@ export function handleEconomy(
     }
 
     // ===== SERVICE DEPOT PRIORITY =====
-    // Build service depot when we have many damaged units
-    if (hasConyard && buildingQueueEmpty && !isPanic && hasFactory) {
-        const hasServiceDepot = buildings.some(b => b.key === 'service_depot' && !b.dead);
-        if (!hasServiceDepot) {
-            const serviceDepotReqsMet = checkPrerequisites('service_depot', buildings);
-            const serviceDepotData = RULES.buildings['service_depot'];
+    // Build service depot when we have many damaged units (respects maxCount from rules.json)
+    if (hasConyard && buildingQueueEmpty && !isPanic && hasFactory && !isAtMaxCount('service_depot', buildings, player)) {
+        const serviceDepotReqsMet = checkPrerequisites('service_depot', buildings);
+        const serviceDepotData = RULES.buildings['service_depot'];
 
-            if (serviceDepotReqsMet && serviceDepotData) {
-                // Count damaged combat units (below 70% HP)
-                const damagedUnits = Object.values(state.entities).filter(e =>
-                    e.owner === playerId &&
-                    e.type === 'UNIT' &&
-                    !e.dead &&
-                    e.key !== 'harvester' &&
-                    e.hp < e.maxHp * 0.7
-                );
+        if (serviceDepotReqsMet && serviceDepotData) {
+            // Count damaged combat units (below 70% HP)
+            const damagedUnits = Object.values(state.entities).filter(e =>
+                e.owner === playerId &&
+                e.type === 'UNIT' &&
+                !e.dead &&
+                e.key !== 'harvester' &&
+                e.hp < e.maxHp * 0.7
+            );
 
-                // Build if we have 2+ damaged units and can afford it with buffer
-                if (damagedUnits.length >= 2 && player.credits >= serviceDepotData.cost + 500) {
-                    actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'service_depot', playerId } });
-                }
+            // Build if we have 2+ damaged units and can afford it with buffer
+            if (damagedUnits.length >= 2 && player.credits >= serviceDepotData.cost + 500) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'service_depot', playerId } });
             }
         }
     }
@@ -427,6 +423,7 @@ export function handleEconomy(
         }
 
         // Standard build order fulfillment (if no dynamic priority triggered)
+        // Respects maxCount from rules.json for all buildings
         if (actions.length === 0) {
             for (const item of buildOrder) {
                 // Skip economic buildings during active combat (Issue #12)
@@ -434,10 +431,17 @@ export function handleEconomy(
                     continue;
                 }
 
+                // Skip if already at max count (uses maxCount from rules.json)
+                if (isAtMaxCount(item, buildings, player)) {
+                    continue;
+                }
+
                 const having = buildings.some(b => b.key === item);
                 const building = q.current === item;
+                const queued = q.queued?.includes(item);
+                const readyToPlace = player.readyToPlace === item;
 
-                if (!having && !building) {
+                if (!having && !building && !queued && !readyToPlace) {
                     const data = RULES.buildings[item];
                     if (data) {
                         const reqsMet = checkPrerequisites(item, buildings);

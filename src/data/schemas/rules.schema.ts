@@ -69,6 +69,8 @@ export const BuildingSchema = z.object({
   // Service depot fields
   repairRadius: z.number().positive().optional(),
   repairRate: z.number().positive().optional(),
+  // Limit fields - AI will not build more than this count per player
+  maxCount: z.number().positive().optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
@@ -94,6 +96,8 @@ export const UnitSchema = z.object({
   canRepairFriendlyBuildings: z.boolean().optional(),
   // Air unit ammo field
   ammo: z.number().positive().optional(),
+  // Limit fields - AI will not build more than this count per player
+  maxCount: z.number().positive().optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 

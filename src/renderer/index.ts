@@ -37,7 +37,7 @@ export class Renderer {
         return { width: this.canvas.width, height: this.canvas.height };
     }
 
-    render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null) {
+    render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null, scrollOrigin: { x: number; y: number } | null = null) {
         const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
 
@@ -152,6 +152,59 @@ export class Renderer {
         if (dragStart) {
             ctx.strokeStyle = '#0f0';
             ctx.strokeRect(dragStart.x, dragStart.y, mousePos.x - dragStart.x, mousePos.y - dragStart.y);
+        }
+
+        // Middle mouse scroll origin indicator
+        if (scrollOrigin) {
+            ctx.save();
+            ctx.strokeStyle = '#fff';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+
+            // Draw origin circle (dead zone indicator)
+            ctx.beginPath();
+            ctx.arc(scrollOrigin.x, scrollOrigin.y, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw directional arrows
+            const arrowSize = 6;
+            const arrowDist = 18;
+            ctx.fillStyle = '#fff';
+
+            // Up arrow
+            ctx.beginPath();
+            ctx.moveTo(scrollOrigin.x, scrollOrigin.y - arrowDist - arrowSize);
+            ctx.lineTo(scrollOrigin.x - arrowSize, scrollOrigin.y - arrowDist);
+            ctx.lineTo(scrollOrigin.x + arrowSize, scrollOrigin.y - arrowDist);
+            ctx.closePath();
+            ctx.fill();
+
+            // Down arrow
+            ctx.beginPath();
+            ctx.moveTo(scrollOrigin.x, scrollOrigin.y + arrowDist + arrowSize);
+            ctx.lineTo(scrollOrigin.x - arrowSize, scrollOrigin.y + arrowDist);
+            ctx.lineTo(scrollOrigin.x + arrowSize, scrollOrigin.y + arrowDist);
+            ctx.closePath();
+            ctx.fill();
+
+            // Left arrow
+            ctx.beginPath();
+            ctx.moveTo(scrollOrigin.x - arrowDist - arrowSize, scrollOrigin.y);
+            ctx.lineTo(scrollOrigin.x - arrowDist, scrollOrigin.y - arrowSize);
+            ctx.lineTo(scrollOrigin.x - arrowDist, scrollOrigin.y + arrowSize);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right arrow
+            ctx.beginPath();
+            ctx.moveTo(scrollOrigin.x + arrowDist + arrowSize, scrollOrigin.y);
+            ctx.lineTo(scrollOrigin.x + arrowDist, scrollOrigin.y - arrowSize);
+            ctx.lineTo(scrollOrigin.x + arrowDist, scrollOrigin.y + arrowSize);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
         }
 
         // Draw tooltips
