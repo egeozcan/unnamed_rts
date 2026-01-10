@@ -248,4 +248,62 @@ export const buildings: Record<string, string> = {
             <rect x="2" y="112" width="116" height="6" fill="COL_PRIMARY"/>
         </g>
     </svg>`,
+
+    'induction_rig_deployed': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            <!-- Base Platform anchored to ground -->
+            <rect x="15" y="70" width="70" height="25" rx="2" fill="COL_PRIMARY" stroke="#111" stroke-width="2"/>
+            <rect x="15" y="70" width="70" height="25" fill="url(#metalGrad)" opacity="0.3" style="mix-blend-mode: overlay"/>
+
+            <!-- Anchor Legs -->
+            <path d="M20 70 L10 95" stroke="#444" stroke-width="6"/>
+            <path d="M80 70 L90 95" stroke="#444" stroke-width="6"/>
+            <circle cx="10" cy="95" r="5" fill="#333"/>
+            <circle cx="90" cy="95" r="5" fill="#333"/>
+
+            <!-- Main Extraction Tower -->
+            <rect x="35" y="15" width="30" height="55" rx="2" fill="#333" stroke="#111"/>
+
+            <!-- Energy Coils (animated glow) -->
+            <rect x="38" y="20" width="24" height="8" rx="2" fill="#4af" stroke="#28a">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="0.8s" repeatCount="indefinite"/>
+            </rect>
+            <rect x="38" y="32" width="24" height="8" rx="2" fill="#4af" stroke="#28a">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="0.8s" begin="0.2s" repeatCount="indefinite"/>
+            </rect>
+            <rect x="38" y="44" width="24" height="8" rx="2" fill="#4af" stroke="#28a">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="0.8s" begin="0.4s" repeatCount="indefinite"/>
+            </rect>
+            <rect x="38" y="56" width="24" height="8" rx="2" fill="#4af" stroke="#28a">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="0.8s" begin="0.6s" repeatCount="indefinite"/>
+            </rect>
+
+            <!-- Energy Beam from ground (traveling up animation) -->
+            <line x1="50" y1="95" x2="50" y2="70" stroke="#4af" stroke-width="4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" values="50;0" dur="0.5s" repeatCount="indefinite"/>
+                <animate attributeName="stroke-dasharray" values="5,45;25,25;45,5" dur="0.5s" repeatCount="indefinite"/>
+            </line>
+
+            <!-- Top Transmitter -->
+            <rect x="40" y="5" width="20" height="10" rx="2" fill="#222" stroke="#111"/>
+            <circle cx="50" cy="10" r="4" fill="#4af">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite"/>
+            </circle>
+
+            <!-- Credit Beam shooting up (data transfer visualization) -->
+            <line x1="50" y1="5" x2="50" y2="-20" stroke="#4af" stroke-width="2" opacity="0.8">
+                <animate attributeName="y2" values="5;-30;5" dur="1s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1s" repeatCount="indefinite"/>
+            </line>
+
+            <!-- Player Color Band -->
+            <rect x="15" y="70" width="70" height="4" fill="COL_PRIMARY"/>
+
+            <!-- Warning/Status Light -->
+            <circle cx="25" cy="80" r="3" fill="#0f0">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="1s" repeatCount="indefinite"/>
+            </circle>
+        </g>
+    </svg>`,
 };

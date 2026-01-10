@@ -5,13 +5,13 @@ import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
 import { placeBuilding, sellBuilding, startRepair, stopRepair } from './reducers/buildings';
-import { deployMCV, commandMove, commandAttack } from './reducers/units';
+import { deployMCV, deployInductionRig, commandMove, commandAttack } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
 export { createPlayerState, canBuild, calculatePower, createEntity, getRuleData, createProjectile } from './reducers/helpers';
 export { tick } from './reducers/game_loop';
 export { placeBuilding, sellBuilding } from './reducers/buildings';
-export { updateUnit, deployMCV } from './reducers/units';
+export { updateUnit, deployMCV, deployInductionRig } from './reducers/units';
 
 export const INITIAL_STATE: GameState = {
     running: false,
@@ -73,6 +73,8 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, showBirdsEye: !state.showBirdsEye };
         case 'DEPLOY_MCV':
             return deployMCV(state, action.payload);
+        case 'DEPLOY_INDUCTION_RIG':
+            return deployInductionRig(state, action.payload);
         case 'QUEUE_UNIT':
             return queueUnit(state, action.payload);
         case 'DEQUEUE_UNIT':

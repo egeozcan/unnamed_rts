@@ -6,7 +6,8 @@ import {
     BuildingStateComponent,
     WellComponent,
     AirUnitComponent,
-    AirBaseComponent
+    AirBaseComponent,
+    InductionRigComponent
 } from './components.js';
 
 export type PlayerId = string;
@@ -63,11 +64,12 @@ export type UnitKey =
     | 'harvester'
     | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando'
     | 'jeep' | 'apc' | 'light' | 'heavy' | 'flame_tank' | 'stealth' | 'artillery' | 'mlrs' | 'mammoth'
-    | 'heli' | 'harrier' | 'mcv';
+    | 'heli' | 'harrier' | 'mcv' | 'induction_rig';
 
 export type BuildingKey =
     | 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory'
-    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech' | 'airforce_command' | 'service_depot';
+    | 'turret' | 'sam_site' | 'pillbox' | 'obelisk' | 'tech' | 'airforce_command' | 'service_depot'
+    | 'induction_rig_deployed';
 
 export type ResourceKey = 'ore';
 export type RockKey = 'rock';
@@ -130,6 +132,7 @@ export interface BuildingEntity extends BaseEntity {
     readonly combat?: CombatComponent; // Only for defense buildings (turret, sam_site, etc.)
     readonly building: BuildingStateComponent;
     readonly airBase?: AirBaseComponent; // Only for airforce_command
+    readonly inductionRig?: InductionRigComponent; // Only for induction_rig_deployed
 }
 
 // ============ STATIC ENTITIES ============
@@ -164,7 +167,8 @@ export type {
     WellComponent,
     AirUnitComponent,
     AirBaseComponent,
-    AirUnitState
+    AirUnitState,
+    InductionRigComponent
 } from './components.js';
 
 export interface Projectile {
@@ -293,6 +297,7 @@ export type Action =
     | { type: 'TOGGLE_MINIMAP' }
     | { type: 'TOGGLE_BIRDS_EYE' }
     | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } }
+    | { type: 'DEPLOY_INDUCTION_RIG'; payload: { unitId: EntityId; wellId: EntityId } }
     | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } };
 

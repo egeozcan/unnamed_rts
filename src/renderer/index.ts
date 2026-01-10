@@ -301,7 +301,8 @@ export class Renderer {
                 if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
                     ctx.fillStyle = '#fff';
                     ctx.font = '10px Arial';
-                    ctx.fillText('Deploy (D)', -25, entity.radius + 20);
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Deploy (Enter)', 0, entity.radius + 20);
                 }
             }
 

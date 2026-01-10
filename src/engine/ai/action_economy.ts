@@ -11,6 +11,14 @@ import {
     getPriorityIndex,
     isValidPlacement,
     isAtMaxCount,
+    // Well utilities for Induction Rig
+    getAllWells,
+    getAccessibleWells,
+    getUnoccupiedWells,
+    findNearestAccessibleUnoccupiedWell,
+    getInductionRigs,
+    getDeployedInductionRigs,
+    getNonDefenseBuildings,
     // Constants (some duplicated locally for now - see AI_CONSTANTS in utils.ts for central definitions)
     SURPLUS_DEFENSE_THRESHOLD,
     MAX_SURPLUS_TURRETS,
@@ -600,6 +608,50 @@ export function handleEconomy(
                 actions.push({ type: 'START_BUILD', payload: { category: 'air', key: 'harrier', playerId } });
                 aiState.lastProductionType = 'air';
                 creditsRemaining -= cost;
+            }
+        }
+
+        // ===== INDUCTION RIG PRODUCTION =====
+        // Build induction rigs when we have accessible unoccupied wells and surplus economy
+        // This provides stable macro income (80% efficiency) without harvester management
+        // Check if we already queued a vehicle this tick
+        const queuedVehicleThisTick = actions.some(a =>
+            a.type === 'START_BUILD' &&
+            (a.payload as { category: string }).category === 'vehicle'
+        );
+        if (hasFactory && vehicleQueueEmpty && !isPanic && !queuedVehicleThisTick) {
+            const inductionRigData = RULES.units['induction_rig'];
+            const inductionRigReqsMet = checkPrerequisites('induction_rig', buildings);
+            const rigCost = inductionRigData?.cost || 1800;
+
+            // Only build if we have accessible wells without rigs
+            const unoccupiedWells = getUnoccupiedWells(state);
+            const nonDefenseBuildings = getNonDefenseBuildings(buildings);
+            const accessibleWells = getAccessibleWells(unoccupiedWells, nonDefenseBuildings, 1500);
+
+            // Count existing induction rigs (mobile + deployed) for this player
+            const existingRigs = getInductionRigs(state, playerId);
+            const deployedRigs = getDeployedInductionRigs(state, playerId);
+            const totalRigs = existingRigs.length + deployedRigs.length;
+
+            // Build if:
+            // 1. Have accessible unoccupied wells
+            // 2. Don't have more rigs in transit than accessible wells
+            // 3. Have enough credits (with buffer for larger investment)
+            // 4. Not already at max rigs (limit to 3 for now)
+            const MAX_INDUCTION_RIGS = 3;
+            const wantsRig = accessibleWells.length > 0 &&
+                             existingRigs.length < accessibleWells.length &&
+                             totalRigs < MAX_INDUCTION_RIGS;
+
+            // Higher credit threshold - this is an expensive strategic investment
+            const rigCreditThreshold = creditBuffer + 1500;
+
+            if (wantsRig && inductionRigReqsMet && creditsRemaining >= rigCost &&
+                creditsRemaining > rigCreditThreshold) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'induction_rig', playerId } });
+                aiState.lastProductionType = 'vehicle';
+                creditsRemaining -= rigCost;
             }
         }
     }
@@ -1665,5 +1717,87 @@ export function handleHarvesterGathering(
             }
         }
     }
+    return actions;
+}
+
+/**
+ * Handle Induction Rig operations: Move rigs to unoccupied wells and deploy them.
+ * Induction rigs provide stable macro income by siphoning wells at 80% efficiency.
+ */
+export function handleInductionRigOperations(
+    state: GameState,
+    playerId: number,
+    myBuildings: Entity[],
+    myUnits: Entity[]
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find all mobile induction rigs for this player
+    const rigs = myUnits.filter(u => u.key === 'induction_rig' && !u.dead);
+    if (rigs.length === 0) return actions;
+
+    // Get accessible unoccupied wells
+    const unoccupiedWells = getUnoccupiedWells(state);
+    const nonDefenseBuildings = getNonDefenseBuildings(myBuildings);
+    const accessibleWells = getAccessibleWells(unoccupiedWells, nonDefenseBuildings, 1500);
+
+    if (accessibleWells.length === 0 && rigs.length > 0) {
+        // No accessible wells - rigs may need to wait or be repurposed
+        return actions;
+    }
+
+    // Track which wells are being targeted by other rigs this tick
+    const targetedWells = new Set<string>();
+
+    for (const rig of rigs) {
+        const rigUnit = rig as UnitEntity;
+
+        // Find the nearest unoccupied well that isn't already being targeted
+        let bestWell: Entity | null = null;
+        let minDist = Infinity;
+
+        for (const well of accessibleWells) {
+            if (targetedWells.has(well.id)) continue;
+
+            const dist = rig.pos.dist(well.pos);
+            if (dist < minDist) {
+                minDist = dist;
+                bestWell = well;
+            }
+        }
+
+        if (!bestWell) continue;
+
+        // Mark this well as targeted
+        targetedWells.add(bestWell.id);
+
+        // Deployment distance - how close the rig needs to be to deploy
+        const DEPLOY_DISTANCE = 60;
+
+        if (minDist <= DEPLOY_DISTANCE) {
+            // Close enough to deploy
+            actions.push({
+                type: 'DEPLOY_INDUCTION_RIG',
+                payload: { unitId: rig.id, wellId: bestWell.id }
+            });
+        } else if (!rigUnit.movement.moveTarget && !rigUnit.movement.finalDest) {
+            // Not moving - command to move to the well
+            actions.push({
+                type: 'COMMAND_MOVE',
+                payload: { unitIds: [rig.id], x: bestWell.pos.x, y: bestWell.pos.y }
+            });
+        } else if (rigUnit.movement.finalDest) {
+            // Check if already moving toward this well
+            const destDist = rigUnit.movement.finalDest.dist(bestWell.pos);
+            if (destDist > 100) {
+                // Moving toward wrong location - redirect to well
+                actions.push({
+                    type: 'COMMAND_MOVE',
+                    payload: { unitIds: [rig.id], x: bestWell.pos.x, y: bestWell.pos.y }
+                });
+            }
+        }
+    }
+
     return actions;
 }

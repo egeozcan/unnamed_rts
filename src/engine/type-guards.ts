@@ -54,6 +54,10 @@ export function isMedic(entity: Entity): entity is CombatUnit {
     return entity.type === 'UNIT' && entity.key === 'medic';
 }
 
+export function isInductionRig(entity: Entity): entity is CombatUnit {
+    return entity.type === 'UNIT' && entity.key === 'induction_rig';
+}
+
 // ============ COMPONENT ACCESS HELPERS ============
 
 export function hasMovement(entity: Entity): entity is UnitEntity {
@@ -84,6 +88,10 @@ export function isRefinery(entity: Entity): entity is BuildingEntity {
 
 export function isConyard(entity: Entity): entity is BuildingEntity {
     return entity.type === 'BUILDING' && entity.key === 'conyard';
+}
+
+export function isDeployedInductionRig(entity: Entity): entity is BuildingEntity {
+    return entity.type === 'BUILDING' && entity.key === 'induction_rig_deployed';
 }
 
 // ============ OWNER HELPERS ============

@@ -202,6 +202,18 @@
             "repairRadius": 90,
             "repairRate": 2,
             "maxCount": 1
+        },
+        "induction_rig_deployed": {
+            "name": "Induction Rig",
+            "hp": 400,
+            "cost": 1800,
+            "w": 50,
+            "h": 50,
+            "drain": 0,
+            "armor": "building",
+            "hidden": true,
+            "prerequisites": [],
+            "inductionEfficiency": 0.8
         }
     },
     "units": {
@@ -511,6 +523,18 @@
             "w": 45,
             "armor": "heavy",
             "prerequisites": ["factory"]
+        },
+        "induction_rig": {
+            "name": "Induction Rig",
+            "type": "vehicle",
+            "hp": 600,
+            "cost": 1800,
+            "speed": 0.8,
+            "range": 0,
+            "damage": 0,
+            "w": 40,
+            "armor": "light",
+            "prerequisites": ["factory", "refinery"]
         }
     },
     "armorTypes": {

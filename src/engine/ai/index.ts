@@ -57,7 +57,8 @@ import {
     handleBuildingPlacement,
     handleBuildingRepair,
     handleMCVOperations,
-    handleHarvesterGathering
+    handleHarvesterGathering,
+    handleInductionRigOperations
 } from './action_economy.js';
 
 import {
@@ -205,6 +206,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies));
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
+    actions.push(...handleInductionRigOperations(state, playerId, myBuildings, myUnits)); // Deploy rigs on wells
     actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack)); // Gather resources
 
     // --- COMBAT & UNIT CONTROL ---

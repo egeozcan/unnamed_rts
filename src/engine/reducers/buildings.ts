@@ -280,15 +280,47 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
 }
 
 /**
+ * Find the induction rig deployed on a specific well.
+ */
+function findInductionRigOnWell(entities: Record<EntityId, Entity>, wellId: EntityId): BuildingEntity | null {
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.type === 'BUILDING' &&
+            entity.key === 'induction_rig_deployed' &&
+            !entity.dead &&
+            entity.inductionRig?.wellId === wellId) {
+            return entity;
+        }
+    }
+    return null;
+}
+
+/**
  * Update ore wells - spawn new ore around wells and grow existing ore.
+ * Also handles induction rig income generation.
  */
 export function updateWells(
     entities: Record<EntityId, Entity>,
     tick: number,
-    config: MapConfig
-): Record<EntityId, Entity> {
+    config: MapConfig,
+    _players: Record<number, import('../types').PlayerState>
+): { entities: Record<EntityId, Entity>; playerCredits: Record<number, number> } {
     const wellConfig = RULES.wells?.well;
-    if (!wellConfig) return entities;
+    if (!wellConfig) return { entities, playerCredits: {} };
+
+    // Track credits earned by each player from induction rigs
+    const playerCredits: Record<number, number> = {};
+
+    // Calculate the base credit value per tick that a well produces
+    // Well spawns ore at spawnRateTicksMin-Max, each ore has initialOreAmount value
+    // Average spawn rate: (spawnRateTicksMin + spawnRateTicksMax) / 2
+    // Value per tick = initialOreAmount / avgSpawnRate
+    const avgSpawnRate = (wellConfig.spawnRateTicksMin + wellConfig.spawnRateTicksMax) / 2;
+    const baseValuePerTick = wellConfig.initialOreAmount / avgSpawnRate;
+
+    // Induction efficiency (80% as per spec)
+    // Note: Using hardcoded 0.8 as the typed schema doesn't include custom building properties
+    const inductionEfficiency = 0.8;
 
     // Use Spatial Grid to find nearby ores optimistically
     const spatialGrid = getSpatialGrid();
@@ -301,6 +333,42 @@ export function updateWells(
         if (entity.type !== 'WELL' || entity.dead) continue;
 
         const well = entity as WellEntity;
+
+        // Check if there's an induction rig deployed on this well
+        const inductionRig = findInductionRigOnWell(nextEntities, id);
+        if (inductionRig) {
+            // Induction rig is active - generate credits instead of ore
+            const creditsPerTick = baseValuePerTick * inductionEfficiency;
+            const currentAccumulated = inductionRig.inductionRig!.accumulatedCredits + creditsPerTick;
+
+            // Pay out whole credits
+            const wholeCreditsPayout = Math.floor(currentAccumulated);
+            const remainingFraction = currentAccumulated - wholeCreditsPayout;
+
+            if (wholeCreditsPayout > 0) {
+                playerCredits[inductionRig.owner] = (playerCredits[inductionRig.owner] || 0) + wholeCreditsPayout;
+            }
+
+            // Update the rig with remaining fractional credits
+            nextEntities[inductionRig.id] = {
+                ...inductionRig,
+                inductionRig: {
+                    ...inductionRig.inductionRig!,
+                    accumulatedCredits: remainingFraction
+                }
+            };
+
+            // Mark well as blocked (by induction rig) but don't spawn ore
+            nextEntities[id] = {
+                ...well,
+                well: {
+                    ...well.well,
+                    isBlocked: true  // Blocked by induction rig
+                }
+            };
+
+            continue; // Skip normal ore spawning for this well
+        }
 
         // Group nearby ores
         const nearbyOres: ResourceEntity[] = [];
@@ -450,5 +518,5 @@ export function updateWells(
         }
     }
 
-    return nextEntities;
+    return { entities: nextEntities, playerCredits };
 }

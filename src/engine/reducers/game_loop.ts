@@ -50,7 +50,23 @@ export function tick(state: GameState): GameState {
     rebuildSpatialGrid(nextEntities);
 
     // Update Wells - spawn new ore and grow existing ore near wells
-    nextEntities = updateWells(nextEntities, nextTick, state.config);
+    // Also handles induction rig income generation
+    const wellResult = updateWells(nextEntities, nextTick, state.config, nextPlayers);
+    nextEntities = wellResult.entities;
+
+    // Apply induction rig credits (with difficulty modifier for AI players)
+    for (const pidStr in wellResult.playerCredits) {
+        const pid = parseInt(pidStr);
+        const player = nextPlayers[pid];
+        if (player) {
+            const modifier = player.isAi ? getDifficultyModifiers(player.difficulty).resourceBonus : 1.0;
+            const adjustedCredits = Math.floor(wellResult.playerCredits[pid] * modifier);
+            nextPlayers[pid] = {
+                ...player,
+                credits: player.credits + adjustedCredits
+            };
+        }
+    }
 
     // Entity Updates
     const updateState = { ...state, players: nextPlayers, entities: nextEntities };

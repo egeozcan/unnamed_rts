@@ -348,6 +348,79 @@ export function deployMCV(state: GameState, payload: { unitId: EntityId }): Game
     };
 }
 
+export function deployInductionRig(state: GameState, payload: { unitId: EntityId; wellId: EntityId }): GameState {
+    const { unitId, wellId } = payload;
+    const rig = state.entities[unitId];
+    const well = state.entities[wellId];
+
+    // Validate induction rig
+    if (!rig || rig.type !== 'UNIT' || rig.key !== 'induction_rig' || rig.dead) {
+        return state;
+    }
+
+    // Validate well
+    if (!well || well.type !== 'WELL' || well.dead) {
+        return {
+            ...state,
+            notification: { text: 'Cannot deploy: Invalid well', type: 'error', tick: state.tick }
+        };
+    }
+
+    // Check if another induction rig is already on this well
+    const existingRig = Object.values(state.entities).find(e =>
+        e.type === 'BUILDING' &&
+        e.key === 'induction_rig_deployed' &&
+        !e.dead &&
+        e.inductionRig?.wellId === wellId
+    );
+
+    if (existingRig) {
+        return {
+            ...state,
+            notification: { text: 'Cannot deploy: Well already has a rig', type: 'error', tick: state.tick }
+        };
+    }
+
+    // Check distance to well (must be close enough to deploy)
+    const deployRange = 80; // Distance required to deploy on a well
+    if (rig.pos.dist(well.pos) > deployRange) {
+        return {
+            ...state,
+            notification: { text: 'Cannot deploy: Move closer to well', type: 'error', tick: state.tick }
+        };
+    }
+
+    // Valid placement: Create deployed induction rig
+    // Remove the mobile rig
+    const nextEntities = { ...state.entities };
+    delete nextEntities[unitId];
+
+    // Create deployed induction rig on the well's position
+    const deployedRig = createEntity(well.pos.x, well.pos.y, rig.owner, 'BUILDING', 'induction_rig_deployed', state);
+
+    // Add the inductionRig component with the well reference
+    const deployedRigWithComponent: BuildingEntity = {
+        ...deployedRig as BuildingEntity,
+        inductionRig: {
+            wellId: wellId,
+            accumulatedCredits: 0
+        }
+    };
+
+    nextEntities[deployedRigWithComponent.id] = deployedRigWithComponent;
+
+    // Clear selection if rig was selected
+    const nextSelection = state.selection.filter(id => id !== unitId);
+    nextSelection.push(deployedRigWithComponent.id);
+
+    return {
+        ...state,
+        entities: nextEntities,
+        selection: nextSelection,
+        notification: { text: "Induction Rig Deployed", type: 'info', tick: state.tick }
+    };
+}
+
 export function updateUnit(
     entity: UnitEntity,
     allEntities: Record<EntityId, Entity>,

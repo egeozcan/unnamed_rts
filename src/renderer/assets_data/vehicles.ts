@@ -231,4 +231,35 @@ export const vehicles: Record<string, string> = {
             <circle cx="45" cy="62" r="3" fill="#222"/>
         </g>
     </svg>`,
+
+    'induction_rig': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            ${TREADS_H}
+            <!-- Base Platform -->
+            <rect x="15" y="25" width="70" height="50" rx="4" fill="COL_PRIMARY" stroke="#111" stroke-width="2"/>
+            <rect x="15" y="25" width="70" height="50" fill="url(#metalGrad)" opacity="0.3" style="mix-blend-mode: overlay"/>
+
+            <!-- Induction Core (top-heavy drilling apparatus) -->
+            <rect x="35" y="8" width="30" height="40" rx="2" fill="#333" stroke="#111"/>
+
+            <!-- Energy Coils -->
+            <rect x="38" y="12" width="24" height="6" rx="1" fill="#4af" stroke="#28a"/>
+            <rect x="38" y="22" width="24" height="6" rx="1" fill="#4af" stroke="#28a"/>
+            <rect x="38" y="32" width="24" height="6" rx="1" fill="#4af" stroke="#28a"/>
+
+            <!-- Drill Tip -->
+            <path d="M50 48 L42 60 L58 60 Z" fill="#666" stroke="#333"/>
+            <circle cx="50" cy="55" r="3" fill="#4af">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="0.5s" repeatCount="indefinite"/>
+            </circle>
+
+            <!-- Support Struts -->
+            <path d="M35 25 L40 48" fill="none" stroke="#444" stroke-width="3"/>
+            <path d="M65 25 L60 48" fill="none" stroke="#444" stroke-width="3"/>
+
+            <!-- Warning Label -->
+            <rect x="20" y="65" width="60" height="8" fill="url(#caution)" opacity="0.3"/>
+        </g>
+    </svg>`,
 };

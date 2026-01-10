@@ -226,6 +226,92 @@ export function getAllOre(state: GameState): Entity[] {
     return Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
 }
 
+// ===== WELL UTILITIES =====
+
+export function getAllWells(state: GameState): Entity[] {
+    return Object.values(state.entities).filter(e => e.type === 'WELL' && !e.dead);
+}
+
+/**
+ * Get wells that are accessible from player buildings (within build radius + buffer)
+ */
+export function getAccessibleWells(wells: Entity[], buildings: Entity[], maxDist: number = AI_CONSTANTS.BUILD_RADIUS + 200): Entity[] {
+    const nonDefense = getNonDefenseBuildings(buildings);
+    return wells.filter(w => nonDefense.some(b => b.pos.dist(w.pos) < maxDist));
+}
+
+/**
+ * Check if a well already has an induction rig deployed on it
+ */
+export function isWellOccupied(wellId: EntityId, state: GameState): boolean {
+    return Object.values(state.entities).some(e =>
+        e.type === 'BUILDING' &&
+        e.key === 'induction_rig_deployed' &&
+        !e.dead &&
+        e.inductionRig?.wellId === wellId
+    );
+}
+
+/**
+ * Get wells that don't have an induction rig deployed on them
+ */
+export function getUnoccupiedWells(state: GameState): Entity[] {
+    const wells = getAllWells(state);
+    return wells.filter(w => !isWellOccupied(w.id, state));
+}
+
+/**
+ * Find the nearest accessible well that doesn't have an induction rig
+ */
+export function findNearestAccessibleUnoccupiedWell(
+    state: GameState,
+    buildings: Entity[],
+    maxDist: number = AI_CONSTANTS.ORE_ACCESSIBLE_RADIUS
+): Entity | null {
+    const nonDefense = getNonDefenseBuildings(buildings);
+    const unoccupiedWells = getUnoccupiedWells(state);
+
+    let nearest: Entity | null = null;
+    let minDist = Infinity;
+
+    for (const well of unoccupiedWells) {
+        // Check if well is accessible from any non-defense building
+        for (const b of nonDefense) {
+            const dist = b.pos.dist(well.pos);
+            if (dist < maxDist && dist < minDist) {
+                minDist = dist;
+                nearest = well;
+            }
+        }
+    }
+
+    return nearest;
+}
+
+/**
+ * Get all induction rigs (mobile units) owned by a player
+ */
+export function getInductionRigs(state: GameState, playerId: number): Entity[] {
+    return Object.values(state.entities).filter(e =>
+        e.type === 'UNIT' &&
+        e.key === 'induction_rig' &&
+        e.owner === playerId &&
+        !e.dead
+    );
+}
+
+/**
+ * Get all deployed induction rigs (buildings) owned by a player
+ */
+export function getDeployedInductionRigs(state: GameState, playerId: number): Entity[] {
+    return Object.values(state.entities).filter(e =>
+        e.type === 'BUILDING' &&
+        e.key === 'induction_rig_deployed' &&
+        e.owner === playerId &&
+        !e.dead
+    );
+}
+
 export function getAccessibleOre(ore: Entity[], buildings: Entity[], maxDist: number = AI_CONSTANTS.BUILD_RADIUS + 200): Entity[] {
     const nonDefense = getNonDefenseBuildings(buildings);
     return ore.filter(o => nonDefense.some(b => b.pos.dist(o.pos) < maxDist));

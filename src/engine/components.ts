@@ -96,3 +96,11 @@ export interface AirBaseComponent {
     readonly slots: readonly (EntityId | null)[];  // 6 slots, each holds a harrier ID or null
     readonly reloadProgress: number;               // Ticks remaining for current reload
 }
+
+// ============ INDUCTION RIG COMPONENT ============
+// Properties specific to deployed Induction Rigs (extract credits from wells)
+
+export interface InductionRigComponent {
+    readonly wellId: EntityId;                    // The well this rig is extracting from
+    readonly accumulatedCredits: number;          // Fractional credits accumulated (paid out when >= 1)
+}
