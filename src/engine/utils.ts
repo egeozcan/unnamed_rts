@@ -559,7 +559,7 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
     ];
 
     let iterations = 0;
-    const maxIterations = 2000; // Increased because danger might force longer paths
+    const maxIterations = 8000; // Must handle cross-map paths on large maps (125x125+ grids)
 
     while (!openSet.isEmpty() && iterations < maxIterations) {
         iterations++;
