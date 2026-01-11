@@ -71,6 +71,8 @@ export const BuildingSchema = z.object({
   repairRate: z.number().positive().optional(),
   // Limit fields - AI will not build more than this count per player
   maxCount: z.number().positive().optional(),
+  // Description for tooltips
+  description: z.string().optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
@@ -100,6 +102,8 @@ export const UnitSchema = z.object({
   maxCount: z.number().positive().optional(),
   // Combat mobility - can fire while moving (light vehicles, strafing aircraft)
   canAttackWhileMoving: z.boolean().optional(),
+  // Description for tooltips
+  description: z.string().optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 

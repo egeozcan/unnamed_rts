@@ -101,6 +101,157 @@ function setupButtons() {
     }
 }
 
+// Global tooltip element
+let globalTooltip: HTMLElement | null = null;
+
+function getGlobalTooltip(): HTMLElement {
+    if (!globalTooltip) {
+        globalTooltip = document.createElement('div');
+        globalTooltip.id = 'build-tooltip';
+        globalTooltip.className = 'build-tooltip';
+        document.body.appendChild(globalTooltip);
+    }
+    return globalTooltip;
+}
+
+interface TooltipInfo {
+    missingPrereqs: string[];
+    limitReached: boolean;
+    currentCount: number;
+    maxCount: number | null;
+}
+
+function getTooltipInfo(key: string, category: string): TooltipInfo {
+    const result: TooltipInfo = {
+        missingPrereqs: [],
+        limitReached: false,
+        currentCount: 0,
+        maxCount: null
+    };
+
+    if (!gameState) return result;
+
+    const isBuilding = category === 'building';
+    const data = isBuilding ? RULES.buildings[key] : RULES.units[key];
+    if (!data) return result;
+
+    // Get player's buildings and count of this specific item
+    const playerId = 0; // Human player
+    const playerBuildings = new Set<string>();
+    let count = 0;
+
+    for (const entity of Object.values(gameState.entities)) {
+        if (entity.owner === playerId && !entity.dead) {
+            if (entity.type === 'BUILDING') {
+                playerBuildings.add(entity.key);
+                if (entity.key === key) count++;
+            } else if (entity.type === 'UNIT' && entity.key === key) {
+                count++;
+            }
+        }
+    }
+
+    result.currentCount = count;
+
+    // Check maxCount limit
+    if (data.maxCount) {
+        result.maxCount = data.maxCount;
+        result.limitReached = count >= data.maxCount;
+    }
+
+    // Find missing prerequisites
+    if (data.prerequisites) {
+        for (const prereq of data.prerequisites) {
+            if (!playerBuildings.has(prereq)) {
+                const prereqData = RULES.buildings[prereq];
+                result.missingPrereqs.push(prereqData?.name || prereq);
+            }
+        }
+    }
+
+    return result;
+}
+
+function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
+    const tooltip = getGlobalTooltip();
+    const isBuilding = category === 'building';
+    const data = isBuilding ? RULES.buildings[key] : RULES.units[key];
+    if (!data) return;
+
+    // Build stats line
+    let stats: string;
+    if (isBuilding) {
+        const building = RULES.buildings[key];
+        const powerInfo = building.power ? `Power: +${building.power}` :
+                         building.drain ? `Drain: ${building.drain}` : '';
+        stats = `HP: ${building.hp}${powerInfo ? ' | ' + powerInfo : ''}`;
+        if (building.range && building.damage) {
+            stats += ` | Dmg: ${building.damage} | Range: ${building.range}`;
+        }
+    } else {
+        const unit = RULES.units[key];
+        stats = `HP: ${unit.hp} | Speed: ${unit.speed}`;
+        if (unit.damage && unit.damage > 0) {
+            stats += ` | Dmg: ${unit.damage}`;
+        }
+        if (unit.range && unit.range > 0) {
+            stats += ` | Range: ${unit.range}`;
+        }
+    }
+
+    const description = data.description || '';
+
+    // Get prerequisite and limit info
+    const info = getTooltipInfo(key, category);
+
+    // Build the requirements/restrictions HTML
+    let restrictionsHtml = '';
+
+    if (info.limitReached) {
+        restrictionsHtml += `
+            <div class="tooltip-requires">
+                <div class="tooltip-requires-title">Limit Reached</div>
+                Maximum ${info.maxCount} allowed (you have ${info.currentCount})
+            </div>
+        `;
+    } else if (info.maxCount) {
+        restrictionsHtml += `
+            <div class="tooltip-limit">
+                Limit: ${info.currentCount}/${info.maxCount}
+            </div>
+        `;
+    }
+
+    if (info.missingPrereqs.length > 0) {
+        restrictionsHtml += `
+            <div class="tooltip-requires">
+                <div class="tooltip-requires-title">Requires:</div>
+                ${info.missingPrereqs.join(', ')}
+            </div>
+        `;
+    }
+
+    tooltip.innerHTML = `
+        <div class="tooltip-title">${data.name}</div>
+        <div class="tooltip-stats">${stats}</div>
+        ${description ? `<div class="tooltip-desc">${description}</div>` : ''}
+        ${restrictionsHtml}
+    `;
+
+    // Position to the left of the button
+    const rect = btn.getBoundingClientRect();
+    const tooltipWidth = 220;
+    tooltip.style.top = `${rect.top}px`;
+    tooltip.style.left = `${rect.left - tooltipWidth - 10}px`;
+    tooltip.style.display = 'block';
+}
+
+function hideTooltip() {
+    if (globalTooltip) {
+        globalTooltip.style.display = 'none';
+    }
+}
+
 function createBtn(parent: HTMLElement, key: string, name: string, cost: number, category: string) {
     const btn = document.createElement('div');
     btn.className = 'build-btn';
@@ -112,6 +263,11 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
         <div class="btn-status"></div>
         <div class="queue-count"></div>
     `;
+
+    // Show/hide tooltip on hover
+    btn.addEventListener('mouseenter', () => showTooltipForButton(btn, key, category));
+    btn.addEventListener('mouseleave', hideTooltip);
+
     btn.onclick = (e) => {
         if (gameState?.mode === 'demo') return;
         if (btn.classList.contains('disabled')) return;
@@ -274,6 +430,10 @@ export function updateButtons(
             }
         }
     }
+}
+
+export function updateGameState(state: GameState) {
+    gameState = state;
 }
 
 export function updateSellModeUI(state: GameState) {
