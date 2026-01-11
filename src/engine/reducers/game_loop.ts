@@ -722,8 +722,19 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
 }
 
 export function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId } } {
-    const nextPos = proj.pos.add(proj.vel);
-    let nextProj = { ...proj, pos: nextPos };
+    let currentVel = proj.vel;
+    const target = entities[proj.targetId];
+
+    // Homing logic for missiles (SAMs, Stealth Tanks)
+    // They track their target perfectly
+    if (proj.weaponType === 'missile' && target && !target.dead) {
+        const speed = proj.speed || 28;
+        const dir = target.pos.sub(proj.pos).norm();
+        currentVel = dir.scale(speed);
+    }
+
+    const nextPos = proj.pos.add(currentVel);
+    let nextProj = { ...proj, pos: nextPos, vel: currentVel };
     let damageEvent = undefined;
 
     // Kill projectiles that go out of bounds (with margin for edge cases)
@@ -733,8 +744,6 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
         nextProj.dead = true;
         return { proj: nextProj, damage: damageEvent };
     }
-
-    const target = entities[proj.targetId];
 
     // Kill projectile if target no longer exists
     if (!target) {

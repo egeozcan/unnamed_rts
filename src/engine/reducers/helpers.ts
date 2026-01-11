@@ -236,8 +236,13 @@ export function killPlayerEntities(entities: Record<EntityId, Entity>, playerId:
 export function createProjectile(source: Entity, target: Entity): Projectile {
     const data = getRuleData(source.key);
     const weaponType = data?.weaponType || 'bullet';
-    const isRocket = weaponType === 'rocket' || weaponType === 'missile' || weaponType === 'heavy_cannon';
-    const speed = isRocket ? 9 : 18;
+    const isRocket = weaponType === 'rocket' || weaponType === 'heavy_cannon';
+    // Missiles (SAM/Stealth Tank) should be very fast (28)
+    // Rockets/Artillery are slower (9)
+    // Standard bullets are 18
+    let speed = 18;
+    if (weaponType === 'missile') speed = 28;
+    else if (isRocket) speed = 9;
 
     return {
         ownerId: source.id,

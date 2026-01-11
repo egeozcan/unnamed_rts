@@ -299,8 +299,25 @@ export function queueUnit(state: GameState, payload: { category: string; key: st
         const airBases = playerEntities.filter(e => e.type === 'BUILDING' && e.key === 'airforce_command' && isAirBase(e));
         const totalSlots = airBases.length * 6;
 
-        // Count existing harriers (any state)
-        const existingHarriers = playerEntities.filter(e => e.type === 'UNIT' && e.key === 'harrier').length;
+        // Count existing harriers (valid ones only)
+        // We exclude "ghost" harriers that think they are docked but are not in the base's slot array
+        const existingHarriers = playerEntities.filter(e => {
+            if (e.type !== 'UNIT' || e.key !== 'harrier') return false;
+
+            // Check for ghost docked harriers
+            if (e.airUnit?.state === 'docked' && e.airUnit.homeBaseId) {
+                const homeBase = state.entities[e.airUnit.homeBaseId];
+
+                // If home base is missing, it's a ghost
+                if (!homeBase) return false;
+
+                // If home base claims to be the base but doesn't have the harrier in slots, it's a ghost
+                if (homeBase.type === 'BUILDING' && homeBase.airBase && !homeBase.airBase.slots.includes(e.id)) {
+                    return false;
+                }
+            }
+            return true;
+        }).length;
 
         // Count harriers in queue (current + queued)
         const harrisersInQueue = (q.current === 'harrier' ? 1 : 0) +
