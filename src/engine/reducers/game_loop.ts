@@ -220,10 +220,14 @@ export function tick(state: GameState): GameState {
             const nearbyEntities = spatialGrid.queryRadius(depot.pos.x, depot.pos.y, repairRadius + 30);
 
             for (const entity of nearbyEntities) {
-                // Filter for friendly damaged units
+                // Filter for friendly damaged vehicles only (not infantry)
                 if (entity.type !== 'UNIT' || entity.dead) continue;
                 if (entity.owner !== depot.owner) continue;
                 if (entity.hp >= entity.maxHp) continue;
+
+                // Service depot only repairs vehicles, not infantry
+                const unitData = getRuleData(entity.key);
+                if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
 
                 // Get latest version from updatedEntities (may have been modified this tick)
                 const unit = updatedEntities[entity.id];

@@ -1,5 +1,5 @@
 import { GameState, Action, Entity, UnitEntity, Vector, HarvesterUnit, EntityId, AirUnit } from '../types.js';
-import { RULES, AIPersonality } from '../../data/schemas/index.js';
+import { RULES, AIPersonality, isUnitData } from '../../data/schemas/index.js';
 import { AIPlayerState, OffensiveGroup } from './types.js';
 import {
     ATTACK_GROUP_MIN_SIZE,
@@ -1409,6 +1409,10 @@ export function handleUnitRepair(
             if (unit.key === 'harvester') continue;
             if (isAirUnit(unit as UnitEntity)) continue;
 
+            // Service depot only repairs vehicles, skip infantry
+            const unitData = RULES.units[unit.key];
+            if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
+
             const dist = unit.pos.dist(depot.pos);
             // Count units already near the depot
             if (dist < DEPOT_EDGE_OFFSET + 40) {
@@ -1426,6 +1430,10 @@ export function handleUnitRepair(
 
         // Skip air units (they need different handling)
         if (isAirUnit(unit as UnitEntity)) continue;
+
+        // Service depot only repairs vehicles, skip infantry
+        const unitData = RULES.units[unit.key];
+        if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
 
         const hpRatio = unit.hp / unit.maxHp;
 

@@ -220,7 +220,9 @@ function findCombatTarget(
         if (!isTargetAir && !targeting.canTargetGround) return false;
 
         if (isHealer) {
-            return other.owner === unit.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id;
+            // Medics can only heal infantry units
+            const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
+            return other.owner === unit.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id && targetType === 'infantry';
         } else if (isEngineer) {
             if (other.type !== 'BUILDING') return false;
             if (other.owner !== unit.owner && data.canCaptureEnemyBuildings) return true;
