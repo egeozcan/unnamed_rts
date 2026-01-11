@@ -214,6 +214,22 @@
         <div id="tab-vehicles" class="btn-grid"></div>
         <div id="tab-air" class="btn-grid"></div>
       </div>
+
+      <!-- Command bar for unit stances and attack-move -->
+      <div id="command-bar" class="command-bar hidden">
+        <div class="stance-section">
+          <span class="command-label">Stance</span>
+          <div class="stance-buttons">
+            <button id="stance-aggressive" class="stance-btn active" title="Aggressive (F) - Pursue enemies indefinitely">F</button>
+            <button id="stance-defensive" class="stance-btn" title="Defensive (G) - Return after kill or if too far">G</button>
+            <button id="stance-hold" class="stance-btn" title="Hold Ground (H) - Don't move, attack in range">H</button>
+          </div>
+        </div>
+        <div class="attack-move-section">
+          <button id="attack-move-btn" class="attack-move-btn" title="Attack-Move (A) - Move and engage enemies">A-Move</button>
+        </div>
+      </div>
+
       <div id="status-msg">Commander, base established.</div>
     </div>
   </div>

@@ -1,5 +1,9 @@
 import { Vector, EntityId } from './types.js';
 
+// ============ ATTACK STANCE ============
+// Attack stance for combat units
+export type AttackStance = 'aggressive' | 'defensive' | 'hold_ground';
+
 // ============ MOVEMENT COMPONENT ============
 // Properties for entities that can move (units only)
 
@@ -30,6 +34,9 @@ export interface CombatComponent {
     readonly cooldown: number;
     readonly flash: number;
     readonly turretAngle: number;
+    readonly stance?: AttackStance;  // Default: 'aggressive'
+    readonly attackMoveTarget?: Vector | null;  // Destination for attack-move command
+    readonly stanceHomePos?: Vector | null;  // Position to return to for defensive stance / attack-move
 }
 
 // ============ HARVESTER COMPONENT ============

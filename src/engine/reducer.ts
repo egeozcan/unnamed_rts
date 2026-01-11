@@ -5,13 +5,13 @@ import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
 import { placeBuilding, sellBuilding, startRepair, stopRepair } from './reducers/buildings';
-import { deployMCV, deployInductionRig, commandMove, commandAttack } from './reducers/units';
+import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, setStance } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
 export { createPlayerState, canBuild, calculatePower, createEntity, getRuleData, createProjectile } from './reducers/helpers';
 export { tick } from './reducers/game_loop';
 export { placeBuilding, sellBuilding } from './reducers/buildings';
-export { updateUnit, deployMCV, deployInductionRig } from './reducers/units';
+export { updateUnit, deployMCV, deployInductionRig, commandAttackMove, setStance } from './reducers/units';
 
 export const INITIAL_STATE: GameState = {
     running: false,
@@ -36,7 +36,8 @@ export const INITIAL_STATE: GameState = {
     debugMode: false,
     showMinimap: true,
     showBirdsEye: false,
-    notification: null
+    notification: null,
+    attackMoveMode: false
 };
 
 export function update(state: GameState, action: Action): GameState {
@@ -81,6 +82,12 @@ export function update(state: GameState, action: Action): GameState {
             return queueUnit(state, action.payload);
         case 'DEQUEUE_UNIT':
             return dequeueUnit(state, action.payload);
+        case 'COMMAND_ATTACK_MOVE':
+            return commandAttackMove(state, action.payload);
+        case 'SET_STANCE':
+            return setStance(state, action.payload);
+        case 'TOGGLE_ATTACK_MOVE_MODE':
+            return { ...state, attackMoveMode: !state.attackMoveMode };
         default:
             return state;
     }

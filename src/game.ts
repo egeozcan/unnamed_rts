@@ -11,7 +11,7 @@ declare global {
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
@@ -530,6 +530,21 @@ function startGameWithConfig(config: SkirmishConfig) {
     initMinimap();
     initScoreboard();
     initBirdsEye();
+    initCommandBar(
+        (stance) => {
+            if (currentState.selection.length > 0) {
+                currentState = update(currentState, {
+                    type: 'SET_STANCE',
+                    payload: { unitIds: currentState.selection, stance }
+                });
+                updateButtonsUI();
+            }
+        },
+        () => {
+            currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+            updateButtonsUI();
+        }
+    );
 
     // Set observer mode if all players are AI
     setObserverMode(isObserverMode);
@@ -554,6 +569,17 @@ function startGameWithConfig(config: SkirmishConfig) {
         },
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
             setGameSpeed(speed);
+        },
+        onSetStance: (stance) => {
+            if (currentState.selection.length > 0) {
+                currentState = update(currentState, {
+                    type: 'SET_STANCE',
+                    payload: { unitIds: currentState.selection, stance }
+                });
+            }
+        },
+        onToggleAttackMove: () => {
+            currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
         },
         getZoom: () => currentState.zoom,
         getCamera: () => currentState.camera
@@ -678,6 +704,11 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
 
     if (currentState.mode === 'demo') return;
 
+    // Cancel attack-move mode on any left click
+    if (currentState.attackMoveMode) {
+        currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+    }
+
     // Sell Mode
     if (currentState.sellMode) {
         if (humanPlayerId === null) return;
@@ -731,8 +762,12 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         return;
     }
 
-    // Selection
-    let newSelection: EntityId[] = [];
+    // Selection with shift-click support
+    const inputState = getInputState();
+    const shiftHeld = inputState.keys['Shift'];
+
+    // Start with existing selection if shift is held
+    let newSelection: EntityId[] = shiftHeld ? [...currentState.selection] : [];
 
     if (isDrag && dragRect) {
         for (const id in currentState.entities) {
@@ -740,7 +775,10 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
             if (humanPlayerId !== null && e.owner === humanPlayerId && isUnit(e) && !e.dead &&
                 e.pos.x > dragRect.x1 && e.pos.x < dragRect.x2 &&
                 e.pos.y > dragRect.y1 && e.pos.y < dragRect.y2) {
-                newSelection.push(e.id);
+                // Add to selection if not already selected
+                if (!newSelection.includes(e.id)) {
+                    newSelection.push(e.id);
+                }
             }
         }
     } else {
@@ -755,7 +793,19 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
                 return;
             }
 
-            newSelection.push(clicked.id);
+            if (shiftHeld) {
+                // Shift-click: toggle selection
+                if (newSelection.includes(clicked.id)) {
+                    // Remove from selection
+                    newSelection = newSelection.filter(id => id !== clicked.id);
+                } else {
+                    // Add to selection
+                    newSelection.push(clicked.id);
+                }
+            } else {
+                // Regular click: replace selection
+                newSelection = [clicked.id];
+            }
         }
     }
 
@@ -784,6 +834,16 @@ function handleRightClick(wx: number, wy: number) {
     if (currentState.placingBuilding) {
         currentState = update(currentState, { type: 'CANCEL_PLACEMENT' });
         updateButtonsUI();
+        return;
+    }
+
+    // Cancel attack-move mode if active (but still process the command)
+    if (currentState.attackMoveMode) {
+        currentState = update(currentState, {
+            type: 'COMMAND_ATTACK_MOVE',
+            payload: { unitIds: currentState.selection, x: wx, y: wy }
+        });
+        // attackMoveMode is cleared by the reducer
         return;
     }
 
@@ -906,6 +966,7 @@ function updateButtonsUI() {
     );
     updateSellModeUI(currentState);
     updateRepairModeUI(currentState);
+    updateCommandBar(currentState);
 
     // Update status message from notification
     if (currentState.notification) {
@@ -1136,6 +1197,17 @@ if (import.meta.hot) {
                 },
                 onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
                     setGameSpeed(speed);
+                },
+                onSetStance: (stance) => {
+                    if (currentState.selection.length > 0) {
+                        currentState = update(currentState, {
+                            type: 'SET_STANCE',
+                            payload: { unitIds: currentState.selection, stance }
+                        });
+                    }
+                },
+                onToggleAttackMove: () => {
+                    currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
                 },
                 getZoom: () => currentState.zoom,
                 getCamera: () => currentState.camera

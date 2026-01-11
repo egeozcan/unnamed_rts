@@ -1,15 +1,23 @@
 import {
-    EntityId, Entity, Projectile, CombatUnit
+    EntityId, Entity, Projectile, CombatUnit, AttackStance
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid } from '../spatial';
 import { moveToward } from './movement';
 
+// Maximum distance a unit will pursue a target when on defensive stance or attack-move
+const DEFENSIVE_PURSUIT_RANGE = 400;
+
 /**
  * Update combat unit behavior - handles auto-targeting and attacks.
- * 
- * Extracted from updateUnit for better maintainability.
+ *
+ * Respects attack stances:
+ * - aggressive: auto-acquire and pursue indefinitely (default)
+ * - defensive: auto-acquire, pursue up to DEFENSIVE_PURSUIT_RANGE, then return home
+ * - hold_ground: never move, only attack targets in weapon range
+ *
+ * Also handles attack-move: move toward destination, engage enemies en route with limited pursuit.
  */
 export function updateCombatUnitBehavior(
     combatUnit: CombatUnit,
@@ -27,15 +35,33 @@ export function updateCombatUnitBehavior(
 
     const spatialGrid = getSpatialGrid();
     const isEngineer = !!(data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings);
+    const stance: AttackStance = nextEntity.combat.stance || 'aggressive';
+    const range = data.range || 100;
 
-    // Auto-acquire target if we don't have one and we're idle
-    if (!nextEntity.combat.targetId && !nextEntity.movement.moveTarget && (data.damage || isEngineer)) {
-        const result = findCombatTarget(nextEntity, data, spatialGrid);
-        if (result) {
-            nextEntity = {
-                ...nextEntity,
-                combat: { ...nextEntity.combat, targetId: result }
-            };
+    // Check if we're in attack-move mode
+    const isAttackMove = !!nextEntity.combat.attackMoveTarget;
+
+    // Auto-acquire target based on stance
+    if (!nextEntity.combat.targetId && (data.damage || isEngineer)) {
+        const shouldAutoAcquire = shouldAutoAcquireTarget(nextEntity, stance, isAttackMove);
+
+        if (shouldAutoAcquire) {
+            // For hold_ground, only search within weapon range
+            const searchRange = stance === 'hold_ground' ? range : undefined;
+            const result = findCombatTarget(nextEntity, data, spatialGrid, searchRange);
+
+            if (result) {
+                // Record home position when first acquiring target (for defensive/attack-move)
+                const shouldRecordHome = (stance === 'defensive' || isAttackMove) && !nextEntity.combat.stanceHomePos;
+                nextEntity = {
+                    ...nextEntity,
+                    combat: {
+                        ...nextEntity.combat,
+                        targetId: result,
+                        stanceHomePos: shouldRecordHome ? nextEntity.pos : nextEntity.combat.stanceHomePos
+                    }
+                };
+            }
         }
     }
 
@@ -43,23 +69,43 @@ export function updateCombatUnitBehavior(
     if (nextEntity.combat.targetId) {
         const target = allEntities[nextEntity.combat.targetId];
         if (target && !target.dead) {
-            const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer);
-            nextEntity = result.entity;
-            projectile = result.projectile;
+            // Check if we should give up pursuit (defensive/attack-move distance limit)
+            if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
+                nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
+            } else {
+                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, stance);
+                nextEntity = result.entity;
+                projectile = result.projectile;
+            }
         } else {
-            // Target dead or gone - clear it
-            nextEntity = {
-                ...nextEntity,
-                combat: { ...nextEntity.combat, targetId: null }
-            };
+            // Target dead or gone - handle return behavior
+            nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
         }
     } else if (nextEntity.movement.moveTarget) {
-        // No target, just moving
+        // No target, just moving (regular move or attack-move in progress)
         nextEntity = moveToward(nextEntity, nextEntity.movement.moveTarget, entityList) as CombatUnit;
         if (nextEntity.pos.dist(nextEntity.movement.moveTarget!) < 10) {
+            // Reached destination
             nextEntity = {
                 ...nextEntity,
-                movement: { ...nextEntity.movement, moveTarget: null }
+                movement: { ...nextEntity.movement, moveTarget: null },
+                combat: {
+                    ...nextEntity.combat,
+                    attackMoveTarget: null,  // Clear attack-move destination
+                    stanceHomePos: null      // Clear home position
+                }
+            };
+        }
+    } else if (stance === 'defensive' && nextEntity.combat.stanceHomePos) {
+        // Defensive stance: return to home position when idle
+        const homePos = nextEntity.combat.stanceHomePos;
+        if (nextEntity.pos.dist(homePos) > 20) {
+            nextEntity = moveToward(nextEntity, homePos, entityList) as CombatUnit;
+        } else {
+            // Close enough to home, clear it
+            nextEntity = {
+                ...nextEntity,
+                combat: { ...nextEntity.combat, stanceHomePos: null }
             };
         }
     }
@@ -68,19 +114,95 @@ export function updateCombatUnitBehavior(
 }
 
 /**
+ * Determine if unit should auto-acquire a new target based on stance
+ */
+function shouldAutoAcquireTarget(unit: CombatUnit, stance: AttackStance, isAttackMove: boolean): boolean {
+    // Attack-move: always actively looking for targets while moving toward destination
+    // Check this FIRST since it overrides normal stance behavior
+    if (isAttackMove) {
+        return true;
+    }
+
+    // Hold ground auto-acquires but never moves, so we look for in-range targets
+    if (stance === 'hold_ground') {
+        return true;
+    }
+
+    // Aggressive and defensive: auto-acquire when idle (no movement target)
+    return !unit.movement.moveTarget;
+}
+
+/**
+ * Check if unit should give up pursuit and return home (defensive/attack-move)
+ */
+function shouldGiveUpPursuit(unit: CombatUnit, _target: Entity, stance: AttackStance, isAttackMove: boolean): boolean {
+    // Aggressive never gives up
+    if (stance === 'aggressive' && !isAttackMove) {
+        return false;
+    }
+
+    // Hold ground doesn't pursue at all (handled elsewhere)
+    if (stance === 'hold_ground') {
+        return false;
+    }
+
+    // Check distance from home position
+    const homePos = unit.combat.stanceHomePos;
+    if (!homePos) {
+        return false;  // No home recorded, don't give up
+    }
+
+    const distFromHome = unit.pos.dist(homePos);
+    return distFromHome > DEFENSIVE_PURSUIT_RANGE;
+}
+
+/**
+ * Clear target and set up return behavior
+ */
+function clearTargetAndReturnHome(unit: CombatUnit, isAttackMove: boolean): CombatUnit {
+    if (isAttackMove && unit.combat.attackMoveTarget) {
+        // Resume attack-move toward original destination
+        return {
+            ...unit,
+            movement: { ...unit.movement, moveTarget: unit.combat.attackMoveTarget, path: null },
+            combat: {
+                ...unit.combat,
+                targetId: null,
+                stanceHomePos: null  // Will be set fresh when new target acquired
+            }
+        };
+    } else if (unit.combat.stanceHomePos) {
+        // Defensive: return to home position
+        return {
+            ...unit,
+            movement: { ...unit.movement, moveTarget: unit.combat.stanceHomePos, path: null },
+            combat: { ...unit.combat, targetId: null }
+        };
+    } else {
+        // Just clear target
+        return {
+            ...unit,
+            combat: { ...unit.combat, targetId: null }
+        };
+    }
+}
+
+/**
  * Find a combat target using spatial grid search
+ * @param maxRange - Optional max range override (used for hold_ground to limit to weapon range)
  */
 function findCombatTarget(
     unit: CombatUnit,
     data: ReturnType<typeof getRuleData>,
-    spatialGrid: ReturnType<typeof getSpatialGrid>
+    spatialGrid: ReturnType<typeof getSpatialGrid>,
+    maxRange?: number
 ): EntityId | null {
 
     if (!data || !isUnitData(data)) return null;
 
     const isHealer = data.damage < 0;
     const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
-    const range = (data.range || 100) + (isHealer ? 100 : 50);
+    const range = maxRange ?? ((data.range || 100) + (isHealer ? 100 : 50));
 
     const weaponType = data.weaponType || 'bullet';
     const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
@@ -124,7 +246,8 @@ function handleCombatTarget(
     target: Entity,
     data: ReturnType<typeof getRuleData>,
     entityList: Entity[],
-    isEngineer: boolean
+    isEngineer: boolean,
+    stance: AttackStance
 ): { entity: CombatUnit, projectile: Projectile | null } {
 
     if (!data || !isUnitData(data)) {
@@ -171,6 +294,17 @@ function handleCombatTarget(
                 ...unit,
                 combat: { ...unit.combat, targetId: null }
                 // Don't clear moveTarget - let unit continue to original destination
+            },
+            projectile: null
+        };
+    }
+
+    // Hold ground stance: if target is out of range, clear it (don't pursue)
+    if (stance === 'hold_ground' && dist > range) {
+        return {
+            entity: {
+                ...unit,
+                combat: { ...unit.combat, targetId: null }
             },
             projectile: null
         };

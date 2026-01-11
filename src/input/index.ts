@@ -1,4 +1,4 @@
-import { Vector } from '../engine/types.js';
+import { Vector, AttackStance } from '../engine/types.js';
 
 interface Mouse {
     x: number;
@@ -60,6 +60,8 @@ let onToggleDebug: (() => void) | null = null;
 let onToggleMinimap: (() => void) | null = null;
 let onToggleBirdsEye: (() => void) | null = null;
 let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
+let onSetStance: ((stance: AttackStance) => void) | null = null;
+let onToggleAttackMove: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
@@ -74,6 +76,8 @@ export function initInput(
         onToggleMinimap: () => void;
         onToggleBirdsEye: () => void;
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
+        onSetStance?: (stance: AttackStance) => void;
+        onToggleAttackMove?: () => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -86,6 +90,8 @@ export function initInput(
     onToggleMinimap = callbacks.onToggleMinimap;
     onToggleBirdsEye = callbacks.onToggleBirdsEye;
     onSetSpeed = callbacks.onSetSpeed;
+    onSetStance = callbacks.onSetStance || null;
+    onToggleAttackMove = callbacks.onToggleAttackMove || null;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -160,6 +166,20 @@ function setupEventListeners() {
         // Deploy MCV key handler
         if (e.key === 'Enter') {
             onDeployMCV?.();
+        }
+        // Stance controls: F = Aggressive, G = Defensive, H = Hold Ground
+        if (e.key === 'f' || e.key === 'F') {
+            onSetStance?.('aggressive');
+        }
+        if (e.key === 'g' || e.key === 'G') {
+            onSetStance?.('defensive');
+        }
+        if (e.key === 'h' || e.key === 'H') {
+            onSetStance?.('hold_ground');
+        }
+        // Attack-move toggle
+        if (e.key === 'a' || e.key === 'A') {
+            onToggleAttackMove?.();
         }
     });
 
@@ -373,10 +393,11 @@ export function handleCameraInput(
 
     const keys = inputState.keys;
     const speed = 15 / zoom;
-    if (keys.ArrowUp || keys.w || keys.W) dy -= speed;
-    if (keys.ArrowDown || keys.s || keys.S) dy += speed;
-    if (keys.ArrowLeft || keys.a || keys.A) dx -= speed;
-    if (keys.ArrowRight || keys.d || keys.D) dx += speed;
+    // Arrow keys for camera movement (WASD removed - used for unit commands)
+    if (keys.ArrowUp) dy -= speed;
+    if (keys.ArrowDown) dy += speed;
+    if (keys.ArrowLeft) dx -= speed;
+    if (keys.ArrowRight) dx += speed;
 
     // Edge scrolling
     if (inputState.rawMouse.x < 10) dx -= speed;

@@ -39,7 +39,10 @@ export function createDefaultCombat(): CombatComponent {
         lastDamageTick: undefined,
         cooldown: 0,
         flash: 0,
-        turretAngle: 0
+        turretAngle: 0,
+        stance: 'aggressive',
+        attackMoveTarget: null,
+        stanceHomePos: null
     };
 }
 

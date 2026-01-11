@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, BuildingEntity
+    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, BuildingEntity, AttackStance
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
@@ -579,4 +579,105 @@ export function updateUnit(
 
     // Fallback for unknown unit types
     return { entity, projectile: null, creditsEarned: 0, resourceDamage: null };
+}
+
+/**
+ * Command units to attack-move to a location.
+ * Units will move toward the destination, engaging enemies encountered along the way.
+ * Unlike aggressive stance, attack-move has limited pursuit distance before resuming toward destination.
+ */
+export function commandAttackMove(state: GameState, payload: { unitIds: EntityId[]; x: number; y: number }): GameState {
+    const { unitIds, x, y } = payload;
+    const target = new Vector(x, y);
+
+    // Filter to valid movable combat units (exclude harvesters, MCVs, and air units)
+    const movableUnits: UnitEntity[] = [];
+    for (const id of unitIds) {
+        const entity = state.entities[id];
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT' &&
+            entity.key !== 'harvester' && entity.key !== 'mcv' && !isAirUnit(entity)) {
+            movableUnits.push(entity);
+        }
+    }
+
+    if (movableUnits.length === 0) {
+        return { ...state, attackMoveMode: false };
+    }
+
+    // Calculate formation positions based on average unit radius
+    const avgRadius = movableUnits.reduce((sum, u) => sum + u.radius, 0) / movableUnits.length;
+    const formationPositions = calculateFormationPositions(target, movableUnits.length, avgRadius);
+
+    // Sort units by distance to target center for efficient position assignment
+    const sortedUnits = [...movableUnits].sort((a, b) =>
+        a.pos.dist(target) - b.pos.dist(target)
+    );
+
+    // Assign positions
+    const assignedPositions = new Map<EntityId, Vector>();
+    const availablePositions = [...formationPositions];
+
+    for (const unit of sortedUnits) {
+        let bestIdx = 0;
+        let bestDist = unit.pos.dist(availablePositions[0]);
+        for (let i = 1; i < availablePositions.length; i++) {
+            const dist = unit.pos.dist(availablePositions[i]);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        assignedPositions.set(unit.id, availablePositions[bestIdx]);
+        availablePositions.splice(bestIdx, 1);
+    }
+
+    let nextEntities = { ...state.entities };
+    for (const unit of movableUnits) {
+        const formationTarget = assignedPositions.get(unit.id) || target;
+
+        nextEntities[unit.id] = {
+            ...unit,
+            movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+            combat: {
+                ...unit.combat,
+                targetId: null,  // Will auto-acquire targets during move
+                attackMoveTarget: formationTarget,  // Remember this is an attack-move
+                stanceHomePos: null  // Will be set when target is acquired
+            }
+        };
+    }
+
+    return { ...state, entities: nextEntities, attackMoveMode: false };
+}
+
+/**
+ * Set the attack stance for selected units.
+ * - aggressive: auto-acquire and pursue indefinitely (default behavior)
+ * - defensive: auto-acquire but return home after kill or if target goes too far
+ * - hold_ground: never move, only fire at targets in weapon range
+ */
+export function setStance(state: GameState, payload: { unitIds: EntityId[]; stance: AttackStance }): GameState {
+    const { unitIds, stance } = payload;
+
+    let nextEntities = { ...state.entities };
+
+    for (const id of unitIds) {
+        const entity = nextEntities[id];
+        if (entity && entity.type === 'UNIT' && entity.combat) {
+            // Only apply stance to combat units (exclude harvesters and MCVs)
+            if (entity.key !== 'harvester' && entity.key !== 'mcv') {
+                nextEntities[id] = {
+                    ...entity,
+                    combat: {
+                        ...entity.combat,
+                        stance,
+                        // Clear stanceHomePos when stance changes - will be set fresh when needed
+                        stanceHomePos: null
+                    }
+                };
+            }
+        }
+    }
+
+    return { ...state, entities: nextEntities };
 }

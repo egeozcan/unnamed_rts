@@ -1,7 +1,8 @@
 import { RULES } from '../data/schemas/index.js';
-import { GameState, Entity, EntityId, Vector } from '../engine/types.js';
+import { GameState, Entity, EntityId, Vector, AttackStance, UnitEntity } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
+import { isUnit } from '../engine/type-guards.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
@@ -9,6 +10,8 @@ let onCancelBuild: ((category: string) => void) | null = null;
 let onDequeueUnit: ((category: string, key: string, count: number) => void) | null = null;
 let onToggleSellMode: (() => void) | null = null;
 let onToggleRepairMode: (() => void) | null = null;
+let onSetStance: ((stance: AttackStance) => void) | null = null;
+let onToggleAttackMove: (() => void) | null = null;
 
 
 export function initUI(
@@ -304,6 +307,17 @@ export function hasBuilding(key: string, owner: number, entities: Entity[]): boo
     return entities.some(e => e.owner === owner && e.key === key && !e.dead);
 }
 
+// Track previous button states to avoid unnecessary DOM updates
+const prevButtonStates: Map<string, {
+    disabled: boolean;
+    building: boolean;
+    ready: boolean;
+    placing: boolean;
+    queued: boolean;
+    progress: number;
+    queueCount: number;
+}> = new Map();
+
 export function updateButtons(
     entities: Record<EntityId, Entity>,
     queues: Record<string, { current: string | null; progress: number; queued?: readonly string[] }>,
@@ -319,10 +333,10 @@ export function updateButtons(
         const el = document.getElementById('btn-' + k);
         if (!el) continue;
 
-        if (canBuild(k, 'building', owner, entities)) {
-            el.classList.remove('disabled');
-        } else {
-            el.classList.add('disabled');
+        const shouldBeDisabled = !canBuild(k, 'building', owner, entities);
+        const isDisabled = el.classList.contains('disabled');
+        if (shouldBeDisabled !== isDisabled) {
+            el.classList.toggle('disabled', shouldBeDisabled);
         }
     }
 
@@ -335,12 +349,23 @@ export function updateButtons(
         const category = unitData.type === 'infantry' ? 'infantry' :
                          unitData.type === 'air' ? 'air' : 'vehicle';
 
-        if (canBuild(k, category, owner, entities)) {
-            el.classList.remove('disabled');
-        } else {
-            el.classList.add('disabled');
+        const shouldBeDisabled = !canBuild(k, category, owner, entities);
+        const isDisabled = el.classList.contains('disabled');
+        if (shouldBeDisabled !== isDisabled) {
+            el.classList.toggle('disabled', shouldBeDisabled);
         }
     }
+
+    // Compute desired state for each button
+    const desiredStates: Map<string, {
+        building: boolean;
+        ready: boolean;
+        placing: boolean;
+        queued: boolean;
+        progress: number;
+        queueCount: number;
+        statusText: string;
+    }> = new Map();
 
     // Update production states
     const categories = ['building', 'infantry', 'vehicle', 'air'] as const;
@@ -351,25 +376,6 @@ export function updateButtons(
             cat === 'infantry' ? ['tab-infantry'] :
             cat === 'air' ? ['tab-air'] : ['tab-vehicles'];
 
-        for (const containerId of containerIds) {
-            const container = document.getElementById(containerId);
-            if (!container) continue;
-
-            // Reset all buttons in this category
-            Array.from(container.children).forEach(btn => {
-                btn.classList.remove('building', 'ready', 'placing', 'queued');
-                const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
-                const status = btn.querySelector('.btn-status') as HTMLElement;
-                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
-                if (overlay) overlay.style.width = '0%';
-                if (status) status.innerText = '';
-                if (queueCountEl) {
-                    queueCountEl.innerText = '';
-                    queueCountEl.style.display = 'none';
-                }
-            });
-        }
-
         // Count queued items by key
         const queuedCounts: Record<string, number> = {};
         if (q?.queued) {
@@ -378,57 +384,124 @@ export function updateButtons(
             }
         }
 
-        // Mark currently building with queue count
+        for (const containerId of containerIds) {
+            const container = document.getElementById(containerId);
+            if (!container) continue;
+
+            // Initialize all buttons in this category to default state
+            Array.from(container.children).forEach(btn => {
+                const btnId = btn.id;
+                if (!btnId.startsWith('btn-')) return;
+                const key = btnId.slice(4);
+
+                desiredStates.set(key, {
+                    building: false,
+                    ready: false,
+                    placing: false,
+                    queued: false,
+                    progress: 0,
+                    queueCount: 0,
+                    statusText: ''
+                });
+            });
+        }
+
+        // Set state for currently building item
         if (q?.current) {
-            const btn = document.getElementById('btn-' + q.current);
-            if (btn) {
-                btn.classList.add('building');
-                const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
-                const status = btn.querySelector('.btn-status') as HTMLElement;
-                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
-                if (overlay) overlay.style.width = q.progress + '%';
-                if (status) status.innerText = 'BUILDING';
-
-                // Show queue count (including current item)
-                const totalForThisItem = 1 + (queuedCounts[q.current] || 0);
-                if (queueCountEl && totalForThisItem > 1) {
-                    queueCountEl.innerText = `x${totalForThisItem}`;
-                    queueCountEl.style.display = 'block';
-                }
+            const state = desiredStates.get(q.current);
+            if (state) {
+                state.building = true;
+                state.progress = q.progress;
+                state.statusText = 'BUILDING';
+                state.queueCount = 1 + (queuedCounts[q.current] || 0);
             }
         }
 
-        // Show queue counts for items that are queued but not currently building
+        // Set state for queued items (not currently building)
         for (const [key, count] of Object.entries(queuedCounts)) {
-            if (key === q?.current) continue; // Already handled above
-            const btn = document.getElementById('btn-' + key);
-            if (btn) {
-                btn.classList.add('queued');
-                const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
-                if (queueCountEl) {
-                    queueCountEl.innerText = `x${count}`;
-                    queueCountEl.style.display = 'block';
-                }
+            if (key === q?.current) continue;
+            const state = desiredStates.get(key);
+            if (state) {
+                state.queued = true;
+                state.queueCount = count;
             }
         }
 
-        // Mark ready to place
+        // Set state for ready to place (buildings only)
         if (cat === 'building' && readyToPlace) {
-            const btn = document.getElementById('btn-' + readyToPlace);
-            if (btn) {
-                btn.classList.add('ready');
-                const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
-                const status = btn.querySelector('.btn-status') as HTMLElement;
-                if (overlay) overlay.style.width = '100%';
-                if (status) status.innerText = 'READY';
+            const state = desiredStates.get(readyToPlace);
+            if (state) {
+                state.building = false;
+                state.ready = true;
+                state.progress = 100;
+                state.statusText = 'READY';
 
                 if (placingBuilding === readyToPlace) {
-                    btn.classList.add('placing');
-                    btn.classList.remove('ready');
-                    if (status) status.innerText = 'PLACING';
+                    state.ready = false;
+                    state.placing = true;
+                    state.statusText = 'PLACING';
                 }
             }
         }
+    }
+
+    // Apply changes only where needed
+    for (const [key, desired] of desiredStates) {
+        const btn = document.getElementById('btn-' + key);
+        if (!btn) continue;
+
+        const prev = prevButtonStates.get(key);
+
+        // Update classes only if changed
+        if (!prev || prev.building !== desired.building) {
+            btn.classList.toggle('building', desired.building);
+        }
+        if (!prev || prev.ready !== desired.ready) {
+            btn.classList.toggle('ready', desired.ready);
+        }
+        if (!prev || prev.placing !== desired.placing) {
+            btn.classList.toggle('placing', desired.placing);
+        }
+        if (!prev || prev.queued !== desired.queued) {
+            btn.classList.toggle('queued', desired.queued);
+        }
+
+        // Update progress overlay only if changed
+        if (!prev || prev.progress !== desired.progress) {
+            const overlay = btn.querySelector('.progress-overlay') as HTMLElement;
+            if (overlay) overlay.style.width = desired.progress + '%';
+        }
+
+        // Update status text only if changed
+        if (!prev || prev.queueCount !== desired.queueCount || desired.statusText !== (prev.building || prev.ready || prev.placing ? (prev.placing ? 'PLACING' : prev.ready ? 'READY' : 'BUILDING') : '')) {
+            const status = btn.querySelector('.btn-status') as HTMLElement;
+            if (status) status.innerText = desired.statusText;
+        }
+
+        // Update queue count only if changed
+        if (!prev || prev.queueCount !== desired.queueCount) {
+            const queueCountEl = btn.querySelector('.queue-count') as HTMLElement;
+            if (queueCountEl) {
+                if (desired.queueCount > 1) {
+                    queueCountEl.innerText = `x${desired.queueCount}`;
+                    queueCountEl.style.display = 'block';
+                } else {
+                    queueCountEl.innerText = '';
+                    queueCountEl.style.display = 'none';
+                }
+            }
+        }
+
+        // Store current state for next comparison
+        prevButtonStates.set(key, {
+            disabled: btn.classList.contains('disabled'),
+            building: desired.building,
+            ready: desired.ready,
+            placing: desired.placing,
+            queued: desired.queued,
+            progress: desired.progress,
+            queueCount: desired.queueCount
+        });
     }
 }
 
@@ -1096,6 +1169,112 @@ function parseGameState(json: string): GameState | null {
     } catch (e) {
         console.error('Failed to parse game state:', e);
         return null;
+    }
+}
+
+// ==================== Command Bar (Stances + Attack-Move) ====================
+
+/**
+ * Initialize the command bar for unit stances and attack-move.
+ * Must be called after the DOM is ready.
+ */
+export function initCommandBar(
+    setStance: (stance: AttackStance) => void,
+    toggleAttackMove: () => void
+) {
+    onSetStance = setStance;
+    onToggleAttackMove = toggleAttackMove;
+
+    // Wire up stance buttons
+    const aggressiveBtn = document.getElementById('stance-aggressive');
+    const defensiveBtn = document.getElementById('stance-defensive');
+    const holdBtn = document.getElementById('stance-hold');
+    const attackMoveBtn = document.getElementById('attack-move-btn');
+
+    if (aggressiveBtn) {
+        aggressiveBtn.addEventListener('click', () => onSetStance?.('aggressive'));
+    }
+    if (defensiveBtn) {
+        defensiveBtn.addEventListener('click', () => onSetStance?.('defensive'));
+    }
+    if (holdBtn) {
+        holdBtn.addEventListener('click', () => onSetStance?.('hold_ground'));
+    }
+    if (attackMoveBtn) {
+        attackMoveBtn.addEventListener('click', () => onToggleAttackMove?.());
+    }
+}
+
+/**
+ * Update the command bar visibility and state based on current selection.
+ * Shows the bar when combat units are selected, highlights active stance.
+ */
+export function updateCommandBar(state: GameState) {
+    const commandBar = document.getElementById('command-bar');
+    const canvas = document.getElementById('gameCanvas');
+    if (!commandBar) return;
+
+    // Check if we have combat units selected (not harvesters, MCVs)
+    const hasCombatUnits = state.selection.some(id => {
+        const entity = state.entities[id];
+        return entity && isUnit(entity) &&
+            entity.key !== 'harvester' && entity.key !== 'mcv';
+    });
+
+    // Show/hide command bar
+    if (hasCombatUnits) {
+        commandBar.classList.remove('hidden');
+
+        // Get the dominant stance of selected units
+        const stances = state.selection
+            .map(id => state.entities[id])
+            .filter(e => e && isUnit(e) && e.key !== 'harvester' && e.key !== 'mcv')
+            .map(e => (e as UnitEntity).combat?.stance || 'aggressive');
+
+        // Find most common stance
+        const stanceCounts = stances.reduce((acc, s) => {
+            acc[s] = (acc[s] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        let dominantStance: AttackStance = 'aggressive';
+        let maxCount = 0;
+        for (const [stance, count] of Object.entries(stanceCounts)) {
+            if (count > maxCount) {
+                maxCount = count;
+                dominantStance = stance as AttackStance;
+            }
+        }
+
+        // Update stance button states
+        document.querySelectorAll('.stance-btn').forEach(btn => btn.classList.remove('active'));
+        if (dominantStance === 'aggressive') {
+            document.getElementById('stance-aggressive')?.classList.add('active');
+        } else if (dominantStance === 'defensive') {
+            document.getElementById('stance-defensive')?.classList.add('active');
+        } else if (dominantStance === 'hold_ground') {
+            document.getElementById('stance-hold')?.classList.add('active');
+        }
+    } else {
+        commandBar.classList.add('hidden');
+    }
+
+    // Update attack-move button and canvas cursor
+    const attackMoveBtn = document.getElementById('attack-move-btn');
+    if (attackMoveBtn) {
+        if (state.attackMoveMode) {
+            attackMoveBtn.classList.add('active');
+        } else {
+            attackMoveBtn.classList.remove('active');
+        }
+    }
+
+    if (canvas) {
+        if (state.attackMoveMode) {
+            canvas.classList.add('attack-move-mode');
+        } else {
+            canvas.classList.remove('attack-move-mode');
+        }
     }
 }
 

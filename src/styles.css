@@ -351,6 +351,92 @@ canvas#gameCanvas {
     color: #f00;
 }
 
+/* Command Bar (Stance + Attack-Move) */
+.command-bar {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 8px 10px;
+    background: #222;
+    border-top: 1px solid #444;
+}
+
+.command-bar.hidden {
+    display: none;
+}
+
+.stance-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.command-label {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.stance-buttons {
+    display: flex;
+    gap: 3px;
+}
+
+.stance-btn {
+    width: 28px;
+    height: 28px;
+    background: #333;
+    border: 1px solid #555;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.stance-btn:hover {
+    background: #444;
+    color: #aaa;
+    border-color: #666;
+}
+
+.stance-btn.active {
+    background: #0a3a0a;
+    border-color: #0f0;
+    color: #0f0;
+}
+
+.attack-move-section {
+    margin-left: auto;
+}
+
+.attack-move-btn {
+    padding: 5px 12px;
+    background: #333;
+    border: 1px solid #555;
+    color: #888;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.attack-move-btn:hover {
+    background: #444;
+    color: #aaa;
+}
+
+.attack-move-btn.active {
+    background: #3a1a0a;
+    border-color: #f80;
+    color: #f80;
+}
+
+/* Attack-move cursor */
+canvas#gameCanvas.attack-move-mode {
+    cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="%23f80" stroke-width="2"/><line x1="12" y1="2" x2="12" y2="6" stroke="%23f80" stroke-width="2"/><line x1="12" y1="18" x2="12" y2="22" stroke="%23f80" stroke-width="2"/><line x1="2" y1="12" x2="6" y2="12" stroke="%23f80" stroke-width="2"/><line x1="18" y1="12" x2="22" y2="12" stroke="%23f80" stroke-width="2"/></svg>') 12 12, crosshair;
+}
+
 #status-msg {
     padding: 5px;
     background: #222;

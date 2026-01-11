@@ -7,7 +7,8 @@ import {
     WellComponent,
     AirUnitComponent,
     AirBaseComponent,
-    InductionRigComponent
+    InductionRigComponent,
+    AttackStance
 } from './components.js';
 
 export type PlayerId = string;
@@ -168,7 +169,8 @@ export type {
     AirUnitComponent,
     AirBaseComponent,
     AirUnitState,
-    InductionRigComponent
+    InductionRigComponent,
+    AttackStance
 } from './components.js';
 
 export interface Projectile {
@@ -277,6 +279,7 @@ export interface GameState {
     readonly showMinimap: boolean;
     readonly showBirdsEye: boolean;
     readonly notification?: { text: string; type: 'info' | 'error'; tick: number } | null;
+    readonly attackMoveMode: boolean;
 }
 
 // Discriminated union for all game actions
@@ -300,7 +303,10 @@ export type Action =
     | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } }
     | { type: 'DEPLOY_INDUCTION_RIG'; payload: { unitId: EntityId; wellId: EntityId } }
     | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
-    | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } };
+    | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
+    | { type: 'COMMAND_ATTACK_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
+    | { type: 'SET_STANCE'; payload: { unitIds: EntityId[]; stance: AttackStance } }
+    | { type: 'TOGGLE_ATTACK_MOVE_MODE' };
 
 // Helper type to extract action type strings
 export type ActionType = Action['type'];
