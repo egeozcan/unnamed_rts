@@ -72,7 +72,8 @@ import {
     handleHarvesterSuicideAttack,
     findNearestDefender,
     handleAirStrikes,
-    handleUnitRepair
+    handleUnitRepair,
+    handleEngineerCapture
 } from './action_combat.js';
 
 /**
@@ -253,6 +254,12 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Retreat critically damaged units to service depot for repairs
     actions.push(...handleUnitRepair(state, playerId, combatUnits, myBuildings));
+
+    // Engineer capture missions - send engineers to capture valuable enemy buildings
+    const engineers = myUnits.filter(u => u.key === 'engineer' && !u.dead);
+    if (engineers.length > 0) {
+        actions.push(...handleEngineerCapture(state, playerId, aiState, engineers, enemies, baseCenter));
+    }
 
     // Air strikes with harriers - can trigger regardless of ground strategy
     // Harriers are opportunistic and don't require ground army coordination

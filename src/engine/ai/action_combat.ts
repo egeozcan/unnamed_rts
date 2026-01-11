@@ -22,6 +22,7 @@ import {
     getDifficultyModifiers
 } from './utils.js';
 import { getGroupCenter } from './state.js';
+import { findCaptureOpportunities } from './planning.js';
 import { isAirUnit } from '../entity-helpers.js';
 import { EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
 
@@ -1503,6 +1504,63 @@ export function handleUnitRepair(
                     }
                 });
             }
+        }
+    }
+
+    return actions;
+}
+
+/**
+ * Handle engineer capture missions - send engineers to capture valuable enemy buildings
+ */
+export function handleEngineerCapture(
+    state: GameState,
+    _playerId: number,
+    _aiState: AIPlayerState,
+    engineers: Entity[],
+    enemies: Entity[],
+    baseCenter: Vector
+): Action[] {
+    const actions: Action[] = [];
+
+    if (engineers.length === 0) return actions;
+
+    // Find capture opportunities sorted by value
+    const captureOps = findCaptureOpportunities(enemies, baseCenter);
+
+    if (captureOps.length === 0) return actions;
+
+    // Track which buildings are already being targeted
+    const targetedBuildings = new Set<EntityId>();
+
+    for (const engineer of engineers) {
+        if (engineer.dead) continue;
+
+        // Check if engineer already has a valid building target
+        const engUnit = engineer as UnitEntity;
+        if (engUnit.combat?.targetId) {
+            const currentTarget = state.entities[engUnit.combat.targetId];
+            if (currentTarget && currentTarget.type === 'BUILDING' && !currentTarget.dead) {
+                // Already has valid target - mark it as targeted and skip
+                targetedBuildings.add(currentTarget.id);
+                continue;
+            }
+        }
+
+        // Find best unassigned capture target
+        for (const op of captureOps) {
+            const building = op.building;
+
+            // Skip if another engineer is already targeting this
+            if (targetedBuildings.has(building.id)) continue;
+
+            // Mark as targeted and order engineer to capture
+            targetedBuildings.add(building.id);
+            actions.push({
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: [engineer.id], targetId: building.id }
+            });
+            break;
         }
     }
 

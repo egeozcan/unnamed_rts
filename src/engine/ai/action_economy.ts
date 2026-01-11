@@ -25,6 +25,7 @@ import {
     ALL_IN_PHASE3_TICKS
 } from './utils.js';
 import { getAIState, findBaseCenter } from './state.js';
+import { findCaptureOpportunities } from './planning.js';
 export function handleEconomy(
     state: GameState,
     playerId: number,
@@ -32,7 +33,7 @@ export function handleEconomy(
     player: PlayerState,
     personality: AIPersonality,
     aiState: AIPlayerState,
-    _enemies: Entity[]
+    enemies: Entity[]
 ): Action[] {
     const actions: Action[] = [];
     const buildOrder = personality.build_order_priority;
@@ -587,6 +588,41 @@ export function handleEconomy(
                     aiState.lastProductionType = 'infantry';
                     creditsRemaining -= cost; // Track locally for subsequent checks
                     break;
+                }
+            }
+        }
+
+        // ===== ENGINEER PRODUCTION FOR CAPTURE OPPORTUNITIES =====
+        // Build engineers when there are valuable enemy buildings to capture
+        // Skip during panic/all-in (need combat units instead)
+        const queuedInfantryThisTick = actions.some(a =>
+            a.type === 'START_BUILD' &&
+            (a.payload as { category: string }).category === 'infantry'
+        );
+        if (hasBarracks && infantryQueueEmpty && !isPanic && aiState.strategy !== 'all_in' && !queuedInfantryThisTick) {
+            const baseCenter = findBaseCenter(buildings);
+            const captureOps = findCaptureOpportunities(enemies, baseCenter);
+
+            if (captureOps.length > 0) {
+                // Count existing engineers
+                const existingEngineers = Object.values(state.entities).filter(e =>
+                    e.owner === playerId && e.type === 'UNIT' && e.key === 'engineer' && !e.dead
+                ).length;
+
+                // Limit to 2 engineers at a time (fragile + expensive)
+                const maxEngineers = Math.min(2, captureOps.length);
+
+                if (existingEngineers < maxEngineers) {
+                    const engineerData = RULES.units['engineer'];
+                    const engineerReqsMet = checkPrerequisites('engineer', buildings);
+                    const engineerCost = engineerData?.cost || 500;
+
+                    // Extra buffer (500) to not starve combat production
+                    if (engineerReqsMet && creditsRemaining >= engineerCost + creditBuffer + 500) {
+                        actions.push({ type: 'START_BUILD', payload: { category: 'infantry', key: 'engineer', playerId } });
+                        aiState.lastProductionType = 'infantry';
+                        creditsRemaining -= engineerCost;
+                    }
                 }
             }
         }

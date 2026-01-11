@@ -434,6 +434,52 @@ export function calculateThreatLevel(
     return Math.max(0, Math.min(100, threatScore));
 }
 
+/**
+ * Find capturable enemy buildings and score them by value.
+ * Used by AI to decide when to build and deploy engineers.
+ */
+export function findCaptureOpportunities(
+    enemies: Entity[],
+    baseCenter: Vector,
+    maxDistance: number = 1500
+): { building: Entity; value: number }[] {
+    const opportunities: { building: Entity; value: number }[] = [];
+
+    // Production building keys get bonus value
+    const productionBuildings = new Set(['conyard', 'factory', 'barracks', 'airforce_command']);
+    const economyBuildings = new Set(['refinery', 'induction_rig_deployed']);
+
+    for (const enemy of enemies) {
+        if (enemy.type !== 'BUILDING' || enemy.dead) continue;
+
+        const buildingData = RULES.buildings[enemy.key];
+        if (!buildingData?.capturable) continue;
+
+        const dist = enemy.pos.dist(baseCenter);
+        if (dist > maxDistance) continue;
+
+        // Calculate value: base cost + strategic bonuses - distance penalty
+        let value = buildingData.cost || 0;
+
+        if (productionBuildings.has(enemy.key)) {
+            value += 500; // Production capability is very valuable
+        }
+        if (economyBuildings.has(enemy.key)) {
+            value += 300; // Economy buildings are valuable
+        }
+
+        // Distance penalty: -1 per 10 units
+        value -= Math.floor(dist / 10);
+
+        opportunities.push({ building: enemy, value });
+    }
+
+    // Sort by value (highest first)
+    opportunities.sort((a, b) => b.value - a.value);
+
+    return opportunities;
+}
+
 export function findDistantOre(
     state: GameState,
     _playerId: number,
