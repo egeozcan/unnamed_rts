@@ -404,9 +404,39 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
     });
 
     // Draw entities
+    const time = Date.now();
     for (const e of sortedEntities) {
         const category = categorizeEntity(e);
         const config = SHAPE_CONFIG[category];
+
+        // Check for induction rig - render with glow
+        if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed') {
+            const pulse = 0.5 + 0.5 * Math.sin(time / 300);
+            const x = e.pos.x * sx;
+            const y = e.pos.y * sy;
+            const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
+            const glowRadius = baseSize + pulse * 8;
+
+            // Outer glow
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+            gradient.addColorStop(0, `rgba(0, 255, 200, ${0.9 * pulse})`);
+            gradient.addColorStop(0.4, `rgba(0, 220, 170, ${0.5 * pulse})`);
+            gradient.addColorStop(1, 'rgba(0, 150, 100, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core with player color tint
+            const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
+                ? PLAYER_COLORS[e.owner]
+                : '#00ffc8';
+            drawShape(ctx, x, y, baseSize, 'rect', '#00ffc8');
+            ctx.strokeStyle = playerColor;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x - baseSize / 2, y - baseSize / 2, baseSize, baseSize);
+            continue;
+        }
 
         let color: string;
         if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {

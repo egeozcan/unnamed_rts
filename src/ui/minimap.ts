@@ -96,8 +96,33 @@ function renderToContext(
     const sy = height / mapHeight;
 
     // Draw entities
+    const time = Date.now();
     for (const e of entities) {
         if (e.dead) continue;
+
+        // Check for induction rig - render with glow
+        if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed') {
+            // Pulsing glow effect
+            const pulse = 0.5 + 0.5 * Math.sin(time / 300);
+            const glowRadius = 6 + pulse * 4;
+            const x = e.pos.x * sx;
+            const y = e.pos.y * sy;
+
+            // Outer glow
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+            gradient.addColorStop(0, `rgba(0, 255, 200, ${0.8 * pulse})`);
+            gradient.addColorStop(0.5, `rgba(0, 200, 150, ${0.4 * pulse})`);
+            gradient.addColorStop(1, 'rgba(0, 150, 100, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core
+            ctx.fillStyle = '#00ffc8';
+            ctx.fillRect(x - 2, y - 2, 4, 4);
+            continue;
+        }
 
         if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {
             ctx.fillStyle = PLAYER_COLORS[e.owner];
