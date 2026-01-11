@@ -1,5 +1,5 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, UnitEntity, CombatUnit, PlayerState } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
 import { initPathfindingWorker } from './engine/utils.js';
 
 declare global {
@@ -327,6 +327,12 @@ setupSkirmishUI();
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
 function reconstructVectors(state: GameState): GameState {
+    // Helper to convert plain object to Vector
+    const toVec = (v: { x: number; y: number } | null | undefined): Vector | null => {
+        if (!v || typeof v.x !== 'number' || typeof v.y !== 'number') return null;
+        return new Vector(v.x, v.y);
+    };
+
     // Deep clone and reconstruct vectors
     const entities: Record<EntityId, Entity> = {};
     for (const id in state.entities) {
@@ -345,11 +351,19 @@ function reconstructVectors(state: GameState): GameState {
             const reconstructedMovement = {
                 ...movement,
                 vel: new Vector(movement.vel.x, movement.vel.y),
-                moveTarget: movement.moveTarget ? new Vector(movement.moveTarget.x, movement.moveTarget.y) : null,
-                finalDest: movement.finalDest ? new Vector(movement.finalDest.x, movement.finalDest.y) : null,
-                unstuckDir: movement.unstuckDir ? new Vector(movement.unstuckDir.x, movement.unstuckDir.y) : null,
+                moveTarget: toVec(movement.moveTarget),
+                finalDest: toVec(movement.finalDest),
+                unstuckDir: toVec(movement.unstuckDir),
                 path: movement.path ? movement.path.map((p: { x: number, y: number }) => new Vector(p.x, p.y)) : null,
                 avgVel: movement.avgVel ? new Vector(movement.avgVel.x, movement.avgVel.y) : undefined
+            };
+
+            // Reconstruct combat component vectors
+            const combat = e.combat;
+            const reconstructedCombat = {
+                ...combat,
+                attackMoveTarget: toVec(combat.attackMoveTarget),
+                stanceHomePos: toVec(combat.stanceHomePos)
             };
 
             if (isHarvester(e)) {
@@ -364,9 +378,19 @@ function reconstructVectors(state: GameState): GameState {
                     type: 'UNIT',
                     key: 'harvester',
                     movement: reconstructedMovement,
-                    combat: e.combat,
+                    combat: reconstructedCombat,
                     harvester: reconstructedHarvester
                 } as HarvesterUnit;
+            } else if ((e as AirUnit).airUnit) {
+                // Air unit (harrier)
+                entities[id] = {
+                    ...baseEntity,
+                    type: 'UNIT',
+                    key: e.key,
+                    movement: reconstructedMovement,
+                    combat: reconstructedCombat,
+                    airUnit: (e as AirUnit).airUnit
+                } as AirUnit;
             } else {
                 // Combat unit
                 entities[id] = {
@@ -374,21 +398,30 @@ function reconstructVectors(state: GameState): GameState {
                     type: 'UNIT',
                     key: e.key,
                     movement: reconstructedMovement,
-                    combat: e.combat,
+                    combat: reconstructedCombat,
                     engineer: (e as CombatUnit).engineer
-                } as UnitEntity;
+                } as CombatUnit;
             }
         } else if (isBuilding(e)) {
+            // Reconstruct building state vectors (rallyPoint is in building component)
+            const building = e.building;
+            const reconstructedBuilding = building ? {
+                ...building,
+                rallyPoint: toVec(building.rallyPoint)
+            } : { isRepairing: false };
+
             // Building entity
             entities[id] = {
                 ...baseEntity,
                 type: 'BUILDING',
                 key: e.key,
-                building: e.building,
-                combat: e.combat
+                building: reconstructedBuilding,
+                combat: e.combat,
+                airBase: e.airBase,
+                inductionRig: e.inductionRig
             } as BuildingEntity;
         } else {
-            // Resource or Rock entity - no additional components
+            // Resource, Rock, or Well entity - no additional Vector components
             entities[id] = baseEntity as Entity;
         }
     }

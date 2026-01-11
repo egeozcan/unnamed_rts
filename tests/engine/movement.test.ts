@@ -160,4 +160,55 @@ describe('Movement & Pathfinding', () => {
         expect(ent.pos.x).toBeGreaterThanOrEqual(unitRadius - 0.1);
         expect(ent.pos.y).toBeGreaterThanOrEqual(unitRadius - 0.1);
     });
+
+    it('should handle movement vectors as plain objects from JSON deserialization', () => {
+        // This test simulates loading a game state from JSON where Vector 
+        // instances are deserialized as plain {x, y} objects
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {} as Record<EntityId, Entity>,
+        };
+
+        // Spawn a unit
+        state = spawnUnit(state, 100, 100, 'json_unit');
+
+        // Manually set movement with plain object vectors (simulating JSON parse)
+        const unit = state.entities['json_unit'];
+        if (unit && unit.type === 'UNIT') {
+            state = {
+                ...state,
+                entities: {
+                    ...state.entities,
+                    'json_unit': {
+                        ...unit,
+                        movement: {
+                            ...unit.movement,
+                            moveTarget: new Vector(400, 400),
+                            // Simulate JSON deserialization - all vectors are plain objects
+                            finalDest: { x: 200, y: 200 } as unknown as Vector,
+                            path: [
+                                { x: 150, y: 150 } as unknown as Vector,
+                                { x: 200, y: 200 } as unknown as Vector,
+                                { x: 300, y: 300 } as unknown as Vector
+                            ],
+                            pathIdx: 1,
+                            unstuckDir: { x: 1, y: 0 } as unknown as Vector
+                        }
+                    }
+                }
+            };
+        }
+
+        // Run simulation - should NOT throw any ".sub is not a function" or ".dist is not a function" errors
+        expect(() => {
+            for (let i = 0; i < 10; i++) {
+                state = update(state, { type: 'TICK' });
+            }
+        }).not.toThrow();
+
+        // Unit should still exist and be moving
+        const ent = state.entities['json_unit'];
+        expect(ent).toBeDefined();
+    });
 });

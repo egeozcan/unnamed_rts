@@ -7,10 +7,23 @@ import { findPath, getGridW, getGridH, collisionGrid } from '../utils';
 import { getSpatialGrid } from '../spatial';
 
 /**
+ * Helper to ensure a value is a proper Vector instance.
+ * JSON deserialization produces plain {x, y} objects, not Vector instances.
+ */
+function ensureVector(v: Vector | { x: number; y: number } | null): Vector | null {
+    if (!v) return null;
+    if (v instanceof Vector) return v;
+    return new Vector(v.x, v.y);
+}
+
+/**
  * Move a unit toward a target position with pathfinding and collision avoidance.
  * Extracted to its own module to avoid circular dependencies.
  */
-export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Entity[], skipWhiskerAvoidance = false): UnitEntity {
+export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities: Entity[], skipWhiskerAvoidance = false): UnitEntity {
+    // Ensure target is a proper Vector (may be plain object from JSON save)
+    const target = ensureVector(targetParam)!;
+
     const distToTarget = entity.pos.dist(target);
     if (distToTarget < 2) {
         return {
@@ -47,11 +60,13 @@ export function moveToward(entity: UnitEntity, target: Vector, _allEntities: Ent
     avgVel = avgVel.scale(0.9).add(effectiveVel.scale(0.1));
 
     let stuckTimer = entity.movement.stuckTimer || 0;
-    let unstuckDir = entity.movement.unstuckDir;
+    let unstuckDir = ensureVector(entity.movement.unstuckDir);
     let unstuckTimer = entity.movement.unstuckTimer || 0;
-    let path = entity.movement.path;
+    // Convert path vectors from plain objects if loaded from JSON save
+    let path = entity.movement.path ? entity.movement.path.map(p => ensureVector(p)!) : null;
     let pathIdx = entity.movement.pathIdx || 0;
-    let finalDest = entity.movement.finalDest;
+    // Convert finalDest to Vector if it's a plain object (e.g., loaded from JSON save)
+    let finalDest = ensureVector(entity.movement.finalDest);
 
     // OPTIMIZATION: Skip pathfinding for very close targets - direct steering is sufficient
     const isCloseTarget = distToTarget < 80;

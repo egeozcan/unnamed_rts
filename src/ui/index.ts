@@ -186,7 +186,7 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
     if (isBuilding) {
         const building = RULES.buildings[key];
         const powerInfo = building.power ? `Power: +${building.power}` :
-                         building.drain ? `Drain: ${building.drain}` : '';
+            building.drain ? `Drain: ${building.drain}` : '';
         stats = `HP: ${building.hp}${powerInfo ? ' | ' + powerInfo : ''}`;
         if (building.range && building.damage) {
             stats += ` | Dmg: ${building.damage} | Range: ${building.range}`;
@@ -347,7 +347,7 @@ export function updateButtons(
 
         const unitData = RULES.units[k];
         const category = unitData.type === 'infantry' ? 'infantry' :
-                         unitData.type === 'air' ? 'air' : 'vehicle';
+            unitData.type === 'air' ? 'air' : 'vehicle';
 
         const shouldBeDisabled = !canBuild(k, category, owner, entities);
         const isDisabled = el.classList.contains('disabled');
@@ -374,7 +374,7 @@ export function updateButtons(
         const q = queues[cat];
         const containerIds = cat === 'building' ? ['tab-buildings', 'tab-defense'] :
             cat === 'infantry' ? ['tab-infantry'] :
-            cat === 'air' ? ['tab-air'] : ['tab-vehicles'];
+                cat === 'air' ? ['tab-air'] : ['tab-vehicles'];
 
         // Count queued items by key
         const queuedCounts: Record<string, number> = {};
@@ -1135,16 +1135,37 @@ function parseGameState(json: string): GameState | null {
         if (data.entities) {
             for (const id of Object.keys(data.entities)) {
                 const e = data.entities[id];
+
+                // Top-level entity vectors
                 if (e.pos) e.pos = new Vector(e.pos.x, e.pos.y);
                 if (e.prevPos) e.prevPos = new Vector(e.prevPos.x, e.prevPos.y);
-                if (e.vel) e.vel = new Vector(e.vel.x, e.vel.y);
-                e.moveTarget = toVector(e.moveTarget);
-                e.finalDest = toVector(e.finalDest);
-                e.unstuckDir = toVector(e.unstuckDir);
-                e.dockPos = toVector(e.dockPos);
-                e.avgVel = toVector(e.avgVel);
-                if (e.path && Array.isArray(e.path)) {
-                    e.path = e.path.map((p: { x: number; y: number }) => new Vector(p.x, p.y));
+
+                // Movement component vectors (for units)
+                if (e.movement) {
+                    e.movement.vel = e.movement.vel ? new Vector(e.movement.vel.x, e.movement.vel.y) : new Vector(0, 0);
+                    e.movement.moveTarget = toVector(e.movement.moveTarget);
+                    e.movement.finalDest = toVector(e.movement.finalDest);
+                    e.movement.unstuckDir = toVector(e.movement.unstuckDir);
+                    e.movement.avgVel = toVector(e.movement.avgVel);
+                    if (e.movement.path && Array.isArray(e.movement.path)) {
+                        e.movement.path = e.movement.path.map((p: { x: number; y: number }) => new Vector(p.x, p.y));
+                    }
+                }
+
+                // Combat component vectors
+                if (e.combat) {
+                    e.combat.attackMoveTarget = toVector(e.combat.attackMoveTarget);
+                    e.combat.stanceHomePos = toVector(e.combat.stanceHomePos);
+                }
+
+                // Harvester component vectors
+                if (e.harvester) {
+                    e.harvester.dockPos = toVector(e.harvester.dockPos);
+                }
+
+                // Building state component vectors
+                if (e.buildingState) {
+                    e.buildingState.rallyPoint = toVector(e.buildingState.rallyPoint);
                 }
             }
         }

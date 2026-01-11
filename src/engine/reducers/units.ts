@@ -503,7 +503,11 @@ export function updateUnit(
 
             // Check if target is unreachable (inside a building)
             const spatialGrid = getSpatialGrid();
-            const target = result.entity.movement.moveTarget!;
+            // Ensure target is a proper Vector (may be plain object from JSON save)
+            const rawTarget = result.entity.movement.moveTarget!;
+            const target = rawTarget instanceof Vector
+                ? rawTarget
+                : new Vector((rawTarget as { x: number; y: number }).x, (rawTarget as { x: number; y: number }).y);
             // Check entities near the target
             const nearbyBlockers = spatialGrid.queryRadius(target.x, target.y, 60);
             const isTargetBlocked = nearbyBlockers.some(e =>
