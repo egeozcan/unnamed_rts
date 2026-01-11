@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, AirUnit, BuildingEntity
+    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, BuildingEntity
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
@@ -154,15 +154,27 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
         return state;
     }
 
-    // Expand unitIds to include harriers from any selected airforce_command buildings
+    // Expand unitIds to include ALL harriers (docked OR flying) from any selected airforce_command buildings
     const expandedUnitIds: EntityId[] = [...unitIds];
+    const selectedBaseIds: EntityId[] = [];
+
+    // First pass: Identify selected air bases
     for (const id of unitIds) {
         const entity = state.entities[id];
-        if (entity && entity.type === 'BUILDING' && entity.key === 'airforce_command' && entity.airBase) {
-            // Add all docked harriers from this air base
-            for (const slotId of entity.airBase.slots) {
-                if (slotId && !expandedUnitIds.includes(slotId)) {
-                    expandedUnitIds.push(slotId);
+        if (entity && entity.type === 'BUILDING' && entity.key === 'airforce_command') {
+            selectedBaseIds.push(id);
+        }
+    }
+
+    // If any air bases selected, find ALL their harriers (docked or flying)
+    if (selectedBaseIds.length > 0) {
+        for (const id in state.entities) {
+            const ent = state.entities[id];
+            if (ent.type === 'UNIT' && ent.key === 'harrier' && !ent.dead && isAirUnit(ent)) {
+                if (ent.airUnit.homeBaseId && selectedBaseIds.includes(ent.airUnit.homeBaseId)) {
+                    if (!expandedUnitIds.includes(id)) {
+                        expandedUnitIds.push(id);
+                    }
                 }
             }
         }
@@ -246,39 +258,21 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                 // Special handling for air units (harriers)
                 // Only launch if docked and has ammo, and target is enemy
                 if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== entity.owner) {
-                    // Launch harrier - set to flying, assign target, clear slot on air base
-                    const homeBaseId = entity.airUnit.homeBaseId;
-                    const dockedSlot = entity.airUnit.dockedSlot;
-
-                    // Update harrier to flying state
-                    const launchedHarrier: AirUnit = {
+                    // Start launch sequence: just set targetId.
+                    // The AirBase update loop will detect this target and launch the harrier in a staggered way.
+                    nextEntities[id] = {
                         ...entity,
-                        airUnit: {
-                            ...entity.airUnit,
-                            state: 'flying',
-                            dockedSlot: null
-                        },
                         combat: { ...entity.combat, targetId: targetId }
                     };
-                    nextEntities[id] = launchedHarrier;
-
-                    // Clear slot on air base
-                    if (homeBaseId && dockedSlot !== null) {
-                        const airBase = nextEntities[homeBaseId] as BuildingEntity;
-                        if (airBase && airBase.airBase) {
-                            const newSlots = [...airBase.airBase.slots];
-                            newSlots[dockedSlot] = null;
-                            nextEntities[homeBaseId] = {
-                                ...airBase,
-                                airBase: {
-                                    ...airBase.airBase,
-                                    slots: newSlots
-                                }
-                            };
-                        }
-                    }
                 }
-                // Otherwise (not docked, no ammo, or no target): ignore command
+                else if (entity.airUnit.state !== 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== entity.owner) {
+                    // Redirect flying/returning/attacking harriers
+                    nextEntities[id] = {
+                        ...entity,
+                        airUnit: { ...entity.airUnit, state: 'flying' }, // Reset to flying to approach new target
+                        combat: { ...entity.combat, targetId: targetId }
+                    };
+                }
             } else {
                 // Normal combat unit attack behavior - only target enemies
                 if (target && target.owner !== entity.owner) {

@@ -376,13 +376,20 @@ describe('Air Units - Attack Commands', () => {
         const launchedHarrier = state.entities['harrier1'] as AirUnit;
         const updatedBase = state.entities['base1'] as BuildingEntity;
 
-        // Harrier should be flying with target
-        expect(launchedHarrier.airUnit.state).toBe('flying');
+        // Harrier should be docked with target (waiting for launch)
+        expect(launchedHarrier.airUnit.state).toBe('docked');
         expect(launchedHarrier.combat.targetId).toBe('enemy1');
-        expect(launchedHarrier.airUnit.dockedSlot).toBeNull();
 
-        // Base slot should be cleared
-        expect(updatedBase.airBase!.slots[0]).toBeNull();
+        // Advance state and run updateAirBase to trigger launch
+        const tick = 200; // arbitrary tick
+        state = { ...state, tick };
+        const launchRes = updateAirBase(updatedBase, state.entities, tick + 20); // wait > 15 ticks
+
+        const flyingHarrier = launchRes.updatedHarriers['harrier1'];
+        expect(flyingHarrier).toBeDefined();
+        expect(flyingHarrier.airUnit.state).toBe('flying');
+        expect(flyingHarrier.airUnit.dockedSlot).toBeNull();
+        expect(launchRes.entity.airBase!.slots[0]).toBeNull();
     });
 
     it('should ignore attack command when harrier has no ammo', () => {
@@ -467,7 +474,10 @@ describe('Air Units - Attack Commands', () => {
         const unchangedHarrier = state.entities['harrier1'] as AirUnit;
 
         // Harrier should keep original target
-        expect(unchangedHarrier.combat.targetId).toBe('enemy2');
+        // Harrier should keep original target
+        // NOTE: The new logic redirects flying harriers too!
+        // So this expectation was wrong based on new requirements "All harriers... are commanded to attack"
+        expect(unchangedHarrier.combat.targetId).toBe('enemy1');
     });
 
     it('should ignore move commands for harriers', () => {

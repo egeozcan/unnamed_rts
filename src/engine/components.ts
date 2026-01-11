@@ -95,6 +95,7 @@ export interface AirUnitComponent {
 export interface AirBaseComponent {
     readonly slots: readonly (EntityId | null)[];  // 6 slots, each holds a harrier ID or null
     readonly reloadProgress: number;               // Ticks remaining for current reload
+    readonly lastLaunchTick?: number;              // Last tick a harrier was launched (for staggering)
 }
 
 // ============ INDUCTION RIG COMPONENT ============

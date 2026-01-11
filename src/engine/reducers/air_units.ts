@@ -261,9 +261,119 @@ export function updateAirBase(
     // If no harrier needs reload, reset progress
     if (!foundHarrierNeedingReload && nextAirBase.reloadProgress !== reloadTicks) {
         nextAirBase = {
-            slots: nextAirBase.slots,
+            ...nextAirBase,
             reloadProgress: reloadTicks
         };
+    }
+
+    // Process Launching (Staggered)
+    const currentTick = _currentTick;
+    const lastLaunch = nextAirBase.lastLaunchTick || 0;
+    const launchDelay = 15; // 15 ticks = 250ms at 60fps
+
+    if (currentTick - lastLaunch >= launchDelay) {
+        // Find a docked harrier that wants to launch (has a target)
+        // Check slots in order 0-5
+        for (let i = 0; i < nextAirBase.slots.length; i++) {
+            const slotId = nextAirBase.slots[i];
+            if (!slotId) continue;
+
+            const harrier = allEntities[slotId];
+            if (!harrier || harrier.dead || !isAirUnit(harrier)) continue;
+
+            // Check if harrier wants to launch (has target and ammo)
+            if (harrier.airUnit.state === 'docked' && harrier.combat.targetId && harrier.airUnit.ammo > 0) {
+                // Determine launch position based on slot
+                // Slot positions relative to center
+                const slotPositions = [
+                    { x: -30, y: -20 }, { x: 0, y: -20 }, { x: 30, y: -20 },
+                    { x: -30, y: 10 }, { x: 0, y: 10 }, { x: 30, y: 10 }
+                ];
+                const offset = slotPositions[i] || { x: 0, y: 0 };
+                // Rotate offset by building rotation if necessary (assuming valid rotation is 0 for now)
+
+                const launchPos = entity.pos.add(new Vector(offset.x, offset.y));
+
+                // Launch this harrier!
+                updatedHarriers[harrier.id] = {
+                    ...harrier,
+                    pos: launchPos, // Set physical position to slot
+                    airUnit: {
+                        ...harrier.airUnit,
+                        state: 'flying', // Take off!
+                        dockedSlot: null
+                    },
+                    // combat target is already set by commandAttack
+                };
+
+                // Clear slot
+                const newSlots = [...nextAirBase.slots];
+                newSlots[i] = null;
+
+                nextAirBase = {
+                    ...nextAirBase,
+                    slots: newSlots,
+                    lastLaunchTick: currentTick
+                };
+
+                // Only launch one per check
+                break;
+            }
+        }
+    }
+
+    // Self-Healing: Ensure all harriers that think they are docked here are actually in the slots
+    // This fixes state desyncs where harriers are docked but invisible (missing from base slots)
+    const knownHarrierIds = new Set(nextAirBase.slots.filter(id => id !== null) as string[]);
+    const lostHarriers: string[] = [];
+
+    // Scan for lost harriers (expensive but robust)
+    // In a high-perf scenario this should be optimized with a spatial grid or cache
+    for (const id in allEntities) {
+        const ent = allEntities[id];
+        if (ent.type === 'UNIT' && ent.key === 'harrier' && !ent.dead) {
+            const h = ent as AirUnit;
+            // Skip harriers we just launched this tick!
+            if (updatedHarriers[h.id]) continue;
+
+            if (h.airUnit.state === 'docked' && h.airUnit.homeBaseId === entity.id && !knownHarrierIds.has(h.id)) {
+                lostHarriers.push(h.id);
+            }
+        }
+    }
+
+    if (lostHarriers.length > 0) {
+        const newSlots = [...nextAirBase.slots];
+        let assignedCount = 0;
+
+        for (const harrierId of lostHarriers) {
+            // Find empty slot
+            const emptyIdx = newSlots.findIndex(s => s === null);
+            if (emptyIdx !== -1) {
+                newSlots[emptyIdx] = harrierId;
+                assignedCount++;
+
+                // Also update the harrier's dockedSlot to match reality
+                const harrier = allEntities[harrierId] as AirUnit;
+                if (harrier.airUnit.dockedSlot !== emptyIdx) {
+                    updatedHarriers[harrierId] = {
+                        ...harrier,
+                        airUnit: { ...harrier.airUnit, dockedSlot: emptyIdx }
+                    };
+                }
+            } else {
+                console.warn(`[AirBase] Could not recover lost harrier ${harrierId} - no slots available`);
+                // Force undock? Or just leave it in limbo?
+                // For now leave it, it might get picked up next time a slot opens
+            }
+        }
+
+        if (assignedCount > 0) {
+            nextAirBase = {
+                ...nextAirBase,
+                slots: newSlots
+            };
+        }
     }
 
     const nextEntity: BuildingEntity = {
