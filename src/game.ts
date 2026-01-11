@@ -413,7 +413,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     const players: Record<number, PlayerState> = {};
     config.players.forEach(p => {
         const isAi = p.type !== 'human';
-        const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'easy' | 'medium' | 'hard';
+        const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'dummy' | 'easy' | 'medium' | 'hard';
         players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color);
     });
 

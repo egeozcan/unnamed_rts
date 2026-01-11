@@ -207,7 +207,7 @@ export interface Camera {
 export type GameMode = 'menu' | 'game' | 'demo';
 
 // Player type for skirmish configuration
-export type PlayerType = 'human' | 'easy' | 'medium' | 'hard' | 'none';
+export type PlayerType = 'human' | 'dummy' | 'easy' | 'medium' | 'hard' | 'none';
 
 // Skirmish configuration for game setup
 export interface SkirmishConfig {
@@ -224,7 +224,7 @@ export interface SkirmishConfig {
 export interface PlayerState {
     readonly id: number; // Changed to number to match owner
     readonly isAi: boolean;
-    readonly difficulty: 'easy' | 'medium' | 'hard';
+    readonly difficulty: 'dummy' | 'easy' | 'medium' | 'hard';
     readonly color: string;
     readonly credits: number;
     readonly maxPower: number;

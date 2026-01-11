@@ -150,15 +150,20 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
         aiState.lastThreatDetectedTick = 0;  // Reset when threats clear
     }
 
-    // Always handle critical combat reactions
-    actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState, cache));
+    // DUMMY AI: Skip all combat reactions - just build and gather
+    const isDummy = player.difficulty === 'dummy';
 
-    // Defense with reaction delay - easier AI takes longer to respond
-    const reactionDelayPassed = threatsNearBase.length > 0 &&
-        (state.tick - aiState.lastThreatDetectedTick >= difficultyMods.reactionDelay);
+    // Always handle critical combat reactions (except for dummy AI)
+    if (!isDummy) {
+        actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState, cache));
 
-    if (reactionDelayPassed && combatUnits.length > 0) {
-        actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
+        // Defense with reaction delay - easier AI takes longer to respond
+        const reactionDelayPassed = threatsNearBase.length > 0 &&
+            (state.tick - aiState.lastThreatDetectedTick >= difficultyMods.reactionDelay);
+
+        if (reactionDelayPassed && combatUnits.length > 0) {
+            actions.push(...handleDefense(state, playerId, aiState, combatUnits, baseCenter, personality));
+        }
     }
 
     // FULL AI COMPUTATION: Only on designated ticks
@@ -210,6 +215,13 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack)); // Gather resources
 
     // --- COMBAT & UNIT CONTROL ---
+    // Dummy AI skips all combat - just rallies units near base
+    if (isDummy) {
+        // Rally units near base but don't attack
+        actions.push(...handleRally(state, playerId, aiState, combatUnits, baseCenter, enemies));
+        return actions;
+    }
+
     // Defense already handled above for critical response
 
     if (aiState.strategy === 'defend') {

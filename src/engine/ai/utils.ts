@@ -142,6 +142,17 @@ export function isUnit(entity: Entity): boolean {
 // Difficulty modifiers - affect gameplay independently of personality
 // Hard = fair play (no cheats), lower difficulties get handicaps
 export const DIFFICULTY_MODIFIERS = {
+    dummy: {
+        resourceBonus: 1.0,      // Normal resource gain
+        buildSpeedBonus: 1.0,    // Normal build speed
+        reactionDelay: 9999,     // Never reacts to threats
+        // Combat intelligence - disabled
+        attackGroupSizeMultiplier: 9999,  // Never attacks
+        threatDetectionMultiplier: 0,     // Doesn't detect threats
+        retreatThresholdMultiplier: 1.0,
+        strategyCooldownMultiplier: 1.0,
+        microEnabled: false,
+    },
     easy: {
         resourceBonus: 0.7,      // 70% resource gain from harvesting
         buildSpeedBonus: 0.75,   // 75% build speed
@@ -179,7 +190,7 @@ export const DIFFICULTY_MODIFIERS = {
 
 export type DifficultyModifiers = typeof DIFFICULTY_MODIFIERS[keyof typeof DIFFICULTY_MODIFIERS];
 
-export function getDifficultyModifiers(difficulty: 'easy' | 'medium' | 'hard'): DifficultyModifiers {
+export function getDifficultyModifiers(difficulty: 'dummy' | 'easy' | 'medium' | 'hard'): DifficultyModifiers {
     return DIFFICULTY_MODIFIERS[difficulty];
 }
 

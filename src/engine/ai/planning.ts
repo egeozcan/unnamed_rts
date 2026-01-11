@@ -23,7 +23,7 @@ export function detectThreats(
     harvesters: Entity[],
     enemies: Entity[],
     myBuildings: Entity[],
-    difficulty: 'easy' | 'medium' | 'hard' = 'hard',
+    difficulty: 'dummy' | 'easy' | 'medium' | 'hard' = 'hard',
     currentTick: number = 0
 ): { threatsNearBase: EntityId[], harvestersUnderAttack: EntityId[] } {
     const threatsNearBase: EntityId[] = [];
@@ -87,8 +87,14 @@ export function updateStrategy(
     threatsNearBase: EntityId[],
     personality: AIPersonality,
     credits: number = 0,
-    difficulty: 'easy' | 'medium' | 'hard' = 'hard'
+    difficulty: 'dummy' | 'easy' | 'medium' | 'hard' = 'hard'
 ): void {
+    // Dummy AI always stays in buildup mode - never attacks
+    if (difficulty === 'dummy') {
+        aiState.strategy = 'buildup';
+        return;
+    }
+
     const hasFactory = hasProductionBuildingFor('vehicle', buildings);
     const hasBarracks = hasProductionBuildingFor('infantry', buildings);
     const armySize = combatUnits.length;
