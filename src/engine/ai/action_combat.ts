@@ -164,7 +164,7 @@ export function handleAttack(
     // If we are here, we are READY TO ATTACK (status === 'attacking' and cohesive)
 
     // Find best target - prioritize threats and high-value targets
-    const bestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits);
+    const bestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits, [], baseCenter);
 
     // --- MULTI-FRONT ATTACK (Simplified from original) ---
     // If army is large enough (10+ units), split into two attack groups
@@ -173,7 +173,7 @@ export function handleAttack(
     // Check if multi-front attack is active (large army with 2+ targets)
     if (aiState.attackGroup.length >= MULTI_FRONT_THRESHOLD && enemies.length > 1 && bestTarget) {
         // Find second best target
-        const secondBestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits, [bestTarget.id]);
+        const secondBestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits, [bestTarget.id], baseCenter);
 
         if (secondBestTarget) {
             // Split the army: ~60% main, ~40% flank
@@ -517,7 +517,8 @@ function selectBestTarget(
     enemies: Entity[],
     groupCenter: Vector,
     combatUnits: Entity[],
-    excludeIds: EntityId[] = []
+    excludeIds: EntityId[] = [],
+    baseCenter?: Vector
 ): Entity | null {
     let bestTarget: Entity | null = null;
     let bestScore = -Infinity;
@@ -570,9 +571,23 @@ function selectBestTarget(
 
         // Strategic Value
         if (enemy.type === 'BUILDING') {
-            const priorityIndex = targetPriority.indexOf(enemy.key);
-            if (priorityIndex >= 0) score += 80 - priorityIndex * 15;
-            else score += 30;
+            // Induction rigs are high-priority targets - they steal resources!
+            if (enemy.key === 'induction_rig_deployed') {
+                score += 120; // Higher than conyard priority
+                // Extra aggression if near our base - this is an invasion!
+                if (baseCenter) {
+                    const distToOurBase = enemy.pos.dist(baseCenter);
+                    if (distToOurBase < 800) {
+                        score += 200; // Very high priority - they're stealing our wells!
+                    } else if (distToOurBase < 1500) {
+                        score += 100; // Still prioritize nearby rigs
+                    }
+                }
+            } else {
+                const priorityIndex = targetPriority.indexOf(enemy.key);
+                if (priorityIndex >= 0) score += 80 - priorityIndex * 15;
+                else score += 30;
+            }
         }
 
         // Unit value

@@ -36,6 +36,29 @@ export function detectThreats(
 
     // Find enemies near base
     for (const enemy of enemies) {
+        // Induction rigs are ALWAYS high-priority threats - they steal resources!
+        // Especially if near our base or buildings
+        if (enemy.type === 'BUILDING' && enemy.key === 'induction_rig_deployed') {
+            const distToBase = enemy.pos.dist(baseCenter);
+            // Always consider rigs near our base as threats
+            if (distToBase < 1500) {
+                if (!threatsNearBase.includes(enemy.id)) {
+                    threatsNearBase.push(enemy.id);
+                }
+                continue; // Already added, skip regular checks
+            }
+            // Also check if rig is near any of our buildings
+            for (const building of myBuildings) {
+                if (enemy.pos.dist(building.pos) < 800) {
+                    if (!threatsNearBase.includes(enemy.id)) {
+                        threatsNearBase.push(enemy.id);
+                    }
+                    break;
+                }
+            }
+            continue;
+        }
+
         if (enemy.pos.dist(baseCenter) < scaledBaseDefenseRadius) {
             threatsNearBase.push(enemy.id);
         }
@@ -394,6 +417,11 @@ export function calculateThreatLevel(
         e.type === 'UNIT' && e.key !== 'harvester' && e.pos.dist(baseCenter) < 600
     );
 
+    // Count enemy induction rigs near our base - these are economic threats!
+    const nearbyRigs = enemies.filter(e =>
+        e.type === 'BUILDING' && e.key === 'induction_rig_deployed' && e.pos.dist(baseCenter) < 1500
+    );
+
     // Count our defenses
     const defenses = myBuildings.filter(b => {
         const data = RULES.buildings[b.key];
@@ -401,7 +429,8 @@ export function calculateThreatLevel(
     });
 
     // High threat if enemies near base and few defenses
-    const threatScore = nearbyThreats.length * 25 - defenses.length * 15;
+    // Induction rigs add significant threat (they're stealing our resources!)
+    const threatScore = nearbyThreats.length * 25 + nearbyRigs.length * 40 - defenses.length * 15;
     return Math.max(0, Math.min(100, threatScore));
 }
 
