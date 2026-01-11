@@ -313,7 +313,8 @@ export type Action =
     | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'COMMAND_ATTACK_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
     | { type: 'SET_STANCE'; payload: { unitIds: EntityId[]; stance: AttackStance } }
-    | { type: 'TOGGLE_ATTACK_MOVE_MODE' };
+    | { type: 'TOGGLE_ATTACK_MOVE_MODE' }
+    | { type: 'SET_RALLY_POINT'; payload: { buildingId: EntityId; x: number; y: number } };
 
 // Helper type to extract action type strings
 export type ActionType = Action['type'];

@@ -71,6 +71,7 @@ export interface EngineerComponent {
 export interface BuildingStateComponent {
     readonly isRepairing?: boolean;
     readonly placedTick?: number;
+    readonly rallyPoint?: Vector | null;  // Rally point for produced units
 }
 
 // ============ WELL COMPONENT ============

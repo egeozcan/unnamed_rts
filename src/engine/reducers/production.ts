@@ -188,11 +188,16 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                         const spawnBuildingKey = unitType === 'infantry' ? 'barracks' : 'factory';
 
                         let spawnPos = new Vector(100, 100); // Default fallback
+                        let rallyPoint: Vector | null = null;
 
                         const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
                         if (factories.length > 0) {
-                            const factory = factories[0];
+                            const factory = factories[0] as BuildingEntity;
                             spawnPos = factory.pos.add(new Vector(0, factory.h / 2 + 20));
+                            // Check for rally point
+                            if (factory.building.rallyPoint) {
+                                rallyPoint = factory.building.rallyPoint;
+                            }
                         } else {
                             // Fallback to conyard
                             const conyards = playerBuildings.filter(e => e.key === 'conyard');
@@ -201,7 +206,19 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
 
                         const newUnit = createEntity(spawnPos.x, spawnPos.y, player.id, 'UNIT', q.current!, state);
                         const offset = new Vector((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
-                        const movedUnit = { ...newUnit, pos: newUnit.pos.add(offset) };
+                        let movedUnit = { ...newUnit, pos: newUnit.pos.add(offset) };
+
+                        // Apply rally point if set
+                        if (rallyPoint && movedUnit.type === 'UNIT' && 'movement' in movedUnit) {
+                            movedUnit = {
+                                ...movedUnit,
+                                movement: {
+                                    ...movedUnit.movement,
+                                    moveTarget: rallyPoint,
+                                    finalDest: rallyPoint
+                                }
+                            };
+                        }
 
                         createdEntities.push(movedUnit);
 

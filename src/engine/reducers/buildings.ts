@@ -520,3 +520,33 @@ export function updateWells(
 
     return { entities: nextEntities, playerCredits };
 }
+
+export function setRallyPoint(state: GameState, payload: { buildingId: EntityId; x: number; y: number }): GameState {
+    const { buildingId, x, y } = payload;
+    const building = state.entities[buildingId];
+
+    // Validate building exists and is a building
+    if (!building || building.type !== 'BUILDING' || building.dead) {
+        return state;
+    }
+
+    // Only production buildings can have rally points
+    const buildingData = RULES.buildings[building.key];
+    if (!buildingData || !buildingData.provides) {
+        return state;
+    }
+
+    return {
+        ...state,
+        entities: {
+            ...state.entities,
+            [buildingId]: {
+                ...building,
+                building: {
+                    ...building.building,
+                    rallyPoint: new Vector(x, y)
+                }
+            }
+        }
+    };
+}

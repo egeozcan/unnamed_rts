@@ -847,6 +847,24 @@ function handleRightClick(wx: number, wy: number) {
         return;
     }
 
+    // Check if a production building is selected - set rally point
+    const selectedIds = currentState.selection;
+    if (selectedIds.length === 1) {
+        const selectedEntity = currentState.entities[selectedIds[0]];
+        if (selectedEntity && selectedEntity.type === 'BUILDING' && selectedEntity.owner === humanPlayerId) {
+            const buildingData = RULES.buildings[selectedEntity.key];
+            if (buildingData && buildingData.provides) {
+                // This is a production building - set rally point
+                currentState = update(currentState, {
+                    type: 'SET_RALLY_POINT',
+                    payload: { buildingId: selectedIds[0], x: wx, y: wy }
+                });
+                updateButtonsUI();
+                return;
+            }
+        }
+    }
+
     // Find target
     let targetId: EntityId | null = null;
     const entityList = Object.values(currentState.entities);
@@ -858,7 +876,6 @@ function handleRightClick(wx: number, wy: number) {
     }
 
     // Issue commands
-    const selectedIds = currentState.selection;
     if (selectedIds.length === 0) return;
 
     // Special handling for Induction Rig: deploy on wells

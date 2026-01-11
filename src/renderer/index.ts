@@ -130,6 +130,17 @@ export class Renderer {
             this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
+        // Draw rally points for selected production buildings
+        for (const id of selection) {
+            const entity = entities[id];
+            if (entity && entity.type === 'BUILDING' && !entity.dead) {
+                const buildingData = RULES.buildings[entity.key];
+                if (buildingData && buildingData.provides && entity.building.rallyPoint) {
+                    this.drawRallyPoint(entity, entity.building.rallyPoint, camera, zoom);
+                }
+            }
+        }
+
         // Draw projectiles
         for (const proj of projectiles) {
             if (proj.dead) continue;
@@ -625,6 +636,52 @@ export class Renderer {
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(sc.x, sc.y, 3 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    private drawRallyPoint(building: Entity, rallyPoint: Vector, camera: { x: number; y: number }, zoom: number) {
+        const ctx = this.ctx;
+        const buildingScreen = this.worldToScreen(building.pos, camera, zoom);
+        const rallyScreen = this.worldToScreen(rallyPoint, camera, zoom);
+
+        ctx.save();
+
+        // Draw dashed line from building to rally point
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 2 * zoom;
+        ctx.setLineDash([5 * zoom, 5 * zoom]);
+        ctx.beginPath();
+        ctx.moveTo(buildingScreen.x, buildingScreen.y);
+        ctx.lineTo(rallyScreen.x, rallyScreen.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw flag at rally point
+        const flagHeight = 20 * zoom;
+        const flagWidth = 12 * zoom;
+
+        // Flag pole
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 2 * zoom;
+        ctx.beginPath();
+        ctx.moveTo(rallyScreen.x, rallyScreen.y);
+        ctx.lineTo(rallyScreen.x, rallyScreen.y - flagHeight);
+        ctx.stroke();
+
+        // Flag
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.moveTo(rallyScreen.x, rallyScreen.y - flagHeight);
+        ctx.lineTo(rallyScreen.x + flagWidth, rallyScreen.y - flagHeight + flagWidth / 2);
+        ctx.lineTo(rallyScreen.x, rallyScreen.y - flagHeight + flagWidth);
+        ctx.closePath();
+        ctx.fill();
+
+        // Circle at base
+        ctx.beginPath();
+        ctx.arc(rallyScreen.x, rallyScreen.y, 4 * zoom, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
