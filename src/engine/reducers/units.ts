@@ -64,29 +64,22 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
     const avgRadius = movableUnits.reduce((sum, u) => sum + u.radius, 0) / movableUnits.length;
     const formationPositions = calculateFormationPositions(target, movableUnits.length, avgRadius);
 
-    // Sort units by distance to target center for efficient position assignment
-    // Units closest to target get positions closest to center
+    // Sort units by ID for stable position assignment
+    // Prevents "circling" where moving units constantly swap slots as their distances change
     const sortedUnits = [...movableUnits].sort((a, b) =>
-        a.pos.dist(target) - b.pos.dist(target)
+        a.id.localeCompare(b.id)
     );
 
-    // Assign positions - match each unit to the closest available formation slot
+    // STABLE ASSIGNMENT: Map sorted units to formation positions by index
+    // This ensures that as long as the group membership is stable, the slot assignment is stable.
     const assignedPositions = new Map<EntityId, Vector>();
-    const availablePositions = [...formationPositions];
-
-    for (const unit of sortedUnits) {
-        // Find closest available position to this unit's current position
-        let bestIdx = 0;
-        let bestDist = unit.pos.dist(availablePositions[0]);
-        for (let i = 1; i < availablePositions.length; i++) {
-            const dist = unit.pos.dist(availablePositions[i]);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIdx = i;
-            }
+    for (let i = 0; i < sortedUnits.length; i++) {
+        if (i < formationPositions.length) {
+            assignedPositions.set(sortedUnits[i].id, formationPositions[i]);
+        } else {
+            // Fallback if more units than positions (shouldn't happen with current calculation)
+            assignedPositions.set(sortedUnits[i].id, target);
         }
-        assignedPositions.set(unit.id, availablePositions[bestIdx]);
-        availablePositions.splice(bestIdx, 1);
     }
 
     let nextEntities = { ...state.entities };
@@ -196,24 +189,16 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     const approachRange = 80; // Distance from target to spread to
     const spreadPositions = calculateAttackSpreadPositions(target.pos, attackerPositions, approachRange);
 
-    // Assign spread positions to attackers (closest unit to closest position)
+    // STABLE ASSIGNMENT: Map sorted units to spread positions by index
     const assignedSpread = new Map<EntityId, Vector>();
-    const availableSpread = [...spreadPositions];
-    const sortedAttackers = [...attackers].sort((a, b) => a.pos.dist(target.pos) - b.pos.dist(target.pos));
+    const sortedAttackers = [...attackers].sort((a, b) => a.id.localeCompare(b.id));
 
-    for (const unit of sortedAttackers) {
-        if (availableSpread.length === 0) break;
-        let bestIdx = 0;
-        let bestDist = unit.pos.dist(availableSpread[0]);
-        for (let i = 1; i < availableSpread.length; i++) {
-            const dist = unit.pos.dist(availableSpread[i]);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIdx = i;
-            }
+    for (let i = 0; i < sortedAttackers.length; i++) {
+        if (i < spreadPositions.length) {
+            assignedSpread.set(sortedAttackers[i].id, spreadPositions[i]);
+        } else {
+            assignedSpread.set(sortedAttackers[i].id, target.pos); // Fallback
         }
-        assignedSpread.set(unit.id, availableSpread[bestIdx]);
-        availableSpread.splice(bestIdx, 1);
     }
 
     let nextEntities = { ...state.entities };
@@ -608,27 +593,19 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
     const avgRadius = movableUnits.reduce((sum, u) => sum + u.radius, 0) / movableUnits.length;
     const formationPositions = calculateFormationPositions(target, movableUnits.length, avgRadius);
 
-    // Sort units by distance to target center for efficient position assignment
+    // Sort units by ID for stable position assignment
     const sortedUnits = [...movableUnits].sort((a, b) =>
-        a.pos.dist(target) - b.pos.dist(target)
+        a.id.localeCompare(b.id)
     );
 
-    // Assign positions
+    // STABLE ASSIGNMENT: Map sorted units to formation positions by index
     const assignedPositions = new Map<EntityId, Vector>();
-    const availablePositions = [...formationPositions];
-
-    for (const unit of sortedUnits) {
-        let bestIdx = 0;
-        let bestDist = unit.pos.dist(availablePositions[0]);
-        for (let i = 1; i < availablePositions.length; i++) {
-            const dist = unit.pos.dist(availablePositions[i]);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIdx = i;
-            }
+    for (let i = 0; i < sortedUnits.length; i++) {
+        if (i < formationPositions.length) {
+            assignedPositions.set(sortedUnits[i].id, formationPositions[i]);
+        } else {
+            assignedPositions.set(sortedUnits[i].id, target);
         }
-        assignedPositions.set(unit.id, availablePositions[bestIdx]);
-        availablePositions.splice(bestIdx, 1);
     }
 
     let nextEntities = { ...state.entities };
