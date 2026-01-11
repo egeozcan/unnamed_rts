@@ -125,6 +125,26 @@ describe('Performance Benchmarks', () => {
         return elapsed / iterations;
     }
 
+    // More robust measurement: multiple runs, return median to reduce outlier impact
+    function measureTimeRobust(fn: () => void, iterations: number = 30, runs: number = 5): number {
+        const runTimes: number[] = [];
+        for (let r = 0; r < runs; r++) {
+            // Warmup for each run
+            for (let w = 0; w < 3; w++) {
+                fn();
+            }
+            // Measure
+            const start = performance.now();
+            for (let i = 0; i < iterations; i++) {
+                fn();
+            }
+            runTimes.push((performance.now() - start) / iterations);
+        }
+        // Return median
+        runTimes.sort((a, b) => a - b);
+        return runTimes[Math.floor(runs / 2)];
+    }
+
     describe('Tick Performance', () => {
         it('should handle 100 entities with tick time under 8ms', () => {
             // 8 players * ~12 entities each = ~100 entities
@@ -188,28 +208,30 @@ describe('Performance Benchmarks', () => {
 
         it('should scale sub-linearly with entity count (spatial optimization working)', () => {
             // Test that doubling entities doesn't double tick time
+            // Use robust measurement with median across multiple runs to reduce flakiness
             let state100 = createLargeGameState(4, 20, 20);
             let state200 = createLargeGameState(8, 20, 40);
             let state400 = createLargeGameState(8, 40, 80);
 
-            // Warm up
-            for (let i = 0; i < 10; i++) {
+            // Extended warm up to stabilize JIT compilation
+            for (let i = 0; i < 20; i++) {
                 state100 = update(state100, { type: 'TICK' });
                 state200 = update(state200, { type: 'TICK' });
                 state400 = update(state400, { type: 'TICK' });
             }
 
-            const time100 = measureTime(() => {
+            // Use robust measurement (median of multiple runs) to reduce variance
+            const time100 = measureTimeRobust(() => {
                 state100 = update(state100, { type: 'TICK' });
-            }, 30);
+            }, 20, 5);
 
-            const time200 = measureTime(() => {
+            const time200 = measureTimeRobust(() => {
                 state200 = update(state200, { type: 'TICK' });
-            }, 30);
+            }, 20, 5);
 
-            const time400 = measureTime(() => {
+            const time400 = measureTimeRobust(() => {
                 state400 = update(state400, { type: 'TICK' });
-            }, 30);
+            }, 20, 5);
 
             console.log(`Scaling test:`);
             console.log(`  ~100 entities: ${time100.toFixed(2)}ms`);
@@ -218,10 +240,18 @@ describe('Performance Benchmarks', () => {
 
             // With O(n) or O(n log n) algorithms, doubling entities should less than double time
             // With O(n²), doubling would quadruple time (4x per doubling = 16x for 4x entities)
-            // We expect sub-quadratic scaling (allow some variance in CI)
+            // We expect sub-quadratic scaling
             const scalingFactor = time400 / time100;
-            // Relaxed threshold to 20 to account for environment variance and small baseline times
-            expect(scalingFactor).toBeLessThan(20); // Should be much less than 16x (quadratic)
+
+            // Instead of comparing ratios (which are unstable with small baseline times),
+            // verify absolute performance is acceptable AND scaling isn't quadratic
+            // Quadratic would be 16x, we expect much less but allow headroom for CI variance
+            expect(scalingFactor).toBeLessThan(20);
+
+            // Also verify the 200->400 scaling isn't quadratic (would be 4x)
+            // This is more stable since both times are larger
+            const scaling200to400 = time400 / time200;
+            expect(scaling200to400).toBeLessThan(6); // Should be ~2x for linear, allow headroom
         });
     });
 
@@ -607,33 +637,43 @@ describe('Performance Benchmarks', () => {
             // indirectly by verifying tick performance is consistent
             let tickState = state;
 
-            // First few ticks establish the baseline
-            for (let i = 0; i < 5; i++) {
+            // Extended warmup to stabilize JIT and caches
+            for (let i = 0; i < 20; i++) {
                 tickState = update(tickState, { type: 'TICK' });
             }
 
             // Measure multiple ticks - should be consistent (power cached within tick)
             const tickTimes: number[] = [];
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 30; i++) {
                 const start = performance.now();
                 tickState = update(tickState, { type: 'TICK' });
                 tickTimes.push(performance.now() - start);
             }
 
-            const avgTime = tickTimes.reduce((a, b) => a + b, 0) / tickTimes.length;
-            const maxTime = Math.max(...tickTimes);
-            const variance = tickTimes.reduce((acc, t) => acc + Math.pow(t - avgTime, 2), 0) / tickTimes.length;
+            // Sort and use trimmed statistics (ignore top/bottom 10% as outliers)
+            tickTimes.sort((a, b) => a - b);
+            const trimCount = Math.floor(tickTimes.length * 0.1);
+            const trimmedTimes = tickTimes.slice(trimCount, tickTimes.length - trimCount);
+
+            const avgTime = trimmedTimes.reduce((a, b) => a + b, 0) / trimmedTimes.length;
+            const maxTrimmed = Math.max(...trimmedTimes);
+            const variance = trimmedTimes.reduce((acc, t) => acc + Math.pow(t - avgTime, 2), 0) / trimmedTimes.length;
             const stdDev = Math.sqrt(variance);
 
+            // Also track the actual max for logging
+            const actualMax = Math.max(...tickTimes);
+
             console.log(`Power cache consistency (8 players):`);
-            console.log(`  Avg tick: ${avgTime.toFixed(2)}ms`);
-            console.log(`  Max tick: ${maxTime.toFixed(2)}ms`);
+            console.log(`  Avg tick (trimmed): ${avgTime.toFixed(2)}ms`);
+            console.log(`  Max tick (trimmed): ${maxTrimmed.toFixed(2)}ms`);
+            console.log(`  Max tick (actual): ${actualMax.toFixed(2)}ms`);
             console.log(`  Std dev: ${stdDev.toFixed(2)}ms`);
 
-            // Tick times should be reasonably consistent
-            // Use a lenient constraint since system load varies between test runs
-            // Main goal is detecting major regressions, not measuring exact variance
-            expect(maxTime).toBeLessThan(50); // No single tick should take > 50ms
+            // Use trimmed max for assertion to avoid GC/scheduling spikes failing the test
+            // The goal is to detect regressions, not penalize transient system load
+            expect(maxTrimmed).toBeLessThan(30); // Trimmed max should be reasonable
+            // Also verify average is good
+            expect(avgTime).toBeLessThan(15); // Average should be well under frame budget
         });
     });
 
