@@ -396,6 +396,18 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
     const nextEntities = { ...state.entities };
     delete nextEntities[unitId];
 
+    // Clear ores around the well that would block placement
+    const clearRadius = 40; // Slightly larger than rig half-size (25) + ore radius
+    for (const id in nextEntities) {
+        const entity = nextEntities[id];
+        if (entity.type === 'RESOURCE' && !entity.dead) {
+            const dist = entity.pos.dist(well.pos);
+            if (dist < clearRadius) {
+                delete nextEntities[id];
+            }
+        }
+    }
+
     // Create deployed induction rig on the well's position
     const deployedRig = createEntity(well.pos.x, well.pos.y, rig.owner, 'BUILDING', 'induction_rig_deployed', state);
 
