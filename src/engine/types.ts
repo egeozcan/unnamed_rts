@@ -252,6 +252,12 @@ export interface Power {
     readonly out: number; // production
 }
 
+export interface CommandIndicator {
+    readonly pos: Vector;
+    readonly type: 'move' | 'attack';
+    readonly startTick: number;
+}
+
 export interface GameState {
     readonly running: boolean;
     readonly mode: GameMode;
@@ -280,6 +286,7 @@ export interface GameState {
     readonly showBirdsEye: boolean;
     readonly notification?: { text: string; type: 'info' | 'error'; tick: number } | null;
     readonly attackMoveMode: boolean;
+    readonly commandIndicator?: CommandIndicator | null;
 }
 
 // Discriminated union for all game actions

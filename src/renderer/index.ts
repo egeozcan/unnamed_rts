@@ -1,4 +1,4 @@
-import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS } from '../engine/types.js';
+import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS, CommandIndicator } from '../engine/types.js';
 import { getAsset, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
@@ -139,6 +139,11 @@ export class Renderer {
         // Draw particles
         for (const particle of particles) {
             this.drawParticle(particle, camera, zoom);
+        }
+
+        // Draw command indicator (move/attack target)
+        if (state.commandIndicator) {
+            this.drawCommandIndicator(state.commandIndicator, camera, zoom, tick);
         }
 
         // Building placement preview
@@ -581,6 +586,48 @@ export class Renderer {
             ctx.fillStyle = particle.color;
             ctx.fillRect(sc.x, sc.y, 2 * zoom, 2 * zoom);
         }
+    }
+
+    private drawCommandIndicator(indicator: CommandIndicator, camera: { x: number; y: number }, zoom: number, currentTick: number) {
+        const ctx = this.ctx;
+        const sc = this.worldToScreen(indicator.pos, camera, zoom);
+
+        const INDICATOR_DURATION = 120;
+        const elapsed = currentTick - indicator.startTick;
+        const progress = Math.min(1, elapsed / INDICATOR_DURATION);
+
+        // Fade out over the duration
+        const alpha = 1 - progress;
+
+        // Pulsing effect
+        const pulse = 1 + 0.3 * Math.sin(elapsed * 0.2);
+        const baseRadius = 15 * zoom * pulse;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        // Color based on type
+        const color = indicator.type === 'move' ? '#44ff44' : '#ff4444';
+
+        // Outer ring
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2 * zoom;
+        ctx.beginPath();
+        ctx.arc(sc.x, sc.y, baseRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner ring (smaller, same color)
+        ctx.beginPath();
+        ctx.arc(sc.x, sc.y, baseRadius * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Center dot
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(sc.x, sc.y, 3 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 
     private drawPlacementPreview(

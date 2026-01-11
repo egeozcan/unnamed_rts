@@ -1,5 +1,5 @@
 import {
-    Action, GameState, PLAYER_COLORS
+    Action, GameState, PLAYER_COLORS, Vector
 } from './types';
 import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
@@ -52,10 +52,29 @@ export function update(state: GameState, action: Action): GameState {
             return cancelBuild(state, action.payload);
         case 'CANCEL_PLACEMENT':
             return { ...state, placingBuilding: null };
-        case 'COMMAND_MOVE':
-            return commandMove(state, action.payload);
-        case 'COMMAND_ATTACK':
-            return commandAttack(state, action.payload);
+        case 'COMMAND_MOVE': {
+            const newState = commandMove(state, action.payload);
+            return {
+                ...newState,
+                commandIndicator: {
+                    pos: new Vector(action.payload.x, action.payload.y),
+                    type: 'move',
+                    startTick: state.tick
+                }
+            };
+        }
+        case 'COMMAND_ATTACK': {
+            const target = state.entities[action.payload.targetId];
+            const newState = commandAttack(state, action.payload);
+            return {
+                ...newState,
+                commandIndicator: target ? {
+                    pos: target.pos,
+                    type: 'attack',
+                    startTick: state.tick
+                } : null
+            };
+        }
         case 'SELECT_UNITS':
             return { ...state, selection: action.payload };
         case 'SELL_BUILDING':
@@ -82,8 +101,17 @@ export function update(state: GameState, action: Action): GameState {
             return queueUnit(state, action.payload);
         case 'DEQUEUE_UNIT':
             return dequeueUnit(state, action.payload);
-        case 'COMMAND_ATTACK_MOVE':
-            return commandAttackMove(state, action.payload);
+        case 'COMMAND_ATTACK_MOVE': {
+            const newState = commandAttackMove(state, action.payload);
+            return {
+                ...newState,
+                commandIndicator: {
+                    pos: new Vector(action.payload.x, action.payload.y),
+                    type: 'move',
+                    startTick: state.tick
+                }
+            };
+        }
         case 'SET_STANCE':
             return setStance(state, action.payload);
         case 'TOGGLE_ATTACK_MOVE_MODE':

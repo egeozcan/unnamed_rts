@@ -301,6 +301,13 @@ export function tick(state: GameState): GameState {
         }
     }
 
+    // Clear command indicator after 2 seconds (120 ticks)
+    const INDICATOR_DURATION = 120;
+    const nextCommandIndicator = state.commandIndicator &&
+        (nextTick - state.commandIndicator.startTick < INDICATOR_DURATION)
+        ? state.commandIndicator
+        : null;
+
     return {
         ...state,
         tick: nextTick,
@@ -309,7 +316,8 @@ export function tick(state: GameState): GameState {
         projectiles: nextProjectiles,
         winner: nextWinner,
         running: nextRunning,
-        notification: nextNotification
+        notification: nextNotification,
+        commandIndicator: nextCommandIndicator
     };
 }
 
