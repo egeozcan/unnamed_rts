@@ -2,7 +2,7 @@ import { RULES } from '../data/schemas/index.js';
 import { GameState, Entity, EntityId, Vector, AttackStance, UnitEntity } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
-import { isUnit } from '../engine/type-guards.js';
+import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
@@ -1278,11 +1278,113 @@ export function updateCommandBar(state: GameState) {
     }
 }
 
+// All action cursor CSS class names
+const ACTION_CURSOR_CLASSES = [
+    'cursor-move', 'cursor-attack', 'cursor-harvest', 'cursor-capture',
+    'cursor-deploy', 'cursor-engineer-repair', 'cursor-no-entry'
+];
+
+type ActionCursor = 'move' | 'attack' | 'harvest' | 'capture' | 'deploy' | 'engineer-repair' | 'no-entry' | null;
+
 /**
- * Update the capture cursor based on whether an engineer is selected
- * and the mouse is hovering over a capturable enemy building.
+ * Analyze what types of units are currently selected
  */
-export function updateCaptureCursor(
+function getSelectionInfo(state: GameState, playerId: number): {
+    hasUnits: boolean;
+    hasCombatUnits: boolean;
+    hasHarvesters: boolean;
+    hasEngineers: boolean;
+    hasInductionRigs: boolean;
+} {
+    let hasUnits = false;
+    let hasCombatUnits = false;
+    let hasHarvesters = false;
+    let hasEngineers = false;
+    let hasInductionRigs = false;
+
+    for (const id of state.selection) {
+        const entity = state.entities[id];
+        if (!entity || entity.dead || entity.owner !== playerId) continue;
+        if (!isUnit(entity)) continue;
+
+        hasUnits = true;
+
+        if (isHarvester(entity)) {
+            hasHarvesters = true;
+        } else if (isEngineer(entity)) {
+            hasEngineers = true;
+        } else if (isInductionRig(entity)) {
+            hasInductionRigs = true;
+        } else {
+            // Regular combat unit (not harvester, engineer, or induction rig)
+            const unitData = RULES.units[entity.key];
+            if (unitData && unitData.damage > 0) {
+                hasCombatUnits = true;
+            }
+        }
+    }
+
+    return { hasUnits, hasCombatUnits, hasHarvesters, hasEngineers, hasInductionRigs };
+}
+
+/**
+ * Find entity under mouse cursor
+ */
+function getEntityAtPosition(entities: Record<EntityId, Entity>, wx: number, wy: number): Entity | null {
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.dead) continue;
+
+        // For buildings, use rectangular bounds
+        if (entity.type === 'BUILDING') {
+            const dx = Math.abs(wx - entity.pos.x);
+            const dy = Math.abs(wy - entity.pos.y);
+            if (dx <= entity.w / 2 && dy <= entity.h / 2) {
+                return entity;
+            }
+        } else {
+            // For other entities, use radius
+            const dist = Math.sqrt((wx - entity.pos.x) ** 2 + (wy - entity.pos.y) ** 2);
+            if (dist <= entity.radius + 5) {
+                return entity;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Check if any selected combat unit can attack a given target
+ */
+function canAnyUnitAttackTarget(state: GameState, targetEntity: Entity, playerId: number): boolean {
+    // Determine if target is air or ground
+    const targetData = RULES.units[targetEntity.key];
+    const isTargetAir = targetData && targetData.fly === true;
+
+    for (const id of state.selection) {
+        const entity = state.entities[id];
+        if (!entity || entity.dead || entity.owner !== playerId) continue;
+        if (!isUnit(entity)) continue;
+
+        const unitData = RULES.units[entity.key];
+        if (!unitData || unitData.damage <= 0) continue;
+
+        // Check weapon targeting capabilities
+        const weaponType = unitData.weaponType || 'bullet';
+        const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
+
+        if (isTargetAir && targeting.canTargetAir) return true;
+        if (!isTargetAir && targeting.canTargetGround) return true;
+    }
+
+    return false;
+}
+
+/**
+ * Update the action cursor based on what's selected and what's under the mouse.
+ * Shows different cursors for move, attack, harvest, capture, deploy, repair, and invalid targets.
+ */
+export function updateActionCursor(
     state: GameState,
     mouseWorldX: number,
     mouseWorldY: number,
@@ -1291,52 +1393,128 @@ export function updateCaptureCursor(
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
 
-    // Don't show capture cursor if in special modes
-    if (state.sellMode || state.repairMode || state.attackMoveMode || state.placingBuilding) {
-        canvas.classList.remove('capture-mode');
-        return;
-    }
-
-    // Check if any selected unit is an engineer
-    const hasEngineerSelected = state.selection.some(id => {
-        const entity = state.entities[id];
-        if (!entity || entity.dead) return false;
-        if (!isUnit(entity)) return false;
-        // Check if this unit has engineer capture capability
-        const unitData = RULES.units[entity.key];
-        return unitData && unitData.canCaptureEnemyBuildings === true;
-    });
-
-    if (!hasEngineerSelected) {
-        canvas.classList.remove('capture-mode');
-        return;
-    }
-
-    // Find entity under mouse cursor
-    let hoveredBuilding: Entity | null = null;
-    for (const id in state.entities) {
-        const entity = state.entities[id];
-        if (entity.dead) continue;
-        if (entity.type !== 'BUILDING') continue;
-
-        // Check if mouse is within building bounds
-        const dx = Math.abs(mouseWorldX - entity.pos.x);
-        const dy = Math.abs(mouseWorldY - entity.pos.y);
-        if (dx <= entity.w / 2 && dy <= entity.h / 2) {
-            hoveredBuilding = entity;
-            break;
+    // Helper to clear all action cursors
+    const clearCursors = () => {
+        for (const cls of ACTION_CURSOR_CLASSES) {
+            canvas.classList.remove(cls);
         }
+    };
+
+    // Helper to set a specific cursor
+    const setCursor = (cursor: ActionCursor) => {
+        clearCursors();
+        if (cursor) {
+            canvas.classList.add(`cursor-${cursor}`);
+        }
+    };
+
+    // Don't show action cursor if in special modes
+    if (state.sellMode || state.repairMode || state.attackMoveMode || state.placingBuilding) {
+        clearCursors();
+        return;
     }
 
-    // Check if hovered building is capturable enemy building
-    if (hoveredBuilding && hoveredBuilding.owner !== playerId && hoveredBuilding.owner !== -1) {
-        const buildingData = RULES.buildings[hoveredBuilding.key];
-        if (buildingData && buildingData.capturable === true) {
-            canvas.classList.add('capture-mode');
+    // Get selection info
+    const selInfo = getSelectionInfo(state, playerId);
+
+    // No units selected → no action cursor
+    if (!selInfo.hasUnits) {
+        clearCursors();
+        return;
+    }
+
+    // Find entity under mouse
+    const hoveredEntity = getEntityAtPosition(state.entities, mouseWorldX, mouseWorldY);
+
+    // === DETERMINE CURSOR BASED ON HOVERED ENTITY ===
+
+    if (!hoveredEntity) {
+        // Hovering empty ground → move cursor
+        setCursor('move');
+        return;
+    }
+
+    // --- WELL ---
+    if (isWell(hoveredEntity)) {
+        if (selInfo.hasInductionRigs) {
+            setCursor('deploy');
+        } else {
+            setCursor('move');
+        }
+        return;
+    }
+
+    // --- RESOURCE (ORE) ---
+    if (isResource(hoveredEntity)) {
+        if (selInfo.hasHarvesters) {
+            setCursor('harvest');
+        } else {
+            setCursor('move');
+        }
+        return;
+    }
+
+    // --- ROCK ---
+    if (hoveredEntity.type === 'ROCK') {
+        // Can't interact with rocks
+        setCursor('no-entry');
+        return;
+    }
+
+    // --- FRIENDLY ENTITY ---
+    if (isPlayerEntity(hoveredEntity, playerId)) {
+        // Engineer can repair damaged friendly buildings
+        if (selInfo.hasEngineers && isBuilding(hoveredEntity) && hoveredEntity.hp < hoveredEntity.maxHp) {
+            setCursor('engineer-repair');
+            return;
+        }
+        // Can't do anything else to friendly entities (attacking own units not allowed)
+        // Show no cursor change (default crosshair)
+        clearCursors();
+        return;
+    }
+
+    // --- NEUTRAL ENTITY ---
+    if (hoveredEntity.owner === -1) {
+        // Can't attack neutral entities
+        setCursor('move');
+        return;
+    }
+
+    // --- ENEMY ENTITY ---
+    if (isEnemyOf(hoveredEntity, playerId)) {
+        // Engineer + enemy building
+        if (selInfo.hasEngineers && isBuilding(hoveredEntity)) {
+            const buildingData = RULES.buildings[hoveredEntity.key];
+            if (buildingData && buildingData.capturable === true) {
+                setCursor('capture');
+            } else {
+                // Non-capturable building (defense building)
+                setCursor('no-entry');
+            }
+            return;
+        }
+
+        // Combat units vs enemy
+        if (selInfo.hasCombatUnits || selInfo.hasHarvesters || selInfo.hasInductionRigs) {
+            // Check if any selected unit can actually attack this target
+            if (canAnyUnitAttackTarget(state, hoveredEntity, playerId)) {
+                setCursor('attack');
+            } else {
+                // Can't attack (e.g., ground unit vs air target)
+                setCursor('no-entry');
+            }
+            return;
+        }
+
+        // Only engineers selected vs enemy unit (not building) - can't attack
+        if (selInfo.hasEngineers && !isBuilding(hoveredEntity)) {
+            setCursor('no-entry');
             return;
         }
     }
 
-    canvas.classList.remove('capture-mode');
+    // Default: no cursor change
+    clearCursors();
 }
 
