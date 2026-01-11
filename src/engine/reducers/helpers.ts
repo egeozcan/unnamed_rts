@@ -38,7 +38,8 @@ function hasProductionBuilding(category: string, playerBuildings: Entity[]): boo
  */
 export function canBuild(key: string, category: string, playerId: number, entities: Record<EntityId, Entity> | EntityCache): boolean {
     // Support both EntityCache and entities record for backward compatibility
-    const playerBuildings = ('buildingsByOwner' in entities && entities.buildingsByOwner instanceof Map)
+    const isEntityCache = 'buildingsByOwner' in entities && entities.buildingsByOwner instanceof Map;
+    const playerBuildings = isEntityCache
         ? (entities.buildingsByOwner.get(playerId) || [])
         : Object.values(entities as Record<EntityId, Entity>).filter(e => e.owner === playerId && e.type === 'BUILDING' && !e.dead);
 
@@ -48,7 +49,32 @@ export function canBuild(key: string, category: string, playerId: number, entiti
     }
 
     // Check prerequisites
-    return checkPrerequisites(key, playerBuildings);
+    if (!checkPrerequisites(key, playerBuildings)) {
+        return false;
+    }
+
+    // Check maxCount limit
+    const unitData = RULES.units[key];
+    const buildingData = RULES.buildings[key];
+    const maxCount = unitData?.maxCount || buildingData?.maxCount;
+    if (maxCount !== undefined) {
+        // Count existing entities of this type
+        let existingCount = 0;
+        if (isEntityCache) {
+            const cache = entities as EntityCache;
+            const buildings = cache.buildingsByOwner.get(playerId) || [];
+            const units = cache.unitsByOwner.get(playerId) || [];
+            existingCount = [...buildings, ...units].filter(e => e.key === key).length;
+        } else {
+            existingCount = Object.values(entities as Record<EntityId, Entity>)
+                .filter(e => e.owner === playerId && !e.dead && e.key === key).length;
+        }
+        if (existingCount >= maxCount) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' | 'dummy' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {

@@ -198,7 +198,6 @@
             "prerequisites": ["conyard", "power", "barracks"],
             "landingSlots": 6,
             "reloadTicks": 120,
-            "maxCount": 1,
             "description": "Produces and rearms aircraft. Select this building and right-click an enemy to launch all docked Harriers at once."
         },
         "service_depot": {
