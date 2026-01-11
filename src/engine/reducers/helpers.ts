@@ -92,7 +92,8 @@ export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' 
             vehicle: { current: null, progress: 0, invested: 0, queued: [] },
             air: { current: null, progress: 0, invested: 0, queued: [] }
         },
-        readyToPlace: null
+        readyToPlace: null,
+        primaryBuildings: { infantry: null, vehicle: null }
     };
 }
 

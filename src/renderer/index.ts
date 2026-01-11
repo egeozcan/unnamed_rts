@@ -141,6 +141,22 @@ export class Renderer {
             }
         }
 
+        // Draw primary building indicators
+        const PRIMARY_BUILDING_MAP: Record<string, 'infantry' | 'vehicle'> = {
+            'barracks': 'infantry',
+            'factory': 'vehicle'
+        };
+        for (const id in entities) {
+            const entity = entities[id];
+            if (entity.type !== 'BUILDING' || entity.dead) continue;
+            const category = PRIMARY_BUILDING_MAP[entity.key];
+            if (!category) continue;
+            const player = state.players[entity.owner];
+            if (player?.primaryBuildings?.[category] === id) {
+                this.drawPrimaryIndicator(entity, camera, zoom);
+            }
+        }
+
         // Draw projectiles
         for (const proj of projectiles) {
             if (proj.dead) continue;
@@ -683,6 +699,39 @@ export class Renderer {
         ctx.beginPath();
         ctx.arc(rallyScreen.x, rallyScreen.y, 4 * zoom, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.restore();
+    }
+
+    private drawPrimaryIndicator(building: Entity, camera: { x: number; y: number }, zoom: number) {
+        const ctx = this.ctx;
+        const screen = this.worldToScreen(building.pos, camera, zoom);
+
+        ctx.save();
+
+        // Draw a yellow star at the top-right corner of the building
+        const starSize = 8 * zoom;
+        const offsetX = (building.w / 2) * zoom - 5 * zoom;
+        const offsetY = -(building.h / 2) * zoom + 5 * zoom;
+
+        const cx = screen.x + offsetX;
+        const cy = screen.y + offsetY;
+
+        // 5-pointed star
+        ctx.fillStyle = '#ffcc00';
+        ctx.strokeStyle = '#886600';
+        ctx.lineWidth = 1 * zoom;
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * 144 - 90) * Math.PI / 180;
+            const x = cx + Math.cos(angle) * starSize;
+            const y = cy + Math.sin(angle) * starSize;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
 
         ctx.restore();
     }

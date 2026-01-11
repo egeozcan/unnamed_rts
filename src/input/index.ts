@@ -62,6 +62,7 @@ let onToggleBirdsEye: (() => void) | null = null;
 let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
+let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
@@ -78,6 +79,7 @@ export function initInput(
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
         onSetStance?: (stance: AttackStance) => void;
         onToggleAttackMove?: () => void;
+        onDoubleClick?: (wx: number, wy: number) => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -92,6 +94,7 @@ export function initInput(
     onSetSpeed = callbacks.onSetSpeed;
     onSetStance = callbacks.onSetStance || null;
     onToggleAttackMove = callbacks.onToggleAttackMove || null;
+    onDoubleClick = callbacks.onDoubleClick || null;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -280,10 +283,16 @@ function setupEventListeners() {
         }
     });
 
-    // Double click for MCV deploy
+    // Double click handler (MCV deploy, primary building, etc.)
     window.addEventListener('dblclick', e => {
         if (e.button === 0 && inputState.rawMouse.x < canvas.width) {
-            onDeployMCV?.();
+            const worldMouse = screenToWorld(inputState.mouse.x, inputState.mouse.y);
+            if (onDoubleClick) {
+                onDoubleClick(worldMouse.x, worldMouse.y);
+            } else {
+                // Fallback: just deploy MCV for backwards compatibility
+                onDeployMCV?.();
+            }
         }
     });
 

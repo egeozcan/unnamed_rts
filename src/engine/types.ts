@@ -238,6 +238,10 @@ export interface PlayerState {
         air: ProductionQueue;
     };
     readonly readyToPlace: string | null;
+    readonly primaryBuildings?: {
+        infantry: EntityId | null;  // Primary barracks
+        vehicle: EntityId | null;   // Primary factory
+    };
 }
 
 export interface MapConfig {
@@ -314,7 +318,8 @@ export type Action =
     | { type: 'COMMAND_ATTACK_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
     | { type: 'SET_STANCE'; payload: { unitIds: EntityId[]; stance: AttackStance } }
     | { type: 'TOGGLE_ATTACK_MOVE_MODE' }
-    | { type: 'SET_RALLY_POINT'; payload: { buildingId: EntityId; x: number; y: number } };
+    | { type: 'SET_RALLY_POINT'; payload: { buildingId: EntityId; x: number; y: number } }
+    | { type: 'SET_PRIMARY_BUILDING'; payload: { buildingId: EntityId; category: 'infantry' | 'vehicle'; playerId: number } };
 
 // Helper type to extract action type strings
 export type ActionType = Action['type'];

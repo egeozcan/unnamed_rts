@@ -4,7 +4,7 @@ import {
 import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
-import { placeBuilding, sellBuilding, startRepair, stopRepair, setRallyPoint } from './reducers/buildings';
+import { placeBuilding, sellBuilding, startRepair, stopRepair, setRallyPoint, setPrimaryBuilding } from './reducers/buildings';
 import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, setStance } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
@@ -124,6 +124,8 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, attackMoveMode: !state.attackMoveMode };
         case 'SET_RALLY_POINT':
             return setRallyPoint(state, action.payload);
+        case 'SET_PRIMARY_BUILDING':
+            return setPrimaryBuilding(state, action.payload);
         default:
             return state;
     }

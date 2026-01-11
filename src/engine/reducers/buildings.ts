@@ -89,6 +89,17 @@ export function sellBuilding(state: GameState, payload: { buildingId: EntityId; 
     // Also clear from selection if it was selected
     const nextSelection = state.selection.filter(id => id !== buildingId);
 
+    // Clear primary building status if this was the primary
+    let updatedPrimaryBuildings = player.primaryBuildings;
+    if (updatedPrimaryBuildings) {
+        if (updatedPrimaryBuildings.infantry === buildingId) {
+            updatedPrimaryBuildings = { ...updatedPrimaryBuildings, infantry: null };
+        }
+        if (updatedPrimaryBuildings.vehicle === buildingId) {
+            updatedPrimaryBuildings = { ...updatedPrimaryBuildings, vehicle: null };
+        }
+    }
+
     const newState = {
         ...state,
         entities: nextEntities,
@@ -97,7 +108,8 @@ export function sellBuilding(state: GameState, payload: { buildingId: EntityId; 
             ...state.players,
             [playerId]: {
                 ...player,
-                credits: player.credits + refund
+                credits: player.credits + refund,
+                primaryBuildings: updatedPrimaryBuildings
             }
         }
     };
@@ -524,6 +536,12 @@ export function updateWells(
 // Buildings that can have rally points
 const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
 
+// Buildings that can be set as primary for production
+const PRIMARY_BUILDING_CATEGORIES: Record<string, 'infantry' | 'vehicle'> = {
+    'barracks': 'infantry',
+    'factory': 'vehicle'
+};
+
 export function setRallyPoint(state: GameState, payload: { buildingId: EntityId; x: number; y: number }): GameState {
     const { buildingId, x, y } = payload;
     const building = state.entities[buildingId];
@@ -547,6 +565,43 @@ export function setRallyPoint(state: GameState, payload: { buildingId: EntityId;
                 building: {
                     ...building.building,
                     rallyPoint: new Vector(x, y)
+                }
+            }
+        }
+    };
+}
+
+export function setPrimaryBuilding(state: GameState, payload: { buildingId: EntityId; category: 'infantry' | 'vehicle'; playerId: number }): GameState {
+    const { buildingId, category, playerId } = payload;
+    const building = state.entities[buildingId];
+    const player = state.players[playerId];
+
+    // Validate building exists, is owned by player, is a production building
+    if (!building || building.owner !== playerId || building.type !== 'BUILDING' || building.dead) {
+        return state;
+    }
+
+    if (!player) return state;
+
+    // Validate building is correct type for category
+    const buildingCategory = PRIMARY_BUILDING_CATEGORIES[building.key];
+    if (!buildingCategory || buildingCategory !== category) {
+        return state;
+    }
+
+    // Ensure we have proper default values for primaryBuildings
+    const currentPrimary = player.primaryBuildings || { infantry: null, vehicle: null };
+
+    return {
+        ...state,
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                primaryBuildings: {
+                    infantry: currentPrimary.infantry,
+                    vehicle: currentPrimary.vehicle,
+                    [category]: buildingId
                 }
             }
         }

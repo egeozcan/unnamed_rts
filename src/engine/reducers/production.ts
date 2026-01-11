@@ -186,13 +186,19 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                     } else {
                         // Ground unit production (infantry/vehicle)
                         const spawnBuildingKey = unitType === 'infantry' ? 'barracks' : 'factory';
+                        const primaryCategory = unitType === 'infantry' ? 'infantry' : 'vehicle';
 
                         let spawnPos = new Vector(100, 100); // Default fallback
                         let rallyPoint: Vector | null = null;
 
                         const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
                         if (factories.length > 0) {
-                            const factory = factories[0] as BuildingEntity;
+                            // Use primary building if set and still valid, otherwise use first
+                            const primaryId = player.primaryBuildings?.[primaryCategory];
+                            const primaryFactory = primaryId
+                                ? factories.find(f => f.id === primaryId)
+                                : null;
+                            const factory = (primaryFactory || factories[0]) as BuildingEntity;
                             spawnPos = factory.pos.add(new Vector(0, factory.h / 2 + 20));
                             // Check for rally point
                             if (factory.building.rallyPoint) {

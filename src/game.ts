@@ -581,6 +581,7 @@ function startGameWithConfig(config: SkirmishConfig) {
         onToggleAttackMove: () => {
             currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
         },
+        onDoubleClick: handleDoubleClick,
         getZoom: () => currentState.zoom,
         getCamera: () => currentState.camera
     });
@@ -969,6 +970,41 @@ function attemptMCVDeploy() {
     }
 }
 
+// Buildings that can be set as primary for production
+const PRIMARY_BUILDING_MAP: Record<string, 'infantry' | 'vehicle'> = {
+    'barracks': 'infantry',
+    'factory': 'vehicle'
+};
+
+function handleDoubleClick(wx: number, wy: number) {
+    if (humanPlayerId === null) return;
+
+    // Check if double-clicked on a production building owned by human player
+    for (const id in currentState.entities) {
+        const entity = currentState.entities[id];
+        if (entity.type !== 'BUILDING' || entity.owner !== humanPlayerId || entity.dead) continue;
+
+        const category = PRIMARY_BUILDING_MAP[entity.key];
+        if (!category) continue;
+
+        // Check if click is within building bounds
+        const dx = Math.abs(wx - entity.pos.x);
+        const dy = Math.abs(wy - entity.pos.y);
+        if (dx <= entity.w / 2 && dy <= entity.h / 2) {
+            // Set this building as primary
+            currentState = update(currentState, {
+                type: 'SET_PRIMARY_BUILDING',
+                payload: { buildingId: id, category, playerId: humanPlayerId }
+            });
+            updateButtonsUI();
+            return;
+        }
+    }
+
+    // No production building clicked - try to deploy MCV
+    attemptMCVDeploy();
+}
+
 function updateButtonsUI() {
     // Use human player's UI, or first player if observer
     const pid = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
@@ -1227,6 +1263,7 @@ if (import.meta.hot) {
                 onToggleAttackMove: () => {
                     currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
                 },
+                onDoubleClick: handleDoubleClick,
                 getZoom: () => currentState.zoom,
                 getCamera: () => currentState.camera
             });
