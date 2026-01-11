@@ -105,7 +105,7 @@ export function tick(state: GameState): GameState {
     for (const d of damageEvents) {
         if (updatedEntities[d.targetId]) {
             const ent = updatedEntities[d.targetId];
-            const nextHp = Math.max(0, ent.hp - d.amount);
+            const nextHp = Math.min(ent.maxHp, Math.max(0, ent.hp - d.amount));
 
             // Update combat component for units and buildings with combat
             if (ent.type === 'UNIT') {
