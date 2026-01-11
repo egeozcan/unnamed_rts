@@ -40,6 +40,7 @@ All game state updates go through the reducer. State objects are immutable - upd
 - **src/engine/spatial.ts** - SpatialGrid class for O(1) neighbor queries
 - **src/engine/perf.ts** - EntityCache for per-tick entity lookups
 - **src/engine/utils.ts** - A* pathfinding, collision grids, spatial queries
+- **src/engine/pathfinding.worker.ts** - Web Worker for offloaded pathfinding calculations
 - **src/renderer/index.ts** - Canvas 2D rendering engine
 - **src/data/rules.json** - Game balance data (unit/building stats, costs, prerequisites, damage modifiers)
 
@@ -67,6 +68,10 @@ All game state updates go through the reducer. State objects are immutable - upd
 - `SpatialGrid` (spatial.ts) - Cell-based partitioning for efficient neighbor queries
 
 **Game Modes**: `'menu'` (setup screen), `'game'` (human playing), `'demo'` (observer/all-AI)
+
+**AI Difficulties**: `'dummy'` (builds but never attacks), `'easy'`, `'medium'`, `'hard'`
+
+**Induction Rig**: A deployable unit that converts ore wells into infinite resource extractors. Built at War Factory, deployed by right-clicking on an ore well.
 
 ### Directory Structure
 ```
@@ -116,15 +121,15 @@ src/
 ├── input/                  # Keyboard/mouse/touch handling
 └── scripts/                # Utility scripts
 
-tests/                      # ~65 test files mirroring src/ structure
-├── engine/                 # Engine tests (reducer, AI, pathfinding, harvesters, etc.)
+tests/                      # 69 test files (617+ tests) mirroring src/ structure
+├── engine/                 # Engine tests (reducer, AI, pathfinding, harvesters, air units, etc.)
 ├── renderer/               # Renderer tests
 └── data/                   # Schema tests
 ```
 
 ## Testing
 
-Tests use Vitest. Test files are in the `tests/` directory, mirroring the `src/` structure. Comprehensive coverage includes game state immutability, AI behavior (strategies, economy, combat), harvester logic, pathfinding, air units, production, and more.
+Tests use Vitest. 69 test files with 617+ tests in the `tests/` directory, mirroring the `src/` structure. Comprehensive coverage includes game state immutability, AI behavior (strategies, economy, combat, threat detection), harvester logic, pathfinding, air units, production, and more.
 
 Test utilities in `src/engine/test-utils.ts` provide builder pattern helpers: `createTestHarvester()`, `createTestBuilding()`, `createTestCombatUnit()`, etc.
 

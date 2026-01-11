@@ -11,7 +11,7 @@ A browser-based real-time strategy game inspired by Command & Conquer. Built wit
 - **Multiplayer Support**: Up to 8 players (human + AI) in a single match
 - **Diverse Units**: 22 unit types across infantry, vehicles, and aircraft
 - **Base Building**: 12 building types including production, defense, and support structures
-- **AI Opponents**: Three difficulty levels (Easy, Medium, Hard) with distinct strategies
+- **AI Opponents**: Four difficulty levels (Dummy, Easy, Medium, Hard) with distinct strategies
 - **Multiple Map Sizes**: Small (2000x2000) to Huge (5000x5000) with configurable resource and rock density
 - **Full Tech Tree**: Prerequisites system requiring specific buildings before advanced units
 - **Game Modes**:
@@ -70,25 +70,33 @@ npx vitest run tests/engine/harvester.test.ts
 | **Left Click** | Select unit/building |
 | **Left Click + Drag** | Box select multiple units |
 | **Right Click** | Move selected units / Attack target |
-| **Shift + Click** | Add to selection |
-| **Ctrl + Number** | Assign control group |
-| **Number Key** | Select control group |
-| **Escape** | Deselect all |
+| **Right Click on Well** | Deploy Induction Rig (with rig unit selected) |
+| **Double Click / Enter** | Deploy MCV (with MCV selected) |
+| **Middle Mouse Button** | Pan camera (drag to scroll) |
+| **Arrow Keys / WASD** | Pan camera |
+| **Mouse Wheel** | Zoom in/out |
+| **1-5** | Set game speed |
+| **F3** | Toggle debug mode |
+| **M** | Toggle minimap |
+| **B** | Toggle bird's eye view |
 
 ### Gameplay Basics
 
-1. **Economy**: Build a Refinery to process ore. Harvesters automatically gather resources from ore fields and ore wells.
+1. **Economy**: Build a Refinery to process ore. Harvesters automatically gather resources from ore fields.
+   - **Ore Wells**: Deploy an Induction Rig on ore wells for infinite resource extraction
+   - **Induction Rig**: Built at the War Factory, right-click on an ore well to deploy
 
 2. **Power**: Construct Power Plants to generate electricity. Many buildings require power to function.
 
 3. **Production**:
    - Barracks produces infantry units
-   - War Factory produces vehicles
+   - War Factory produces vehicles and the Induction Rig
    - Air-Force Command produces aircraft
 
 4. **Tech Tree**: Advanced units require prerequisite buildings. For example, the Tech Center unlocks elite units.
 
 5. **Combat**: Select units and right-click on enemies to attack. Units automatically engage nearby threats.
+   - **Air Strikes**: Select an Air-Force Command and right-click on a target to launch all docked harriers
 
 ## Game Content
 
@@ -137,6 +145,7 @@ npx vitest run tests/engine/harvester.test.ts
 | MLRS | 250 | 1800 | 1.8 | Rocket artillery |
 | Mammoth Tank | 1200 | 2500 | 1.5 | Superheavy assault vehicle |
 | MCV | 2000 | 3000 | 1.0 | Deploys into Construction Yard |
+| Induction Rig | 800 | 1400 | 1.5 | Deploys on ore wells for infinite resources |
 
 ### Aircraft
 
@@ -160,11 +169,12 @@ All state updates go through the central reducer (`src/engine/reducer.ts`), ensu
 ### Core Systems
 
 - **Rendering**: Pure Canvas 2D API - no frameworks
-- **Pathfinding**: A* algorithm with collision avoidance
+- **Pathfinding**: A* algorithm with collision avoidance, offloaded to Web Worker
 - **Spatial Queries**: SpatialGrid for O(1) neighbor lookups
 - **Entity System**: Component-based architecture (Movement, Combat, Harvester, AirUnit components)
 - **AI**: Modular system with threat detection, economic decisions, and combat coordination
 - **Performance**: EntityCache for per-tick categorization, power calculation caching
+- **Hot Reload**: Full HMR support preserving game state during development
 
 ### Technology Stack
 
@@ -207,7 +217,7 @@ src/
 │   └── ai.json             # AI personalities
 └── input/                  # Input handling
 
-tests/                      # ~67 test files mirroring src/
+tests/                      # 69 test files mirroring src/
 ```
 
 ## Deployment
@@ -261,8 +271,8 @@ npm run test:coverage
 
 ### Test Structure
 
-- **67 test files** mirroring the `src/` directory structure
-- Tests cover: state immutability, AI behavior, pathfinding, combat, harvesting, production
+- **69 test files** with 617+ tests mirroring the `src/` directory structure
+- Tests cover: state immutability, AI behavior, pathfinding, combat, harvesting, air units, production
 - Test utilities in `src/engine/test-utils.ts` provide builder helpers
 
 ### Game State CLI

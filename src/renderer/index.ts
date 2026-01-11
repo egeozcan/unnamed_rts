@@ -112,22 +112,22 @@ export class Renderer {
 
         // Draw resources (no owner-specific colors)
         for (const entity of resourceEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw rocks (no owner-specific colors)
         for (const entity of rockEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw wells (no owner-specific colors)
         for (const entity of wellEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw units and buildings (batched by owner for color caching)
         for (const entity of unitBuildingEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId);
+            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw projectiles
@@ -271,7 +271,7 @@ export class Renderer {
         };
     }
 
-    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null) {
+    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null, allEntities: Record<string, Entity>) {
         // Skip docked harriers - they are invisible while docked at base
         if (isAirUnit(entity) && entity.airUnit.state === 'docked') {
             return;
@@ -467,10 +467,17 @@ export class Renderer {
                     const slotId = entity.airBase.slots[i];
                     const pos = slotPositions[i] || { x: 0, y: 0 };
                     if (slotId) {
+                        const harrier = allEntities[slotId];
+                        const isReloading = harrier && isAirUnit(harrier) && harrier.airUnit.ammo < harrier.airUnit.maxAmmo;
+                        const isDamaged = harrier && harrier.hp < harrier.maxHp;
+
                         // Draw small harrier icon at slot
                         ctx.save();
                         ctx.translate(pos.x, pos.y);
-                        ctx.fillStyle = playerColor;
+
+                        // Red if reloading, else player color
+                        ctx.fillStyle = isReloading ? '#ff0000' : playerColor;
+
                         // Simple jet shape
                         ctx.beginPath();
                         ctx.moveTo(0, -8);
@@ -482,6 +489,16 @@ export class Renderer {
                         ctx.strokeStyle = '#000';
                         ctx.lineWidth = 1;
                         ctx.stroke();
+
+                        // Draw mini HP bar if damaged
+                        if (isDamaged) {
+                            const hpRatio = harrier.hp / harrier.maxHp;
+                            ctx.fillStyle = 'red';
+                            ctx.fillRect(-8, 8, 16, 3);
+                            ctx.fillStyle = '#0f0';
+                            ctx.fillRect(-8, 8, 16 * hpRatio, 3);
+                        }
+
                         ctx.restore();
                     } else {
                         // Empty slot indicator

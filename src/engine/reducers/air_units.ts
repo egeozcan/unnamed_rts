@@ -217,6 +217,22 @@ export function updateAirBase(
     const updatedHarriers: Record<EntityId, AirUnit> = {};
     const reloadTicks = RULES.buildings['airforce_command']?.reloadTicks || 120;
 
+    // Healing - Repair all docked harriers slowly (independent of reload)
+    if (_currentTick % 5 === 0) {
+        for (const slotId of airBase.slots) {
+            if (!slotId) continue;
+            const harrier = allEntities[slotId];
+            if (!harrier || harrier.dead || !isAirUnit(harrier)) continue;
+
+            if (harrier.airUnit.state === 'docked' && harrier.hp < harrier.maxHp) {
+                updatedHarriers[harrier.id] = {
+                    ...harrier,
+                    hp: Math.min(harrier.maxHp, harrier.hp + 2)
+                };
+            }
+        }
+    }
+
     // Process reload - find a docked harrier that needs ammo
     let foundHarrierNeedingReload = false;
 
@@ -234,11 +250,12 @@ export function updateAirBase(
 
             if (newProgress <= 0) {
                 // Reload complete - restore ammo
+                const prev = updatedHarriers[harrier.id] || harrier;
                 updatedHarriers[harrier.id] = {
-                    ...harrier,
+                    ...prev,
                     airUnit: {
-                        ...harrier.airUnit,
-                        ammo: harrier.airUnit.maxAmmo
+                        ...prev.airUnit,
+                        ammo: prev.airUnit.maxAmmo
                     }
                 };
 
