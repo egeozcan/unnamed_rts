@@ -552,9 +552,9 @@ canvas#gameCanvas.attack-move-mode {
     cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23ff3333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>') 16 16, crosshair;
 }
 
-/* Action Cursor - Harvest (gold/yellow ore symbol) */
+/* Action Cursor - Harvest (gold pickaxe) */
 #gameCanvas.cursor-harvest {
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%23ffd700" stroke="%23cc9900" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15,8 22,9 17,14 18,21 12,18 6,21 7,14 2,9 9,8"/></svg>') 16 16, crosshair;
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23ffd700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10l-2 2"/><path d="M4 20l6-6"/><path d="M14 4l6 6-8 8"/><path d="M18 4l2 2"/></svg>') 16 16, crosshair;
 }
 
 /* Action Cursor - Deploy (blue chevron down into box) */

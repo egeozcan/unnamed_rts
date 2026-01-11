@@ -405,20 +405,23 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                     };
                 }
             } else if (ent.key !== 'harvester' && ent.key !== 'harrier' && 'engineer' in ent && ent.engineer?.repairTargetId) {
+                // Engineer entered friendly building to repair - fully heal the building
                 const engTargetId = ent.engineer.repairTargetId;
                 const engTarget = nextEntities[engTargetId];
                 if (engTarget && engTarget.type === 'BUILDING' && engTarget.hp < engTarget.maxHp) {
-                    const repairAmount = 20; // Repair strength
+                    // Fully repair the building
                     nextEntities[engTargetId] = {
                         ...engTarget,
-                        hp: Math.min(engTarget.maxHp, engTarget.hp + repairAmount),
+                        hp: engTarget.maxHp,
                         combat: engTarget.combat ? { ...engTarget.combat, flash: 5 } : undefined
                     };
-                    nextEntities[id] = {
-                        ...ent,
-                        engineer: { ...ent.engineer, repairTargetId: null }
-                    };
                 }
+                // Engineer is consumed (already marked dead in combat.ts)
+                nextEntities[id] = {
+                    ...ent,
+                    dead: true,
+                    engineer: { ...ent.engineer, repairTargetId: null }
+                };
             }
         } else if (entity.type === 'BUILDING') {
             const res = updateBuilding(entity, state.entities, entityList);

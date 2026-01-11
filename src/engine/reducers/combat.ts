@@ -320,9 +320,14 @@ function handleCombatTarget(
 
     // Engineer special behavior
     if (isEngineer && target.type === 'BUILDING') {
-        // Capture/repair distance accounts for building size (20 pixels from edge)
-        const captureDistance = target.radius + 20;
-        if (dist < captureDistance) {
+        // Entry distance based on building bounds (not radius) - allows entry from any direction
+        const halfW = target.w / 2;
+        const halfH = target.h / 2;
+        const dx = Math.abs(unit.pos.x - target.pos.x);
+        const dy = Math.abs(unit.pos.y - target.pos.y);
+        const entryBuffer = 30; // pixels from building edge
+        const canEnter = dx < halfW + entryBuffer && dy < halfH + entryBuffer;
+        if (canEnter) {
             nextUnit = {
                 ...nextUnit,
                 movement: { ...nextUnit.movement, moveTarget: null }
@@ -337,15 +342,13 @@ function handleCombatTarget(
                     dead: true,
                     engineer: { ...nextUnit.engineer, captureTargetId: target.id }
                 };
-            } else if (target.owner === unit.owner && data.canRepairFriendlyBuildings) {
-                // Repair friendly building
-                if (unit.combat.cooldown <= 0) {
-                    nextUnit = {
-                        ...nextUnit,
-                        combat: { ...nextUnit.combat, cooldown: data.rate || 30 },
-                        engineer: { ...nextUnit.engineer, repairTargetId: target.id }
-                    };
-                }
+            } else if (target.owner === unit.owner && data.canRepairFriendlyBuildings && target.hp < target.maxHp) {
+                // Repair friendly building - engineer enters and is consumed, building fully healed
+                nextUnit = {
+                    ...nextUnit,
+                    dead: true,
+                    engineer: { ...nextUnit.engineer, repairTargetId: target.id }
+                };
             }
             return { entity: nextUnit, projectile: null };
         } else {
