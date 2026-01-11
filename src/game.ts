@@ -779,13 +779,9 @@ function handleRightClick(wx: number, wy: number) {
         return;
     }
 
-    // Cancel placement
+    // Cancel placement mode (but keep building ready to place)
     if (currentState.placingBuilding) {
-        if (humanPlayerId === null) return;
-        currentState = update(currentState, {
-            type: 'CANCEL_BUILD',
-            payload: { category: 'building', playerId: humanPlayerId }
-        });
+        currentState = update(currentState, { type: 'CANCEL_PLACEMENT' });
         updateButtonsUI();
         return;
     }

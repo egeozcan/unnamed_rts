@@ -287,6 +287,7 @@ export type Action =
     | { type: 'START_BUILD'; payload: { category: string; key: string; playerId: number } }
     | { type: 'PLACE_BUILDING'; payload: { key: string; x: number; y: number; playerId: number } }
     | { type: 'CANCEL_BUILD'; payload: { category: string; playerId: number } }
+    | { type: 'CANCEL_PLACEMENT' }
     | { type: 'SELECT_UNITS'; payload: EntityId[] }
     | { type: 'SELL_BUILDING'; payload: { buildingId: EntityId; playerId: number } }
     | { type: 'TOGGLE_SELL_MODE' }

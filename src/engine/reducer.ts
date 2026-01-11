@@ -49,6 +49,8 @@ export function update(state: GameState, action: Action): GameState {
             return placeBuilding(state, action.payload);
         case 'CANCEL_BUILD':
             return cancelBuild(state, action.payload);
+        case 'CANCEL_PLACEMENT':
+            return { ...state, placingBuilding: null };
         case 'COMMAND_MOVE':
             return commandMove(state, action.payload);
         case 'COMMAND_ATTACK':
