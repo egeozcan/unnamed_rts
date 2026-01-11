@@ -54,25 +54,29 @@ export function update(state: GameState, action: Action): GameState {
             return { ...state, placingBuilding: null };
         case 'COMMAND_MOVE': {
             const newState = commandMove(state, action.payload);
+            // Only show indicator for human commands (units in selection)
+            const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
             return {
                 ...newState,
-                commandIndicator: {
+                commandIndicator: isHumanCommand ? {
                     pos: new Vector(action.payload.x, action.payload.y),
                     type: 'move',
                     startTick: state.tick
-                }
+                } : state.commandIndicator
             };
         }
         case 'COMMAND_ATTACK': {
             const target = state.entities[action.payload.targetId];
             const newState = commandAttack(state, action.payload);
+            // Only show indicator for human commands (units in selection)
+            const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
             return {
                 ...newState,
-                commandIndicator: target ? {
+                commandIndicator: isHumanCommand && target ? {
                     pos: target.pos,
                     type: 'attack',
                     startTick: state.tick
-                } : null
+                } : state.commandIndicator
             };
         }
         case 'SELECT_UNITS':
@@ -103,13 +107,15 @@ export function update(state: GameState, action: Action): GameState {
             return dequeueUnit(state, action.payload);
         case 'COMMAND_ATTACK_MOVE': {
             const newState = commandAttackMove(state, action.payload);
+            // Only show indicator for human commands (units in selection)
+            const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
             return {
                 ...newState,
-                commandIndicator: {
+                commandIndicator: isHumanCommand ? {
                     pos: new Vector(action.payload.x, action.payload.y),
                     type: 'move',
                     startTick: state.tick
-                }
+                } : state.commandIndicator
             };
         }
         case 'SET_STANCE':
