@@ -59,6 +59,7 @@
             "hidden": true,
             "marker": "conyard",
             "armor": "building",
+            "capturable": true,
             "prerequisites": [],
             "description": "The heart of your base. Required to construct all other buildings. Protect it at all costs!"
         },
@@ -71,6 +72,7 @@
             "power": 200,
             "drain": 0,
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard"],
             "description": "Generates power for your base. Build multiple to support advanced buildings and defenses."
         },
@@ -83,6 +85,7 @@
             "drain": 30,
             "provides": "harvester",
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "power"],
             "description": "Processes ore into credits. Comes with a free Harvester. Build near ore fields for efficiency."
         },
@@ -95,6 +98,7 @@
             "drain": 10,
             "provides": "infantry",
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "power"],
             "description": "Trains infantry units. Cheap and quick to build. Essential for early defense and unlocking other buildings."
         },
@@ -107,6 +111,7 @@
             "drain": 20,
             "provides": "vehicles",
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "refinery", "barracks"],
             "description": "Produces tanks and vehicles. Key to building a strong army. Also builds MCVs and Induction Rigs."
         },
@@ -182,6 +187,7 @@
             "h": 80,
             "drain": 50,
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "factory"],
             "maxCount": 1,
             "description": "Unlocks advanced units and buildings. Grants access to Mammoth Tanks, Commandos, Artillery, and the Obelisk."
@@ -195,6 +201,7 @@
             "drain": 50,
             "provides": "air",
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "power", "barracks"],
             "landingSlots": 6,
             "reloadTicks": 120,
@@ -208,6 +215,7 @@
             "h": 120,
             "drain": 50,
             "armor": "building",
+            "capturable": true,
             "prerequisites": ["conyard", "barracks", "factory"],
             "repairRadius": 90,
             "repairRate": 2,
@@ -222,6 +230,7 @@
             "h": 50,
             "drain": 0,
             "armor": "building",
+            "capturable": true,
             "hidden": true,
             "prerequisites": [],
             "inductionEfficiency": 0.8,

@@ -1278,3 +1278,65 @@ export function updateCommandBar(state: GameState) {
     }
 }
 
+/**
+ * Update the capture cursor based on whether an engineer is selected
+ * and the mouse is hovering over a capturable enemy building.
+ */
+export function updateCaptureCursor(
+    state: GameState,
+    mouseWorldX: number,
+    mouseWorldY: number,
+    playerId: number
+): void {
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) return;
+
+    // Don't show capture cursor if in special modes
+    if (state.sellMode || state.repairMode || state.attackMoveMode || state.placingBuilding) {
+        canvas.classList.remove('capture-mode');
+        return;
+    }
+
+    // Check if any selected unit is an engineer
+    const hasEngineerSelected = state.selection.some(id => {
+        const entity = state.entities[id];
+        if (!entity || entity.dead) return false;
+        if (!isUnit(entity)) return false;
+        // Check if this unit has engineer capture capability
+        const unitData = RULES.units[entity.key];
+        return unitData && unitData.canCaptureEnemyBuildings === true;
+    });
+
+    if (!hasEngineerSelected) {
+        canvas.classList.remove('capture-mode');
+        return;
+    }
+
+    // Find entity under mouse cursor
+    let hoveredBuilding: Entity | null = null;
+    for (const id in state.entities) {
+        const entity = state.entities[id];
+        if (entity.dead) continue;
+        if (entity.type !== 'BUILDING') continue;
+
+        // Check if mouse is within building bounds
+        const dx = Math.abs(mouseWorldX - entity.pos.x);
+        const dy = Math.abs(mouseWorldY - entity.pos.y);
+        if (dx <= entity.w / 2 && dy <= entity.h / 2) {
+            hoveredBuilding = entity;
+            break;
+        }
+    }
+
+    // Check if hovered building is capturable enemy building
+    if (hoveredBuilding && hoveredBuilding.owner !== playerId && hoveredBuilding.owner !== -1) {
+        const buildingData = RULES.buildings[hoveredBuilding.key];
+        if (buildingData && buildingData.capturable === true) {
+            canvas.classList.add('capture-mode');
+            return;
+        }
+    }
+
+    canvas.classList.remove('capture-mode');
+}
+

@@ -11,7 +11,7 @@ declare global {
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
-import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar } from './ui/index.js';
+import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateCaptureCursor } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
@@ -1138,6 +1138,13 @@ function gameLoop(timestamp: number = 0) {
 
     // Render
     renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
+
+    // Update capture cursor (engineer hovering over capturable enemy building)
+    if (humanPlayerId !== null) {
+        const mouseWorldX = currentState.camera.x + input.mouse.x / currentState.zoom;
+        const mouseWorldY = currentState.camera.y + input.mouse.y / currentState.zoom;
+        updateCaptureCursor(currentState, mouseWorldX, mouseWorldY, humanPlayerId);
+    }
 
     // Minimap
     const size = renderer.getSize();

@@ -59,6 +59,7 @@ export const BuildingSchema = z.object({
   marker: z.string().optional(),
   provides: z.string().optional(),
   isDefense: z.boolean().optional(),
+  capturable: z.boolean().optional(),
   range: z.number().optional(),
   damage: z.number().optional(),
   rate: z.number().optional(),

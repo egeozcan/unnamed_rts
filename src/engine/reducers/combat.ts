@@ -320,13 +320,17 @@ function handleCombatTarget(
 
     // Engineer special behavior
     if (isEngineer && target.type === 'BUILDING') {
-        if (dist < 40) {
+        // Capture/repair distance accounts for building size (20 pixels from edge)
+        const captureDistance = target.radius + 20;
+        if (dist < captureDistance) {
             nextUnit = {
                 ...nextUnit,
                 movement: { ...nextUnit.movement, moveTarget: null }
             };
 
-            if (target.owner !== unit.owner && data.canCaptureEnemyBuildings) {
+            const targetBuildingData = RULES.buildings[target.key];
+            const isCapturable = targetBuildingData?.capturable === true;
+            if (target.owner !== unit.owner && data.canCaptureEnemyBuildings && isCapturable) {
                 // Capture enemy building - engineer is consumed
                 nextUnit = {
                     ...nextUnit,
