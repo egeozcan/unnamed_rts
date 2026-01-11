@@ -130,12 +130,12 @@ export class Renderer {
             this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
-        // Draw rally points for selected production buildings
+        // Draw rally points for selected production buildings (barracks/factory only)
+        const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
         for (const id of selection) {
             const entity = entities[id];
             if (entity && entity.type === 'BUILDING' && !entity.dead) {
-                const buildingData = RULES.buildings[entity.key];
-                if (buildingData && buildingData.provides && entity.building.rallyPoint) {
+                if (RALLY_POINT_BUILDINGS.includes(entity.key) && entity.building.rallyPoint) {
                     this.drawRallyPoint(entity, entity.building.rallyPoint, camera, zoom);
                 }
             }

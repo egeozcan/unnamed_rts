@@ -848,12 +848,13 @@ function handleRightClick(wx: number, wy: number) {
     }
 
     // Check if a production building is selected - set rally point
+    // Only barracks and factory can have rally points (not refinery or airforce_command)
+    const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
     const selectedIds = currentState.selection;
     if (selectedIds.length === 1) {
         const selectedEntity = currentState.entities[selectedIds[0]];
         if (selectedEntity && selectedEntity.type === 'BUILDING' && selectedEntity.owner === humanPlayerId) {
-            const buildingData = RULES.buildings[selectedEntity.key];
-            if (buildingData && buildingData.provides) {
+            if (RALLY_POINT_BUILDINGS.includes(selectedEntity.key)) {
                 // This is a production building - set rally point
                 currentState = update(currentState, {
                     type: 'SET_RALLY_POINT',

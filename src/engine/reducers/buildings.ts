@@ -521,6 +521,9 @@ export function updateWells(
     return { entities: nextEntities, playerCredits };
 }
 
+// Buildings that can have rally points
+const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
+
 export function setRallyPoint(state: GameState, payload: { buildingId: EntityId; x: number; y: number }): GameState {
     const { buildingId, x, y } = payload;
     const building = state.entities[buildingId];
@@ -530,9 +533,8 @@ export function setRallyPoint(state: GameState, payload: { buildingId: EntityId;
         return state;
     }
 
-    // Only production buildings can have rally points
-    const buildingData = RULES.buildings[building.key];
-    if (!buildingData || !buildingData.provides) {
+    // Only barracks and factory can have rally points
+    if (!RALLY_POINT_BUILDINGS.includes(building.key)) {
         return state;
     }
 
