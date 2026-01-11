@@ -273,6 +273,12 @@ function setupEventListeners() {
             return; // Let normal scroll behavior happen
         }
 
+        // Allow scrolling within the sidebar (building list, etc.)
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && sidebar.contains(e.target as Node)) {
+            return; // Let normal scroll behavior happen
+        }
+
         e.preventDefault();
         if (e.ctrlKey) {
             // Pinch to zoom (Mac touchpad)
