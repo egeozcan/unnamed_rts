@@ -18,7 +18,7 @@ import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeClose
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
-import { isUnit, isBuilding, isHarvester } from './engine/type-guards.js';
+import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
@@ -803,6 +803,38 @@ function handleRightClick(wx: number, wy: number) {
     // Issue commands
     const selectedIds = currentState.selection;
     if (selectedIds.length === 0) return;
+
+    // Special handling for Induction Rig: deploy on wells
+    if (targetId) {
+        const targetEntity = currentState.entities[targetId];
+        if (targetEntity && isWell(targetEntity)) {
+            // Check if we have an Induction Rig selected
+            const selectedRigId = selectedIds.find(id => {
+                const ent = currentState.entities[id];
+                return ent && ent.owner === humanPlayerId && isInductionRig(ent);
+            });
+
+            if (selectedRigId) {
+                const rig = currentState.entities[selectedRigId];
+                const deployRange = 80;
+
+                if (rig && rig.pos.dist(targetEntity.pos) <= deployRange) {
+                    // Close enough - deploy the rig
+                    currentState = update(currentState, {
+                        type: 'DEPLOY_INDUCTION_RIG',
+                        payload: { unitId: selectedRigId, wellId: targetId }
+                    });
+                } else {
+                    // Too far - move toward the well first
+                    currentState = update(currentState, {
+                        type: 'COMMAND_MOVE',
+                        payload: { unitIds: [selectedRigId], x: targetEntity.pos.x, y: targetEntity.pos.y }
+                    });
+                }
+                return;
+            }
+        }
+    }
 
     // Special handling for Air-Force Command: launch all docked harriers with ammo
     if (targetId) {
