@@ -51,7 +51,7 @@ export function canBuild(key: string, category: string, playerId: number, entiti
     return checkPrerequisites(key, playerBuildings);
 }
 
-export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
+export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' | 'dummy' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
     return {
         id,
         isAi,

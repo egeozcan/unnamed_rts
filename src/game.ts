@@ -56,6 +56,7 @@ const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
 
 let lastFrameTime = 0;
 let gameSpeed: GameSpeed = 2;
+let animationFrameId: number | null = null;
 
 function setGameSpeed(speed: GameSpeed) {
     gameSpeed = speed;
@@ -919,7 +920,7 @@ function gameLoop(timestamp: number = 0) {
     // Frame rate limiting - skip if not enough time has passed
     const elapsed = timestamp - lastFrameTime;
     if (elapsed < FRAME_TIME) {
-        requestAnimationFrame(gameLoop);
+        animationFrameId = requestAnimationFrame(gameLoop);
         return;
     }
     lastFrameTime = timestamp - (elapsed % FRAME_TIME);
@@ -1056,7 +1057,7 @@ function gameLoop(timestamp: number = 0) {
     // Debug UI
     updateDebugUI(currentState);
 
-    requestAnimationFrame(gameLoop);
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 function calculatePower(pid: number, entities: Record<EntityId, any>) {
@@ -1104,14 +1105,60 @@ function checkWinCondition() {
 
 window.startGame = startGameWithConfig;
 
-// HMR: Save state before module is replaced
+// HMR: Save and restore state across hot reloads
 if (import.meta.hot) {
+    // Restore state from previous module if available
+    if (import.meta.hot.data?.gameState) {
+        const savedState = import.meta.hot.data.gameState;
+        currentState = reconstructVectors(savedState);
+        humanPlayerId = import.meta.hot.data.humanPlayerId;
+        gameSpeed = import.meta.hot.data.gameSpeed || 2;
+        console.log('[HMR] Restored game state from hot reload');
+
+        // Reinitialize input with fresh callbacks after state restoration
+        const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+        if (canvas) {
+            initInput(canvas, {
+                onLeftClick: handleLeftClick,
+                onRightClick: handleRightClick,
+                onDeployMCV: attemptMCVDeploy,
+                onToggleDebug: () => {
+                    currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
+                    updateButtonsUI();
+                },
+                onToggleMinimap: () => {
+                    if (currentState.mode === 'demo') {
+                        currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
+                    }
+                },
+                onToggleBirdsEye: () => {
+                    currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
+                },
+                onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
+                    setGameSpeed(speed);
+                },
+                getZoom: () => currentState.zoom,
+                getCamera: () => currentState.camera
+            });
+
+            // Restart the game loop
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+    }
+
     import.meta.hot.accept();
     import.meta.hot.dispose((data) => {
+        // Cancel the animation frame to prevent duplicate loops
+        if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+
         // Only save if game is running (not in menu)
         if (currentState.mode !== 'menu') {
             data.gameState = currentState;
             data.humanPlayerId = humanPlayerId;
+            data.gameSpeed = gameSpeed;
             console.log('[HMR] Saved game state for hot reload');
         }
     });

@@ -62,6 +62,7 @@ let onToggleBirdsEye: (() => void) | null = null;
 let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
+let listenersInitialized = false;
 
 export function initInput(
     gameCanvas: HTMLCanvasElement,
@@ -88,7 +89,11 @@ export function initInput(
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
-    setupEventListeners();
+    // Only set up event listeners once - callbacks are updated via module variables
+    if (!listenersInitialized) {
+        setupEventListeners();
+        listenersInitialized = true;
+    }
 }
 
 function screenToWorld(sx: number, sy: number): Vector {
