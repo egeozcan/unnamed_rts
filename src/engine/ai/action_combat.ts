@@ -372,7 +372,12 @@ function handleGroupCohesion(
                     atRallyCount++;
                 }
                 if (distToRally >= 100) {
-                    unitsToRallyIds.push(aliveUnits[i]);
+                    // Only add if not already moving toward rally point
+                    // This prevents re-commanding units that are in transit, which causes circling
+                    const existingTarget = unit.movement.moveTarget;
+                    if (!existingTarget || existingTarget.dist(group.rallyPoint!) > 150) {
+                        unitsToRallyIds.push(aliveUnits[i]);
+                    }
                 }
             }
         }
@@ -431,8 +436,14 @@ function handleGroupCohesion(
             const stragglerIds: EntityId[] = [];
             const frontUnitIds: EntityId[] = [];
             for (let i = 0; i < unitRefs.length; i++) {
-                if (unitRefs[i].pos.dist(groupCenter) > stragglerThreshold) {
-                    stragglerIds.push(aliveUnits[i]);
+                const unit = unitRefs[i];
+                if (unit.pos.dist(groupCenter) > stragglerThreshold) {
+                    // Only add straggler if not already heading toward group center
+                    // This prevents re-commanding and circling
+                    const existingTarget = unit.movement.moveTarget;
+                    if (!existingTarget || existingTarget.dist(groupCenter) > 100) {
+                        stragglerIds.push(aliveUnits[i]);
+                    }
                 } else {
                     frontUnitIds.push(aliveUnits[i]);
                 }
@@ -466,14 +477,24 @@ function handleGroupCohesion(
         }
 
         // Group is cohesive - move toward target
-        actions.push({
-            type: 'COMMAND_MOVE',
-            payload: {
-                unitIds: aliveUnits,
-                x: group.moveTarget.x,
-                y: group.moveTarget.y
-            }
+        // Filter out units already heading to the target to prevent re-commanding and circling
+        const targetPos = group.moveTarget;
+        const unitsNeedingCommand = aliveUnits.filter((_id, i) => {
+            const existingTarget = unitRefs[i].movement.moveTarget;
+            if (!existingTarget) return true; // Not moving, needs command
+            return existingTarget.dist(targetPos) > 150; // Moving to wrong place
         });
+
+        if (unitsNeedingCommand.length > 0) {
+            actions.push({
+                type: 'COMMAND_MOVE',
+                payload: {
+                    unitIds: unitsNeedingCommand,
+                    x: group.moveTarget.x,
+                    y: group.moveTarget.y
+                }
+            });
+        }
         return actions;
     }
 
