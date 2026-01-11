@@ -154,9 +154,23 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
         return state;
     }
 
+    // Expand unitIds to include harriers from any selected airforce_command buildings
+    const expandedUnitIds: EntityId[] = [...unitIds];
+    for (const id of unitIds) {
+        const entity = state.entities[id];
+        if (entity && entity.type === 'BUILDING' && entity.key === 'airforce_command' && entity.airBase) {
+            // Add all docked harriers from this air base
+            for (const slotId of entity.airBase.slots) {
+                if (slotId && !expandedUnitIds.includes(slotId)) {
+                    expandedUnitIds.push(slotId);
+                }
+            }
+        }
+    }
+
     // Collect combat units that will attack
     const attackers: UnitEntity[] = [];
-    for (const id of unitIds) {
+    for (const id of expandedUnitIds) {
         const entity = state.entities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT' &&
             entity.key !== 'harvester' && !isAirUnit(entity) &&
@@ -191,7 +205,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     }
 
     let nextEntities = { ...state.entities };
-    for (const id of unitIds) {
+    for (const id of expandedUnitIds) {
         const entity = nextEntities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
             // Special handling for harvesters: right-clicking on resources or refineries
