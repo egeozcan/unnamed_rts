@@ -66,9 +66,12 @@ export function updateCombatUnitBehavior(
     }
 
     // Handle targeting and attacking
+    const isHealer = data.damage < 0;
     if (nextEntity.combat.targetId) {
         const target = allEntities[nextEntity.combat.targetId];
-        if (target && !target.dead) {
+        // Clear target if: dead, gone, or healer's target is fully healed
+        const shouldClearTarget = !target || target.dead || (isHealer && target.hp >= target.maxHp);
+        if (target && !shouldClearTarget) {
             // Check if we should give up pursuit (defensive/attack-move distance limit)
             if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
                 nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
@@ -78,7 +81,7 @@ export function updateCombatUnitBehavior(
                 projectile = result.projectile;
             }
         } else {
-            // Target dead or gone - handle return behavior
+            // Target dead, gone, or fully healed - handle return behavior
             nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
         }
     } else if (nextEntity.movement.moveTarget) {
