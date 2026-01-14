@@ -165,6 +165,7 @@ describe('Harvester Dancing Bug', () => {
         const fleeDestination = new Vector(400, 400);
 
         // Harvester with low cargo - should continue fleeing if targeted
+        // When fleeing (manual move), manualMode is set to true
         state = spawnHarvester(state, 380, 380, 'harv1', 0);
         const harvester = state.entities['harv1'] as HarvesterUnit;
         state = {
@@ -178,6 +179,7 @@ describe('Harvester Dancing Bug', () => {
                         cargo: 100, // NOT full
                         resourceTargetId: null,
                         baseTargetId: null,
+                        manualMode: true, // Fleeing/move command sets manual mode
                     },
                     movement: {
                         ...harvester.movement,

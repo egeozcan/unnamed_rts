@@ -74,6 +74,7 @@ export function updateHarvesterBehavior(
         const result = handleGathering(nextEntity, allEntities, entityList, currentTick, harvesterCounts, spatialGrid);
         nextEntity = result.entity;
         resourceDamage = result.resourceDamage;
+        creditsEarned = result.creditsEarned;
     }
 
     return { entity: nextEntity, projectile, creditsEarned, resourceDamage };
@@ -209,10 +210,11 @@ function handleGathering(
     currentTick: number,
     harvesterCounts?: Record<EntityId, number>,
     spatialGrid?: ReturnType<typeof getSpatialGrid>
-): { entity: HarvesterUnit, resourceDamage: { id: string, amount: number } | null } {
+): { entity: HarvesterUnit, resourceDamage: { id: string, amount: number } | null, creditsEarned: number } {
 
     let nextHarvester = harvester;
     let resourceDamage: { id: string, amount: number } | null = null;
+    let creditsEarned = 0;
     const grid = spatialGrid || getSpatialGrid();
 
     // Only skip resource finding if manualMode is explicitly true
@@ -260,9 +262,59 @@ function handleGathering(
                 harvester: { ...nextHarvester.harvester, blockedOreId: null }
             };
         }
+
+        // If harvester has partial cargo and can't find ore, return to base with what it has
+        // This prevents harvesters from sitting idle when all ore is depleted or too far away
+        // Only do this if:
+        // - Has significant cargo (> 50)
+        // - Not currently fleeing/moving (no moveTarget)
+        // - Not in manual mode (player hasn't issued move command)
+        // - Not already heading to base
+        const hasSignificantCargo = nextHarvester.harvester.cargo > 50;
+        const notCurrentlyMoving = !nextHarvester.movement.moveTarget;
+        if (hasSignificantCargo && notCurrentlyMoving && !isManualMode && !nextHarvester.harvester.baseTargetId) {
+            const bestRef = grid.findNearest(
+                nextHarvester.pos.x, nextHarvester.pos.y, 5000,
+                (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead
+            );
+            if (bestRef) {
+                nextHarvester = {
+                    ...nextHarvester,
+                    harvester: { ...nextHarvester.harvester, baseTargetId: bestRef.id }
+                };
+                // Move toward the refinery dock
+                const dockPos = bestRef.pos.add(new Vector(0, 100));
+                nextHarvester = moveToward(nextHarvester, dockPos, entityList) as HarvesterUnit;
+            }
+        }
+        // If we have baseTargetId set (from previous tick or above), move toward it
+        else if (nextHarvester.harvester.cargo > 0 && nextHarvester.harvester.baseTargetId) {
+            const ref = allEntities[nextHarvester.harvester.baseTargetId];
+            if (ref && !ref.dead) {
+                const dockPos = ref.pos.add(new Vector(0, 100));
+                const dist = nextHarvester.pos.dist(dockPos);
+                if (dist < 20) {
+                    // At dock - unload and earn credits for partial cargo
+                    creditsEarned = Math.floor(nextHarvester.harvester.cargo);
+                    nextHarvester = {
+                        ...nextHarvester,
+                        harvester: { ...nextHarvester.harvester, cargo: 0, baseTargetId: null }
+                    };
+                } else {
+                    // Move toward dock
+                    nextHarvester = moveToward(nextHarvester, dockPos, entityList) as HarvesterUnit;
+                }
+            } else {
+                // Refinery destroyed - clear target
+                nextHarvester = {
+                    ...nextHarvester,
+                    harvester: { ...nextHarvester.harvester, baseTargetId: null }
+                };
+            }
+        }
     }
 
-    return { entity: nextHarvester, resourceDamage };
+    return { entity: nextHarvester, resourceDamage, creditsEarned };
 }
 
 /**

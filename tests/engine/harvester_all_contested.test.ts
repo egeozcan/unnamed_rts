@@ -391,4 +391,73 @@ describe('Harvester All Contested Ore Fallback', () => {
         expect(foundTarget).toBe(true);
         expect(harvestedSomething).toBe(true);
     });
+
+    it('should return to base with partial cargo when no ore is available', () => {
+        let state = createTestState();
+
+        // Player 1's refinery (needed to return cargo)
+        state.entities['ref_p1'] = createTestBuilding({
+            id: 'ref_p1',
+            owner: 1,
+            key: 'refinery',
+            x: 300,
+            y: 200,
+        });
+
+        // Harvester with partial cargo but no ore anywhere
+        state.entities['harv_test'] = createTestHarvester({
+            id: 'harv_test',
+            owner: 1,
+            x: 500,
+            y: 500,
+            resourceTargetId: null,
+            cargo: 200, // Partial cargo (> 50)
+            manualMode: false, // Auto-harvest mode
+        });
+
+        // No ore in the game - harvester should return to base with partial cargo
+
+        // Run several ticks
+        for (let i = 0; i < 10; i++) {
+            state = tick(state);
+        }
+
+        const harv = state.entities['harv_test'] as HarvesterUnit;
+
+        // Should be heading to refinery with partial cargo
+        expect(harv.harvester.baseTargetId).toBe('ref_p1');
+    });
+
+    it('should NOT return to base with partial cargo if in manual mode', () => {
+        let state = createTestState();
+
+        state.entities['ref_p1'] = createTestBuilding({
+            id: 'ref_p1',
+            owner: 1,
+            key: 'refinery',
+            x: 300,
+            y: 200,
+        });
+
+        // Harvester with partial cargo but in manual mode (player commanded move)
+        state.entities['harv_test'] = createTestHarvester({
+            id: 'harv_test',
+            owner: 1,
+            x: 500,
+            y: 500,
+            resourceTargetId: null,
+            cargo: 200,
+            manualMode: true, // Player issued move command
+        });
+
+        // Run several ticks
+        for (let i = 0; i < 10; i++) {
+            state = tick(state);
+        }
+
+        const harv = state.entities['harv_test'] as HarvesterUnit;
+
+        // Should NOT be heading to refinery because manual mode is on
+        expect(harv.harvester.baseTargetId).toBeNull();
+    });
 });
