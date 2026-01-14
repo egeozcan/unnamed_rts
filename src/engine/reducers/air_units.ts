@@ -140,14 +140,8 @@ export function updateAirUnitState(
                             }
                         };
                     } else {
-                        // No slot available - hover and wait (shouldn't happen normally)
-                        nextEntity = {
-                            ...nextEntity,
-                            movement: {
-                                ...nextEntity.movement,
-                                vel: new Vector(0, 0)
-                            }
-                        };
+                        // No slot available at home base - try to find another base
+                        nextEntity = findNewHomeBase(nextEntity, allEntities);
                     }
                 } else {
                     // Move toward base
@@ -165,9 +159,10 @@ export function updateAirUnitState(
 
 /**
  * Find a new home base for a stranded harrier.
+ * If no base with available slots exists, the harrier crashes (dies).
  */
 function findNewHomeBase(entity: AirUnit, allEntities: Record<EntityId, Entity>): AirUnit {
-    // Find another Air-Force Command owned by same player
+    // Find another Air-Force Command owned by same player with available slot
     for (const id in allEntities) {
         const e = allEntities[id];
         if (e.type === 'BUILDING' && e.key === 'airforce_command' &&
@@ -188,10 +183,12 @@ function findNewHomeBase(entity: AirUnit, allEntities: Record<EntityId, Entity>)
         }
     }
 
-    // No base found - harrier stays in returning state but has no valid destination
-    // Eventually could crash or self-destruct, but for now just hover
+    // No base with available slot found - harrier crashes (out of fuel)
+    // This applies to both AI and human players
     return {
         ...entity,
+        dead: true,
+        hp: 0,
         movement: {
             ...entity.movement,
             vel: new Vector(0, 0)

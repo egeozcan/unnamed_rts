@@ -632,8 +632,17 @@ export function handleEconomy(
         const hasAirforce = hasProductionBuildingFor('air', buildings);
         const airQueueEmpty = !player.queues.air.current;
 
+        // Count total slots available (6 per airforce command) and current harriers
+        const airforceCommands = buildings.filter(b => b.key === 'airforce_command' && !b.dead);
+        const totalSlots = airforceCommands.length * 6;
+        const currentHarriers = Object.values(state.entities).filter(
+            e => e.type === 'UNIT' && e.key === 'harrier' && e.owner === playerId && !e.dead
+        ).length;
+        const harriersInQueue = player.queues.air.current ? 1 : 0;
+        const hasAvailableSlots = (currentHarriers + harriersInQueue) < totalSlots;
+
         // Lower threshold for harrier production (800 instead of 1500) to build air power faster
-        if (hasAirforce && airQueueEmpty && !isPanic && creditsRemaining > creditBuffer + 800) {
+        if (hasAirforce && airQueueEmpty && hasAvailableSlots && !isPanic && creditsRemaining > creditBuffer + 800) {
             const harrierData = RULES.units['harrier'];
             const harrierReqsMet = checkPrerequisites('harrier', buildings);
             const cost = harrierData?.cost || 0;

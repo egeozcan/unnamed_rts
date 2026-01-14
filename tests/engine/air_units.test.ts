@@ -328,6 +328,101 @@ describe('Air Units - Harrier State Machine', () => {
             expect(result.entity.airUnit.homeBaseId).toBe('base2');
             expect(result.entity.airUnit.state).toBe('returning');
         });
+
+        it('should crash (die) if no base available anywhere', () => {
+            // Harrier with no home base and no other bases available
+            const harrier = createTestHarrier({
+                id: 'harrier1',
+                owner: 0,
+                x: 500,
+                y: 500,
+                state: 'returning',
+                homeBaseId: 'base1', // Home base doesn't exist
+                ammo: 0
+            });
+
+            const entities: Record<EntityId, Entity> = {
+                harrier1: harrier
+            };
+
+            const result = updateAirUnitState(harrier, entities, Object.values(entities));
+
+            // Should crash - no base to return to
+            expect(result.entity.dead).toBe(true);
+            expect(result.entity.hp).toBe(0);
+        });
+
+        it('should crash if home base slot is full and no other base available', () => {
+            // Home base with all slots full
+            const fullBase = createTestAirforceCommand({
+                id: 'base1',
+                owner: 0,
+                x: 100,
+                y: 100,
+                slots: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] // All slots full
+            });
+            const harrier = createTestHarrier({
+                id: 'harrier_new',
+                owner: 0,
+                x: 100,
+                y: 100, // At the base
+                state: 'returning',
+                homeBaseId: 'base1',
+                ammo: 0
+            });
+
+            const entities: Record<EntityId, Entity> = {
+                base1: fullBase,
+                harrier_new: harrier
+            };
+
+            const result = updateAirUnitState(harrier, entities, Object.values(entities));
+
+            // Should crash - no slot available
+            expect(result.entity.dead).toBe(true);
+            expect(result.entity.hp).toBe(0);
+        });
+
+        it('should find alternate base if home base slots are full', () => {
+            // Home base with all slots full
+            const fullBase = createTestAirforceCommand({
+                id: 'base1',
+                owner: 0,
+                x: 100,
+                y: 100,
+                slots: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] // All slots full
+            });
+            // Second base with empty slot
+            const emptyBase = createTestAirforceCommand({
+                id: 'base2',
+                owner: 0,
+                x: 800,
+                y: 800,
+                slots: [null, null, null, null, null, null]
+            });
+            const harrier = createTestHarrier({
+                id: 'harrier_new',
+                owner: 0,
+                x: 100,
+                y: 100, // At the full base
+                state: 'returning',
+                homeBaseId: 'base1',
+                ammo: 0
+            });
+
+            const entities: Record<EntityId, Entity> = {
+                base1: fullBase,
+                base2: emptyBase,
+                harrier_new: harrier
+            };
+
+            const result = updateAirUnitState(harrier, entities, Object.values(entities));
+
+            // Should redirect to base2
+            expect(result.entity.dead).toBeFalsy();
+            expect(result.entity.airUnit.homeBaseId).toBe('base2');
+            expect(result.entity.airUnit.state).toBe('returning');
+        });
     });
 });
 
