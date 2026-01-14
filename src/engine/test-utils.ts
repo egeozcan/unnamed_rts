@@ -89,7 +89,7 @@ export function createTestHarvester(options: HarvesterOptions = {}): HarvesterUn
             cargo: options.cargo ?? 0,
             resourceTargetId: options.resourceTargetId ?? null,
             baseTargetId: options.baseTargetId ?? null,
-            manualMode: options.manualMode,
+            manualMode: options.manualMode ?? false,
             harvestAttemptTicks: options.harvestAttemptTicks ?? 0
         }
     };

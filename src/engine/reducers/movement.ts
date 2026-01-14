@@ -163,8 +163,17 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         const d = entity.pos.dist(other.pos);
         const minDist = entity.radius + other.radius;
 
-        if (d < minDist + 3 && d > 0.001) {
-            const weight = (minDist + 3 - d) / (minDist + 3);
+        // Soft buffer zone: start gentle avoidance at minDist + 15, increase force as units overlap
+        // This prevents the abrupt on/off separation that causes vibration
+        const softBuffer = 15;
+        const hardBuffer = 3;
+        if (d < minDist + softBuffer && d > 0.001) {
+            // Smooth weight: 0 at soft buffer edge, 1 at hard overlap
+            const softWeight = Math.max(0, (minDist + softBuffer - d) / softBuffer) * 0.3;
+            const hardWeight = d < minDist + hardBuffer
+                ? Math.max(0, (minDist + hardBuffer - d) / (minDist + hardBuffer)) * 0.7
+                : 0;
+            const weight = softWeight + hardWeight;
             separation = separation.add(entity.pos.sub(other.pos).norm().scale(weight));
             entityCount++;
         }
@@ -226,6 +235,20 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         if (fdMag > 0.001) {
             fdX /= fdMag;
             fdY /= fdMag;
+        } else if (entityCount > 0) {
+            // Combined direction is near-zero (direction and separation cancel out)
+            // This happens when units cluster around a target - prioritize escaping the cluster
+            // Use separation direction if available, otherwise use perpendicular to target
+            const sepMag = separation.mag();
+            if (sepMag > 0.001) {
+                // Move in separation direction (away from cluster)
+                fdX = separation.x / sepMag;
+                fdY = separation.y / sepMag;
+            } else {
+                // Fallback: move perpendicular to target (right side)
+                fdX = rightX;
+                fdY = rightY;
+            }
         }
         finalDir = new Vector(fdX, fdY);
 

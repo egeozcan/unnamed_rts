@@ -127,7 +127,7 @@ describe('Unit Control', () => {
             return createTestResource({ id, x: pos.x, y: pos.y });
         }
 
-        it('freshly spawned harvester should not auto-move to ore', () => {
+        it('freshly spawned harvester should auto-move to ore by default', () => {
             let state = createTestState();
 
             // Create harvester and nearby ore
@@ -139,6 +139,38 @@ describe('Unit Control', () => {
                     'cy0': createBuilding('cy0', 0, new Vector(100, 500)),
                     'cy1': createBuilding('cy1', 1, new Vector(900, 500)),
                     'harv1': createHarvester('harv1', 0, new Vector(500, 500), 0),
+                    'ore1': createOre('ore1', new Vector(600, 500))
+                }
+            };
+
+            // Run several ticks
+            for (let i = 0; i < 10; i++) {
+                state = update(state, { type: 'TICK' });
+            }
+
+            // Harvester SHOULD auto-target the ore (manualMode: false by default)
+            const harv = state.entities['harv1'] as HarvesterUnit;
+            expect(harv.harvester.resourceTargetId).toBe('ore1');
+        });
+
+        it('harvester in manual mode should not auto-move to ore', () => {
+            let state = createTestState();
+
+            // Create harvester with manualMode: true and nearby ore
+            state = {
+                ...state,
+                entities: {
+                    ...state.entities,
+                    'cy0': createBuilding('cy0', 0, new Vector(100, 500)),
+                    'cy1': createBuilding('cy1', 1, new Vector(900, 500)),
+                    'harv1': createTestHarvester({
+                        id: 'harv1',
+                        owner: 0,
+                        x: 500,
+                        y: 500,
+                        cargo: 0,
+                        manualMode: true
+                    }),
                     'ore1': createOre('ore1', new Vector(600, 500))
                 }
             };

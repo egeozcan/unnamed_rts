@@ -215,7 +215,9 @@ function handleGathering(
     let resourceDamage: { id: string, amount: number } | null = null;
     const grid = spatialGrid || getSpatialGrid();
 
-    const isManualMode = nextHarvester.harvester.manualMode !== false;
+    // Only skip resource finding if manualMode is explicitly true
+    // (undefined or false both mean auto-harvest mode)
+    const isManualMode = nextHarvester.harvester.manualMode === true;
 
     // Find a resource target if we don't have one
     if (!nextHarvester.harvester.resourceTargetId && !isManualMode) {
@@ -233,6 +235,29 @@ function handleGathering(
             nextHarvester = {
                 ...nextHarvester,
                 harvester: { ...nextHarvester.harvester, resourceTargetId: null, harvestAttemptTicks: 0 }
+            };
+        }
+    } else {
+        // No ore target found - reset stale harvestAttemptTicks and clear blocked ore if timer expired
+        // This prevents harvesters from staying in a stale state when all ore is unavailable
+        const harvestAttemptTicks = nextHarvester.harvester.harvestAttemptTicks ?? 0;
+        if (harvestAttemptTicks > 0) {
+            nextHarvester = {
+                ...nextHarvester,
+                harvester: {
+                    ...nextHarvester.harvester,
+                    harvestAttemptTicks: 0,
+                    lastDistToOre: null,
+                    bestDistToOre: null
+                }
+            };
+        }
+        // Clear blocked ore timer so harvester can retry previously blocked ore
+        const blockedOreTimer = nextHarvester.harvester.blockedOreTimer ?? 0;
+        if (nextHarvester.harvester.blockedOreId && blockedOreTimer <= 0) {
+            nextHarvester = {
+                ...nextHarvester,
+                harvester: { ...nextHarvester.harvester, blockedOreId: null }
             };
         }
     }
@@ -313,10 +338,45 @@ function findResourceTarget(
         }
     }
 
+    // Final fallback: if all ore is contested (2+ harvesters), pick the least contested one
+    // This prevents harvesters from freezing when all ore patches are busy
+    if (!bestOre) {
+        let leastContestedOre: Entity | null = null;
+        let lowestCount = Infinity;
+        let closestDist = Infinity;
+
+        const allNearbyOre = grid.queryRadiusByType(harvester.pos.x, harvester.pos.y, 2000, 'RESOURCE');
+        for (const other of allNearbyOre) {
+            if (other.dead || other.id === blockedOreId) continue;
+            const harvestersAtOre = harvestersPerOre[other.id] || 0;
+            const dist = harvester.pos.dist(other.pos);
+
+            // Prefer ore with fewer harvesters, then by distance
+            if (harvestersAtOre < lowestCount ||
+                (harvestersAtOre === lowestCount && dist < closestDist)) {
+                lowestCount = harvestersAtOre;
+                closestDist = dist;
+                leastContestedOre = other;
+            }
+        }
+
+        if (leastContestedOre) {
+            bestOre = leastContestedOre;
+        }
+    }
+
     if (bestOre) {
+        // Reset harvestAttemptTicks when assigning a NEW target to prevent
+        // stale values from triggering "contested ore" logic immediately
         return {
             ...harvester,
-            harvester: { ...harvester.harvester, resourceTargetId: bestOre.id }
+            harvester: {
+                ...harvester.harvester,
+                resourceTargetId: bestOre.id,
+                harvestAttemptTicks: 0,
+                lastDistToOre: null,
+                bestDistToOre: null
+            }
         };
     }
 
