@@ -438,6 +438,43 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
             continue;
         }
 
+        // Check for demo truck - render with danger glow
+        if (e.type === 'UNIT' && e.key === 'demo_truck') {
+            const pulse = 0.5 + 0.5 * Math.sin(time / 150);
+            const x = e.pos.x * sx;
+            const y = e.pos.y * sy;
+            const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
+            const glowRadius = baseSize + pulse * 10;
+
+            // Outer danger glow (red/orange pulsing)
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+            gradient.addColorStop(0, `rgba(255, 100, 0, ${0.9 * pulse})`);
+            gradient.addColorStop(0.4, `rgba(255, 50, 0, ${0.5 * pulse})`);
+            gradient.addColorStop(1, 'rgba(200, 0, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Diamond shape core with player color
+            const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
+                ? PLAYER_COLORS[e.owner]
+                : '#ff6600';
+            drawShape(ctx, x, y, baseSize, 'diamond', playerColor);
+
+            // Warning stripes overlay
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, y - baseSize / 2);
+            ctx.lineTo(x + baseSize / 2, y);
+            ctx.lineTo(x, y + baseSize / 2);
+            ctx.lineTo(x - baseSize / 2, y);
+            ctx.closePath();
+            ctx.stroke();
+            continue;
+        }
+
         let color: string;
         if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {
             color = PLAYER_COLORS[e.owner];

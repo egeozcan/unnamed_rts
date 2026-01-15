@@ -42,10 +42,18 @@
         }
     },
     "productionBuildings": {
-        "building": ["conyard"],
-        "infantry": ["barracks"],
-        "vehicle": ["factory"],
-        "air": ["airforce_command"]
+        "building": [
+            "conyard"
+        ],
+        "infantry": [
+            "barracks"
+        ],
+        "vehicle": [
+            "factory"
+        ],
+        "air": [
+            "airforce_command"
+        ]
     },
     "buildings": {
         "conyard": {
@@ -73,7 +81,9 @@
             "drain": 0,
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard"],
+            "prerequisites": [
+                "conyard"
+            ],
             "description": "Generates power for your base. Build multiple to support advanced buildings and defenses."
         },
         "refinery": {
@@ -86,7 +96,10 @@
             "provides": "harvester",
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "power"],
+            "prerequisites": [
+                "conyard",
+                "power"
+            ],
             "description": "Processes ore into credits. Comes with a free Harvester. Build near ore fields for efficiency."
         },
         "barracks": {
@@ -99,7 +112,10 @@
             "provides": "infantry",
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "power"],
+            "prerequisites": [
+                "conyard",
+                "power"
+            ],
             "description": "Trains infantry units. Cheap and quick to build. Essential for early defense and unlocking other buildings."
         },
         "factory": {
@@ -112,7 +128,11 @@
             "provides": "vehicles",
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "refinery", "barracks"],
+            "prerequisites": [
+                "conyard",
+                "refinery",
+                "barracks"
+            ],
             "description": "Produces tanks and vehicles. Key to building a strong army. Also builds MCVs and Induction Rigs."
         },
         "turret": {
@@ -128,7 +148,10 @@
             "isDefense": true,
             "armor": "building",
             "weaponType": "cannon",
-            "prerequisites": ["conyard", "barracks"],
+            "prerequisites": [
+                "conyard",
+                "barracks"
+            ],
             "description": "Anti-ground defense. Effective against vehicles and infantry. Cannot target aircraft."
         },
         "sam_site": {
@@ -144,7 +167,10 @@
             "isDefense": true,
             "armor": "building",
             "weaponType": "missile",
-            "prerequisites": ["conyard", "barracks"],
+            "prerequisites": [
+                "conyard",
+                "barracks"
+            ],
             "description": "Anti-air defense. Essential against helicopters and harriers. Cannot target ground units."
         },
         "pillbox": {
@@ -160,7 +186,10 @@
             "isDefense": true,
             "armor": "building",
             "weaponType": "bullet",
-            "prerequisites": ["conyard", "barracks"],
+            "prerequisites": [
+                "conyard",
+                "barracks"
+            ],
             "description": "Cheap anti-infantry defense. Fast firing but weak against armor. Good for base perimeters."
         },
         "obelisk": {
@@ -176,7 +205,10 @@
             "isDefense": true,
             "armor": "building",
             "weaponType": "laser",
-            "prerequisites": ["conyard", "tech"],
+            "prerequisites": [
+                "conyard",
+                "tech"
+            ],
             "description": "Advanced laser defense. Devastating damage against all targets. High power drain. Requires Tech Center."
         },
         "tech": {
@@ -188,7 +220,10 @@
             "drain": 50,
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "factory"],
+            "prerequisites": [
+                "conyard",
+                "factory"
+            ],
             "maxCount": 1,
             "description": "Unlocks advanced units and buildings. Grants access to Mammoth Tanks, Commandos, Artillery, and the Obelisk."
         },
@@ -202,7 +237,11 @@
             "provides": "air",
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "power", "barracks"],
+            "prerequisites": [
+                "conyard",
+                "power",
+                "barracks"
+            ],
             "landingSlots": 6,
             "reloadTicks": 120,
             "description": "Produces and rearms aircraft. Select this building and right-click an enemy to launch all docked Harriers at once."
@@ -216,7 +255,11 @@
             "drain": 50,
             "armor": "building",
             "capturable": true,
-            "prerequisites": ["conyard", "barracks", "factory"],
+            "prerequisites": [
+                "conyard",
+                "barracks",
+                "factory"
+            ],
             "repairRadius": 90,
             "repairRate": 2,
             "maxCount": 1,
@@ -250,7 +293,9 @@
             "w": 15,
             "armor": "infantry",
             "weaponType": "bullet",
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Basic infantry. Cheap and fast to train. Effective in groups against infantry, weak against armor."
         },
         "rocket": {
@@ -266,7 +311,9 @@
             "splash": 25,
             "armor": "infantry",
             "weaponType": "rocket",
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Anti-armor infantry. Fires rockets with splash damage. Effective vs vehicles and aircraft."
         },
         "engineer": {
@@ -282,7 +329,9 @@
             "armor": "infantry",
             "canCaptureEnemyBuildings": true,
             "canRepairFriendlyBuildings": true,
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Support unit. Right-click enemy buildings to capture them. Right-click friendly buildings to repair."
         },
         "medic": {
@@ -297,7 +346,9 @@
             "w": 15,
             "armor": "infantry",
             "weaponType": "heal",
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Healer unit. Automatically heals nearby friendly infantry. Keep behind front lines for best results."
         },
         "sniper": {
@@ -312,7 +363,10 @@
             "w": 15,
             "armor": "infantry",
             "weaponType": "sniper",
-            "prerequisites": ["barracks", "tech"],
+            "prerequisites": [
+                "barracks",
+                "tech"
+            ],
             "description": "Long-range specialist. Extreme range and damage, one-shots most infantry. Fragile and slow to fire."
         },
         "flamer": {
@@ -328,7 +382,9 @@
             "splash": 30,
             "armor": "infantry",
             "weaponType": "flame",
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Short-range area damage. Devastating vs grouped infantry and buildings. Very short range, vulnerable."
         },
         "grenadier": {
@@ -344,7 +400,9 @@
             "splash": 35,
             "armor": "infantry",
             "weaponType": "grenade",
-            "prerequisites": ["barracks"],
+            "prerequisites": [
+                "barracks"
+            ],
             "description": "Splash damage infantry. Grenades deal area damage. Good vs infantry groups and light vehicles."
         },
         "commando": {
@@ -359,7 +417,10 @@
             "w": 15,
             "armor": "infantry",
             "weaponType": "ap_bullet",
-            "prerequisites": ["barracks", "tech"],
+            "prerequisites": [
+                "barracks",
+                "tech"
+            ],
             "description": "Elite soldier. Fast, tough, armor-piercing rounds. Expensive but extremely effective vs all targets."
         },
         "harvester": {
@@ -375,7 +436,10 @@
             "capacity": 500,
             "armor": "heavy",
             "weaponType": "bullet",
-            "prerequisites": ["refinery", "factory"],
+            "prerequisites": [
+                "refinery",
+                "factory"
+            ],
             "description": "Resource gatherer. Automatically collects ore and returns to Refinery. Right-click ore fields to redirect."
         },
         "jeep": {
@@ -390,7 +454,9 @@
             "w": 22,
             "armor": "light",
             "weaponType": "bullet",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "canAttackWhileMoving": true,
             "description": "Fast scout vehicle. Very fast with drive-by attacks. Great for harassing and early scouting."
         },
@@ -406,7 +472,9 @@
             "w": 25,
             "armor": "light",
             "weaponType": "ap_bullet",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "canAttackWhileMoving": true,
             "description": "Fast armored transport. Good speed and armor-piercing gun. Can fire while moving."
         },
@@ -422,7 +490,9 @@
             "w": 28,
             "armor": "medium",
             "weaponType": "cannon",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "canAttackWhileMoving": true,
             "description": "Balanced main battle tank. Good mix of speed, armor and firepower. Can fire while moving."
         },
@@ -438,7 +508,9 @@
             "w": 34,
             "armor": "heavy",
             "weaponType": "cannon",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "description": "Heavy assault tank. Strong armor and powerful cannon. Slower but hits much harder than Light Tank."
         },
         "flame_tank": {
@@ -454,7 +526,9 @@
             "splash": 50,
             "armor": "medium",
             "weaponType": "flame",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "description": "Anti-infantry vehicle. Sprays flames dealing heavy splash damage. Excellent vs infantry blobs."
         },
         "stealth": {
@@ -469,7 +543,10 @@
             "w": 28,
             "armor": "medium",
             "weaponType": "missile",
-            "prerequisites": ["factory", "tech"],
+            "prerequisites": [
+                "factory",
+                "tech"
+            ],
             "description": "Fast missile tank. Good speed and damage. Requires Tech Center."
         },
         "artillery": {
@@ -485,7 +562,10 @@
             "splash": 60,
             "armor": "light",
             "weaponType": "heavy_cannon",
-            "prerequisites": ["factory", "tech"],
+            "prerequisites": [
+                "factory",
+                "tech"
+            ],
             "description": "Long-range siege unit. Massive range and damage with splash. Paper-thin armor, keep protected."
         },
         "mlrs": {
@@ -501,7 +581,10 @@
             "splash": 80,
             "armor": "light",
             "weaponType": "missile",
-            "prerequisites": ["factory", "tech"],
+            "prerequisites": [
+                "factory",
+                "tech"
+            ],
             "description": "Rocket artillery. Very long range with large splash radius. Fragile, best used behind tank lines."
         },
         "mammoth": {
@@ -516,7 +599,10 @@
             "w": 40,
             "armor": "heavy",
             "weaponType": "heavy_cannon",
-            "prerequisites": ["factory", "tech"],
+            "prerequisites": [
+                "factory",
+                "tech"
+            ],
             "description": "Ultimate tank. Massive HP, devastating firepower. Slow and very expensive, but nearly unstoppable."
         },
         "heli": {
@@ -532,7 +618,9 @@
             "fly": true,
             "armor": "light",
             "weaponType": "rocket",
-            "prerequisites": ["tech"],
+            "prerequisites": [
+                "tech"
+            ],
             "description": "Attack helicopter. Good speed and sustained rocket fire. Vulnerable to anti-air but flexible."
         },
         "harrier": {
@@ -549,7 +637,9 @@
             "armor": "light",
             "weaponType": "air_missile",
             "ammo": 1,
-            "prerequisites": ["airforce_command"],
+            "prerequisites": [
+                "airforce_command"
+            ],
             "canAttackWhileMoving": true,
             "description": "Strike fighter. Very fast, high damage pass. Must return to Air-Force Command to reload after each attack."
         },
@@ -563,7 +653,9 @@
             "damage": 0,
             "w": 45,
             "armor": "heavy",
-            "prerequisites": ["factory"],
+            "prerequisites": [
+                "factory"
+            ],
             "description": "Mobile Construction Vehicle. Double-click or press Enter to deploy into a Construction Yard. Cannot attack."
         },
         "induction_rig": {
@@ -576,7 +668,10 @@
             "damage": 0,
             "w": 40,
             "armor": "light",
-            "prerequisites": ["factory", "refinery"],
+            "prerequisites": [
+                "factory",
+                "refinery"
+            ],
             "description": "Deploys on ore wells for infinite resources. Right-click on a golden well to deploy. Great for late-game economy."
         },
         "demo_truck": {
@@ -590,9 +685,11 @@
             "rate": 999,
             "w": 30,
             "armor": "light",
-            "explosionRadius": 120,
-            "explosionDamage": 500,
-            "prerequisites": ["factory"],
+            "explosionRadius": 150,
+            "explosionDamage": 600,
+            "prerequisites": [
+                "factory"
+            ],
             "description": "Suicide vehicle. Detonates on impact or death, dealing massive area damage. Chain reactions possible."
         }
     },
@@ -711,17 +808,53 @@
         }
     },
     "weaponTargeting": {
-        "bullet": { "canTargetGround": true, "canTargetAir": false },
-        "ap_bullet": { "canTargetGround": true, "canTargetAir": false },
-        "cannon": { "canTargetGround": true, "canTargetAir": false },
-        "heavy_cannon": { "canTargetGround": true, "canTargetAir": false },
-        "rocket": { "canTargetGround": true, "canTargetAir": true },
-        "missile": { "canTargetGround": false, "canTargetAir": true },
-        "air_missile": { "canTargetGround": true, "canTargetAir": false },
-        "flame": { "canTargetGround": true, "canTargetAir": false },
-        "sniper": { "canTargetGround": true, "canTargetAir": false },
-        "laser": { "canTargetGround": true, "canTargetAir": true },
-        "grenade": { "canTargetGround": true, "canTargetAir": false },
-        "heal": { "canTargetGround": true, "canTargetAir": true }
+        "bullet": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "ap_bullet": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "cannon": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "heavy_cannon": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "rocket": {
+            "canTargetGround": true,
+            "canTargetAir": true
+        },
+        "missile": {
+            "canTargetGround": false,
+            "canTargetAir": true
+        },
+        "air_missile": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "flame": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "sniper": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "laser": {
+            "canTargetGround": true,
+            "canTargetAir": true
+        },
+        "grenade": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
+        "heal": {
+            "canTargetGround": true,
+            "canTargetAir": true
+        }
     }
 }

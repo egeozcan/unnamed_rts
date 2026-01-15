@@ -124,6 +124,33 @@ function renderToContext(
             continue;
         }
 
+        // Check for demo truck - render with danger glow
+        if (e.type === 'UNIT' && e.key === 'demo_truck') {
+            // Pulsing danger glow effect (faster pulse for urgency)
+            const pulse = 0.5 + 0.5 * Math.sin(time / 150);
+            const glowRadius = 5 + pulse * 3;
+            const x = e.pos.x * sx;
+            const y = e.pos.y * sy;
+
+            // Outer danger glow (red/orange)
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+            gradient.addColorStop(0, `rgba(255, 100, 0, ${0.9 * pulse})`);
+            gradient.addColorStop(0.5, `rgba(255, 50, 0, ${0.5 * pulse})`);
+            gradient.addColorStop(1, 'rgba(200, 0, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core with player color
+            const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
+                ? PLAYER_COLORS[e.owner]
+                : '#ff6600';
+            ctx.fillStyle = playerColor;
+            ctx.fillRect(x - 2, y - 2, 4, 4);
+            continue;
+        }
+
         if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {
             ctx.fillStyle = PLAYER_COLORS[e.owner];
         } else if (e.type === 'ROCK') {

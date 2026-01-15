@@ -55,8 +55,8 @@ describe('Demo Truck', () => {
     describe('Explosion Stats', () => {
         it('should return correct explosion stats from rules', () => {
             const stats = getDemoTruckExplosionStats();
-            expect(stats.damage).toBe(500);
-            expect(stats.radius).toBe(120);
+            expect(stats.damage).toBe(600);
+            expect(stats.radius).toBe(150);
         });
     });
 
