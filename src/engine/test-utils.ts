@@ -9,6 +9,7 @@ import {
     HarvesterUnit,
     CombatUnit,
     AirUnit,
+    DemoTruckUnit,
     UnitKey,
     BuildingKey,
     GameState
@@ -20,7 +21,8 @@ import {
     createDefaultBuildingState,
     createDefaultWellComponent,
     createDefaultAirUnit,
-    createDefaultAirBase
+    createDefaultAirBase,
+    createDefaultDemoTruck
 } from './entity-helpers.js';
 
 // ============ TEST ENTITY ID GENERATION ============
@@ -100,7 +102,7 @@ export function createTestHarvester(options: HarvesterOptions = {}): HarvesterUn
 export interface CombatUnitOptions {
     id?: EntityId;
     owner?: number;
-    key?: Exclude<UnitKey, 'harvester' | 'harrier'>;
+    key?: Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>;
     x?: number;
     y?: number;
     hp?: number;
@@ -211,6 +213,59 @@ export function createTestHarrier(options: HarrierOptions = {}): AirUnit {
             state: options.state ?? 'docked',
             homeBaseId: options.homeBaseId ?? null,
             dockedSlot: options.dockedSlot ?? null
+        }
+    };
+}
+
+// ============ DEMO TRUCK BUILDER ============
+
+export interface DemoTruckOptions {
+    id?: EntityId;
+    owner?: number;
+    x?: number;
+    y?: number;
+    hp?: number;
+    maxHp?: number;
+    moveTarget?: Vector | null;
+    detonationTargetId?: EntityId | null;
+    detonationTargetPos?: Vector | null;
+    hasDetonated?: boolean;
+    dead?: boolean;
+}
+
+export function createTestDemoTruck(options: DemoTruckOptions = {}): DemoTruckUnit {
+    const id = options.id ?? createTestId('demo');
+    const x = options.x ?? 500;
+    const y = options.y ?? 500;
+    const hp = options.hp ?? 150;
+
+    return {
+        id,
+        owner: options.owner ?? 0,
+        type: 'UNIT',
+        key: 'demo_truck',
+        pos: new Vector(x, y),
+        prevPos: new Vector(x, y),
+        hp,
+        maxHp: options.maxHp ?? hp,
+        w: 30,
+        h: 30,
+        radius: 15,
+        dead: options.dead ?? false,
+        movement: {
+            ...createDefaultMovement(),
+            moveTarget: options.moveTarget ?? null
+        },
+        combat: {
+            ...createDefaultCombat(),
+            targetId: null,
+            cooldown: 0
+        },
+        demoTruck: {
+            ...createDefaultDemoTruck(),
+            detonationTargetId: options.detonationTargetId ?? null,
+            detonationTargetPos: options.detonationTargetPos ?? null,
+            hasDetonated: options.hasDetonated ?? false
         }
     };
 }
@@ -505,7 +560,7 @@ export function createTestEntity(options: GenericEntityOptions): Entity {
                 return createTestCombatUnit({
                     id: options.id,
                     owner: options.owner,
-                    key: options.key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+                    key: options.key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
                     x: options.x,
                     y: options.y,
                     hp: options.hp,

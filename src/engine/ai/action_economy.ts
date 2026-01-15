@@ -627,6 +627,43 @@ export function handleEconomy(
             }
         }
 
+        // ===== DEMO TRUCK PRODUCTION =====
+        // Build demo trucks for surgical strikes against high-value targets
+        // Skip during panic/all-in (need regular combat units)
+        const queuedVehicleForDemoCheck = actions.some(a =>
+            a.type === 'START_BUILD' &&
+            (a.payload as { category: string }).category === 'vehicle'
+        );
+        if (hasFactory && vehicleQueueEmpty && !isPanic && aiState.strategy !== 'all_in' && !queuedVehicleForDemoCheck) {
+            // Count existing demo trucks
+            const existingDemoTrucks = Object.values(state.entities).filter(e =>
+                e.owner === playerId && e.type === 'UNIT' && e.key === 'demo_truck' && !e.dead
+            ).length;
+
+            // Limit to 2 demo trucks at a time (expensive + suicide units)
+            const maxDemoTrucks = 2;
+
+            // Only build if there are high-value building targets
+            const highValueTargets = enemies.filter(e =>
+                e.type === 'BUILDING' &&
+                ['conyard', 'factory', 'refinery', 'barracks', 'tech'].includes(e.key)
+            );
+
+            if (existingDemoTrucks < maxDemoTrucks && highValueTargets.length > 0) {
+                const demoTruckData = RULES.units['demo_truck'];
+                const demoTruckReqsMet = checkPrerequisites('demo_truck', buildings);
+                const demoTruckCost = demoTruckData?.cost || 1500;
+
+                // High credit buffer (1000) - only build when we have surplus
+                // Demo trucks are expensive and risky
+                if (demoTruckReqsMet && creditsRemaining >= demoTruckCost + creditBuffer + 1000) {
+                    actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'demo_truck', playerId } });
+                    aiState.lastProductionType = 'vehicle';
+                    creditsRemaining -= demoTruckCost;
+                }
+            }
+        }
+
         // ===== AIR UNIT PRODUCTION =====
         // Produce harriers when airforce_command is available - prioritize air power
         const hasAirforce = hasProductionBuildingFor('air', buildings);

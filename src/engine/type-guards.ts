@@ -7,6 +7,7 @@ import {
     WellEntity,
     CombatUnit,
     HarvesterUnit,
+    DemoTruckUnit,
     CombatComponent
 } from './types.js';
 
@@ -39,7 +40,11 @@ export function isHarvester(entity: Entity): entity is HarvesterUnit {
 }
 
 export function isCombatUnit(entity: Entity): entity is CombatUnit {
-    return entity.type === 'UNIT' && entity.key !== 'harvester';
+    return entity.type === 'UNIT' && entity.key !== 'harvester' && entity.key !== 'harrier' && entity.key !== 'demo_truck';
+}
+
+export function isDemoTruck(entity: Entity): entity is DemoTruckUnit {
+    return entity.type === 'UNIT' && entity.key === 'demo_truck';
 }
 
 export function isEngineer(entity: Entity): entity is CombatUnit {

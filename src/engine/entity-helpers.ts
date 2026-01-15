@@ -6,13 +6,15 @@ import {
     BuildingEntity,
     HarvesterUnit,
     AirUnit,
+    DemoTruckUnit,
     MovementComponent,
     CombatComponent,
     HarvesterComponent,
     BuildingStateComponent,
     WellComponent,
     AirUnitComponent,
-    AirBaseComponent
+    AirBaseComponent,
+    DemoTruckComponent
 } from './types.js';
 
 // ============ COMPONENT DEFAULTS ============
@@ -77,6 +79,14 @@ export function createDefaultWellComponent(): WellComponent {
     };
 }
 
+export function createDefaultDemoTruck(): DemoTruckComponent {
+    return {
+        detonationTargetId: null,
+        detonationTargetPos: null,
+        hasDetonated: false
+    };
+}
+
 // ============ IMMUTABLE UPDATE HELPERS ============
 
 export function updateMovement<T extends UnitEntity>(
@@ -117,6 +127,16 @@ export function updateHarvester(
     return {
         ...entity,
         harvester: { ...entity.harvester, ...updates }
+    };
+}
+
+export function updateDemoTruck(
+    entity: DemoTruckUnit,
+    updates: Partial<DemoTruckComponent>
+): DemoTruckUnit {
+    return {
+        ...entity,
+        demoTruck: { ...entity.demoTruck, ...updates }
     };
 }
 

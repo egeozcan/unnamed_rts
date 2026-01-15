@@ -578,6 +578,22 @@
             "armor": "light",
             "prerequisites": ["factory", "refinery"],
             "description": "Deploys on ore wells for infinite resources. Right-click on a golden well to deploy. Great for late-game economy."
+        },
+        "demo_truck": {
+            "name": "Demo Truck",
+            "type": "vehicle",
+            "hp": 150,
+            "cost": 1500,
+            "speed": 2.8,
+            "range": 30,
+            "damage": 0,
+            "rate": 999,
+            "w": 30,
+            "armor": "light",
+            "explosionRadius": 120,
+            "explosionDamage": 500,
+            "prerequisites": ["factory"],
+            "description": "Suicide vehicle. Detonates on impact or death, dealing massive area damage. Chain reactions possible."
         }
     },
     "armorTypes": {
@@ -683,6 +699,14 @@
             "light": 1.5,
             "medium": 1.25,
             "heavy": 1.0,
+            "building": 1.5
+        },
+        "explosion": {
+            "none": 1.0,
+            "infantry": 1.5,
+            "light": 1.25,
+            "medium": 1.0,
+            "heavy": 0.75,
             "building": 1.5
         }
     },

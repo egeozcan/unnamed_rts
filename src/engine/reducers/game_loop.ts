@@ -1,9 +1,10 @@
 import {
-    GameState, EntityId, Entity, Projectile, Particle, UnitEntity, Vector, HarvesterUnit
+    GameState, EntityId, Entity, Projectile, Particle, UnitEntity, Vector, HarvesterUnit,
+    ExplosionEvent
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
-import { setPathCacheTick, refreshCollisionGrid, syncGridsToWorker } from '../utils';
+import { setPathCacheTick, refreshCollisionGrid, syncGridsToWorker, spawnExplosionParticles } from '../utils';
 import { rebuildSpatialGrid, getSpatialGrid } from '../spatial';
 import { createEntityCache } from '../perf';
 import { updateProduction } from './production';
@@ -12,6 +13,8 @@ import { updateUnit } from './units';
 import { updateAirUnitState, updateAirBase } from './air_units';
 import { getDifficultyModifiers } from '../ai/utils';
 import { isAirUnit } from '../entity-helpers';
+import { isDemoTruck } from '../type-guards';
+import { getDemoTruckExplosionStats } from './demo_truck';
 
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
@@ -142,6 +145,16 @@ export function tick(state: GameState): GameState {
             }
         }
     }
+
+    // Process Demo Truck Explosions (chain reactions)
+    const explosionResult = processExplosions(updatedEntities, nextTick);
+    // Note: We use a mutable reference approach here since updatedEntities is from destructuring
+    // Copy the explosion-processed entities back into updatedEntities object
+    for (const id in explosionResult.entities) {
+        updatedEntities[id] = explosionResult.entities[id];
+    }
+    const explosionParticles = explosionResult.particles;
+    const triggerScreenShake = explosionResult.explosionCount > 0;
 
     // Process Building Repairs
     const repairCostPercentage = RULES.economy?.repairCostPercentage || 0.3;
@@ -308,12 +321,48 @@ export function tick(state: GameState): GameState {
         ? state.commandIndicator
         : null;
 
+    // Update screen shake (decay or trigger new)
+    let nextCamera = state.camera;
+    if (triggerScreenShake) {
+        // Trigger new screen shake from explosion
+        nextCamera = {
+            ...state.camera,
+            shakeIntensity: 10,
+            shakeDuration: 15
+        };
+    } else if (state.camera.shakeDuration && state.camera.shakeDuration > 0) {
+        // Decay existing shake
+        nextCamera = {
+            ...state.camera,
+            shakeDuration: state.camera.shakeDuration - 1
+        };
+        if (nextCamera.shakeDuration === 0) {
+            nextCamera = {
+                ...nextCamera,
+                shakeIntensity: undefined,
+                shakeDuration: undefined
+            };
+        }
+    }
+
+    // Update particles (decay life, remove dead)
+    const existingParticles = state.particles
+        .map(p => ({
+            ...p,
+            pos: new Vector(p.pos.x + p.vel.x, p.pos.y + p.vel.y),
+            life: p.life - 1
+        }))
+        .filter(p => p.life > 0);
+    const nextParticles = [...existingParticles, ...explosionParticles];
+
     return {
         ...state,
         tick: nextTick,
         entities: finalEntities,
         players: nextPlayers,
         projectiles: nextProjectiles,
+        particles: nextParticles,
+        camera: nextCamera,
         winner: nextWinner,
         running: nextRunning,
         notification: nextNotification,
@@ -789,4 +838,121 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
     }
 
     return { proj: nextProj, damage: damageEvent };
+}
+
+/**
+ * Process demo truck explosions with chain reaction support.
+ * Uses breadth-first queue processing to prevent stack overflow.
+ */
+function processExplosions(
+    entities: Record<EntityId, Entity>,
+    _tick: number
+): { entities: Record<EntityId, Entity>; particles: Particle[]; explosionCount: number } {
+    const explosionQueue: ExplosionEvent[] = [];
+    const explodedIds = new Set<EntityId>();
+    let particles: Particle[] = [];
+    let updatedEntities = { ...entities };
+
+    // Find all demo trucks that just died this tick and haven't detonated
+    for (const id in updatedEntities) {
+        const ent = updatedEntities[id];
+        if (isDemoTruck(ent) && ent.dead && !ent.demoTruck.hasDetonated) {
+            // Queue explosion
+            const { damage, radius } = getDemoTruckExplosionStats();
+            explosionQueue.push({
+                pos: ent.pos,
+                damage,
+                radius,
+                ownerId: ent.owner,
+                sourceId: ent.id
+            });
+            // Mark as detonated to prevent re-queuing
+            updatedEntities[id] = {
+                ...ent,
+                demoTruck: { ...ent.demoTruck, hasDetonated: true }
+            };
+            explodedIds.add(id);
+        }
+    }
+
+    // Process queue breadth-first for chain reactions
+    while (explosionQueue.length > 0) {
+        const explosion = explosionQueue.shift()!;
+
+        // Spawn explosion particles
+        particles = particles.concat(spawnExplosionParticles(explosion.pos, explosion.radius));
+
+        // Apply splash damage to all entities in radius
+        for (const id in updatedEntities) {
+            const ent = updatedEntities[id];
+            // Skip dead entities, the source entity, and neutral entities
+            if (ent.dead || id === explosion.sourceId || ent.owner === -1) continue;
+            // Skip resources and rocks
+            if (ent.type === 'RESOURCE' || ent.type === 'ROCK') continue;
+
+            const dist = ent.pos.dist(explosion.pos);
+            const effectiveRadius = explosion.radius + ent.radius;
+
+            if (dist <= effectiveRadius) {
+                // Calculate damage with distance falloff
+                const falloff = 1 - (dist / effectiveRadius);
+                const baseDamage = explosion.damage * falloff;
+
+                // Apply armor modifier
+                const data = getRuleData(ent.key);
+                const armorType = (data && 'armor' in data) ? (data.armor || 'none') : 'none';
+                const damageModifiers = RULES.damageModifiers as Record<string, Record<string, number>>;
+                const modifier = damageModifiers?.['explosion']?.[armorType] ?? 1.0;
+                const finalDamage = Math.round(baseDamage * modifier);
+
+                const newHp = Math.max(0, ent.hp - finalDamage);
+                const nowDead = newHp <= 0;
+
+                // Update entity with damage
+                if (ent.type === 'UNIT') {
+                    updatedEntities[id] = {
+                        ...ent,
+                        hp: newHp,
+                        dead: nowDead,
+                        combat: {
+                            ...ent.combat,
+                            flash: 5
+                        }
+                    };
+                } else if (ent.type === 'BUILDING') {
+                    updatedEntities[id] = {
+                        ...ent,
+                        hp: newHp,
+                        dead: nowDead,
+                        combat: ent.combat ? { ...ent.combat, flash: 5 } : undefined
+                    };
+                }
+
+                // Chain reaction: if this killed a demo truck, queue its explosion
+                const updatedEnt = updatedEntities[id];
+                if (nowDead && isDemoTruck(updatedEnt) && !explodedIds.has(id)) {
+                    const { damage: chainDamage, radius: chainRadius } = getDemoTruckExplosionStats();
+                    explosionQueue.push({
+                        pos: updatedEnt.pos,
+                        damage: chainDamage,
+                        radius: chainRadius,
+                        ownerId: updatedEnt.owner,
+                        sourceId: id
+                    });
+                    explodedIds.add(id);
+                    // Mark as detonated
+                    updatedEntities[id] = {
+                        ...updatedEnt,
+                        demoTruck: { ...updatedEnt.demoTruck, hasDetonated: true }
+                    };
+                }
+            }
+        }
+    }
+
+    return {
+        entities: updatedEntities,
+        particles,
+        explosionCount: explodedIds.size
+    };
 }

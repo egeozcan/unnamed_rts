@@ -8,6 +8,7 @@ import {
     AirUnitComponent,
     AirBaseComponent,
     InductionRigComponent,
+    DemoTruckComponent,
     AttackStance
 } from './components.js';
 
@@ -65,7 +66,7 @@ export type UnitKey =
     | 'harvester'
     | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando'
     | 'jeep' | 'apc' | 'light' | 'heavy' | 'flame_tank' | 'stealth' | 'artillery' | 'mlrs' | 'mammoth'
-    | 'heli' | 'harrier' | 'mcv' | 'induction_rig';
+    | 'heli' | 'harrier' | 'mcv' | 'induction_rig' | 'demo_truck';
 
 export type BuildingKey =
     | 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory'
@@ -96,10 +97,10 @@ export interface BaseEntity {
 
 // ============ UNIT ENTITIES ============
 
-// Combat units (all units except harvester and harrier which have their own interfaces)
+// Combat units (all units except harvester, harrier, and demo_truck which have their own interfaces)
 export interface CombatUnit extends BaseEntity {
     readonly type: 'UNIT';
-    readonly key: Exclude<UnitKey, 'harvester' | 'harrier'>;
+    readonly key: Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>;
     readonly movement: MovementComponent;
     readonly combat: CombatComponent;
     readonly engineer?: EngineerComponent; // Only for engineer units
@@ -123,7 +124,16 @@ export interface AirUnit extends BaseEntity {
     readonly airUnit: AirUnitComponent;
 }
 
-export type UnitEntity = CombatUnit | HarvesterUnit | AirUnit;
+// Demo truck units (suicide vehicle that explodes on impact or death)
+export interface DemoTruckUnit extends BaseEntity {
+    readonly type: 'UNIT';
+    readonly key: 'demo_truck';
+    readonly movement: MovementComponent;
+    readonly combat: CombatComponent;
+    readonly demoTruck: DemoTruckComponent;
+}
+
+export type UnitEntity = CombatUnit | HarvesterUnit | AirUnit | DemoTruckUnit;
 
 // ============ BUILDING ENTITIES ============
 
@@ -170,6 +180,7 @@ export type {
     AirBaseComponent,
     AirUnitState,
     InductionRigComponent,
+    DemoTruckComponent,
     AttackStance
 } from './components.js';
 
@@ -194,6 +205,14 @@ export interface Particle {
     readonly text?: string;
 }
 
+export interface ExplosionEvent {
+    readonly pos: Vector;
+    readonly damage: number;
+    readonly radius: number;
+    readonly ownerId: number;
+    readonly sourceId: EntityId;
+}
+
 export interface ProductionQueue {
     readonly current: string | null;
     readonly progress: number;
@@ -204,6 +223,8 @@ export interface ProductionQueue {
 export interface Camera {
     readonly x: number;
     readonly y: number;
+    readonly shakeIntensity?: number;
+    readonly shakeDuration?: number;
 }
 
 export type GameMode = 'menu' | 'game' | 'demo';

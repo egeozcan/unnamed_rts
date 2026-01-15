@@ -113,3 +113,12 @@ export interface InductionRigComponent {
     readonly wellId: EntityId;                    // The well this rig is extracting from
     readonly accumulatedCredits: number;          // Fractional credits accumulated (paid out when >= 1)
 }
+
+// ============ DEMO TRUCK COMPONENT ============
+// Properties specific to demolition truck units (suicide vehicle)
+
+export interface DemoTruckComponent {
+    readonly detonationTargetId: EntityId | null;  // Entity to drive toward and detonate on
+    readonly detonationTargetPos: Vector | null;   // Position to drive toward (for ground targeting)
+    readonly hasDetonated: boolean;                // Prevents double-explosion
+}

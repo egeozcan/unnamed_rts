@@ -12,6 +12,7 @@ export * from './action_combat.js';
 // Import locally for computeAiActions and _testUtils
 import {
     getAIState,
+    resetAIState,
     findBaseCenter,
     updateEnemyBaseLocation,
     updateEnemyIntelligence,
@@ -72,6 +73,7 @@ import {
     handleHarvesterSuicideAttack,
     findNearestDefender,
     handleAirStrikes,
+    handleDemoTruckAssault,
     handleUnitRepair,
     handleEngineerCapture
 } from './action_combat.js';
@@ -105,7 +107,14 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     }
 
     const harvesters = myUnits.filter(u => u.key === 'harvester');
-    const combatUnits = myUnits.filter(u => u.key !== 'harvester' && u.key !== 'mcv');
+    // Exclude harvesters, MCVs, engineers, and demo trucks from regular combat units
+    // Demo trucks have specialized assault logic, engineers have capture logic
+    const combatUnits = myUnits.filter(u =>
+        u.key !== 'harvester' &&
+        u.key !== 'mcv' &&
+        u.key !== 'engineer' &&
+        u.key !== 'demo_truck'
+    );
 
     const baseCenter = findBaseCenter(myBuildings);
 
@@ -267,6 +276,12 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
         actions.push(...handleAirStrikes(state, playerId, enemies, aiState));
     }
 
+    // Demo truck assault - send suicide trucks to high-value targets
+    // Demo trucks are tactical weapons that deal massive splash damage
+    if (enemies.length > 0) {
+        actions.push(...handleDemoTruckAssault(state, playerId, enemies, aiState));
+    }
+
     return actions;
 }
 
@@ -285,6 +300,7 @@ export const _testUtils = {
     updateEnemyIntelligence,
     updateVengeance,
     getAIState,
+    resetAIState,
     getGroupCenter,
     updateEnemyBaseLocation,
     getPersonalityForPlayer,

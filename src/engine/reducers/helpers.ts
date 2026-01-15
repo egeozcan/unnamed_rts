@@ -3,7 +3,7 @@ import {
     UnitKey, BuildingKey, Projectile
 } from '../types';
 import { RULES, Building, Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
-import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState, createDefaultAirUnit, createDefaultAirBase } from '../entity-helpers';
+import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState, createDefaultAirUnit, createDefaultAirBase, createDefaultDemoTruck } from '../entity-helpers';
 import { type EntityCache } from '../perf';
 
 // Power calculation cache - keyed by tick to auto-invalidate
@@ -199,11 +199,20 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
                 combat: createDefaultCombat(),
                 airUnit: createDefaultAirUnit(null as unknown as string, -1, 1)
             };
+        } else if (key === 'demo_truck') {
+            return {
+                ...baseProps,
+                type: 'UNIT' as const,
+                key: 'demo_truck' as const,
+                movement: createDefaultMovement(),
+                combat: createDefaultCombat(),
+                demoTruck: createDefaultDemoTruck()
+            };
         } else {
             return {
                 ...baseProps,
                 type: 'UNIT' as const,
-                key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+                key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
                 movement: createDefaultMovement(),
                 combat: createDefaultCombat(),
                 engineer: key === 'engineer' ? { captureTargetId: null, repairTargetId: null } : undefined

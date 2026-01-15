@@ -24,6 +24,7 @@ import {
 import { getGroupCenter } from './state.js';
 import { findCaptureOpportunities } from './planning.js';
 import { isAirUnit } from '../entity-helpers.js';
+import { isDemoTruck } from '../type-guards.js';
 import { EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
 
 export function handleAttack(
@@ -1390,6 +1391,119 @@ export function handleAirStrikes(
                 }
             });
         }
+    }
+
+    return actions;
+}
+
+/**
+ * Handle demo truck assault - send demo trucks to high-value targets.
+ * Demo trucks are suicide units that deal massive area damage on detonation.
+ * They should target clustered enemies or high-value buildings.
+ */
+export function handleDemoTruckAssault(
+    state: GameState,
+    playerId: number,
+    enemies: Entity[],
+    aiState: AIPlayerState
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find all idle demo trucks (not attacking, not dead)
+    const idleDemoTrucks: Entity[] = [];
+    for (const id in state.entities) {
+        const entity = state.entities[id];
+        if (entity.owner === playerId && !entity.dead && isDemoTruck(entity)) {
+            // Check if not already attacking (no detonation target set)
+            if (!entity.demoTruck.detonationTargetId && !entity.demoTruck.detonationTargetPos) {
+                idleDemoTrucks.push(entity);
+            }
+        }
+    }
+
+    if (idleDemoTrucks.length === 0 || enemies.length === 0) {
+        return actions;
+    }
+
+    // Define high-value target priorities for demo truck strikes
+    // Buildings are primary targets - demo trucks excel at structure destruction
+    const buildingPriorities = ['conyard', 'factory', 'refinery', 'barracks', 'tech', 'airforce_command', 'power'];
+
+    // Find best target for demo truck assault
+    let bestTarget: Entity | null = null;
+    let bestScore = -Infinity;
+
+    for (const enemy of enemies) {
+        let score = 0;
+
+        // Buildings are primary targets for demo trucks
+        if (enemy.type === 'BUILDING') {
+            const priorityIndex = buildingPriorities.indexOf(enemy.key);
+            if (priorityIndex >= 0) {
+                score += 200 - priorityIndex * 20; // High base score for priority buildings
+            } else {
+                score += 50; // Other buildings still valuable
+            }
+
+            // Defense buildings are harder but still valid targets
+            if (['turret', 'pillbox', 'obelisk', 'sam_site'].includes(enemy.key)) {
+                score += 30; // Bonus for clearing defenses
+            }
+        } else if (enemy.type === 'UNIT') {
+            // Demo trucks can target units but buildings are preferred
+            if (enemy.key === 'harvester') {
+                score += 80; // Harvesters are economic damage
+            } else if (enemy.key === 'mcv') {
+                score += 100; // MCVs are high value
+            } else if (enemy.key === 'mammoth') {
+                score += 90; // Mammoth tanks are expensive and tough
+            } else {
+                score += 30; // Other units less valuable for suicide attack
+            }
+        }
+
+        // Low HP bonus - finish off weakened targets
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio < 0.3) score += 60;
+        else if (hpRatio < 0.5) score += 40;
+
+        // Cluster bonus - demo trucks deal splash damage
+        // Count enemies near this target
+        let nearbyEnemies = 0;
+        for (const other of enemies) {
+            if (other.id !== enemy.id && other.pos.dist(enemy.pos) < 100) {
+                nearbyEnemies++;
+            }
+        }
+        score += nearbyEnemies * 25; // Bonus per nearby enemy
+
+        // Prefer targets near enemy base location if known
+        if (aiState.enemyBaseLocation) {
+            const distToBase = enemy.pos.dist(aiState.enemyBaseLocation);
+            if (distToBase < 500) score += 50; // Bonus for targets near enemy base
+        }
+
+        // Distance penalty (don't send too far)
+        const distFromOurUnits = idleDemoTrucks[0].pos.dist(enemy.pos);
+        score -= distFromOurUnits / 20; // Light distance penalty
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestTarget = enemy;
+        }
+    }
+
+    // Only attack if we found a worthwhile target
+    // Minimum score threshold to avoid wasting demo trucks on low-value targets
+    if (bestTarget && bestScore > 100) {
+        // Send one demo truck at a time (they're expensive)
+        actions.push({
+            type: 'COMMAND_ATTACK',
+            payload: {
+                unitIds: [idleDemoTrucks[0].id],
+                targetId: bestTarget.id
+            }
+        });
     }
 
     return actions;

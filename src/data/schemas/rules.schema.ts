@@ -103,6 +103,9 @@ export const UnitSchema = z.object({
   maxCount: z.number().positive().optional(),
   // Combat mobility - can fire while moving (light vehicles, strafing aircraft)
   canAttackWhileMoving: z.boolean().optional(),
+  // Demo truck explosion fields
+  explosionDamage: z.number().positive().optional(),
+  explosionRadius: z.number().positive().optional(),
   // Description for tooltips
   description: z.string().optional(),
 });

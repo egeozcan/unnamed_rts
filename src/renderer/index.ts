@@ -44,16 +44,25 @@ export class Renderer {
         ctx.fillStyle = '#2d3322';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+        // Apply screen shake offset to camera
+        let effectiveCameraX = camera.x;
+        let effectiveCameraY = camera.y;
+        if (camera.shakeIntensity && camera.shakeDuration && camera.shakeDuration > 0) {
+            effectiveCameraX += (Math.random() - 0.5) * camera.shakeIntensity;
+            effectiveCameraY += (Math.random() - 0.5) * camera.shakeIntensity;
+        }
+        const effectiveCamera = { x: effectiveCameraX, y: effectiveCameraY };
+
         // Draw map boundary indicator lines
-        this.drawMapBorder(camera, zoom, state.config.width, state.config.height);
+        this.drawMapBorder(effectiveCamera, zoom, state.config.width, state.config.height);
 
         ctx.save();
 
         // OPTIMIZATION: Cache frequently accessed values
         const canvasWidth = this.canvas.width;
         const canvasHeight = this.canvas.height;
-        const cameraX = camera.x;
-        const cameraY = camera.y;
+        const cameraX = effectiveCameraX;
+        const cameraY = effectiveCameraY;
 
         // Calculate visible world bounds with buffer for large entities
         const buffer = 150;
@@ -112,22 +121,22 @@ export class Renderer {
 
         // Draw resources (no owner-specific colors)
         for (const entity of resourceEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw rocks (no owner-specific colors)
         for (const entity of rockEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw wells (no owner-specific colors)
         for (const entity of wellEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw units and buildings (batched by owner for color caching)
         for (const entity of unitBuildingEntities) {
-            this.drawEntity(entity, camera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw rally points for selected production buildings (barracks/factory only)
@@ -136,7 +145,7 @@ export class Renderer {
             const entity = entities[id];
             if (entity && entity.type === 'BUILDING' && !entity.dead) {
                 if (RALLY_POINT_BUILDINGS.includes(entity.key) && entity.building.rallyPoint) {
-                    this.drawRallyPoint(entity, entity.building.rallyPoint, camera, zoom);
+                    this.drawRallyPoint(entity, entity.building.rallyPoint, effectiveCamera, zoom);
                 }
             }
         }
@@ -153,29 +162,29 @@ export class Renderer {
             if (!category) continue;
             const player = state.players[entity.owner];
             if (player?.primaryBuildings?.[category] === id) {
-                this.drawPrimaryIndicator(entity, camera, zoom);
+                this.drawPrimaryIndicator(entity, effectiveCamera, zoom);
             }
         }
 
         // Draw projectiles
         for (const proj of projectiles) {
             if (proj.dead) continue;
-            this.drawProjectile(proj, camera, zoom);
+            this.drawProjectile(proj, effectiveCamera, zoom);
         }
 
         // Draw particles
         for (const particle of particles) {
-            this.drawParticle(particle, camera, zoom);
+            this.drawParticle(particle, effectiveCamera, zoom);
         }
 
         // Draw command indicator (move/attack target)
         if (state.commandIndicator) {
-            this.drawCommandIndicator(state.commandIndicator, camera, zoom, tick);
+            this.drawCommandIndicator(state.commandIndicator, effectiveCamera, zoom, tick);
         }
 
         // Building placement preview
         if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
-            this.drawPlacementPreview(placingBuilding, mousePos, camera, zoom, Object.values(entities), localPlayerId);
+            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, Object.values(entities), localPlayerId);
         }
 
 
@@ -239,7 +248,7 @@ export class Renderer {
         }
 
         // Draw tooltips
-        this.drawTooltip(mousePos, sortedEntities, camera, zoom, localPlayerId);
+        this.drawTooltip(mousePos, sortedEntities, effectiveCamera, zoom, localPlayerId);
 
 
         ctx.restore();

@@ -1,11 +1,13 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, Projectile, BuildingEntity, AttackStance
+    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, DemoTruckUnit, Projectile, BuildingEntity, AttackStance
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
 import { isAirUnit } from '../entity-helpers';
+import { isDemoTruck } from '../type-guards';
 import { updateHarvesterBehavior } from './harvester';
 import { updateCombatUnitBehavior } from './combat';
+import { updateDemoTruckBehavior, setDetonationTarget } from './demo_truck';
 import { moveToward } from './movement';
 import { getSpatialGrid } from '../spatial';
 
@@ -257,6 +259,11 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                         airUnit: { ...entity.airUnit, state: 'flying' }, // Reset to flying to approach new target
                         combat: { ...entity.combat, targetId: targetId }
                     };
+                }
+            } else if (isDemoTruck(entity)) {
+                // Special handling for demo trucks - set detonation target
+                if (target && target.owner !== entity.owner) {
+                    nextEntities[id] = setDetonationTarget(entity, targetId, null);
                 }
             } else {
                 // Normal combat unit attack behavior - only target enemies
@@ -556,7 +563,40 @@ export function updateUnit(
         return result;
     }
 
-    // Handle combat units (non-harvester, non-air)
+    // Handle demo truck units
+    if (isDemoTruck(entity)) {
+        const result = updateDemoTruckBehavior(entity, allEntities);
+
+        // If demo truck has a detonation target, move toward it
+        if (result.entity.demoTruck.detonationTargetId || result.entity.demoTruck.detonationTargetPos) {
+            // Movement is handled by the standard movement system
+            // Just move toward the target position
+            let targetPos: Vector | null = null;
+            if (result.entity.demoTruck.detonationTargetId) {
+                const target = allEntities[result.entity.demoTruck.detonationTargetId];
+                if (target && !target.dead) {
+                    targetPos = target.pos;
+                }
+            } else if (result.entity.demoTruck.detonationTargetPos) {
+                targetPos = result.entity.demoTruck.detonationTargetPos;
+            }
+
+            if (targetPos && !result.shouldDetonate) {
+                const movedTruck = moveToward(result.entity, targetPos, entityList) as DemoTruckUnit;
+                return { entity: movedTruck, projectile: null, creditsEarned: 0, resourceDamage: null };
+            }
+        }
+
+        // Handle standard move target (right-click to move without attack)
+        if (result.entity.movement.moveTarget && !result.shouldDetonate) {
+            const movedTruck = moveToward(result.entity, result.entity.movement.moveTarget, entityList) as DemoTruckUnit;
+            return { entity: movedTruck, projectile: null, creditsEarned: 0, resourceDamage: null };
+        }
+
+        return { entity: result.entity, projectile: null, creditsEarned: 0, resourceDamage: null };
+    }
+
+    // Handle combat units (non-harvester, non-air, non-demo-truck)
     if (data && isUnitData(data)) {
         const result = updateCombatUnitBehavior(
             entity as CombatUnit,

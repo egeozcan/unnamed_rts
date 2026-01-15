@@ -403,10 +403,25 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
         };
     }
 
+    if (statsKey === 'demo_truck') {
+        return {
+            ...baseProps,
+            type: 'UNIT' as const,
+            key: 'demo_truck' as const,
+            movement,
+            combat,
+            demoTruck: {
+                detonationTargetId: null,
+                detonationTargetPos: null,
+                hasDetonated: false
+            }
+        };
+    }
+
     return {
         ...baseProps,
         type: 'UNIT' as const,
-        key: statsKey as Exclude<UnitKey, 'harvester' | 'harrier'>,
+        key: statsKey as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
         movement,
         combat
     };
@@ -452,6 +467,39 @@ export function spawnFloater(particles: Particle[], x: number, y: number, text: 
         text,
         color
     });
+}
+
+/**
+ * Spawn explosion particles for demo truck detonation.
+ * Creates fire particles (orange/yellow) and smoke particles (gray).
+ */
+export function spawnExplosionParticles(pos: Vector, radius: number): Particle[] {
+    const particles: Particle[] = [];
+    const count = Math.floor(radius / 5); // More particles for larger explosions
+
+    // Fire particles (orange/yellow)
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 5;
+        particles.push({
+            pos: new Vector(pos.x, pos.y),
+            vel: new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed),
+            life: 20 + Math.random() * 20,
+            color: Math.random() > 0.5 ? '#ff4400' : '#ffaa00'
+        });
+    }
+
+    // Smoke particles (gray, rising)
+    for (let i = 0; i < count / 2; i++) {
+        particles.push({
+            pos: new Vector(pos.x + (Math.random() - 0.5) * 20, pos.y + (Math.random() - 0.5) * 20),
+            vel: new Vector((Math.random() - 0.5) * 2, -1 - Math.random()),
+            life: 30 + Math.random() * 20,
+            color: '#666666'
+        });
+    }
+
+    return particles;
 }
 
 export function hasBuilding(key: string, owner: number, entities: Entity[]): boolean {

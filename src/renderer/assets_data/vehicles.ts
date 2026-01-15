@@ -262,4 +262,35 @@ export const vehicles: Record<string, string> = {
             <rect x="20" y="65" width="60" height="8" fill="url(#caution)" opacity="0.3"/>
         </g>
     </svg>`,
+
+    'demo_truck': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <g filter="url(#shadow)">
+            ${TREADS_H}
+
+            <!-- Truck Body -->
+            <rect x="15" y="20" width="70" height="60" rx="4" fill="COL_PRIMARY" stroke="#111" stroke-width="2"/>
+
+            <!-- Explosive Cargo Bed -->
+            <rect x="20" y="25" width="60" height="40" fill="#222" stroke="#111"/>
+            <rect x="20" y="25" width="60" height="40" fill="url(#caution)" opacity="0.6"/>
+
+            <!-- TNT Barrels -->
+            <ellipse cx="35" cy="45" rx="10" ry="12" fill="#c00" stroke="#600" stroke-width="2"/>
+            <ellipse cx="65" cy="45" rx="10" ry="12" fill="#c00" stroke="#600" stroke-width="2"/>
+            <text x="35" y="48" font-size="8" text-anchor="middle" fill="#fff" font-weight="bold" font-family="Arial">TNT</text>
+            <text x="65" y="48" font-size="8" text-anchor="middle" fill="#fff" font-weight="bold" font-family="Arial">TNT</text>
+
+            <!-- Detonator Box -->
+            <rect x="45" y="15" width="10" height="12" fill="#333" stroke="#111"/>
+            <circle cx="50" cy="10" r="5" fill="#f00">
+                <animate attributeName="fill" values="#f00;#600;#f00" dur="0.5s" repeatCount="indefinite"/>
+            </circle>
+
+            <!-- Cab -->
+            <rect x="25" y="68" width="50" height="15" rx="2" fill="#333"/>
+            <rect x="30" y="71" width="15" height="8" fill="#acf" opacity="0.7"/>
+            <rect x="55" y="71" width="15" height="8" fill="#acf" opacity="0.7"/>
+        </g>
+    </svg>`,
 };
