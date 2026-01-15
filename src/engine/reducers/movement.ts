@@ -114,9 +114,33 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         }
     }
 
+    // Improved stuck detection that catches collision oscillation
+    // The old logic only checked avgVel magnitude, but units being pushed back by
+    // collisions can have non-zero avgVel while making no progress toward the target.
+    const dirToTarget = target.sub(entity.pos).norm();
+    const avgVelMag = avgVel.mag();
+
+    // Check if avgVel is pointing away from target (being pushed backward by collisions)
+    // Dot product < 0 means moving away from target
+    const velDotDir = avgVel.x * dirToTarget.x + avgVel.y * dirToTarget.y;
+    const isBeingPushedBack = avgVelMag > 0.05 && velDotDir < -0.02;
+
+    // Check if unit has no path and is far from target (pathfinding failed)
+    const hasNoPath = !path || path.length === 0;
+    const isPathfindingStuck = hasNoPath && distToTarget > 100;
+
     if (distToTarget > 10) {
-        if (avgVel.mag() < speed * 0.15) {
-            stuckTimer++;
+        // Stuck conditions:
+        // 1. Very low velocity (original check)
+        // 2. Being pushed backward by collisions (new)
+        // 3. No path and low forward progress (new)
+        const isLowVelocity = avgVelMag < speed * 0.15;
+        const isLowForwardProgress = isPathfindingStuck && velDotDir < speed * 0.1;
+
+        if (isLowVelocity || isBeingPushedBack || isLowForwardProgress) {
+            // Increment faster when being pushed back or stuck without a path
+            const increment = (isBeingPushedBack || isPathfindingStuck) ? 2 : 1;
+            stuckTimer += increment;
         } else {
             stuckTimer = Math.max(0, stuckTimer - 2);
         }
@@ -124,9 +148,15 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         stuckTimer = 0;
     }
 
-    if (stuckTimer > 20) {
-        unstuckTimer = 25;
-        stuckTimer = 0;
+    // Trigger unstuck behavior - lower threshold when no path available
+    // Units stuck without a path need to escape faster to find an alternate route
+    const stuckThreshold = isPathfindingStuck ? 12 : 20;
+    if (stuckTimer > stuckThreshold) {
+        // Longer unstuck duration when no path - need more time to find alternate route
+        unstuckTimer = isPathfindingStuck ? 35 : 25;
+        // Don't reset stuckTimer to 0 - keep a base value so cumulative stuck time is tracked
+        // This allows us to detect repeated unstuck cycles and eventually give up
+        stuckTimer = isPathfindingStuck ? 6 : 0;
         const toTarget = target.sub(entity.pos).norm();
         const perpendicular = Math.random() > 0.5
             ? new Vector(-toTarget.y, toTarget.x)
@@ -136,19 +166,47 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         pathIdx = 0;
     }
 
+    // If stuck for a very long time (multiple unstuck cycles) with no path, give up on target
+    // This prevents infinite oscillation when target is truly unreachable
+    // stuckTimer accumulates: 6 (base after unstuck) + ~12 per cycle = ~18 per cycle
+    // After ~3 cycles (~54+ ticks of stuck time), give up
+    const giveUpThreshold = 50;
+    const shouldGiveUp = isPathfindingStuck && stuckTimer > giveUpThreshold;
+
     if (unstuckTimer > 0 && unstuckDir) {
+        // During unstuck mode, keep stuckTimer steady (don't reset to 0)
+        // This tracks cumulative stuck time across multiple unstuck attempts
         return {
             ...entity,
             movement: {
                 ...entity.movement,
                 vel: unstuckDir.scale(speed * 0.8),
-                stuckTimer: 0,
+                stuckTimer: stuckTimer,  // Preserve accumulated stuck time
                 unstuckTimer: unstuckTimer - 1,
                 unstuckDir: unstuckDir,
                 avgVel: avgVel,
                 path: null,
                 pathIdx: 0,
                 finalDest
+            }
+        };
+    }
+
+    // Give up on unreachable target after multiple failed unstuck attempts
+    if (shouldGiveUp) {
+        return {
+            ...entity,
+            movement: {
+                ...entity.movement,
+                vel: new Vector(0, 0),
+                moveTarget: null,  // Clear the unreachable target
+                stuckTimer: 0,
+                unstuckTimer: 0,
+                unstuckDir: null,
+                avgVel: avgVel,
+                path: null,
+                pathIdx: 0,
+                finalDest: null
             }
         };
     }
@@ -228,9 +286,22 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         const rightY = dir.x;
         const rightBias = entityCount > 0 ? 0.4 : 0;
 
+        // Project separation perpendicular to target direction to prevent "kiting" behavior.
+        // When multiple units cluster to attack the same target, raw separation forces can
+        // push them backward away from the target. By removing the backward component,
+        // units spread out sideways instead of retreating.
+        let sepX = separation.x;
+        let sepY = separation.y;
+        const sepDotDir = sepX * dir.x + sepY * dir.y;
+        if (sepDotDir < 0) {
+            // Separation is pointing backward - remove the backward component
+            sepX -= sepDotDir * dir.x;
+            sepY -= sepDotDir * dir.y;
+        }
+
         // finalDir = dir + separation*0.8 + avoidance + right*rightBias
-        let fdX = dir.x + separation.x * 0.8 + avoidanceX + rightX * rightBias;
-        let fdY = dir.y + separation.y * 0.8 + avoidanceY + rightY * rightBias;
+        let fdX = dir.x + sepX * 0.8 + avoidanceX + rightX * rightBias;
+        let fdY = dir.y + sepY * 0.8 + avoidanceY + rightY * rightBias;
         const fdMag = Math.sqrt(fdX * fdX + fdY * fdY);
         if (fdMag > 0.001) {
             fdX /= fdMag;

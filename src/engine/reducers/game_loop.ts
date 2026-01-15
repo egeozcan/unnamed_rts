@@ -665,6 +665,15 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     // Max collision check radius (max unit radius ~45 + max other radius ~45 + buffer)
     const MAX_CHECK_RADIUS = 100;
 
+    // Save start positions for moving units to correct backward displacement after all iterations
+    const startPositions = new Map<string, Vector>();
+    for (const unit of movingUnits) {
+        const unitData = unit as unknown as UnitEntity;
+        if (unitData.movement.moveTarget) {
+            startPositions.set(unit.id, unit.pos);
+        }
+    }
+
     for (let k = 0; k < iterations; k++) {
         let hadOverlap = false; // OPTIMIZATION: Track if we found any overlaps this iteration
 
@@ -779,6 +788,59 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         // Collision resolution has converged
         if (!hadOverlap) {
             break;
+        }
+    }
+
+    // After all iterations, correct any backward displacement for moving units.
+    // This prevents collision resolution from fighting against intended movement.
+    for (const [unitId, startPos] of startPositions) {
+        const unit = workingEntities[unitId];
+        if (!unit || unit.dead) continue;
+
+        const unitData = unit as unknown as UnitEntity;
+        const target = unitData.movement.moveTarget;
+        if (!target) continue;
+
+        // Calculate net displacement from collision resolution
+        const dispX = unit.pos.x - startPos.x;
+        const dispY = unit.pos.y - startPos.y;
+        const dispMag = Math.sqrt(dispX * dispX + dispY * dispY);
+        if (dispMag < 0.001) continue;
+
+        // Get direction to target
+        const toTargetX = target.x - startPos.x;
+        const toTargetY = target.y - startPos.y;
+        const toTargetMag = Math.sqrt(toTargetX * toTargetX + toTargetY * toTargetY);
+        if (toTargetMag < 0.001) continue;
+
+        const toTargetNormX = toTargetX / toTargetMag;
+        const toTargetNormY = toTargetY / toTargetMag;
+
+        // Check if net displacement is backward (opposite to target direction)
+        const dispDotTarget = (dispX / dispMag) * toTargetNormX + (dispY / dispMag) * toTargetNormY;
+        if (dispDotTarget >= -0.3) {
+            // Displacement is mostly forward or sideways - allow it
+            continue;
+        }
+
+        // Net displacement is significantly backward - project perpendicular to target direction
+        // Remove the backward component, keep only the perpendicular part
+        const backwardComponent = (dispX * toTargetNormX + dispY * toTargetNormY);
+        const projectedX = dispX - backwardComponent * toTargetNormX;
+        const projectedY = dispY - backwardComponent * toTargetNormY;
+        const projMag = Math.sqrt(projectedX * projectedX + projectedY * projectedY);
+
+        if (projMag < 0.001) {
+            // Displacement was directly backward - use perpendicular (keep right rule)
+            const perpX = -toTargetNormY;
+            const perpY = toTargetNormX;
+            (unit as MutableEntity).pos = new Vector(startPos.x + perpX * dispMag, startPos.y + perpY * dispMag);
+        } else {
+            // Use the perpendicular component with original magnitude
+            (unit as MutableEntity).pos = new Vector(
+                startPos.x + (projectedX / projMag) * dispMag,
+                startPos.y + (projectedY / projMag) * dispMag
+            );
         }
     }
 
