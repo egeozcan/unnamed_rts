@@ -126,8 +126,9 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
 
     // Check if avgVel is pointing away from target (being pushed backward by collisions)
     // Dot product < 0 means moving away from target
+    // NOTE: We defer the full isBeingPushedBack check until after isActuallyMovingForward
+    // is calculated, since direction reversals can cause avgVel to point backward temporarily
     const velDotDir = avgVel.x * dirToTarget.x + avgVel.y * dirToTarget.y;
-    const isBeingPushedBack = avgVelMag > 0.05 && velDotDir < -0.02;
 
     // Check if unit has no path and is far from target (pathfinding failed)
     const hasNoPath = !path || path.length === 0;
@@ -145,10 +146,16 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     const lastVelDotDir = lastVel.x * dirToTarget.x + lastVel.y * dirToTarget.y;
     const isActuallyMovingForward = lastVelMag > speed * 0.5 && lastVelDotDir > speed * 0.3;
 
+    // Now calculate isBeingPushedBack, gated by isActuallyMovingForward
+    // During direction reversals, avgVel may point backward due to exponential averaging
+    // even when the unit is currently moving forward. Only flag as pushed back if
+    // we're NOT making actual forward progress.
+    const isBeingPushedBack = avgVelMag > 0.05 && velDotDir < -0.02 && !isActuallyMovingForward;
+
     if (distToTarget > 10 && !isInUnstuckMode) {
         // Stuck conditions:
         // 1. Low avgVel AND not actually moving forward (distinguishes stuck from direction change)
-        // 2. Being pushed backward by collisions
+        // 2. Being pushed backward by collisions (also gated by !isActuallyMovingForward)
         // 3. No path and low forward progress
         const isLowVelocity = avgVelMag < speed * 0.15 && !isActuallyMovingForward;
         const isLowForwardProgress = isPathfindingStuck && velDotDir < speed * 0.1;

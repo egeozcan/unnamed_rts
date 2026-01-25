@@ -211,4 +211,59 @@ describe('Movement & Pathfinding', () => {
         const ent = state.entities['json_unit'];
         expect(ent).toBeDefined();
     });
+
+    it('should not falsely detect stuck during direction reversals with negative avgVel', () => {
+        // This tests the specific bug where avgVel pointing backward (from recent direction change)
+        // caused isBeingPushedBack to trigger even when lastVel shows forward movement.
+        // The artillery unit at tick 33692 had:
+        // - avgVel: {x: -0.144, y: -0.266} (pointing backward due to 90% retention)
+        // - lastVel: {x: 1.2, y: -0.007} (pointing forward toward target)
+        // This caused false "being pushed back" detection and oscillation.
+
+        let state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            entities: {} as Record<EntityId, Entity>,
+        };
+
+        // Spawn a unit at a position and simulate the problematic state
+        const unit = createEntity(500, 500, 1, 'UNIT', 'medium');
+        state = {
+            ...state,
+            entities: {
+                [unit.id]: {
+                    ...unit,
+                    movement: {
+                        ...unit.movement,
+                        moveTarget: new Vector(700, 500), // Target to the right
+                        // Simulate avgVel pointing backward (left) due to recent direction reversal
+                        avgVel: new Vector(-0.5, -0.2),
+                        // But lastVel shows we're currently moving forward (right) at speed
+                        lastVel: new Vector(1.8, 0.1),
+                        stuckTimer: 0,
+                        unstuckTimer: 0,
+                        unstuckDir: null,
+                        path: [new Vector(520, 500), new Vector(700, 500)],
+                        pathIdx: 0,
+                        finalDest: new Vector(700, 500)
+                    }
+                }
+            } as Record<EntityId, Entity>
+        };
+
+        // Run a few ticks - stuckTimer should NOT increase significantly
+        // because lastVel shows we're making forward progress
+        let maxStuckTimer = 0;
+        for (let i = 0; i < 30; i++) {
+            state = update(state, { type: 'TICK' });
+            const ent = state.entities[unit.id] as any;
+            if (ent && ent.movement.stuckTimer > maxStuckTimer) {
+                maxStuckTimer = ent.movement.stuckTimer;
+            }
+        }
+
+        // stuckTimer should stay low (below unstuck trigger threshold of 20)
+        // because lastVel shows forward movement, preventing false stuck detection
+        expect(maxStuckTimer).toBeLessThan(15);
+    });
 });
