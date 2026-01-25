@@ -1,6 +1,7 @@
 import { GameState, Action, Entity, UnitEntity, Vector, HarvesterUnit, EntityId, AirUnit } from '../types.js';
 import { RULES, AIPersonality, isUnitData } from '../../data/schemas/index.js';
 import { AIPlayerState, OffensiveGroup } from './types.js';
+import { DebugEvents } from '../debug/events.js';
 import {
     ATTACK_GROUP_MIN_SIZE,
     HARASS_GROUP_SIZE,
@@ -150,7 +151,7 @@ export function handleAttack(
 
     // Handle Group State Machine (Forming -> Rallying -> Moving -> Attacking)
     // Can also transition to: Engaging (combat en route), Retreating, Reinforcing
-    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter, aiState, enemies, baseCenter);
+    const cohesionActions = handleGroupCohesion(state, mainGroup, groupCenter, aiState, enemies, baseCenter, _playerId);
     if (cohesionActions.length > 0) {
         actions.push(...cohesionActions);
         // If retreating or reinforcing, don't continue to attack logic
@@ -168,6 +169,23 @@ export function handleAttack(
     // Find best target - prioritize threats and high-value targets
     const bestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits, [], baseCenter);
 
+    // Emit debug event for target selection
+    if (import.meta.env.DEV && bestTarget) {
+        DebugEvents.emit('decision', {
+            tick: state.tick,
+            playerId: _playerId,
+            entityId: mainGroup.id,
+            data: {
+                category: 'combat',
+                action: 'select-target',
+                reason: `target=${bestTarget.key}:${bestTarget.id.slice(0, 8)}`,
+                targetId: bestTarget.id,
+                targetKey: bestTarget.key,
+                groupSize: aiState.attackGroup.length
+            }
+        });
+    }
+
     // --- MULTI-FRONT ATTACK (Simplified from original) ---
     // If army is large enough (10+ units), split into two attack groups
     const MULTI_FRONT_THRESHOLD = 10;
@@ -184,10 +202,10 @@ export function handleAttack(
             const flankGroupUnits = aiState.attackGroup.slice(splitIndex);
 
             // Issue orders to Main Group
-            issueAttackOrders(actions, state, mainGroupUnits, bestTarget.id);
+            issueAttackOrders(actions, state, mainGroupUnits, bestTarget.id, _playerId);
 
             // Issue orders to Flank Group
-            issueAttackOrders(actions, state, flankGroupUnits, secondBestTarget.id);
+            issueAttackOrders(actions, state, flankGroupUnits, secondBestTarget.id, _playerId);
 
             return actions;
         }
@@ -195,10 +213,10 @@ export function handleAttack(
 
     // Standard Single Front Attack
     if (bestTarget) {
-        issueAttackOrders(actions, state, aiState.attackGroup, bestTarget.id);
+        issueAttackOrders(actions, state, aiState.attackGroup, bestTarget.id, _playerId);
     } else if (aiState.attackGroup.length > 0 && enemies.length > 0) {
         // Fallback: Attack closest enemy
-        issueAttackOrders(actions, state, aiState.attackGroup, enemies[0].id);
+        issueAttackOrders(actions, state, aiState.attackGroup, enemies[0].id, _playerId);
     }
 
     // Track combat
@@ -215,7 +233,8 @@ function handleGroupCohesion(
     groupCenter: Vector,
     aiState: AIPlayerState,
     enemies: Entity[],
-    baseCenter: Vector
+    baseCenter: Vector,
+    playerId: number
 ): Action[] {
     const actions: Action[] = [];
 
@@ -246,8 +265,22 @@ function handleGroupCohesion(
 
         // Check for retreat condition
         if (group.avgHealthPercent < GROUP_RETREAT_HEALTH && group.status !== 'retreating') {
+            const prevStatus = group.status;
             group.status = 'retreating';
             group.lastOrderTick = state.tick;
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('group', {
+                    tick: state.tick,
+                    playerId: playerId,
+                    data: {
+                        groupId: group.id,
+                        action: 'status-changed',
+                        prevStatus,
+                        status: 'retreating',
+                        reason: `avgHp=${group.avgHealthPercent.toFixed(0)}% < ${GROUP_RETREAT_HEALTH}%`
+                    }
+                });
+            }
         }
         // Check for reinforcement request
         else if (group.avgHealthPercent < GROUP_REINFORCE_HEALTH && !group.needsReinforcements) {
@@ -277,6 +310,19 @@ function handleGroupCohesion(
             group.status = 'rallying';
             group.needsReinforcements = false;
             group.lastOrderTick = state.tick;
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('group', {
+                    tick: state.tick,
+                    playerId: playerId,
+                    data: {
+                        groupId: group.id,
+                        action: 'status-changed',
+                        prevStatus: 'retreating',
+                        status: 'rallying',
+                        reason: `avgHp=${group.avgHealthPercent.toFixed(0)}% recovered`
+                    }
+                });
+            }
         } else {
             // Move all units toward base
             actions.push({
@@ -334,7 +380,7 @@ function handleGroupCohesion(
             );
             if (sortedThreats.length > 0) {
                 group.engagedEnemies = sortedThreats.slice(0, 3).map(e => e.id);
-                issueAttackOrders(actions, state, aliveUnits, sortedThreats[0].id);
+                issueAttackOrders(actions, state, aliveUnits, sortedThreats[0].id, playerId);
             }
             return actions;
         }
@@ -344,13 +390,27 @@ function handleGroupCohesion(
     if ((group.status === 'rallying' || group.status === 'moving') &&
         (nearbyThreats.length > 0 || unitsUnderAttack.length > 0)) {
         // Save current destination before engaging
+        const prevStatus = group.status;
         group.preEngageTarget = group.moveTarget || group.rallyPoint;
         group.status = 'engaging';
         group.engagedEnemies = nearbyThreats.map(e => e.id);
         group.lastOrderTick = state.tick;
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('group', {
+                tick: state.tick,
+                playerId: playerId,
+                data: {
+                    groupId: group.id,
+                    action: 'status-changed',
+                    prevStatus,
+                    status: 'engaging',
+                    reason: `threats=${nearbyThreats.length}, unitsUnderAttack=${unitsUnderAttack.length}`
+                }
+            });
+        }
         // Attack the threats
         if (nearbyThreats.length > 0) {
-            issueAttackOrders(actions, state, aliveUnits, nearbyThreats[0].id);
+            issueAttackOrders(actions, state, aliveUnits, nearbyThreats[0].id, playerId);
         }
         return actions;
     }
@@ -644,7 +704,7 @@ function selectBestTarget(
     return bestTarget;
 }
 
-function issueAttackOrders(actions: Action[], state: GameState, unitIds: EntityId[], targetId: EntityId) {
+function issueAttackOrders(actions: Action[], state: GameState, unitIds: EntityId[], targetId: EntityId, playerId?: number) {
     // Only issue orders to units that aren't already attacking this target
     // OR if they are idle
     const unitsNeedingOrders = unitIds.filter(id => {
@@ -666,6 +726,26 @@ function issueAttackOrders(actions: Action[], state: GameState, unitIds: EntityI
                 targetId: targetId
             }
         });
+
+        // Emit debug events for each unit receiving attack command
+        if (import.meta.env.DEV) {
+            const target = state.entities[targetId];
+            for (const unitId of unitsNeedingOrders) {
+                const unit = state.entities[unitId];
+                DebugEvents.emit('command', {
+                    tick: state.tick,
+                    playerId: playerId ?? unit?.owner,
+                    entityId: unitId,
+                    data: {
+                        command: 'attack',
+                        source: 'ai',
+                        targetId,
+                        targetKey: target?.key,
+                        reason: 'focus-fire'
+                    }
+                });
+            }
+        }
     }
 }
 
@@ -709,6 +789,23 @@ export function handleDefense(
                 targetId: primaryThreat.id
             }
         });
+
+        // Emit debug event for defense decision
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('decision', {
+                tick: state.tick,
+                playerId: _playerId,
+                data: {
+                    category: 'combat',
+                    action: 'defend',
+                    reason: `threat=${primaryThreat.key}:${primaryThreat.id.slice(0, 8)}`,
+                    targetId: primaryThreat.id,
+                    targetKey: primaryThreat.key,
+                    defenderCount: unitsNeedingOrders.length,
+                    threatCount: threats.length
+                }
+            });
+        }
     }
 
     return actions;
@@ -785,6 +882,22 @@ export function handleHarass(
                     targetId: bestTarget.id
                 }
             });
+
+            // Emit debug event for harass decision
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('decision', {
+                    tick: state.tick,
+                    playerId: _playerId,
+                    data: {
+                        category: 'combat',
+                        action: 'harass',
+                        reason: `target=${bestTarget.key}:${bestTarget.id.slice(0, 8)}`,
+                        targetId: bestTarget.id,
+                        targetKey: bestTarget.key,
+                        harasserCount: unitsNeedingOrders.length
+                    }
+                });
+            }
         }
     }
 
@@ -1391,6 +1504,23 @@ export function handleAirStrikes(
                 }
             });
         }
+
+        // Emit debug event for air strike decision
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('decision', {
+                tick: state.tick,
+                playerId: playerId,
+                data: {
+                    category: 'combat',
+                    action: 'air-strike',
+                    reason: `target=${bestTarget.key}:${bestTarget.id.slice(0, 8)}, score=${bestScore.toFixed(0)}`,
+                    targetId: bestTarget.id,
+                    targetKey: bestTarget.key,
+                    harrierCount: harriersToLaunch,
+                    scores: { targetScore: bestScore }
+                }
+            });
+        }
     }
 
     return actions;
@@ -1504,6 +1634,23 @@ export function handleDemoTruckAssault(
                 targetId: bestTarget.id
             }
         });
+
+        // Emit debug event for demo truck assault decision
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('decision', {
+                tick: state.tick,
+                playerId: playerId,
+                entityId: idleDemoTrucks[0].id,
+                data: {
+                    category: 'combat',
+                    action: 'demo-truck-assault',
+                    reason: `target=${bestTarget.key}:${bestTarget.id.slice(0, 8)}, score=${bestScore.toFixed(0)}`,
+                    targetId: bestTarget.id,
+                    targetKey: bestTarget.key,
+                    scores: { targetScore: bestScore }
+                }
+            });
+        }
     }
 
     return actions;
