@@ -1,6 +1,7 @@
 import { GameState, Entity, EntityId, Vector, HarvesterUnit } from '../types.js';
 import { RULES, AIPersonality } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
+import { DebugEvents } from '../debug/events.js';
 import {
     AI_CONSTANTS,
     BASE_DEFENSE_RADIUS,
@@ -344,7 +345,25 @@ export function evaluateInvestmentPriority(
     aiState.economyScore = calculateEconomyScore(state, playerId, myBuildings);
 
     // Calculate threat level
+    const prevThreatLevel = aiState.threatLevel;
     aiState.threatLevel = calculateThreatLevel(state, playerId, baseCenter, enemies, myBuildings);
+
+    // Emit threat event if threat level changed significantly (>10 points)
+    if (import.meta.env.DEV && Math.abs(aiState.threatLevel - prevThreatLevel) > 10) {
+        DebugEvents.emit('threat', {
+            tick: state.tick,
+            playerId,
+            data: {
+                threatLevel: aiState.threatLevel,
+                prevThreatLevel,
+                economyScore: aiState.economyScore,
+                desperation: aiState.stalemateDesperation,
+                isDoomed: aiState.isDoomed,
+                threatsNearBase: aiState.threatsNearBase,
+                vengeanceScores: aiState.vengeanceScores
+            }
+        });
+    }
 
     // Calculate army ratio
     const enemyCombatUnits = enemies.filter(e => e.type === 'UNIT' && e.key !== 'harvester' && e.key !== 'mcv');

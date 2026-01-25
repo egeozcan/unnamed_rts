@@ -15,6 +15,7 @@ import { getDifficultyModifiers } from '../ai/utils';
 import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
 import { getDemoTruckExplosionStats } from './demo_truck';
+import { DebugEvents } from '../debug/events';
 
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
@@ -87,6 +88,19 @@ export function tick(state: GameState): GameState {
                 ...player,
                 credits: player.credits + adjustedCredits
             };
+
+            // Emit economy event for harvester deposit
+            if (import.meta.env.DEV && adjustedCredits > 0) {
+                DebugEvents.emit('economy', {
+                    tick: nextTick,
+                    playerId: pid,
+                    data: {
+                        credits: nextPlayers[pid].credits,
+                        delta: adjustedCredits,
+                        source: 'harvest'
+                    }
+                });
+            }
         }
     }
 
@@ -108,14 +122,46 @@ export function tick(state: GameState): GameState {
     for (const d of damageEvents) {
         if (updatedEntities[d.targetId]) {
             const ent = updatedEntities[d.targetId];
+            const prevHp = ent.hp;
             const nextHp = Math.min(ent.maxHp, Math.max(0, ent.hp - d.amount));
+            const nowDead = nextHp <= 0;
+
+            // Emit state-change event for damage
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('state-change', {
+                    tick: state.tick,
+                    playerId: ent.owner,
+                    entityId: ent.id,
+                    data: {
+                        subject: ent.type === 'UNIT' ? 'unit' : 'building',
+                        field: 'hp',
+                        from: prevHp,
+                        to: nextHp,
+                        cause: `attack from ${d.attackerId.slice(0, 8)}`
+                    }
+                });
+                if (nowDead) {
+                    DebugEvents.emit('state-change', {
+                        tick: state.tick,
+                        playerId: ent.owner,
+                        entityId: ent.id,
+                        data: {
+                            subject: ent.type === 'UNIT' ? 'unit' : 'building',
+                            field: 'dead',
+                            from: false,
+                            to: true,
+                            cause: `killed by ${d.attackerId.slice(0, 8)}`
+                        }
+                    });
+                }
+            }
 
             // Update combat component for units and buildings with combat
             if (ent.type === 'UNIT') {
                 updatedEntities[d.targetId] = {
                     ...ent,
                     hp: nextHp,
-                    dead: nextHp <= 0,
+                    dead: nowDead,
                     combat: {
                         ...ent.combat,
                         flash: 5,
@@ -127,7 +173,7 @@ export function tick(state: GameState): GameState {
                 updatedEntities[d.targetId] = {
                     ...ent,
                     hp: nextHp,
-                    dead: nextHp <= 0,
+                    dead: nowDead,
                     combat: {
                         ...ent.combat,
                         flash: 5,
@@ -140,7 +186,7 @@ export function tick(state: GameState): GameState {
                 updatedEntities[d.targetId] = {
                     ...ent,
                     hp: nextHp,
-                    dead: nextHp <= 0
+                    dead: nowDead
                 };
             }
         }
@@ -972,8 +1018,39 @@ function processExplosions(
                 const modifier = damageModifiers?.['explosion']?.[armorType] ?? 1.0;
                 const finalDamage = Math.round(baseDamage * modifier);
 
+                const prevHp = ent.hp;
                 const newHp = Math.max(0, ent.hp - finalDamage);
                 const nowDead = newHp <= 0;
+
+                // Emit state-change event for explosion damage
+                if (import.meta.env.DEV && finalDamage > 0) {
+                    DebugEvents.emit('state-change', {
+                        tick: _tick,
+                        playerId: ent.owner,
+                        entityId: ent.id,
+                        data: {
+                            subject: ent.type === 'UNIT' ? 'unit' : 'building',
+                            field: 'hp',
+                            from: prevHp,
+                            to: newHp,
+                            cause: `explosion from ${explosion.sourceId.slice(0, 8)}`
+                        }
+                    });
+                    if (nowDead) {
+                        DebugEvents.emit('state-change', {
+                            tick: _tick,
+                            playerId: ent.owner,
+                            entityId: ent.id,
+                            data: {
+                                subject: ent.type === 'UNIT' ? 'unit' : 'building',
+                                field: 'dead',
+                                from: false,
+                                to: true,
+                                cause: `explosion from ${explosion.sourceId.slice(0, 8)}`
+                            }
+                        });
+                    }
+                }
 
                 // Update entity with damage
                 if (ent.type === 'UNIT') {

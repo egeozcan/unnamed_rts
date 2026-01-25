@@ -4,6 +4,7 @@ import { canBuild, calculatePower, getRuleData, createEntity } from './helpers';
 import { getDifficultyModifiers } from '../ai/utils';
 import { type EntityCache } from '../perf';
 import { isAirBase } from '../entity-helpers';
+import { DebugEvents } from '../debug/events';
 
 export function updateProduction(player: PlayerState, _entities: Record<EntityId, Entity>, state: GameState, cache: EntityCache): { player: PlayerState, createdEntities: Entity[], modifiedEntities: Record<EntityId, Entity> } {
     let nextPlayer = { ...player, queues: { ...player.queues } };
@@ -94,6 +95,18 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
 
             if (nextPlayer.queues[cat].progress >= 100) {
                 if (cat === 'building') {
+                    if (import.meta.env.DEV) {
+                        DebugEvents.emit('production', {
+                            tick: state.tick,
+                            playerId: player.id,
+                            data: {
+                                action: 'completed',
+                                category: cat,
+                                key: q.current,
+                                queueLength: 0
+                            }
+                        });
+                    }
                     nextPlayer = {
                         ...nextPlayer,
                         readyToPlace: q.current,
@@ -153,6 +166,21 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                                         slots: newSlots
                                     }
                                 } as BuildingEntity;
+
+                                // Emit production completed event for air unit
+                                if (import.meta.env.DEV) {
+                                    DebugEvents.emit('production', {
+                                        tick: state.tick,
+                                        playerId: player.id,
+                                        entityId: dockedHarrier.id,
+                                        data: {
+                                            action: 'completed',
+                                            category: cat,
+                                            key: q.current,
+                                            queueLength: (nextPlayer.queues[cat].queued || []).length
+                                        }
+                                    });
+                                }
 
                                 foundSlot = true;
                                 break;
@@ -228,6 +256,21 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
 
                         createdEntities.push(movedUnit);
 
+                        // Emit production completed event for ground unit
+                        if (import.meta.env.DEV) {
+                            DebugEvents.emit('production', {
+                                tick: state.tick,
+                                playerId: player.id,
+                                entityId: movedUnit.id,
+                                data: {
+                                    action: 'completed',
+                                    category: cat,
+                                    key: q.current,
+                                    queueLength: (nextPlayer.queues[cat].queued || []).length - 1
+                                }
+                            });
+                        }
+
                         // Start next unit in queue if available
                         const currentQueue = nextPlayer.queues[cat];
                         const queuedItems = currentQueue.queued || [];
@@ -279,6 +322,20 @@ export function startBuild(state: GameState, payload: { category: string; key: s
     // Check prerequisites and production building requirements
     if (!canBuild(key, category, playerId, state.entities)) {
         return state;
+    }
+
+    // Emit production started event
+    if (import.meta.env.DEV) {
+        DebugEvents.emit('production', {
+            tick: state.tick,
+            playerId,
+            data: {
+                action: 'started',
+                category,
+                key,
+                queueLength: 0
+            }
+        });
     }
 
     return {
@@ -360,6 +417,19 @@ export function queueUnit(state: GameState, payload: { category: string; key: st
 
     // If nothing is currently building, start the first one
     if (!q.current) {
+        // Emit production started event
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('production', {
+                tick: state.tick,
+                playerId,
+                data: {
+                    action: 'started',
+                    category,
+                    key: itemsToAdd[0],
+                    queueLength: itemsToAdd.length - 1
+                }
+            });
+        }
         return {
             ...state,
             players: {
