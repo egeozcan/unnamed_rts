@@ -18,6 +18,9 @@ export interface MovementComponent {
     readonly unstuckDir: Vector | null;
     readonly unstuckTimer: number;
     readonly avgVel?: Vector;
+    // Stores the velocity from last frame before it was cleared.
+    // Used for avgVel calculation to track intended movement (not collision displacement).
+    readonly lastVel?: Vector;
     // Progress tracking for flee destinations (harvesters)
     readonly lastDistToMoveTarget?: number;
     readonly bestDistToMoveTarget?: number;

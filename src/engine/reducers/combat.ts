@@ -88,10 +88,17 @@ export function updateCombatUnitBehavior(
         // No target, just moving (regular move or attack-move in progress)
         nextEntity = moveToward(nextEntity, nextEntity.movement.moveTarget, entityList) as CombatUnit;
         if (nextEntity.pos.dist(nextEntity.movement.moveTarget!) < 10) {
-            // Reached destination
+            // Reached destination - clear all movement state including unstuck
             nextEntity = {
                 ...nextEntity,
-                movement: { ...nextEntity.movement, moveTarget: null },
+                movement: {
+                    ...nextEntity.movement,
+                    moveTarget: null,
+                    stuckTimer: 0,
+                    unstuckTimer: 0,
+                    unstuckDir: null,
+                    avgVel: undefined
+                },
                 combat: {
                     ...nextEntity.combat,
                     attackMoveTarget: null,  // Clear attack-move destination
@@ -99,6 +106,18 @@ export function updateCombatUnitBehavior(
                 }
             };
         }
+    } else if (nextEntity.movement.unstuckTimer && nextEntity.movement.unstuckTimer > 0) {
+        // Unit is idle but still has stale unstuck state - clear it
+        nextEntity = {
+            ...nextEntity,
+            movement: {
+                ...nextEntity.movement,
+                stuckTimer: 0,
+                unstuckTimer: 0,
+                unstuckDir: null,
+                avgVel: undefined
+            }
+        };
     } else if (stance === 'defensive' && nextEntity.combat.stanceHomePos) {
         // Defensive stance: return to home position when idle
         const homePos = nextEntity.combat.stanceHomePos;
@@ -163,11 +182,19 @@ function shouldGiveUpPursuit(unit: CombatUnit, _target: Entity, stance: AttackSt
  * Clear target and set up return behavior
  */
 function clearTargetAndReturnHome(unit: CombatUnit, isAttackMove: boolean): CombatUnit {
+    // Clear stale movement state when changing targets/destinations
+    const clearedMovement = {
+        ...unit.movement,
+        stuckTimer: 0,
+        unstuckTimer: 0,
+        unstuckDir: null
+    };
+
     if (isAttackMove && unit.combat.attackMoveTarget) {
         // Resume attack-move toward original destination
         return {
             ...unit,
-            movement: { ...unit.movement, moveTarget: unit.combat.attackMoveTarget, path: null },
+            movement: { ...clearedMovement, moveTarget: unit.combat.attackMoveTarget, path: null },
             combat: {
                 ...unit.combat,
                 targetId: null,
@@ -178,13 +205,14 @@ function clearTargetAndReturnHome(unit: CombatUnit, isAttackMove: boolean): Comb
         // Defensive: return to home position
         return {
             ...unit,
-            movement: { ...unit.movement, moveTarget: unit.combat.stanceHomePos, path: null },
+            movement: { ...clearedMovement, moveTarget: unit.combat.stanceHomePos, path: null },
             combat: { ...unit.combat, targetId: null }
         };
     } else {
-        // Just clear target
+        // Just clear target and movement state
         return {
             ...unit,
+            movement: clearedMovement,
             combat: { ...unit.combat, targetId: null }
         };
     }

@@ -56,8 +56,12 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     // Ground units use pathfinding and collision avoidance
 
     let avgVel = entity.movement.avgVel || new Vector(0, 0);
-    const effectiveVel = entity.pos.sub(entity.prevPos);
-    avgVel = avgVel.scale(0.9).add(effectiveVel.scale(0.1));
+    // Use intended velocity from last frame, not position delta.
+    // Position delta (pos - prevPos) includes collision displacement which causes
+    // false stuck detection when collision resolution fights against movement.
+    // lastVel is stored in game_loop.ts before vel is cleared after movement application.
+    const lastVel = entity.movement.lastVel ? ensureVector(entity.movement.lastVel)! : new Vector(0, 0);
+    avgVel = avgVel.scale(0.9).add(lastVel.scale(0.1));
 
     let stuckTimer = entity.movement.stuckTimer || 0;
     let unstuckDir = ensureVector(entity.movement.unstuckDir);
@@ -129,7 +133,11 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     const hasNoPath = !path || path.length === 0;
     const isPathfindingStuck = hasNoPath && distToTarget > 100;
 
-    if (distToTarget > 10) {
+    // Skip stuck detection during unstuck mode - we're intentionally moving perpendicular
+    // so velDotDir will be ~0, which would falsely trigger isLowForwardProgress
+    const isInUnstuckMode = unstuckTimer > 0 && unstuckDir;
+
+    if (distToTarget > 10 && !isInUnstuckMode) {
         // Stuck conditions:
         // 1. Very low velocity (original check)
         // 2. Being pushed backward by collisions (new)
@@ -144,9 +152,10 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         } else {
             stuckTimer = Math.max(0, stuckTimer - 2);
         }
-    } else {
+    } else if (!isInUnstuckMode) {
         stuckTimer = 0;
     }
+    // During unstuck mode, stuckTimer is preserved (not modified)
 
     // Trigger unstuck behavior - lower threshold when no path available
     // Units stuck without a path need to escape faster to find an alternate route

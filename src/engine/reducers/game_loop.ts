@@ -513,7 +513,12 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                 }
                 currentEnt = {
                     ...currentEnt,
-                    movement: { ...currentEnt.movement, vel: new Vector(0, 0) }
+                    movement: {
+                        ...currentEnt.movement,
+                        vel: new Vector(0, 0),
+                        // Store the velocity before clearing so avgVel can track intended movement
+                        lastVel: vel
+                    }
                 };
                 nextEntities[id] = currentEnt;
             }
