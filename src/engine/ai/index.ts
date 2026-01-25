@@ -78,6 +78,8 @@ import {
     handleEngineerCapture
 } from './action_combat.js';
 
+import { updateHarvesterAI } from './harvester/index.js';
+
 /**
  * Main AI Logic Loop
  * This function determines the actions for an AI player for a given tick.
@@ -223,6 +225,16 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
     actions.push(...handleInductionRigOperations(state, playerId, myBuildings, myUnits)); // Deploy rigs on wells
     actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack, aiState, player.difficulty)); // Gather resources
+
+    // Update harvester AI (medium/hard only)
+    const harvesterResult = updateHarvesterAI(
+        aiState.harvesterAI,
+        playerId,
+        state,
+        player.difficulty
+    );
+    aiState.harvesterAI = harvesterResult.harvesterAI;
+    actions.push(...harvesterResult.actions);
 
     // --- COMBAT & UNIT CONTROL ---
     // Dummy AI skips all combat - just rallies units near base
