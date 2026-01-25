@@ -8,6 +8,9 @@ let currentMapWidth = 3000;
 let currentMapHeight = 3000;
 let onMinimapClick: ((worldX: number, worldY: number) => void) | null = null;
 
+// Track if listeners are already attached (for HMR support)
+let listenersInitialized = false;
+
 function setupClickHandler(canvas: HTMLCanvasElement) {
     let isDragging = false;
 
@@ -51,14 +54,23 @@ export function initMinimap() {
     minimapCanvas = document.getElementById('minimapCanvas') as HTMLCanvasElement;
     if (minimapCanvas) {
         minimapCtx = minimapCanvas.getContext('2d');
-        setupClickHandler(minimapCanvas);
     }
 
     // Observer mode floating minimap
     observerMinimapCanvas = document.getElementById('observerMinimapCanvas') as HTMLCanvasElement;
     if (observerMinimapCanvas) {
         observerMinimapCtx = observerMinimapCanvas.getContext('2d');
-        setupClickHandler(observerMinimapCanvas);
+    }
+
+    // Only set up listeners once - callbacks are updated via module variables (for HMR support)
+    if (!listenersInitialized) {
+        if (minimapCanvas) {
+            setupClickHandler(minimapCanvas);
+        }
+        if (observerMinimapCanvas) {
+            setupClickHandler(observerMinimapCanvas);
+        }
+        listenersInitialized = true;
     }
 }
 

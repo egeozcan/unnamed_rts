@@ -1308,6 +1308,27 @@ if (import.meta.hot) {
                 getCamera: () => currentState.camera
             });
 
+            // Reinitialize UI modules with fresh callbacks (they use listener guard pattern for HMR)
+            initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);
+            initMinimap();
+            initScoreboard();
+            initBirdsEye();
+            initCommandBar(
+                (stance) => {
+                    if (currentState.selection.length > 0) {
+                        currentState = update(currentState, {
+                            type: 'SET_STANCE',
+                            payload: { unitIds: currentState.selection, stance }
+                        });
+                        updateButtonsUI();
+                    }
+                },
+                () => {
+                    currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+                    updateButtonsUI();
+                }
+            );
+
             // Restart the game loop
             animationFrameId = requestAnimationFrame(gameLoop);
         }

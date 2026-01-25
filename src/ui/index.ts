@@ -13,6 +13,8 @@ let onToggleRepairMode: (() => void) | null = null;
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
 
+// Track if DOM listeners are already attached (for HMR support)
+let listenersInitialized = false;
 
 export function initUI(
     state: GameState,
@@ -22,27 +24,34 @@ export function initUI(
     cancelBuild?: (category: string) => void,
     dequeueUnit?: (category: string, key: string, count: number) => void
 ) {
+    // Always update state and callbacks (for HMR support)
     gameState = state;
     onBuildClick = buildBy;
     onCancelBuild = cancelBuild || null;
     onDequeueUnit = dequeueUnit || null;
     onToggleSellMode = toggleSell;
     onToggleRepairMode = toggleRepair || null;
-    setupTabs();
-    setupButtons();
 
-    const sellBtn = document.getElementById('sell-btn');
-    if (sellBtn) {
-        sellBtn.onclick = () => {
-            if (onToggleSellMode) onToggleSellMode();
-        };
-    }
+    // Only set up DOM listeners once - callbacks are updated via module variables
+    if (!listenersInitialized) {
+        setupTabs();
+        setupButtons();
 
-    const repairBtn = document.getElementById('repair-btn');
-    if (repairBtn) {
-        repairBtn.onclick = () => {
-            if (onToggleRepairMode) onToggleRepairMode();
-        };
+        const sellBtn = document.getElementById('sell-btn');
+        if (sellBtn) {
+            sellBtn.onclick = () => {
+                if (onToggleSellMode) onToggleSellMode();
+            };
+        }
+
+        const repairBtn = document.getElementById('repair-btn');
+        if (repairBtn) {
+            repairBtn.onclick = () => {
+                if (onToggleRepairMode) onToggleRepairMode();
+            };
+        }
+
+        listenersInitialized = true;
     }
 }
 
@@ -1195,6 +1204,9 @@ function parseGameState(json: string): GameState | null {
 
 // ==================== Command Bar (Stances + Attack-Move) ====================
 
+// Track if command bar listeners are already attached (for HMR support)
+let commandBarListenersInitialized = false;
+
 /**
  * Initialize the command bar for unit stances and attack-move.
  * Must be called after the DOM is ready.
@@ -1203,26 +1215,31 @@ export function initCommandBar(
     setStance: (stance: AttackStance) => void,
     toggleAttackMove: () => void
 ) {
+    // Always update callbacks (for HMR support)
     onSetStance = setStance;
     onToggleAttackMove = toggleAttackMove;
 
-    // Wire up stance buttons
-    const aggressiveBtn = document.getElementById('stance-aggressive');
-    const defensiveBtn = document.getElementById('stance-defensive');
-    const holdBtn = document.getElementById('stance-hold');
-    const attackMoveBtn = document.getElementById('attack-move-btn');
+    // Only set up DOM listeners once - callbacks are updated via module variables
+    if (!commandBarListenersInitialized) {
+        const aggressiveBtn = document.getElementById('stance-aggressive');
+        const defensiveBtn = document.getElementById('stance-defensive');
+        const holdBtn = document.getElementById('stance-hold');
+        const attackMoveBtn = document.getElementById('attack-move-btn');
 
-    if (aggressiveBtn) {
-        aggressiveBtn.addEventListener('click', () => onSetStance?.('aggressive'));
-    }
-    if (defensiveBtn) {
-        defensiveBtn.addEventListener('click', () => onSetStance?.('defensive'));
-    }
-    if (holdBtn) {
-        holdBtn.addEventListener('click', () => onSetStance?.('hold_ground'));
-    }
-    if (attackMoveBtn) {
-        attackMoveBtn.addEventListener('click', () => onToggleAttackMove?.());
+        if (aggressiveBtn) {
+            aggressiveBtn.addEventListener('click', () => onSetStance?.('aggressive'));
+        }
+        if (defensiveBtn) {
+            defensiveBtn.addEventListener('click', () => onSetStance?.('defensive'));
+        }
+        if (holdBtn) {
+            holdBtn.addEventListener('click', () => onSetStance?.('hold_ground'));
+        }
+        if (attackMoveBtn) {
+            attackMoveBtn.addEventListener('click', () => onToggleAttackMove?.());
+        }
+
+        commandBarListenersInitialized = true;
     }
 }
 

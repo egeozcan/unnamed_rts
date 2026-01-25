@@ -13,6 +13,9 @@ let currentMapHeight = 3000;
 let mousePos: { x: number; y: number } | null = null;
 let hoveredEntity: Entity | null = null;
 
+// Track if listeners are already attached (for HMR support)
+let listenersInitialized = false;
+
 // Entity categorization
 type EntityCategory = 'infantry' | 'vehicle' | 'air' | 'building_base' | 'building_defense' | 'resource' | 'rock' | 'well';
 
@@ -264,7 +267,12 @@ export function initBirdsEye() {
     birdsEyeCanvas = document.getElementById('birdsEyeCanvas') as HTMLCanvasElement;
     if (birdsEyeCanvas) {
         birdsEyeCtx = birdsEyeCanvas.getContext('2d');
+    }
+
+    // Only set up listeners once - callbacks are updated via module variables (for HMR support)
+    if (!listenersInitialized) {
         setupClickHandler();
+        listenersInitialized = true;
     }
 }
 
