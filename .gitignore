@@ -3,3 +3,5 @@ dist
 temp
 ideas.md
 coverage.worktrees/
+/.env
+/coverage/
