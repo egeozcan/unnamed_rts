@@ -19,21 +19,9 @@ import { parseTrigger, evaluateTrigger, Trigger } from './triggers.js';
 import { update } from '../../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../../engine/ai/index.js';
 import { formatStatus, formatUnit, formatFind, formatGroups } from './formatters.js';
+import { startRepl } from './repl.js';
 import fs from 'node:fs';
 import { GameState } from '../../engine/types.js';
-
-// ============================================================================
-// Stub Functions (to be implemented in later tasks)
-// ============================================================================
-
-// TODO: implement in Task 8
-async function startRepl(
-    _state: GameState | null,
-    _collector: DebugCollector,
-    _args: CliArgs
-): Promise<void> {
-    console.log('TODO: startRepl not yet implemented');
-}
 
 // ============================================================================
 // Main Entry Point
