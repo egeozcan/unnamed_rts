@@ -323,6 +323,17 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
             sepY -= sepDotDir * dir.y;
         }
 
+        // Additional per-axis scaling to reduce oscillation from diagonal clustering.
+        // The perpendicular projection above removes backward component parallel to dir,
+        // but when dir is diagonal, the resulting perpendicular vector can still have
+        // components opposing individual axes. Scale these down to reduce oscillation.
+        if ((dir.x > 0.3 && sepX < -0.1) || (dir.x < -0.3 && sepX > 0.1)) {
+            sepX *= 0.4;
+        }
+        if ((dir.y > 0.3 && sepY < -0.1) || (dir.y < -0.3 && sepY > 0.1)) {
+            sepY *= 0.4;
+        }
+
         // finalDir = dir + separation*0.8 + avoidance + right*rightBias
         let fdX = dir.x + sepX * 0.8 + avoidanceX + rightX * rightBias;
         let fdY = dir.y + sepY * 0.8 + avoidanceY + rightY * rightBias;
