@@ -1,6 +1,7 @@
 import { GameState, Action, Entity, PlayerState, BuildingEntity, Vector, UnitEntity, HarvesterUnit } from '../types.js';
 import { RULES, AIPersonality } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
+import { DebugEvents } from '../debug/events.js';
 import {
     hasProductionBuildingFor,
     checkPrerequisites,
@@ -74,6 +75,19 @@ export function handleEconomy(
             const data = RULES.buildings[defToBuild];
             if (data && player.credits >= data.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: defToBuild, playerId } });
+                if (import.meta.env.DEV) {
+                    DebugEvents.emit('decision', {
+                        tick: state.tick,
+                        playerId,
+                        data: {
+                            category: 'economy',
+                            action: 'queue-build',
+                            reason: 'panic-defense',
+                            building: defToBuild,
+                            isPanic: true
+                        }
+                    });
+                }
                 // Don't return, let unit production happen too
             }
         }
@@ -120,6 +134,20 @@ export function handleEconomy(
             const harvReqsMet = checkPrerequisites('harvester', buildings);
             if (harvData && harvReqsMet && player.credits >= harvData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
+                if (import.meta.env.DEV) {
+                    DebugEvents.emit('decision', {
+                        tick: state.tick,
+                        playerId,
+                        data: {
+                            category: 'economy',
+                            action: 'queue-build',
+                            reason: 'economy-priority-harvester',
+                            unit: 'harvester',
+                            currentHarvesters: harvesters.length,
+                            idealHarvesters
+                        }
+                    });
+                }
                 return actions; // Focus on harvesters
             }
         }
@@ -152,6 +180,19 @@ export function handleEconomy(
             if (canReachTarget && canBuildRefinery && refineryData && player.credits >= refineryData.cost) {
                 // Build refinery near the ore
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                if (import.meta.env.DEV) {
+                    DebugEvents.emit('decision', {
+                        tick: state.tick,
+                        playerId,
+                        data: {
+                            category: 'economy',
+                            action: 'queue-build',
+                            reason: 'expansion-refinery',
+                            building: 'refinery',
+                            refineryCount: refineries.length
+                        }
+                    });
+                }
                 return actions;
             } else if (!canReachTarget && buildingQueueEmpty && existingPowerPlants < MAX_POWER_FOR_EXPANSION) {
                 // BUILDING WALK: Build power plant toward the ore (limited number)

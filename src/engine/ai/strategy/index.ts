@@ -13,6 +13,7 @@
 import { Entity, EntityId } from '../../types.js';
 import { AIPersonality } from '../../../data/schemas/index.js';
 import { AIPlayerState } from '../types.js';
+import { DebugEvents } from '../../debug/events.js';
 import { AI_CONSTANTS, hasProductionBuildingFor } from '../utils.js';
 
 const {
@@ -57,8 +58,22 @@ export function updateStrategy(
 
         if (armySize > 0) {
             if (aiState.strategy !== 'defend') {
+                const prevStrategy = aiState.strategy;
                 aiState.strategy = 'defend';
                 aiState.lastStrategyChange = tick;
+                if (import.meta.env.DEV) {
+                    DebugEvents.emit('decision', {
+                        tick,
+                        playerId: undefined, // Not available in this function
+                        data: {
+                            category: 'strategy',
+                            action: 'strategy-change',
+                            prevStrategy,
+                            newStrategy: 'defend',
+                            reason: `threats-near-base=${threatsNearBase.length}`
+                        }
+                    });
+                }
             }
             aiState.lastCombatTick = tick;
             aiState.stalemateDesperation = 0;
@@ -84,10 +99,24 @@ export function updateStrategy(
         // Desperate attack when desperation is high
         if (aiState.stalemateDesperation >= 50 && enemies.length > 0) {
             if (armySize > 0) {
+                const prevStrategy = aiState.strategy;
                 aiState.strategy = 'all_in';
                 aiState.lastStrategyChange = tick;
                 if (aiState.allInStartTick === 0) aiState.allInStartTick = tick;
                 aiState.attackGroup = combatUnits.map(u => u.id);
+                if (import.meta.env.DEV) {
+                    DebugEvents.emit('decision', {
+                        tick,
+                        playerId: undefined,
+                        data: {
+                            category: 'strategy',
+                            action: 'strategy-change',
+                            prevStrategy,
+                            newStrategy: 'all_in',
+                            reason: `desperation=${aiState.stalemateDesperation}`
+                        }
+                    });
+                }
                 return;
             }
         }
@@ -120,9 +149,23 @@ export function updateStrategy(
     // Priority 2: Full attack if we have a strong army
     if (armySize >= attackThreshold && hasFactory && enemies.length > 0) {
         if (aiState.strategy !== 'attack') {
+            const prevStrategy = aiState.strategy;
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = tick;
             aiState.attackGroup = combatUnits.map(u => u.id);
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('decision', {
+                    tick,
+                    playerId: undefined,
+                    data: {
+                        category: 'strategy',
+                        action: 'strategy-change',
+                        prevStrategy,
+                        newStrategy: 'attack',
+                        reason: `army-size=${armySize} >= threshold=${attackThreshold}`
+                    }
+                });
+            }
         }
         return;
     }
@@ -140,10 +183,24 @@ export function updateStrategy(
             credits >= SURPLUS_CREDIT_THRESHOLD * 2;
 
         if (shouldBreakPeace) {
+            const prevStrategy = aiState.strategy;
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = tick;
             aiState.attackGroup = combatUnits.map(u => u.id);
             aiState.peaceTicks = 0;
+            if (import.meta.env.DEV) {
+                DebugEvents.emit('decision', {
+                    tick,
+                    playerId: undefined,
+                    data: {
+                        category: 'strategy',
+                        action: 'strategy-change',
+                        prevStrategy,
+                        newStrategy: 'attack',
+                        reason: `peace-break peaceTicks=${aiState.peaceTicks} credits=${credits}`
+                    }
+                });
+            }
             return;
         }
     }
@@ -208,6 +265,7 @@ export function updateStrategy(
 
     // Default: Build up
     if (aiState.strategy !== 'buildup') {
+        const prevStrategy = aiState.strategy;
         if (aiState.strategy === 'all_in') {
             aiState.allInStartTick = 0;
         }
@@ -216,6 +274,19 @@ export function updateStrategy(
         aiState.attackGroup = [];
         aiState.harassGroup = [];
         aiState.offensiveGroups = [];
+        if (import.meta.env.DEV) {
+            DebugEvents.emit('decision', {
+                tick,
+                playerId: undefined,
+                data: {
+                    category: 'strategy',
+                    action: 'strategy-change',
+                    prevStrategy,
+                    newStrategy: 'buildup',
+                    reason: 'default-fallback'
+                }
+            });
+        }
     }
 }
 
