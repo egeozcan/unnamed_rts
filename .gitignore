@@ -5,3 +5,4 @@ ideas.md
 coverage.worktrees/
 /.env
 /coverage/
+.worktrees
