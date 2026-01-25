@@ -95,7 +95,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
 
             if (nextPlayer.queues[cat].progress >= 100) {
                 if (cat === 'building') {
-                    if (import.meta.env.DEV) {
+                    if (import.meta.env?.DEV) {
                         DebugEvents.emit('production', {
                             tick: state.tick,
                             playerId: player.id,
@@ -168,7 +168,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                                 } as BuildingEntity;
 
                                 // Emit production completed event for air unit
-                                if (import.meta.env.DEV) {
+                                if (import.meta.env?.DEV) {
                                     DebugEvents.emit('production', {
                                         tick: state.tick,
                                         playerId: player.id,
@@ -257,7 +257,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                         createdEntities.push(movedUnit);
 
                         // Emit production completed event for ground unit
-                        if (import.meta.env.DEV) {
+                        if (import.meta.env?.DEV) {
                             DebugEvents.emit('production', {
                                 tick: state.tick,
                                 playerId: player.id,
@@ -325,7 +325,7 @@ export function startBuild(state: GameState, payload: { category: string; key: s
     }
 
     // Emit production started event
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
         DebugEvents.emit('production', {
             tick: state.tick,
             playerId,
@@ -418,7 +418,7 @@ export function queueUnit(state: GameState, payload: { category: string; key: st
     // If nothing is currently building, start the first one
     if (!q.current) {
         // Emit production started event
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('production', {
                 tick: state.tick,
                 playerId,

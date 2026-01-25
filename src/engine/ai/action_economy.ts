@@ -75,7 +75,7 @@ export function handleEconomy(
             const data = RULES.buildings[defToBuild];
             if (data && player.credits >= data.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: defToBuild, playerId } });
-                if (import.meta.env.DEV) {
+                if (import.meta.env?.DEV) {
                     DebugEvents.emit('decision', {
                         tick: state.tick,
                         playerId,
@@ -134,7 +134,7 @@ export function handleEconomy(
             const harvReqsMet = checkPrerequisites('harvester', buildings);
             if (harvData && harvReqsMet && player.credits >= harvData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
-                if (import.meta.env.DEV) {
+                if (import.meta.env?.DEV) {
                     DebugEvents.emit('decision', {
                         tick: state.tick,
                         playerId,
@@ -180,7 +180,7 @@ export function handleEconomy(
             if (canReachTarget && canBuildRefinery && refineryData && player.credits >= refineryData.cost) {
                 // Build refinery near the ore
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
-                if (import.meta.env.DEV) {
+                if (import.meta.env?.DEV) {
                     DebugEvents.emit('decision', {
                         tick: state.tick,
                         playerId,

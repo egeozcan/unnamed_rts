@@ -88,23 +88,42 @@ export function updateCombatUnitBehavior(
         // No target, just moving (regular move or attack-move in progress)
         nextEntity = moveToward(nextEntity, nextEntity.movement.moveTarget, entityList) as CombatUnit;
         if (nextEntity.pos.dist(nextEntity.movement.moveTarget!) < 10) {
-            // Reached destination - clear all movement state including unstuck
-            nextEntity = {
-                ...nextEntity,
-                movement: {
-                    ...nextEntity.movement,
-                    moveTarget: null,
-                    stuckTimer: 0,
-                    unstuckTimer: 0,
-                    unstuckDir: null,
-                    avgVel: undefined
-                },
-                combat: {
-                    ...nextEntity.combat,
-                    attackMoveTarget: null,  // Clear attack-move destination
-                    stanceHomePos: null      // Clear home position
-                }
-            };
+            // Reached intermediate waypoint - check if we still need to reach finalDest
+            const finalDest = nextEntity.movement.finalDest;
+            const distToFinal = finalDest ? nextEntity.pos.dist(finalDest) : 0;
+
+            if (finalDest && distToFinal > 15) {
+                // Still far from final destination - continue moving toward it
+                // This prevents units from getting stuck when collision pushes them away
+                nextEntity = {
+                    ...nextEntity,
+                    movement: {
+                        ...nextEntity.movement,
+                        moveTarget: finalDest,
+                        path: null,  // Clear path to trigger re-pathing
+                        pathIdx: 0
+                    }
+                };
+            } else {
+                // Reached final destination - clear all movement state including unstuck
+                nextEntity = {
+                    ...nextEntity,
+                    movement: {
+                        ...nextEntity.movement,
+                        moveTarget: null,
+                        finalDest: null,
+                        stuckTimer: 0,
+                        unstuckTimer: 0,
+                        unstuckDir: null,
+                        avgVel: undefined
+                    },
+                    combat: {
+                        ...nextEntity.combat,
+                        attackMoveTarget: null,  // Clear attack-move destination
+                        stanceHomePos: null      // Clear home position
+                    }
+                };
+            }
         }
     } else if (nextEntity.movement.unstuckTimer && nextEntity.movement.unstuckTimer > 0) {
         // Unit is idle but still has stale unstuck state - clear it

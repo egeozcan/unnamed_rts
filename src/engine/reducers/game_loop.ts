@@ -90,7 +90,7 @@ export function tick(state: GameState): GameState {
             };
 
             // Emit economy event for harvester deposit
-            if (import.meta.env.DEV && adjustedCredits > 0) {
+            if (import.meta.env?.DEV && adjustedCredits > 0) {
                 DebugEvents.emit('economy', {
                     tick: nextTick,
                     playerId: pid,
@@ -127,7 +127,7 @@ export function tick(state: GameState): GameState {
             const nowDead = nextHp <= 0;
 
             // Emit state-change event for damage
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('state-change', {
                     tick: state.tick,
                     playerId: ent.owner,
@@ -1023,7 +1023,7 @@ function processExplosions(
                 const nowDead = newHp <= 0;
 
                 // Emit state-change event for explosion damage
-                if (import.meta.env.DEV && finalDamage > 0) {
+                if (import.meta.env?.DEV && finalDamage > 0) {
                     DebugEvents.emit('state-change', {
                         tick: _tick,
                         playerId: ent.owner,

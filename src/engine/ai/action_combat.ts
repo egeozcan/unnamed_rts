@@ -170,7 +170,7 @@ export function handleAttack(
     const bestTarget = selectBestTarget(state, aiState, enemies, groupCenter, combatUnits, [], baseCenter);
 
     // Emit debug event for target selection
-    if (import.meta.env.DEV && bestTarget) {
+    if (import.meta.env?.DEV && bestTarget) {
         DebugEvents.emit('decision', {
             tick: state.tick,
             playerId: _playerId,
@@ -268,7 +268,7 @@ function handleGroupCohesion(
             const prevStatus = group.status;
             group.status = 'retreating';
             group.lastOrderTick = state.tick;
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('group', {
                     tick: state.tick,
                     playerId: playerId,
@@ -310,7 +310,7 @@ function handleGroupCohesion(
             group.status = 'rallying';
             group.needsReinforcements = false;
             group.lastOrderTick = state.tick;
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('group', {
                     tick: state.tick,
                     playerId: playerId,
@@ -395,7 +395,7 @@ function handleGroupCohesion(
         group.status = 'engaging';
         group.engagedEnemies = nearbyThreats.map(e => e.id);
         group.lastOrderTick = state.tick;
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('group', {
                 tick: state.tick,
                 playerId: playerId,
@@ -728,7 +728,7 @@ function issueAttackOrders(actions: Action[], state: GameState, unitIds: EntityI
         });
 
         // Emit debug events for each unit receiving attack command
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             const target = state.entities[targetId];
             for (const unitId of unitsNeedingOrders) {
                 const unit = state.entities[unitId];
@@ -791,7 +791,7 @@ export function handleDefense(
         });
 
         // Emit debug event for defense decision
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('decision', {
                 tick: state.tick,
                 playerId: _playerId,
@@ -884,7 +884,7 @@ export function handleHarass(
             });
 
             // Emit debug event for harass decision
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('decision', {
                     tick: state.tick,
                     playerId: _playerId,
@@ -1506,7 +1506,7 @@ export function handleAirStrikes(
         }
 
         // Emit debug event for air strike decision
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('decision', {
                 tick: state.tick,
                 playerId: playerId,
@@ -1636,7 +1636,7 @@ export function handleDemoTruckAssault(
         });
 
         // Emit debug event for demo truck assault decision
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('decision', {
                 tick: state.tick,
                 playerId: playerId,

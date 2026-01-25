@@ -349,7 +349,7 @@ export function evaluateInvestmentPriority(
     aiState.threatLevel = calculateThreatLevel(state, playerId, baseCenter, enemies, myBuildings);
 
     // Emit threat event if threat level changed significantly (>10 points)
-    if (import.meta.env.DEV && Math.abs(aiState.threatLevel - prevThreatLevel) > 10) {
+    if (import.meta.env?.DEV && Math.abs(aiState.threatLevel - prevThreatLevel) > 10) {
         DebugEvents.emit('threat', {
             tick: state.tick,
             playerId,

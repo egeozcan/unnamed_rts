@@ -61,7 +61,7 @@ export function updateStrategy(
                 const prevStrategy = aiState.strategy;
                 aiState.strategy = 'defend';
                 aiState.lastStrategyChange = tick;
-                if (import.meta.env.DEV) {
+                if (import.meta.env?.DEV) {
                     DebugEvents.emit('decision', {
                         tick,
                         playerId: undefined, // Not available in this function
@@ -104,7 +104,7 @@ export function updateStrategy(
                 aiState.lastStrategyChange = tick;
                 if (aiState.allInStartTick === 0) aiState.allInStartTick = tick;
                 aiState.attackGroup = combatUnits.map(u => u.id);
-                if (import.meta.env.DEV) {
+                if (import.meta.env?.DEV) {
                     DebugEvents.emit('decision', {
                         tick,
                         playerId: undefined,
@@ -153,7 +153,7 @@ export function updateStrategy(
             aiState.strategy = 'attack';
             aiState.lastStrategyChange = tick;
             aiState.attackGroup = combatUnits.map(u => u.id);
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('decision', {
                     tick,
                     playerId: undefined,
@@ -188,7 +188,7 @@ export function updateStrategy(
             aiState.lastStrategyChange = tick;
             aiState.attackGroup = combatUnits.map(u => u.id);
             aiState.peaceTicks = 0;
-            if (import.meta.env.DEV) {
+            if (import.meta.env?.DEV) {
                 DebugEvents.emit('decision', {
                     tick,
                     playerId: undefined,
@@ -274,7 +274,7 @@ export function updateStrategy(
         aiState.attackGroup = [];
         aiState.harassGroup = [];
         aiState.offensiveGroups = [];
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
             DebugEvents.emit('decision', {
                 tick,
                 playerId: undefined,
