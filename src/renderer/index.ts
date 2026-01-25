@@ -330,7 +330,7 @@ export class Renderer {
 
         // Selection circle and HP bar
         // Always show HP bar if damaged, OR if selected
-        if (isSelected || entity.hp < entity.maxHp) {
+        if (isSelected || (entity.hp < entity.maxHp && entity.type !== 'RESOURCE')) {
             if (isSelected) {
                 ctx.strokeStyle = '#0f0';
                 ctx.lineWidth = 2;
@@ -347,8 +347,8 @@ export class Renderer {
                 }
             }
 
-            // HP bar
-            if (entity.hp < entity.maxHp || isSelected) {
+            // HP bar (Skipped for resources)
+            if (entity.type !== 'RESOURCE' && (entity.hp < entity.maxHp || isSelected)) {
                 ctx.fillStyle = 'red';
                 ctx.fillRect(-15, -entity.radius - 12, 30, 4);
                 ctx.fillStyle = '#0f0';
