@@ -47,7 +47,7 @@ export interface StuckResolution {
  * Returns false if:
  * - has moveTarget (actively moving)
  */
-export function detectStuckHarvester(harvester: HarvesterUnit, _currentTick: number): boolean {
+export function detectStuckHarvester(harvester: HarvesterUnit): boolean {
     // If actively moving toward a destination, not stuck
     if (harvester.movement.moveTarget !== null) {
         return false;
@@ -254,22 +254,28 @@ export function resolveStuckHarvester(
     // Clean up expired blacklist entries
     cleanupExpiredBlacklist(harvesterAI, currentTick);
 
-    // Get or create stuck state for this harvester
+    // Get or create stuck state for this harvester.
+    // Note: Stuck detection uses harvestAttemptTicks from the harvester component,
+    // not our own stuckTicks tracking. The stuckStates Map is used primarily for
+    // tracking lastActionTick to prevent rapid repeated actions.
     let stuckState = harvesterAI.stuckStates.get(harvester.id);
     if (!stuckState) {
         stuckState = {
             stuckTicks: 0,
             currentLevel: 1,
-            lastActionTick: 0,
-            blacklistedOre: new Set()
+            lastActionTick: 0
         };
         harvesterAI.stuckStates.set(harvester.id, stuckState);
     }
 
-    // Determine current level
-    const rawLevel = getStuckLevel(stuckState.stuckTicks);
+    // Determine current level based on harvestAttemptTicks from the harvester component
+    const harvestAttemptTicks = harvester.harvester.harvestAttemptTicks ?? 0;
+    const rawLevel = getStuckLevel(harvestAttemptTicks);
     const maxLevel = getMaxLevelForDifficulty(difficulty);
     const effectiveLevel = Math.min(rawLevel, maxLevel) as StuckLevel;
+
+    // Update lastActionTick when we take a resolution action
+    stuckState.lastActionTick = currentTick;
 
     // Filter out blacklisted ores
     const filteredOres = filterBlacklistedOres(availableOres, harvesterAI, currentTick);

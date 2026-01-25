@@ -89,14 +89,11 @@ describe('Harvester AI Types', () => {
             const stuckState: HarvesterStuckState = {
                 stuckTicks: 20,
                 currentLevel: 2,
-                lastActionTick: 100,
-                blacklistedOre: new Set(['ore1', 'ore2'])
+                lastActionTick: 100
             };
             expect(stuckState.stuckTicks).toBe(20);
             expect(stuckState.currentLevel).toBe(2);
             expect(stuckState.lastActionTick).toBe(100);
-            expect(stuckState.blacklistedOre.size).toBe(2);
-            expect(stuckState.blacklistedOre.has('ore1')).toBe(true);
         });
     });
 

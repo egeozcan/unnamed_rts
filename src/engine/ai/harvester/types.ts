@@ -24,11 +24,13 @@ export interface HarvesterDeathRecord {
 export type StuckLevel = 1 | 2 | 3 | 4 | 5;
 
 // Per-harvester stuck state
+// Note: Blacklisting is done globally in HarvesterAIState.blacklistedOre,
+// not per-harvester, since ore that causes problems for one harvester
+// is likely problematic for all.
 export interface HarvesterStuckState {
     stuckTicks: number;
     currentLevel: StuckLevel;
     lastActionTick: number;
-    blacklistedOre: Set<EntityId>;
 }
 
 // Main harvester AI state (per player)

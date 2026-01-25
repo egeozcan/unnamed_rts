@@ -2,17 +2,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     detectStuckHarvester,
     resolveStuckHarvester,
-    isStuckAtRefinery,
-    StuckAction,
-    StuckResolution
+    isStuckAtRefinery
 } from '../../../src/engine/ai/harvester/stuck_resolver.js';
 import {
     HARVESTER_AI_CONSTANTS,
-    HarvesterAIState,
-    HarvesterStuckState,
     createInitialHarvesterAIState
 } from '../../../src/engine/ai/harvester/types.js';
-import { Vector, HarvesterUnit, BuildingEntity, ResourceEntity } from '../../../src/engine/types.js';
+import { Vector, HarvesterUnit } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestBuilding,
@@ -62,38 +58,6 @@ function createHarvesterWithVelocity(
     };
 }
 
-/**
- * Create a stuck state for testing
- */
-function createStuckState(overrides: Partial<HarvesterStuckState> = {}): HarvesterStuckState {
-    return {
-        stuckTicks: 0,
-        currentLevel: 1,
-        lastActionTick: 0,
-        blacklistedOre: new Set(),
-        ...overrides
-    };
-}
-
-/**
- * Create a HarvesterAIState with given stuck state for a harvester
- */
-function createAIStateWithStuck(
-    harvesterId: string,
-    stuckState: HarvesterStuckState,
-    blacklistedOre: Map<string, number> = new Map()
-): HarvesterAIState {
-    const state = createInitialHarvesterAIState();
-    state.stuckStates.set(harvesterId, stuckState);
-
-    // Copy blacklist entries
-    for (const [oreId, expiryTick] of blacklistedOre) {
-        state.blacklistedOre.set(oreId, expiryTick);
-    }
-
-    return state;
-}
-
 describe('Stuck Resolution Engine', () => {
     beforeEach(() => {
         resetTestEntityCounter();
@@ -106,7 +70,7 @@ describe('Stuck Resolution Engine', () => {
                     harvestAttemptTicks: STUCK_LEVEL_1_TICKS - 1
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(false);
+                expect(detectStuckHarvester(harvester)).toBe(false);
             });
 
             it('should return true when harvestAttemptTicks exceeds STUCK_LEVEL_1_TICKS', () => {
@@ -114,7 +78,7 @@ describe('Stuck Resolution Engine', () => {
                     harvestAttemptTicks: STUCK_LEVEL_1_TICKS + 1
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(true);
+                expect(detectStuckHarvester(harvester)).toBe(true);
             });
 
             it('should return true when harvestAttemptTicks equals STUCK_LEVEL_1_TICKS', () => {
@@ -124,7 +88,7 @@ describe('Stuck Resolution Engine', () => {
 
                 // Edge case: at exactly the threshold, still not stuck
                 // Based on spec: > STUCK_LEVEL_1_TICKS
-                expect(detectStuckHarvester(harvester, 100)).toBe(false);
+                expect(detectStuckHarvester(harvester)).toBe(false);
             });
         });
 
@@ -135,7 +99,7 @@ describe('Stuck Resolution Engine', () => {
                     moveTarget: new Vector(600, 600)
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(false);
+                expect(detectStuckHarvester(harvester)).toBe(false);
             });
 
             it('should still detect stuck when moveTarget is null and harvestAttemptTicks high', () => {
@@ -144,7 +108,7 @@ describe('Stuck Resolution Engine', () => {
                     moveTarget: null
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(true);
+                expect(detectStuckHarvester(harvester)).toBe(true);
             });
         });
 
@@ -158,7 +122,7 @@ describe('Stuck Resolution Engine', () => {
                     harvestAttemptTicks: 0 // Below threshold
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(true);
+                expect(detectStuckHarvester(harvester)).toBe(true);
             });
 
             it('should return false when has resourceTargetId and is moving', () => {
@@ -170,7 +134,7 @@ describe('Stuck Resolution Engine', () => {
                     harvestAttemptTicks: 0
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(false);
+                expect(detectStuckHarvester(harvester)).toBe(false);
             });
 
             it('should return false when no resourceTargetId even with zero velocity', () => {
@@ -181,7 +145,7 @@ describe('Stuck Resolution Engine', () => {
                     harvestAttemptTicks: 0
                 });
 
-                expect(detectStuckHarvester(harvester, 100)).toBe(false);
+                expect(detectStuckHarvester(harvester)).toBe(false);
             });
         });
     });
@@ -189,12 +153,12 @@ describe('Stuck Resolution Engine', () => {
     describe('resolveStuckHarvester', () => {
         describe('escalation levels', () => {
             it('should return nudge action at level 1 (5 ticks stuck)', () => {
-                const harvester = createTestHarvester({ id: 'harv_1' });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_1_TICKS + 1,
-                    currentLevel: 1
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
+                const harvester = createTestHarvester({
+                    id: 'harv_1',
+                    harvestAttemptTicks: STUCK_LEVEL_1_TICKS + 1
                 });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
                 const ores = [createTestResource({ x: 700, y: 700 })];
                 const refineries = [createTestBuilding({ key: 'refinery', x: 300, y: 300 })];
 
@@ -213,17 +177,15 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should return detour action at level 2 (15 ticks stuck)', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_2_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_2_TICKS + 1,
-                    currentLevel: 2
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 // Current ore is at 500, 500
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
@@ -247,17 +209,15 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should return relocate action at level 3 (30 ticks stuck)', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_3_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_3_TICKS + 1,
-                    currentLevel: 3
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 // Distant ore beyond detour radius
@@ -279,16 +239,14 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should return retreat action at level 4 (45 ticks stuck)', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
-                    y: 500
+                    y: 500,
+                    harvestAttemptTicks: STUCK_LEVEL_4_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_4_TICKS + 1,
-                    currentLevel: 4
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const ores = [createTestResource({ x: 510, y: 510 })];
                 const refineries = [
@@ -312,17 +270,15 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should return emergency action at level 5 (60 ticks stuck)', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 1,
-                    currentLevel: 5
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 const ores = [currentOre];
@@ -343,18 +299,15 @@ describe('Stuck Resolution Engine', () => {
 
         describe('difficulty capping', () => {
             it('should cap at level 2 for easy difficulty', () => {
+                // Very high harvestAttemptTicks that would normally trigger level 5
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 100
                 });
-                // Very high stuck ticks that would normally trigger level 5
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 100,
-                    currentLevel: 5
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 const alternateOre = createTestResource({ id: 'ore_alt', x: 600, y: 600 });
@@ -376,12 +329,11 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should cap at level 2 for dummy difficulty', () => {
-                const harvester = createTestHarvester({ id: 'harv_1' });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 100,
-                    currentLevel: 5
+                const harvester = createTestHarvester({
+                    id: 'harv_1',
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 100
                 });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const ores = [createTestResource({ x: 600, y: 600 })];
                 const refineries = [createTestBuilding({ key: 'refinery', x: 300, y: 300 })];
@@ -402,13 +354,10 @@ describe('Stuck Resolution Engine', () => {
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
-                    y: 500
+                    y: 500,
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 100
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 100,
-                    currentLevel: 5
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const ores = [createTestResource({ x: 510, y: 510 })];
                 const refineries = [createTestBuilding({ key: 'refinery', x: 300, y: 300 })];
@@ -431,13 +380,10 @@ describe('Stuck Resolution Engine', () => {
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 1,
-                    currentLevel: 5
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 const ores = [currentOre];
@@ -458,17 +404,15 @@ describe('Stuck Resolution Engine', () => {
 
         describe('blacklist handling', () => {
             it('should blacklist current ore at level 3 for BLACKLIST_DURATION', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_3_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_3_TICKS + 1,
-                    currentLevel: 3
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 const distantOre = createTestResource({ id: 'ore_distant', x: 1000, y: 1000 });
@@ -491,17 +435,15 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should blacklist current ore at level 5 for double BLACKLIST_DURATION', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_5_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_5_TICKS + 1,
-                    currentLevel: 5
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 const ores = [currentOre];
@@ -522,23 +464,18 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should filter out blacklisted ore when finding targets', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
-                });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_2_TICKS + 1,
-                    currentLevel: 2
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_2_TICKS + 1
                 });
 
                 // Create AI state with blacklisted ore
-                const harvesterAI = createAIStateWithStuck(
-                    'harv_1',
-                    stuckState,
-                    new Map([['ore_closest', 500]]) // Blacklisted until tick 500
-                );
+                const harvesterAI = createInitialHarvesterAIState();
+                harvesterAI.blacklistedOre.set('ore_closest', 500); // Blacklisted until tick 500
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 // This ore is closest but blacklisted
@@ -564,21 +501,16 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should clean up expired blacklist entries', () => {
-                const harvester = createTestHarvester({ id: 'harv_1' });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_1_TICKS + 1,
-                    currentLevel: 1
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
+                const harvester = createTestHarvester({
+                    id: 'harv_1',
+                    harvestAttemptTicks: STUCK_LEVEL_1_TICKS + 1
                 });
 
                 // Create AI state with expired blacklist
-                const harvesterAI = createAIStateWithStuck(
-                    'harv_1',
-                    stuckState,
-                    new Map([
-                        ['ore_expired', 50],   // Expired (current tick will be 100)
-                        ['ore_valid', 200]     // Still valid
-                    ])
-                );
+                const harvesterAI = createInitialHarvesterAIState();
+                harvesterAI.blacklistedOre.set('ore_expired', 50);  // Expired (current tick will be 100)
+                harvesterAI.blacklistedOre.set('ore_valid', 200);   // Still valid
 
                 const ores = [createTestResource({ x: 600, y: 600 })];
                 const refineries = [createTestBuilding({ key: 'refinery', x: 300, y: 300 })];
@@ -601,17 +533,15 @@ describe('Stuck Resolution Engine', () => {
 
         describe('detour search radius', () => {
             it('should find alternate ore within DETOUR_SEARCH_RADIUS', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_2_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_2_TICKS + 1,
-                    currentLevel: 2
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 // Just within radius
@@ -637,17 +567,15 @@ describe('Stuck Resolution Engine', () => {
             });
 
             it('should not find alternate ore outside DETOUR_SEARCH_RADIUS for level 2', () => {
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
                 const harvester = createTestHarvester({
                     id: 'harv_1',
                     x: 500,
                     y: 500,
-                    resourceTargetId: 'ore_current'
+                    resourceTargetId: 'ore_current',
+                    harvestAttemptTicks: STUCK_LEVEL_2_TICKS + 1
                 });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_2_TICKS + 1,
-                    currentLevel: 2
-                });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const currentOre = createTestResource({ id: 'ore_current', x: 510, y: 510 });
                 // Outside detour radius
@@ -675,12 +603,12 @@ describe('Stuck Resolution Engine', () => {
 
         describe('no available resolution', () => {
             it('should return none when no ores and no refineries available', () => {
-                const harvester = createTestHarvester({ id: 'harv_1' });
-                const stuckState = createStuckState({
-                    stuckTicks: STUCK_LEVEL_4_TICKS + 1,
-                    currentLevel: 4
+                // Level is now determined by harvester.harvester.harvestAttemptTicks
+                const harvester = createTestHarvester({
+                    id: 'harv_1',
+                    harvestAttemptTicks: STUCK_LEVEL_4_TICKS + 1
                 });
-                const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+                const harvesterAI = createInitialHarvesterAIState();
 
                 const resolution = resolveStuckHarvester(
                     harvesterAI,
@@ -782,12 +710,12 @@ describe('Stuck Resolution Engine', () => {
 
     describe('nudge direction', () => {
         it('should return a normalized direction vector for nudge action', () => {
-            const harvester = createTestHarvester({ id: 'harv_1' });
-            const stuckState = createStuckState({
-                stuckTicks: STUCK_LEVEL_1_TICKS + 1,
-                currentLevel: 1
+            // Level is now determined by harvester.harvester.harvestAttemptTicks
+            const harvester = createTestHarvester({
+                id: 'harv_1',
+                harvestAttemptTicks: STUCK_LEVEL_1_TICKS + 1
             });
-            const harvesterAI = createAIStateWithStuck('harv_1', stuckState);
+            const harvesterAI = createInitialHarvesterAIState();
             const ores = [createTestResource({ x: 700, y: 700 })];
             const refineries = [createTestBuilding({ key: 'refinery', x: 300, y: 300 })];
 
