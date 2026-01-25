@@ -14,33 +14,17 @@
 import { parseArgs, buildFilterConfig, CliArgs } from './cli.js';
 import { loadState, saveState } from './state-loader.js';
 import { DebugCollector } from './collector.js';
-import { DebugEvents } from '../../engine/debug/events.js';
+import { DebugEvents, DebugEvent } from '../../engine/debug/events.js';
 import { parseTrigger, evaluateTrigger, Trigger } from './triggers.js';
 import { update } from '../../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../../engine/ai/index.js';
+import { formatStatus, formatUnit, formatFind, formatGroups } from './formatters.js';
 import fs from 'node:fs';
 import { GameState } from '../../engine/types.js';
 
 // ============================================================================
 // Stub Functions (to be implemented in later tasks)
 // ============================================================================
-
-// TODO: implement in Task 7
-function formatStatus(_state: GameState, _playerId: number): string {
-    return 'TODO: formatStatus not yet implemented';
-}
-
-function formatUnit(_state: GameState, _entityId: string): string {
-    return 'TODO: formatUnit not yet implemented';
-}
-
-function formatFind(_state: GameState, _query: string): string {
-    return 'TODO: formatFind not yet implemented';
-}
-
-function formatGroups(_playerId: number): string {
-    return 'TODO: formatGroups not yet implemented';
-}
 
 // TODO: implement in Task 8
 async function startRepl(
@@ -65,7 +49,9 @@ async function main(): Promise<void> {
     collector.setConfig(filterConfig);
 
     // Connect collector to debug events
-    DebugEvents.setCollector((event) => collector.collect(event));
+    // Cast is needed because DebugEvent from events.ts has generic data,
+    // while collector expects the zod-typed DebugEvent with specific data shapes
+    DebugEvents.setCollector((event: DebugEvent) => collector.collect(event as any));
 
     // Load state if provided
     let state: GameState | null = null;
@@ -174,7 +160,7 @@ async function main(): Promise<void> {
 function runSimulation(state: GameState, args: CliArgs): GameState {
     // Reset AI state for all AI players
     for (const [playerIdStr, player] of Object.entries(state.players)) {
-        if (player.isAI) {
+        if (player.isAi) {
             const playerId = parseInt(playerIdStr, 10);
             resetAIState(playerId);
         }
@@ -202,7 +188,7 @@ function runSimulation(state: GameState, args: CliArgs): GameState {
     while (ticksRun < targetTicks) {
         // Compute AI actions for all AI players
         for (const [playerIdStr, player] of Object.entries(state.players)) {
-            if (player.isAI) {
+            if (player.isAi) {
                 const playerId = parseInt(playerIdStr, 10);
                 const actions = computeAiActions(state, playerId);
                 for (const action of actions) {
