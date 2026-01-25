@@ -137,12 +137,20 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     // so velDotDir will be ~0, which would falsely trigger isLowForwardProgress
     const isInUnstuckMode = unstuckTimer > 0 && unstuckDir;
 
+    // Check if unit is actually moving toward target using lastVel (not avgVel)
+    // lastVel is the intended velocity from the previous tick, unaffected by avgVel's
+    // exponential averaging. During direction reversals, avgVel can be low due to
+    // vector cancellation even when the unit is moving at full speed.
+    const lastVelMag = lastVel.mag();
+    const lastVelDotDir = lastVel.x * dirToTarget.x + lastVel.y * dirToTarget.y;
+    const isActuallyMovingForward = lastVelMag > speed * 0.5 && lastVelDotDir > speed * 0.3;
+
     if (distToTarget > 10 && !isInUnstuckMode) {
         // Stuck conditions:
-        // 1. Very low velocity (original check)
-        // 2. Being pushed backward by collisions (new)
-        // 3. No path and low forward progress (new)
-        const isLowVelocity = avgVelMag < speed * 0.15;
+        // 1. Low avgVel AND not actually moving forward (distinguishes stuck from direction change)
+        // 2. Being pushed backward by collisions
+        // 3. No path and low forward progress
+        const isLowVelocity = avgVelMag < speed * 0.15 && !isActuallyMovingForward;
         const isLowForwardProgress = isPathfindingStuck && velDotDir < speed * 0.1;
 
         if (isLowVelocity || isBeingPushedBack || isLowForwardProgress) {
