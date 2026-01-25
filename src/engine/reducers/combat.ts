@@ -1,5 +1,5 @@
 import {
-    EntityId, Entity, Projectile, CombatUnit, AttackStance
+    EntityId, Entity, Projectile, CombatUnit, AttackStance, Vector
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
@@ -118,7 +118,15 @@ export function updateCombatUnitBehavior(
                 avgVel: undefined
             }
         };
-    } else if (stance === 'defensive' && nextEntity.combat.stanceHomePos) {
+    } else {
+        // Unit is truly idle - check if we're blocking a moving ally and should scatter
+        const scatterResult = checkAndScatterForAlly(nextEntity, spatialGrid);
+        if (scatterResult) {
+            nextEntity = scatterResult;
+        }
+    }
+
+    if (stance === 'defensive' && nextEntity.combat.stanceHomePos) {
         // Defensive stance: return to home position when idle
         const homePos = nextEntity.combat.stanceHomePos;
         if (nextEntity.pos.dist(homePos) > 20) {
@@ -216,6 +224,79 @@ function clearTargetAndReturnHome(unit: CombatUnit, isAttackMove: boolean): Comb
             combat: { ...unit.combat, targetId: null }
         };
     }
+}
+
+/**
+ * Check if this idle unit is blocking a moving ally that is STUCK, and if so, scatter out of the way.
+ * Only triggers when the moving ally is actually stuck - not just passing by.
+ * Returns the updated unit with a scatter target, or null if no scatter needed.
+ */
+function checkAndScatterForAlly(
+    unit: CombatUnit,
+    spatialGrid: ReturnType<typeof getSpatialGrid>
+): CombatUnit | null {
+    // Only scatter if truly idle - no movement target, no combat target
+    if (unit.movement.moveTarget || unit.combat.targetId) {
+        return null;
+    }
+
+    // Find nearby moving allies
+    const nearbyEntities = spatialGrid.queryRadius(unit.pos.x, unit.pos.y, 50);
+
+    for (const other of nearbyEntities) {
+        if (other.id === unit.id || other.dead || other.type !== 'UNIT') continue;
+        if (other.owner !== unit.owner) continue; // Only scatter for allies
+
+        // Check if other unit is trying to move and we're in their path
+        const otherUnit = other as CombatUnit;
+        const otherMoveTarget = otherUnit.movement.moveTarget;
+
+        // Only consider units that have an explicit move target (not combat targets)
+        // This prevents scattering for units that are just attacking nearby targets
+        if (!otherMoveTarget) continue;
+
+        // CRITICAL: Only scatter if the moving unit is actually STUCK
+        // This prevents unnecessary scattering when there's room to go around
+        const stuckTimer = otherUnit.movement.stuckTimer || 0;
+        if (stuckTimer < 15) continue; // Not stuck enough to warrant scatter
+
+        // Check if we're blocking their path
+        const dirToTarget = otherMoveTarget.sub(otherUnit.pos).norm();
+        const toUs = unit.pos.sub(otherUnit.pos);
+        const distToUs = toUs.mag();
+
+        if (distToUs > 45) continue; // Too far to be blocking
+
+        // Project our position onto their movement line
+        const projDist = toUs.x * dirToTarget.x + toUs.y * dirToTarget.y;
+
+        // If we're in front of them (positive projection) and close
+        if (projDist > 0 && projDist < 50) {
+            // Calculate perpendicular distance to their movement line
+            const perpDist = Math.abs(toUs.x * (-dirToTarget.y) + toUs.y * dirToTarget.x);
+
+            // If we're directly in their collision corridor (tight check)
+            if (perpDist < unit.radius + otherUnit.radius) {
+                // Scatter perpendicular to their movement
+                // Use "keep right" convention: move to the right side of their path
+                const scatterDir = new Vector(-dirToTarget.y, dirToTarget.x);
+                const scatterDist = 35 + Math.random() * 15; // Random scatter distance
+                const scatterTarget = unit.pos.add(scatterDir.scale(scatterDist));
+
+                return {
+                    ...unit,
+                    movement: {
+                        ...unit.movement,
+                        moveTarget: scatterTarget,
+                        path: null,
+                        pathIdx: 0
+                    }
+                };
+            }
+        }
+    }
+
+    return null;
 }
 
 /**

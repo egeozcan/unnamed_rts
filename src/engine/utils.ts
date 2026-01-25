@@ -1,5 +1,5 @@
 import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle, BuildingKey, UnitKey } from './types.js';
-import { RULES } from '../data/schemas/index.js';
+import { RULES, isUnitData } from '../data/schemas/index.js';
 import { pathfindingWorker } from './pathfinding-worker-manager.js';
 
 // Default grid dimensions based on default map size
@@ -184,6 +184,61 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
                     if (pid !== e.owner) {
                         markDanger(pid, e.pos.x, e.pos.y, range);
                     }
+                }
+            }
+        } else if (e.type === 'UNIT' && !e.dead && e.owner !== -1) {
+            // Mark enemy combat units as danger for pathfinding
+            // This helps units route around enemy clusters instead of through them
+            const unitData = RULES.units[e.key];
+            if (unitData && isUnitData(unitData) && unitData.damage > 0) {
+                // Use smaller radius than buildings (units are mobile)
+                // Skip flying units - ground units can't be blocked by them
+                if (!unitData.fly) {
+                    const dangerRadius = 40; // Small radius - just the immediate area around the unit
+                    for (const pid of allPlayerIds) {
+                        if (pid !== e.owner) {
+                            markDangerLight(pid, e.pos.x, e.pos.y, dangerRadius);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Mark danger with lower cost than defensive buildings (for enemy units)
+ * Units are mobile so we use lower cost to prefer avoiding but not mandate it
+ */
+function markDangerLight(playerId: number, x: number, y: number, radius: number): void {
+    gridManager.ensureDangerGrid(playerId);
+
+    const gx = Math.floor(x / TILE_SIZE);
+    const gy = Math.floor(y / TILE_SIZE);
+    const gr = Math.ceil(radius / TILE_SIZE);
+
+    const grid = gridManager.dangerGrids[playerId];
+    if (!grid) return;
+
+    const gridW = gridManager.gridW;
+    const gridH = gridManager.gridH;
+
+    for (let j = gy - gr; j <= gy + gr; j++) {
+        for (let i = gx - gr; i <= gx + gr; i++) {
+            if (i >= 0 && i < gridW && j >= 0 && j < gridH) {
+                const dx = i - gx;
+                const dy = j - gy;
+                const distSq = dx * dx + dy * dy;
+                const grSq = gr * gr;
+                if (distSq <= grSq) {
+                    // Lower cost than defensive buildings (max 30 vs 100)
+                    // This makes it a preference to avoid, not a hard requirement
+                    const distRatioSq = distSq / grSq;
+                    const dangerCost = Math.floor(30 - 20 * distRatioSq);
+                    const idx = j * gridW + i;
+                    // Add to existing cost (cumulative for clusters)
+                    // But cap at 50 to not make clusters completely impassable
+                    grid[idx] = Math.min(50, grid[idx] + dangerCost);
                 }
             }
         }
