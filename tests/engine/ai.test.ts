@@ -207,6 +207,39 @@ describe('AI System', () => {
         });
     });
 
+    describe('Harvester AI State Integration', () => {
+        it('should initialize harvesterAI state when AI state is created', () => {
+            const aiState = getAIState(4);
+            expect(aiState.harvesterAI).toBeDefined();
+        });
+
+        it('should have all required harvesterAI fields initialized', () => {
+            const aiState = getAIState(5);
+            expect(aiState.harvesterAI.dangerMap).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.dangerMapLastUpdate).toBe(0);
+            expect(aiState.harvesterAI.desperationScore).toBe(30);
+            expect(aiState.harvesterAI.harvesterRoles).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.oreFieldClaims).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.refineryQueue).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.escortAssignments).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.blacklistedOre).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.stuckStates).toBeInstanceOf(Map);
+            expect(aiState.harvesterAI.harvesterDeaths).toEqual([]);
+        });
+
+        it('should persist harvesterAI state across calls', () => {
+            const aiState = getAIState(6);
+            // Modify harvester AI state
+            aiState.harvesterAI.desperationScore = 75;
+            aiState.harvesterAI.dangerMapLastUpdate = 100;
+
+            // Get state again
+            const aiState2 = getAIState(6);
+            expect(aiState2.harvesterAI.desperationScore).toBe(75);
+            expect(aiState2.harvesterAI.dangerMapLastUpdate).toBe(100);
+        });
+    });
+
     describe('Enemy Base Tracking', () => {
         it('should track enemy conyard as base location', () => {
             const aiState = getAIState(1);

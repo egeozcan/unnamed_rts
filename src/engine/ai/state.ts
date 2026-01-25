@@ -3,6 +3,7 @@ import { RULES, AI_CONFIG, PersonalityName } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
 import { VENGEANCE_DECAY, VENGEANCE_PER_HIT } from './utils.js';
 import { isUnit } from '../type-guards.js';
+import { createInitialHarvesterAIState } from './harvester/types.js';
 
 // Select a random personality from available personalities
 function selectRandomPersonality(): PersonalityName {
@@ -51,7 +52,8 @@ export function getAIState(playerId: number): AIPlayerState {
             lastCombatTick: 0,
             stalemateDesperation: 0,
             allInStartTick: 0,
-            isDoomed: false
+            isDoomed: false,
+            harvesterAI: createInitialHarvesterAIState()
         };
     }
     return aiStates[playerId];

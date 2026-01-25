@@ -67,7 +67,7 @@ export function parseZoneKey(key: string): { x: number; y: number } {
  */
 export function updateDangerMap(
     harvesterAI: HarvesterAIState,
-    playerId: number,
+    _playerId: number,
     enemies: Entity[],
     recentAttackEvents: AttackEvent[],
     currentTick: number,
@@ -164,7 +164,7 @@ export function updateDangerMap(
     }
 
     // Clear zones that are now safe (no enemies, no recent events)
-    for (const [zoneKey, zone] of harvesterAI.dangerMap) {
+    for (const [zoneKey] of harvesterAI.dangerMap) {
         if (!updatedZones.has(zoneKey)) {
             // Zone has no current enemies or recent events
             // For medium difficulty, clear immediately

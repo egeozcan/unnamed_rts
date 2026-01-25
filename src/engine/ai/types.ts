@@ -1,5 +1,6 @@
 import { EntityId, Vector } from '../types.js';
 import { PersonalityName } from '../../data/schemas/index.js';
+import { HarvesterAIState } from './harvester/types.js';
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';
@@ -67,6 +68,8 @@ export interface AIPlayerState {
     allInStartTick: number;       // When all_in mode started (0 = not in all_in)
     // Doomed mode: no income AND no way to recover (no conyard to build refinery)
     isDoomed: boolean;
+    // Harvester AI state
+    harvesterAI: HarvesterAIState;
 }
 
 export interface CounterUnits {
