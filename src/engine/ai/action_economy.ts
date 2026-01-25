@@ -1,7 +1,11 @@
-import { GameState, Action, Entity, PlayerState, BuildingEntity, Vector, UnitEntity, HarvesterUnit } from '../types.js';
+import { GameState, Action, Entity, PlayerState, BuildingEntity, Vector, UnitEntity, HarvesterUnit, ResourceEntity } from '../types.js';
 import { RULES, AIPersonality } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
+import { findSafestOre } from './harvester/danger_map.js';
+import { getHarvesterRole, getRoleMaxDanger } from './harvester/coordinator.js';
+
+type AIDifficulty = 'dummy' | 'easy' | 'medium' | 'hard';
 import {
     hasProductionBuildingFor,
     checkPrerequisites,
@@ -1794,7 +1798,9 @@ export function handleHarvesterGathering(
     state: GameState,
     _playerId: number,
     harvesters: Entity[],
-    harvestersUnderAttack: string[]
+    harvestersUnderAttack: string[],
+    aiState: AIPlayerState,
+    difficulty: AIDifficulty
 ): Action[] {
     const actions: Action[] = [];
 
@@ -1812,18 +1818,36 @@ export function handleHarvesterGathering(
         // 3. No base target (not returning)
         if (!h.movement.moveTarget && !h.harvester.resourceTargetId && !h.harvester.baseTargetId) {
 
-            // Recovery logic: Find nearest ore and gather
+            // Recovery logic: Find ore to gather
             // This also fixes manualMode if it was set
-            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead) as ResourceEntity[];
 
             let bestOre: Entity | null = null;
-            let minDist = Infinity;
 
-            for (const ore of allOre) {
-                const d = harvester.pos.dist(ore.pos);
-                if (d < minDist) {
-                    minDist = d;
-                    bestOre = ore;
+            // For medium/hard difficulty: use danger-aware ore selection
+            if (difficulty === 'hard' || difficulty === 'medium') {
+                // Get harvester's role and max allowed danger
+                const role = getHarvesterRole(aiState.harvesterAI, harvester.id);
+                const maxDanger = getRoleMaxDanger(role, aiState.harvesterAI.desperationScore);
+
+                // Use danger-aware ore selection
+                bestOre = findSafestOre(
+                    aiState.harvesterAI,
+                    harvester,
+                    allOre,
+                    maxDanger
+                );
+            }
+
+            // Fallback for easy/dummy OR if findSafestOre returned null: find nearest ore
+            if (!bestOre) {
+                let minDist = Infinity;
+                for (const ore of allOre) {
+                    const d = harvester.pos.dist(ore.pos);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestOre = ore;
+                    }
                 }
             }
 

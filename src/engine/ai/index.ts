@@ -222,7 +222,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
     actions.push(...handleInductionRigOperations(state, playerId, myBuildings, myUnits)); // Deploy rigs on wells
-    actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack)); // Gather resources
+    actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack, aiState, player.difficulty)); // Gather resources
 
     // --- COMBAT & UNIT CONTROL ---
     // Dummy AI skips all combat - just rallies units near base
