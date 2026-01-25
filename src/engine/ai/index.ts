@@ -165,7 +165,7 @@ export function computeAiActions(state: GameState, playerId: number): Action[] {
 
     // Always handle critical combat reactions (except for dummy AI)
     if (!isDummy) {
-        actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState, cache));
+        actions.push(...handleHarvesterSafety(state, playerId, harvesters, combatUnits, baseCenter, enemies, aiState, cache, player.difficulty));
 
         // Defense with reaction delay - easier AI takes longer to respond
         const reactionDelayPassed = threatsNearBase.length > 0 &&

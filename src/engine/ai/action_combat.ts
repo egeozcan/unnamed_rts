@@ -27,6 +27,10 @@ import { findCaptureOpportunities } from './planning.js';
 import { isAirUnit } from '../entity-helpers.js';
 import { isDemoTruck } from '../type-guards.js';
 import { EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
+import { getHarvesterRole } from './harvester/coordinator.js';
+import { recordHarvesterDeath } from './harvester/danger_map.js';
+import { getDesperationBehavior } from './harvester/desperation.js';
+import { HarvesterRole } from './harvester/types.js';
 
 export function handleAttack(
     state: GameState,
@@ -1188,6 +1192,43 @@ function wasRecentlyDamaged(state: GameState, entity: Entity): boolean {
         (state.tick - (entity as UnitEntity).combat.lastDamageTick!) < RECENT_DAMAGE_WINDOW;
 }
 
+/**
+ * Get role-based flee distance for a harvester.
+ *
+ * Base distances:
+ * - 'safe': 250 pixels (most cautious)
+ * - 'standard': 200 pixels (default behavior)
+ * - 'risk-taker': 150 pixels (willing to take risks)
+ * - 'opportunist': 100 pixels (only flee from immediate threats)
+ *
+ * Desperation modifier:
+ * - High desperation (>70 / 'aggressive' or 'desperate'): 0.75x (flee less)
+ * - Low desperation (<30 / 'very_cautious'): 1.25x (flee more)
+ * - Otherwise: 1.0x (normal)
+ */
+function getFleeDistance(role: HarvesterRole, desperationScore: number): number {
+    const baseDistance: Record<HarvesterRole, number> = {
+        'safe': 250,
+        'standard': 200,
+        'risk-taker': 150,
+        'opportunist': 100
+    };
+
+    // Get base distance for role
+    const base = baseDistance[role];
+
+    // Modify based on desperation
+    const behavior = getDesperationBehavior(desperationScore);
+    let modifier = 1.0;
+    if (behavior.riskTolerance === 'aggressive' || behavior.riskTolerance === 'desperate') {
+        modifier = 0.75;  // High desperation, flee less
+    } else if (behavior.riskTolerance === 'very_cautious') {
+        modifier = 1.25;  // Low desperation, flee more
+    }
+
+    return base * modifier;
+}
+
 export function handleHarvesterSafety(
     state: GameState,
     playerId: number,
@@ -1195,8 +1236,9 @@ export function handleHarvesterSafety(
     combatUnits: Entity[],
     baseCenter: Vector,
     enemies: Entity[],
-    _aiState: AIPlayerState,
-    cache?: EntityCache
+    aiState: AIPlayerState,
+    cache?: EntityCache,
+    difficulty: 'dummy' | 'easy' | 'medium' | 'hard' = 'hard'
 ): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
@@ -1218,6 +1260,15 @@ export function handleHarvesterSafety(
         const isCriticallyBroke = player && player.credits < 300;
 
         const isLowHp = harvUnit.hp < harvUnit.maxHp * 0.3;
+
+        // Determine flee distance based on role and desperation (only for medium/hard)
+        // Easy/dummy use default distance (no role-based behavior)
+        let fleeDistance: number = HARVESTER_FLEE_DISTANCE;
+        if (difficulty === 'medium' || difficulty === 'hard') {
+            const role = getHarvesterRole(aiState.harvesterAI, harv.id);
+            const desperationScore = aiState.harvesterAI.desperationScore;
+            fleeDistance = getFleeDistance(role, desperationScore);
+        }
 
         let nearestThreat: Entity | null = null;
         let nearestDist = Infinity;
@@ -1251,13 +1302,14 @@ export function handleHarvesterSafety(
         }
 
         // Proximity check (if no direct attacker found yet)
+        // Uses role-based flee distance for medium/hard difficulties
         if (!nearestThreat) {
             for (const enemy of enemies) {
                 if (enemy.type !== 'UNIT') continue;
                 if (enemy.key === 'harvester' && !isLowHp) continue;
 
                 const dist = enemy.pos.dist(harv.pos);
-                if (dist < HARVESTER_FLEE_DISTANCE && dist < nearestDist) {
+                if (dist < fleeDistance && dist < nearestDist) {
                     nearestDist = dist;
                     nearestThreat = enemy;
                 }
@@ -1314,9 +1366,9 @@ export function handleHarvesterSafety(
                 if (safeRefinery) {
                     finalDest = safeRefinery.pos;
                 } else {
-                    // Panic Flee
+                    // Panic Flee - uses role-based flee distance
                     const fleeDir = harv.pos.sub(nearestThreat.pos).norm();
-                    const fleeDest = harv.pos.add(fleeDir.scale(HARVESTER_FLEE_DISTANCE));
+                    const fleeDest = harv.pos.add(fleeDir.scale(fleeDistance));
                     const toBase = baseCenter.sub(harv.pos).norm();
                     finalDest = fleeDest.add(toBase.scale(100)); // Bias towards base
                 }
@@ -1338,6 +1390,48 @@ export function handleHarvesterSafety(
         }
     }
     return actions;
+}
+
+/**
+ * Detect and record harvester deaths.
+ *
+ * Call this function each AI tick to track which harvesters have died.
+ * Records death positions in the danger map for future path avoidance.
+ *
+ * @param aiState - The AI player state containing harvesterAI
+ * @param previousHarvesterIds - Set of harvester IDs that existed last tick
+ * @param currentHarvesters - Current list of live harvesters
+ * @param allEntities - All game entities (to get death positions)
+ * @param tick - Current game tick
+ * @param difficulty - AI difficulty level
+ */
+export function recordDeadHarvesters(
+    aiState: AIPlayerState,
+    previousHarvesterIds: Set<EntityId>,
+    currentHarvesters: Entity[],
+    allEntities: Record<EntityId, Entity>,
+    tick: number,
+    difficulty: 'dummy' | 'easy' | 'medium' | 'hard'
+): void {
+    // Only record deaths for hard difficulty (medium doesn't use death memory)
+    if (difficulty !== 'hard') {
+        return;
+    }
+
+    // Build set of current harvester IDs
+    const currentIds = new Set(currentHarvesters.map(h => h.id));
+
+    // Find harvesters that existed before but don't exist in current list
+    for (const prevId of previousHarvesterIds) {
+        if (!currentIds.has(prevId)) {
+            // Harvester is missing - check if it's dead
+            const entity = allEntities[prevId];
+            if (entity && entity.dead) {
+                // Record the death at its last known position
+                recordHarvesterDeath(aiState.harvesterAI, entity.pos, tick);
+            }
+        }
+    }
 }
 
 export function handleHarvesterSuicideAttack(
