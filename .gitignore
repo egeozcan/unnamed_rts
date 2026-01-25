@@ -2,4 +2,4 @@ node_modules
 dist
 temp
 ideas.md
-coverage
+coverage.worktrees/
