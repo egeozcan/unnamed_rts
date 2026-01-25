@@ -814,10 +814,11 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                             b.pos = b.pos.add(push);
 
                             // Also use perpendicular push to slide past each other (keep right)
+                            // Reduced from 0.5 to 0.15 to prevent "dancing" in dense clumps
                             const perpA = new Vector(-dir.y, dir.x);
                             const perpB = new Vector(dir.y, -dir.x);
-                            a.pos = a.pos.add(perpA.scale(pushScale * 0.5));
-                            b.pos = b.pos.add(perpB.scale(pushScale * 0.5));
+                            a.pos = a.pos.add(perpA.scale(pushScale * 0.15));
+                            b.pos = b.pos.add(perpB.scale(pushScale * 0.15));
                         } else {
                             // Both stationary - minimal push
                             const totalR = a.radius + b.radius;

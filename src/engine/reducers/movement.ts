@@ -366,8 +366,10 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     }
 
     let newVel = finalDir.scale(speed);
-    if (entity.movement.vel.mag() > 0.1 && newVel.mag() > 0.1) {
-        const blended = entity.movement.vel.scale(0.6).add(newVel.scale(0.4));
+    // Use lastVel for blending since current vel is cleared at the end of every tick
+    const currentVel = entity.movement.lastVel ? ensureVector(entity.movement.lastVel)! : new Vector(0, 0);
+    if (currentVel.mag() > 0.1 && newVel.mag() > 0.1) {
+        const blended = currentVel.scale(0.6).add(newVel.scale(0.4));
         if (blended.mag() > 0.01) {
             newVel = blended.norm().scale(speed);
         }

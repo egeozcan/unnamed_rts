@@ -437,7 +437,7 @@ function handleGroupCohesion(
                     // Only add if not already moving toward rally point
                     // This prevents re-commanding units that are in transit, which causes circling
                     const existingTarget = unit.movement.moveTarget;
-                    if (!existingTarget || existingTarget.dist(group.rallyPoint!) > 150) {
+                    if (!existingTarget || existingTarget.dist(group.rallyPoint!) > 400) {
                         unitsToRallyIds.push(aliveUnits[i]);
                     }
                 }
@@ -544,7 +544,7 @@ function handleGroupCohesion(
         const unitsNeedingCommand = aliveUnits.filter((_id, i) => {
             const existingTarget = unitRefs[i].movement.moveTarget;
             if (!existingTarget) return true; // Not moving, needs command
-            return existingTarget.dist(targetPos) > 150; // Moving to wrong place
+            return existingTarget.dist(targetPos) > 400; // Moving to wrong place
         });
 
         if (unitsNeedingCommand.length > 0) {
