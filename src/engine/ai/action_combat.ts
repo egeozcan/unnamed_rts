@@ -113,7 +113,10 @@ export function handleAttack(
     // If we switched strategy and came back, need a fresh group
     if (mainGroup && mainGroup.status === 'attacking') {
         const aliveUnits = mainGroup.unitIds.filter(id => state.entities[id] && !state.entities[id].dead);
-        if (!ignoreSizeLimit && aliveUnits.length < minGroupSize) {
+        // Only disband if we are critically low AND cannot reinforce
+        // If we have plenty of units in global attackGroup, we should reinforce instead of disbanding
+        const canReinforce = aiState.attackGroup.length >= minGroupSize;
+        if (!ignoreSizeLimit && aliveUnits.length < minGroupSize && !canReinforce) {
             aiState.offensiveGroups = aiState.offensiveGroups.filter(g => g.id !== 'main_attack');
             mainGroup = undefined;
         }
@@ -215,12 +218,24 @@ export function handleAttack(
         }
     }
 
-    // Standard Single Front Attack
     if (bestTarget) {
         issueAttackOrders(actions, state, aiState.attackGroup, bestTarget.id, _playerId);
-    } else if (aiState.attackGroup.length > 0 && enemies.length > 0) {
-        // Fallback: Attack closest enemy
-        issueAttackOrders(actions, state, aiState.attackGroup, enemies[0].id, _playerId);
+    } else if (aiState.attackGroup.length > 0) {
+        if (enemies.length > 0) {
+            // Fallback: Attack closest enemy
+            issueAttackOrders(actions, state, aiState.attackGroup, enemies[0].id, _playerId);
+        } else if (aiState.enemyBaseLocation) {
+            // Fallback: Attack-Move to last known enemy base location
+            // This ensures units don't just hang around at the rally point if they can't see enemies yet
+            actions.push({
+                type: 'COMMAND_ATTACK_MOVE',
+                payload: {
+                    unitIds: aiState.attackGroup,
+                    x: aiState.enemyBaseLocation.x,
+                    y: aiState.enemyBaseLocation.y
+                }
+            });
+        }
     }
 
     // Track combat
