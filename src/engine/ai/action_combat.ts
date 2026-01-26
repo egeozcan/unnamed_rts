@@ -1262,9 +1262,6 @@ export function handleHarvesterSafety(
     for (const harv of harvesters) {
         const harvUnit = harv as HarvesterUnit;
 
-        // Skip if already moving (fleeing)
-        if (harvUnit.movement.moveTarget) continue;
-
         // Skip if on flee cooldown
         if (harvUnit.harvester.fleeCooldownUntilTick && state.tick < harvUnit.harvester.fleeCooldownUntilTick) {
             continue;
