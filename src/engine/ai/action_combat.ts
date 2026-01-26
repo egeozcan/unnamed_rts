@@ -1376,7 +1376,15 @@ export function handleHarvesterSafety(
 
                 let finalDest: Vector;
                 if (safeRefinery) {
-                    finalDest = safeRefinery.pos;
+                    // BUG FIX: Position outside refinery to avoid isTargetBlocked clearing moveTarget
+                    const toRef = safeRefinery.pos.sub(harv.pos);
+                    if (toRef.mag() > 1) { // Only adjust if not already at refinery
+                        const toRefNorm = toRef.norm();
+                        const radius = safeRefinery.radius || 50;
+                        finalDest = safeRefinery.pos.sub(toRefNorm.scale(radius + 30));
+                    } else {
+                        finalDest = safeRefinery.pos;
+                    }
                 } else {
                     // Panic Flee - uses role-based flee distance
                     const fleeDir = harv.pos.sub(nearestThreat.pos).norm();
