@@ -1,6 +1,6 @@
 import {
     GameState, Entity, EntityId, PlayerState, Vector, PLAYER_COLORS,
-    UnitKey, BuildingKey, Projectile
+    UnitKey, BuildingKey, Projectile, ProjectileArchetype
 } from '../types';
 import { RULES, Building, Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState, createDefaultAirUnit, createDefaultAirBase, createDefaultDemoTruck } from '../entity-helpers';
@@ -272,24 +272,58 @@ export function killPlayerEntities(entities: Record<EntityId, Entity>, playerId:
 export function createProjectile(source: Entity, target: Entity): Projectile {
     const data = getRuleData(source.key);
     const weaponType = data?.weaponType || 'bullet';
-    const isRocket = weaponType === 'rocket' || weaponType === 'heavy_cannon';
-    // Missiles (SAM/Stealth Tank) should be very fast (28)
-    // Rockets/Artillery are slower (9)
-    // Standard bullets are 18
-    let speed = 18;
-    if (weaponType === 'missile') speed = 28;
-    else if (isRocket) speed = 9;
+
+    // Get archetype config from rules
+    const archetypeConfig = RULES.weaponArchetypes?.[weaponType] || {
+        archetype: 'hitscan',
+        interceptable: false
+    };
+    const archetype = archetypeConfig.archetype as ProjectileArchetype;
+
+    // Speed by archetype
+    let speed: number;
+    switch (archetype) {
+        case 'hitscan': speed = 50; break;
+        case 'rocket': speed = 9; break;
+        case 'artillery': speed = 6; break;
+        case 'missile': speed = 28; break;
+        case 'ballistic': speed = 14; break;
+        case 'grenade': speed = 8; break;
+        default: speed = 18;
+    }
+
+    // HP for interceptable projectiles
+    const hp = archetypeConfig.interceptable ? (archetypeConfig.hp || 0) : 0;
+
+    // Calculate distance for arc height
+    const distance = source.pos.dist(target.pos);
+
+    // Arc multiplier by archetype
+    let arcMultiplier: number;
+    switch (archetype) {
+        case 'artillery': arcMultiplier = 0.4; break;
+        case 'grenade': arcMultiplier = 0.6; break;
+        case 'ballistic': arcMultiplier = 0.1; break;
+        default: arcMultiplier = 0;
+    }
+    const arcHeight = distance * arcMultiplier;
 
     return {
         ownerId: source.id,
         pos: source.pos,
         vel: target.pos.sub(source.pos).norm().scale(speed),
         targetId: target.id,
-        speed: speed,
+        speed,
         damage: data?.damage || 10,
         splash: (data && isUnitData(data)) ? (data.splash || 0) : 0,
         type: weaponType,
-        weaponType: weaponType,
-        dead: false
+        weaponType,
+        dead: false,
+        archetype,
+        hp,
+        maxHp: hp,
+        arcHeight,
+        startPos: source.pos,
+        trailPoints: []
     };
 }
