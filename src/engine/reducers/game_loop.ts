@@ -107,6 +107,7 @@ export function tick(state: GameState): GameState {
     // Projectile Updates
     let nextProjectiles: Projectile[] = [];
     let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
+    let splashEvents: { projectile: Projectile; hitPos: Vector }[] = [];
 
     [...state.projectiles, ...newProjs].forEach(p => {
         const res = updateProjectile(p, updatedEntities, state.config.width, state.config.height);
@@ -115,6 +116,10 @@ export function tick(state: GameState): GameState {
         }
         if (res.damage) {
             damageEvents.push(res.damage);
+            // Track splash damage events for projectiles that hit their target
+            if (p.splash > 0) {
+                splashEvents.push({ projectile: p, hitPos: res.proj.pos });
+            }
         }
     });
 
@@ -189,6 +194,17 @@ export function tick(state: GameState): GameState {
                     dead: nowDead
                 };
             }
+        }
+    }
+
+    // Apply Splash Damage from projectile hits
+    for (const splash of splashEvents) {
+        // Apply splash damage to all entities in radius (except the primary target which already took direct damage)
+        const tempState = { ...state, entities: updatedEntities };
+        const splashResult = applySplashDamage(tempState, splash.projectile, splash.hitPos);
+        // Copy updated entities back
+        for (const id in splashResult.entities) {
+            updatedEntities[id] = splashResult.entities[id];
         }
     }
 
@@ -952,6 +968,75 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
     }
 
     return { proj: nextProj, damage: damageEvent };
+}
+
+/**
+ * Apply splash damage from a projectile hit.
+ * Uses linear falloff: full damage at center, zero at edge.
+ * Includes friendly fire - damages all entities regardless of owner.
+ */
+export function applySplashDamage(
+    state: GameState,
+    projectile: Projectile,
+    hitPos: Vector
+): GameState {
+    const splashRadius = projectile.splash;
+    if (splashRadius <= 0) return state;
+
+    let entities = { ...state.entities };
+
+    // Find all entities that could be affected
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.dead) continue;
+        if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+
+        const dist = hitPos.dist(entity.pos);
+        if (dist >= splashRadius) continue;
+
+        // Linear falloff: 100% at center, 0% at edge
+        const falloff = 1 - (dist / splashRadius);
+        const baseDamage = projectile.damage * falloff;
+
+        // Apply armor modifiers
+        const targetData = getRuleData(entity.key);
+        const armorType = targetData?.armor || 'none';
+        const weaponType = projectile.weaponType || 'bullet';
+        const modifiers = RULES.damageModifiers?.[weaponType];
+        const modifier = modifiers?.[armorType] ?? 1.0;
+
+        const finalDamage = Math.round(baseDamage * modifier);
+        if (finalDamage <= 0) continue;
+
+        const newHp = Math.max(0, entity.hp - finalDamage);
+        const isDead = newHp <= 0;
+
+        if (entity.type === 'UNIT') {
+            entities[id] = {
+                ...entity,
+                hp: newHp,
+                dead: isDead,
+                combat: { ...entity.combat, flash: 10 }
+            };
+        } else if (entity.type === 'BUILDING') {
+            if (entity.combat) {
+                entities[id] = {
+                    ...entity,
+                    hp: newHp,
+                    dead: isDead,
+                    combat: { ...entity.combat, flash: 10 }
+                };
+            } else {
+                entities[id] = {
+                    ...entity,
+                    hp: newHp,
+                    dead: isDead
+                };
+            }
+        }
+    }
+
+    return { ...state, entities };
 }
 
 /**
