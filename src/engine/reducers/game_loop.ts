@@ -108,9 +108,17 @@ export function tick(state: GameState): GameState {
     let nextProjectiles: Projectile[] = [];
     let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
     let splashEvents: { projectile: Projectile; hitPos: Vector }[] = [];
+    // Temporary state for interception checks (uses updatedEntities from this tick)
+    const interceptionState = { ...state, entities: updatedEntities };
 
     [...state.projectiles, ...newProjs].forEach(p => {
-        const res = updateProjectile(p, updatedEntities, state.config.width, state.config.height);
+        // Apply AA interception damage to interceptable projectiles
+        const interceptedProj = applyInterception(interceptionState, p);
+        // If projectile was killed by interception, don't process further
+        if (interceptedProj.dead) {
+            return; // Skip this projectile, don't add to nextProjectiles
+        }
+        const res = updateProjectile(interceptedProj, updatedEntities, state.config.width, state.config.height);
         if (!res.proj.dead) {
             nextProjectiles.push(res.proj);
         }
@@ -1186,5 +1194,52 @@ function processExplosions(
         entities: updatedEntities,
         particles,
         explosionCount: explodedIds.size
+    };
+}
+
+/**
+ * Apply AA interception damage to a projectile.
+ * Only affects interceptable projectiles (rockets, missiles, artillery).
+ * Friendly AA does not intercept own team's projectiles.
+ */
+export function applyInterception(state: GameState, projectile: Projectile): Projectile {
+    // Only intercept projectiles that have HP (are interceptable)
+    if (projectile.hp <= 0 && projectile.maxHp <= 0) return projectile;
+    if (projectile.dead) return projectile;
+
+    // Get projectile owner's team
+    const sourceEntity = state.entities[projectile.ownerId];
+    const projectileOwner = sourceEntity?.owner ?? -1;
+
+    let totalDamage = 0;
+
+    // Check all entities for interception auras
+    for (const id in state.entities) {
+        const entity = state.entities[id];
+        if (entity.dead) continue;
+
+        // Get interception aura from rules
+        const data = getRuleData(entity.key);
+        const aura = data?.interceptionAura;
+        if (!aura) continue;
+
+        // Friendly AA doesn't intercept own projectiles
+        if (entity.owner === projectileOwner) continue;
+
+        // Check if projectile is in range
+        const dist = projectile.pos.dist(entity.pos);
+        if (dist > aura.radius) continue;
+
+        // Apply DPS (converted to per-tick)
+        totalDamage += aura.dps / 60;
+    }
+
+    if (totalDamage <= 0) return projectile;
+
+    const newHp = projectile.hp - totalDamage;
+    return {
+        ...projectile,
+        hp: newHp,
+        dead: newHp <= 0
     };
 }
