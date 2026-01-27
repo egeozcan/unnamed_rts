@@ -63,20 +63,22 @@ describe('Splash Damage', () => {
     });
 
     it('should apply full damage at center', () => {
-        const target = createTestCombatUnit({ id: 'target', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [target.id]: target });
+        // Use 'nearby' id (not 'target') so this entity receives splash damage
+        const nearby = createTestCombatUnit({ id: 'nearby', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
+        let state = createTestState({ [nearby.id]: nearby });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
+            targetId: 'other', // Primary target is something else
             damage: 50,
             splash: 100
         });
 
         const result = applySplashDamage(state, projectile, projectile.pos);
-        const damagedTarget = result.entities['target'];
+        const damagedNearby = result.entities['nearby'];
 
         // Full damage at center (distance 0), armor modifier may apply
-        expect(damagedTarget.hp).toBeLessThan(100);
+        expect(damagedNearby.hp).toBeLessThan(100);
     });
 
     it('should apply linear falloff damage at edge', () => {
@@ -208,21 +210,22 @@ describe('Splash Damage', () => {
     });
 
     it('should apply damage flash to units', () => {
-        const target = createTestCombatUnit({ id: 'target', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [target.id]: target });
+        const nearby = createTestCombatUnit({ id: 'nearby', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
+        let state = createTestState({ [nearby.id]: nearby });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
+            targetId: 'other', // Primary target is something else
             damage: 30,
             splash: 100
         });
 
         const result = applySplashDamage(state, projectile, projectile.pos);
-        const damagedTarget = result.entities['target'];
+        const damagedNearby = result.entities['nearby'];
 
         // Should have flash effect
-        if (damagedTarget.type === 'UNIT') {
-            expect(damagedTarget.combat.flash).toBeGreaterThan(0);
+        if (damagedNearby.type === 'UNIT') {
+            expect(damagedNearby.combat.flash).toBeGreaterThan(0);
         }
     });
 
@@ -275,5 +278,23 @@ describe('Splash Damage', () => {
         // Both should take damage
         expect(lightDamage).toBeGreaterThan(0);
         expect(heavyDamage).toBeGreaterThan(0);
+    });
+
+    it('should not apply splash damage to the primary target (they already took direct damage)', () => {
+        // The primary target should be excluded from splash damage to avoid double-damage
+        const primaryTarget = createTestCombatUnit({ id: 'primary', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
+        let state = createTestState({ [primaryTarget.id]: primaryTarget });
+
+        const projectile = createTestProjectile({
+            pos: new Vector(100, 100),
+            targetId: 'primary', // This is the primary target
+            damage: 50,
+            splash: 100
+        });
+
+        const result = applySplashDamage(state, projectile, projectile.pos);
+
+        // Primary target should NOT be damaged by splash (they take direct damage separately)
+        expect(result.entities['primary'].hp).toBe(100);
     });
 });

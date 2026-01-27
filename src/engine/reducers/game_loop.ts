@@ -990,6 +990,8 @@ export function applySplashDamage(
         const entity = entities[id];
         if (entity.dead) continue;
         if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+        // Skip the primary target - they already took direct damage
+        if (id === projectile.targetId) continue;
 
         const dist = hitPos.dist(entity.pos);
         if (dist >= splashRadius) continue;
