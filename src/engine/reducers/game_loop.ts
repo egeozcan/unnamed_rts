@@ -17,6 +17,8 @@ import { isDemoTruck } from '../type-guards';
 import { getDemoTruckExplosionStats } from './demo_truck';
 import { DebugEvents } from '../debug/events';
 
+const MAX_TRAIL_POINTS = 30;
+
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
 
@@ -120,7 +122,9 @@ export function tick(state: GameState): GameState {
         }
         const res = updateProjectile(interceptedProj, updatedEntities, state.config.width, state.config.height);
         if (!res.proj.dead) {
-            nextProjectiles.push(res.proj);
+            // Update trail points before adding to nextProjectiles
+            const projWithTrail = updateProjectileTrail(res.proj);
+            nextProjectiles.push(projWithTrail);
         }
         if (res.damage) {
             damageEvents.push(res.damage);
@@ -976,6 +980,23 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
     }
 
     return { proj: nextProj, damage: damageEvent };
+}
+
+/**
+ * Update projectile trail points, maintaining a max of 30 entries.
+ */
+export function updateProjectileTrail(projectile: Projectile): Projectile {
+    const newTrail = [...projectile.trailPoints, projectile.pos];
+
+    // Keep only the last 30 points
+    const trimmedTrail = newTrail.length > MAX_TRAIL_POINTS
+        ? newTrail.slice(newTrail.length - MAX_TRAIL_POINTS)
+        : newTrail;
+
+    return {
+        ...projectile,
+        trailPoints: trimmedTrail
+    };
 }
 
 /**

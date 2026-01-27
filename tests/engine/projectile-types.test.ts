@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { Vector } from '../../src/engine/types';
+import { Vector, Projectile } from '../../src/engine/types';
 import { RULES } from '../../src/data/schemas/index';
 import { createProjectile } from '../../src/engine/reducers/helpers';
 import { createTestCombatUnit, createTestBuilding, createTestHarrier } from '../../src/engine/test-utils';
+import { updateProjectileTrail } from '../../src/engine/reducers/game_loop';
 
 describe('Projectile Archetype Types', () => {
     it('should include archetype field in Projectile interface', () => {
@@ -219,5 +220,90 @@ describe('createProjectile with Archetypes (continued)', () => {
 
         // arcHeight = distance * 0.1 for ballistic = 200 * 0.1 = 20
         expect(proj.arcHeight).toBe(20);
+    });
+});
+
+describe('Projectile Trail Points', () => {
+    it('should add current position to trailPoints each update', () => {
+        const projectile: Projectile = {
+            ownerId: 'attacker',
+            pos: new Vector(100, 100),
+            vel: new Vector(10, 0),
+            targetId: 'target',
+            speed: 10,
+            damage: 10,
+            splash: 0,
+            type: 'bullet',
+            weaponType: 'bullet',
+            dead: false,
+            archetype: 'hitscan',
+            hp: 0,
+            maxHp: 0,
+            arcHeight: 0,
+            startPos: new Vector(0, 100),
+            trailPoints: []
+        };
+
+        const updated = updateProjectileTrail(projectile);
+
+        expect(updated.trailPoints.length).toBe(1);
+        expect(updated.trailPoints[0].x).toBe(100);
+        expect(updated.trailPoints[0].y).toBe(100);
+    });
+
+    it('should limit trailPoints to 30 entries', () => {
+        const existingTrail = Array.from({ length: 30 }, (_, i) => new Vector(i, 0));
+        const projectile: Projectile = {
+            ownerId: 'attacker',
+            pos: new Vector(100, 0),
+            vel: new Vector(10, 0),
+            targetId: 'target',
+            speed: 10,
+            damage: 10,
+            splash: 0,
+            type: 'bullet',
+            weaponType: 'bullet',
+            dead: false,
+            archetype: 'hitscan',
+            hp: 0,
+            maxHp: 0,
+            arcHeight: 0,
+            startPos: new Vector(0, 0),
+            trailPoints: existingTrail
+        };
+
+        const updated = updateProjectileTrail(projectile);
+
+        expect(updated.trailPoints.length).toBe(30);
+        // Oldest point should be dropped, newest added
+        expect(updated.trailPoints[0].x).toBe(1); // Was index 1, now index 0
+        expect(updated.trailPoints[29].x).toBe(100); // New point
+    });
+
+    it('should accumulate points up to the limit', () => {
+        const projectile: Projectile = {
+            ownerId: 'attacker',
+            pos: new Vector(50, 50),
+            vel: new Vector(5, 5),
+            targetId: 'target',
+            speed: 7,
+            damage: 10,
+            splash: 0,
+            type: 'bullet',
+            weaponType: 'bullet',
+            dead: false,
+            archetype: 'hitscan',
+            hp: 0,
+            maxHp: 0,
+            arcHeight: 0,
+            startPos: new Vector(0, 0),
+            trailPoints: [new Vector(10, 10), new Vector(20, 20), new Vector(30, 30)]
+        };
+
+        const updated = updateProjectileTrail(projectile);
+
+        expect(updated.trailPoints.length).toBe(4);
+        expect(updated.trailPoints[3].x).toBe(50);
+        expect(updated.trailPoints[3].y).toBe(50);
     });
 });
