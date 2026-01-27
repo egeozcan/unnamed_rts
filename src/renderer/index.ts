@@ -169,7 +169,7 @@ export class Renderer {
         // Draw projectiles
         for (const proj of projectiles) {
             if (proj.dead) continue;
-            this.drawProjectile(proj, effectiveCamera, zoom);
+            this.drawProjectile(proj, effectiveCamera, zoom, entities);
         }
 
         // Draw particles
@@ -600,14 +600,126 @@ export class Renderer {
         ctx.restore();
     }
 
-    private drawProjectile(proj: Projectile, camera: { x: number; y: number }, zoom: number) {
+    private drawProjectile(proj: Projectile, camera: { x: number; y: number }, zoom: number, entities: Record<string, Entity>) {
         const ctx = this.ctx;
         const sc = this.worldToScreen(proj.pos, camera, zoom);
 
-        ctx.fillStyle = proj.type === 'heal' ? '#0f0' : (proj.type === 'rocket' ? '#f55' : '#ff0');
-        ctx.beginPath();
-        ctx.arc(sc.x, sc.y, 3 * zoom, 0, Math.PI * 2);
-        ctx.fill();
+        // Calculate visual Y offset for arc
+        let yOffset = 0;
+        if (proj.arcHeight > 0) {
+            const targetEntity = entities[proj.targetId];
+            const targetPos = targetEntity?.pos || proj.pos;
+            const totalDist = proj.startPos.dist(targetPos);
+            const traveled = proj.startPos.dist(proj.pos);
+            const progress = totalDist > 0 ? traveled / totalDist : 0;
+            // Parabola: 4 * progress * (1 - progress) peaks at 0.5
+            yOffset = proj.arcHeight * 4 * progress * (1 - progress);
+        }
+
+        const drawY = sc.y - (yOffset * zoom);
+
+        // Draw trail first (behind projectile)
+        this.drawProjectileTrail(proj, camera, zoom);
+
+        // Draw shadow for arcing projectiles
+        if (proj.arcHeight > 0 && yOffset > 10) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(sc.x, sc.y, 8 * zoom, 4 * zoom, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.save();
+        ctx.translate(sc.x, drawY);
+
+        // Rotate to face direction of travel
+        const angle = Math.atan2(proj.vel.y, proj.vel.x);
+        ctx.rotate(angle);
+
+        switch (proj.archetype) {
+            case 'hitscan':
+                // Yellow tracer line
+                ctx.strokeStyle = '#ff0';
+                ctx.lineWidth = 2 * zoom;
+                ctx.beginPath();
+                ctx.moveTo(-8 * zoom, 0);
+                ctx.lineTo(0, 0);
+                ctx.stroke();
+                break;
+
+            case 'rocket':
+                // Orange-red elongated oval
+                ctx.fillStyle = '#f52';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 8 * zoom, 4 * zoom, 0, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'artillery':
+                // Dark gray circle
+                ctx.fillStyle = '#444';
+                ctx.beginPath();
+                ctx.arc(0, 0, 6 * zoom, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'missile':
+                // White triangle
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.moveTo(10 * zoom, 0);
+                ctx.lineTo(-5 * zoom, -5 * zoom);
+                ctx.lineTo(-5 * zoom, 5 * zoom);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'ballistic':
+                // Brown/brass circle
+                ctx.fillStyle = '#a85';
+                ctx.beginPath();
+                ctx.arc(0, 0, 4 * zoom, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'grenade':
+                // Dark green circle
+                ctx.fillStyle = '#252';
+                ctx.beginPath();
+                ctx.arc(0, 0, 5 * zoom, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            default:
+                // Fallback - yellow dot (for heal, etc.)
+                ctx.fillStyle = proj.type === 'heal' ? '#0f0' : '#ff0';
+                ctx.beginPath();
+                ctx.arc(0, 0, 3 * zoom, 0, Math.PI * 2);
+                ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    private drawProjectileTrail(proj: Projectile, camera: { x: number; y: number }, zoom: number) {
+        const { trailPoints } = proj;
+        if (trailPoints.length < 2) return;
+
+        const ctx = this.ctx;
+
+        for (let i = 1; i < trailPoints.length; i++) {
+            const prev = this.worldToScreen(trailPoints[i - 1], camera, zoom);
+            const curr = this.worldToScreen(trailPoints[i], camera, zoom);
+
+            const opacity = (i / trailPoints.length) * 0.3;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.lineWidth = 1 * zoom;
+
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(curr.x, curr.y);
+            ctx.stroke();
+        }
     }
 
     private drawParticle(particle: Particle, camera: { x: number; y: number }, zoom: number) {
