@@ -184,6 +184,8 @@ export type {
     AttackStance
 } from './components.js';
 
+export type ProjectileArchetype = 'hitscan' | 'rocket' | 'artillery' | 'missile' | 'ballistic' | 'grenade';
+
 export interface Projectile {
     readonly ownerId: EntityId;
     readonly pos: Vector;
@@ -195,6 +197,12 @@ export interface Projectile {
     readonly type: string;
     readonly weaponType?: string;
     readonly dead: boolean;
+    readonly archetype: ProjectileArchetype;
+    readonly hp: number;
+    readonly maxHp: number;
+    readonly arcHeight: number;
+    readonly startPos: Vector;
+    readonly trailPoints: readonly Vector[];
 }
 
 export interface Particle {
