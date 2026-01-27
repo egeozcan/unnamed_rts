@@ -13,6 +13,20 @@ export const WeaponTypeSchema = z.enum([
 ]);
 export type WeaponType = z.infer<typeof WeaponTypeSchema>;
 
+// Projectile archetype enum
+export const ProjectileArchetypeSchema = z.enum([
+  'hitscan', 'rocket', 'artillery', 'missile', 'ballistic', 'grenade'
+]);
+export type ProjectileArchetype = z.infer<typeof ProjectileArchetypeSchema>;
+
+// Weapon archetype configuration (maps weapon type to projectile archetype)
+export const WeaponArchetypeSchema = z.object({
+  archetype: ProjectileArchetypeSchema,
+  interceptable: z.boolean(),
+  hp: z.number().positive().optional()
+});
+export type WeaponArchetype = z.infer<typeof WeaponArchetypeSchema>;
+
 // Unit types enum
 export const UnitTypeSchema = z.enum(['infantry', 'vehicle', 'air']);
 export type UnitType = z.infer<typeof UnitTypeSchema>;
@@ -145,6 +159,7 @@ export type Well = z.infer<typeof WellSchema>;
 // Complete Rules schema
 export const RulesSchema = z.object({
   economy: EconomySchema,
+  weaponArchetypes: z.record(z.string(), WeaponArchetypeSchema).optional(),
   meta: MetaSchema,
   productionBuildings: ProductionBuildingsSchema,
   buildings: z.record(z.string(), BuildingSchema),

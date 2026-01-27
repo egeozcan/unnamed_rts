@@ -3,6 +3,20 @@
         "sellBuildingReturnPercentage": 0.5,
         "repairCostPercentage": 0.3
     },
+    "weaponArchetypes": {
+        "bullet": { "archetype": "hitscan", "interceptable": false },
+        "ap_bullet": { "archetype": "hitscan", "interceptable": false },
+        "sniper": { "archetype": "hitscan", "interceptable": false },
+        "laser": { "archetype": "hitscan", "interceptable": false },
+        "cannon": { "archetype": "ballistic", "interceptable": false },
+        "heavy_cannon": { "archetype": "artillery", "interceptable": true, "hp": 150 },
+        "rocket": { "archetype": "rocket", "interceptable": true, "hp": 50 },
+        "missile": { "archetype": "missile", "interceptable": true, "hp": 100 },
+        "air_missile": { "archetype": "missile", "interceptable": true, "hp": 100 },
+        "grenade": { "archetype": "grenade", "interceptable": false },
+        "flame": { "archetype": "hitscan", "interceptable": false },
+        "heal": { "archetype": "hitscan", "interceptable": false }
+    },
     "wells": {
         "well": {
             "name": "Ore Well",
