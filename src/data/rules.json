@@ -185,7 +185,8 @@
                 "conyard",
                 "barracks"
             ],
-            "description": "Anti-air defense. Essential against helicopters and harriers. Cannot target ground units."
+            "description": "Anti-air defense. Essential against helicopters and harriers. Cannot target ground units.",
+            "interceptionAura": { "radius": 200, "dps": 150 }
         },
         "pillbox": {
             "name": "Pillbox",
@@ -328,7 +329,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Anti-armor infantry. Fires rockets with splash damage. Effective vs vehicles and aircraft."
+            "description": "Anti-armor infantry. Fires rockets with splash damage. Effective vs vehicles and aircraft.",
+            "interceptionAura": { "radius": 60, "dps": 40 }
         },
         "engineer": {
             "name": "Engineer",
@@ -599,7 +601,8 @@
                 "factory",
                 "tech"
             ],
-            "description": "Rocket artillery. Very long range with large splash radius. Fragile, best used behind tank lines."
+            "description": "Rocket artillery. Very long range with large splash radius. Fragile, best used behind tank lines.",
+            "interceptionAura": { "radius": 120, "dps": 80 }
         },
         "mammoth": {
             "name": "Mammoth Tank",

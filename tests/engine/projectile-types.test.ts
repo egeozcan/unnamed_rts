@@ -156,7 +156,35 @@ describe('createProjectile with Archetypes', () => {
 
         expect(proj.arcHeight).toBe(0);
     });
+});
 
+describe('Interception Aura Configuration', () => {
+    it('should have interceptionAura on sam_site', () => {
+        const samSite = RULES.buildings.sam_site;
+        expect(samSite.interceptionAura).toEqual({
+            radius: 200,
+            dps: 150
+        });
+    });
+
+    it('should have interceptionAura on mlrs', () => {
+        const mlrs = RULES.units.mlrs;
+        expect(mlrs.interceptionAura).toEqual({
+            radius: 120,
+            dps: 80
+        });
+    });
+
+    it('should have interceptionAura on rocket soldier', () => {
+        const rocket = RULES.units.rocket;
+        expect(rocket.interceptionAura).toEqual({
+            radius: 60,
+            dps: 40
+        });
+    });
+});
+
+describe('createProjectile with Archetypes (continued)', () => {
     it('should create ballistic projectile for cannon weapon', () => {
         const source = createTestBuilding({ key: 'turret', x: 0, y: 0 });
         const target = createTestCombatUnit({ key: 'rifle', x: 100, y: 0 });

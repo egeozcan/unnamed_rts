@@ -27,6 +27,13 @@ export const WeaponArchetypeSchema = z.object({
 });
 export type WeaponArchetype = z.infer<typeof WeaponArchetypeSchema>;
 
+// Interception aura configuration (for AA units that can damage projectiles)
+export const InterceptionAuraSchema = z.object({
+  radius: z.number(),
+  dps: z.number()
+});
+export type InterceptionAura = z.infer<typeof InterceptionAuraSchema>;
+
 // Unit types enum
 export const UnitTypeSchema = z.enum(['infantry', 'vehicle', 'air']);
 export type UnitType = z.infer<typeof UnitTypeSchema>;
@@ -88,6 +95,8 @@ export const BuildingSchema = z.object({
   maxCount: z.number().positive().optional(),
   // Description for tooltips
   description: z.string().optional(),
+  // AA interception aura - damages enemy projectiles passing through
+  interceptionAura: InterceptionAuraSchema.optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
@@ -122,6 +131,8 @@ export const UnitSchema = z.object({
   explosionRadius: z.number().positive().optional(),
   // Description for tooltips
   description: z.string().optional(),
+  // AA interception aura - damages enemy projectiles passing through
+  interceptionAura: InterceptionAuraSchema.optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 
