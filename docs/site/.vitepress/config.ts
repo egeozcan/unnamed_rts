@@ -7,7 +7,7 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
-      { text: 'Play', link: '/game/' },
+      { text: 'Play', link: '/game/', target: '_self' },
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Units', link: '/units/infantry' },
       { text: 'Buildings', link: '/buildings/' },

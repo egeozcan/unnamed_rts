@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Play Now
-      link: /game/
+      link: https://egeozcan.github.io/unnamed_rts/game/
     - theme: alt
       text: Learn to Play
       link: /guide/getting-started
