@@ -33,8 +33,17 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
+      - name: Build game
+        run: npm run build -- --base=/${{ github.event.repository.name }}/game/
+
+      - name: Build docs
+        run: npm run docs:build
+
+      - name: Combine builds
+        run: |
+          # Move game build into docs output as /game/ subfolder
+          mkdir -p docs/site/.vitepress/dist/game
+          cp -r dist/* docs/site/.vitepress/dist/game/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -42,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: ./docs/site/.vitepress/dist
 
   deploy:
     environment:
