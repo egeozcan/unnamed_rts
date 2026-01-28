@@ -1,6 +1,5 @@
 let pauseOverlay: HTMLDivElement | null = null;
 let helpPanel: HTMLDivElement | null = null;
-let currentTab: 'controls' | 'shortcuts' | 'tips' = 'controls';
 
 const HELP_CONTENT = {
   controls: `
@@ -94,7 +93,6 @@ export function initPauseMenu(
     tab.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       const tabName = target.dataset.tab as 'controls' | 'shortcuts' | 'tips';
-      currentTab = tabName;
 
       // Update active tab
       helpPanel?.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
