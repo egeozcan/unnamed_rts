@@ -6,3 +6,4 @@ coverage.worktrees/
 /.env
 /coverage/
 .worktrees
+docs/site/.vitepress/cache

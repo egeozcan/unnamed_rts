@@ -11,7 +11,10 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "manipulate-state": "npx -y tsx src/scripts/manipulate_state.ts",
-    "debug": "npx tsx src/scripts/debug/index.ts"
+    "debug": "npx tsx src/scripts/debug/index.ts",
+    "docs:dev": "vitepress dev docs/site",
+    "docs:build": "vitepress build docs/site",
+    "docs:preview": "vitepress preview docs/site"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
@@ -19,6 +22,7 @@
     "jsdom": "^27.4.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
+    "vitepress": "^1.6.4",
     "vitest": "^1.1.0"
   },
   "dependencies": {
