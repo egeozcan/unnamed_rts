@@ -15,6 +15,7 @@ import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellMo
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
+import { initPauseMenu, showPauseMenu, hidePauseMenu } from './ui/pause-menu.js';
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
 import { computeAiActions } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
@@ -31,6 +32,7 @@ const renderer = new Renderer(canvas);
 // Game state
 let currentState: GameState = INITIAL_STATE;
 let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
+let prePauseMode: 'game' | 'demo' | null = null;
 
 // HMR: Restore state from previous hot reload if available
 if (import.meta.hot?.data?.gameState) {
@@ -579,6 +581,22 @@ function startGameWithConfig(config: SkirmishConfig) {
         }
     );
 
+    // Initialize pause menu
+    initPauseMenu(
+        () => {
+            // Resume
+            if (prePauseMode) {
+                currentState = { ...currentState, mode: prePauseMode };
+                prePauseMode = null;
+            }
+            hidePauseMenu();
+        },
+        () => {
+            // Quit - reload page
+            location.reload();
+        }
+    );
+
     // Set observer mode if all players are AI
     setObserverMode(isObserverMode);
     renderer.resize();
@@ -613,6 +631,21 @@ function startGameWithConfig(config: SkirmishConfig) {
         },
         onToggleAttackMove: () => {
             currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+        },
+        onTogglePause: () => {
+            if (currentState.mode === 'paused') {
+                // Resume
+                if (prePauseMode) {
+                    currentState = { ...currentState, mode: prePauseMode };
+                    prePauseMode = null;
+                }
+                hidePauseMenu();
+            } else if (currentState.mode === 'game' || currentState.mode === 'demo') {
+                // Pause
+                prePauseMode = currentState.mode;
+                currentState = { ...currentState, mode: 'paused' };
+                showPauseMenu();
+            }
         },
         onDoubleClick: handleDoubleClick,
         getZoom: () => currentState.zoom,
@@ -1078,6 +1111,14 @@ function gameLoop(timestamp: number = 0) {
         return;
     }
 
+    if (currentState.mode === 'paused') {
+        // Still render but don't update
+        const input = getInputState();
+        renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
+        animationFrameId = requestAnimationFrame(gameLoop);
+        return;
+    }
+
     if (currentState.debugMode) {
         // Just render, don't update
     } else {
@@ -1302,6 +1343,21 @@ if (import.meta.hot) {
                 },
                 onToggleAttackMove: () => {
                     currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+                },
+                onTogglePause: () => {
+                    if (currentState.mode === 'paused') {
+                        // Resume
+                        if (prePauseMode) {
+                            currentState = { ...currentState, mode: prePauseMode };
+                            prePauseMode = null;
+                        }
+                        hidePauseMenu();
+                    } else if (currentState.mode === 'game' || currentState.mode === 'demo') {
+                        // Pause
+                        prePauseMode = currentState.mode;
+                        currentState = { ...currentState, mode: 'paused' };
+                        showPauseMenu();
+                    }
                 },
                 onDoubleClick: handleDoubleClick,
                 getZoom: () => currentState.zoom,

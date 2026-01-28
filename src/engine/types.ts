@@ -235,7 +235,7 @@ export interface Camera {
     readonly shakeDuration?: number;
 }
 
-export type GameMode = 'menu' | 'game' | 'demo';
+export type GameMode = 'menu' | 'game' | 'demo' | 'paused';
 
 // Player type for skirmish configuration
 export type PlayerType = 'human' | 'dummy' | 'easy' | 'medium' | 'hard' | 'none';

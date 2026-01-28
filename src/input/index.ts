@@ -63,6 +63,7 @@ let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
 let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
+let onTogglePause: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
@@ -80,6 +81,7 @@ export function initInput(
         onSetStance?: (stance: AttackStance) => void;
         onToggleAttackMove?: () => void;
         onDoubleClick?: (wx: number, wy: number) => void;
+        onTogglePause?: () => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -95,6 +97,7 @@ export function initInput(
     onSetStance = callbacks.onSetStance || null;
     onToggleAttackMove = callbacks.onToggleAttackMove || null;
     onDoubleClick = callbacks.onDoubleClick || null;
+    onTogglePause = callbacks.onTogglePause || null;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -183,6 +186,11 @@ function setupEventListeners() {
         // Attack-move toggle
         if (e.key === 'a' || e.key === 'A') {
             onToggleAttackMove?.();
+        }
+        // Pause game
+        if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
+            e.preventDefault();
+            onTogglePause?.();
         }
     });
 

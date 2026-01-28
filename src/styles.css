@@ -1691,3 +1691,130 @@ canvas#gameCanvas.attack-move-mode {
         padding: 14px 28px;
     }
 }
+
+/* Pause Menu */
+#pause-overlay, #help-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.pause-modal, .help-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #4a90d9;
+  border-radius: 8px;
+  padding: 30px 50px;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(74, 144, 217, 0.3);
+}
+
+.pause-modal h2 {
+  color: #4a90d9;
+  font-size: 32px;
+  margin: 0 0 30px 0;
+  text-shadow: 0 0 10px rgba(74, 144, 217, 0.5);
+}
+
+.pause-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.pause-buttons button, .help-back {
+  background: linear-gradient(180deg, #3a7bd5 0%, #2a5aa0 100%);
+  border: 1px solid #4a90d9;
+  color: white;
+  padding: 12px 30px;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.pause-buttons button:hover, .help-back:hover {
+  background: linear-gradient(180deg, #4a90d9 0%, #3a7bd5 100%);
+  transform: scale(1.05);
+}
+
+.help-modal {
+  min-width: 400px;
+  max-width: 500px;
+}
+
+.help-tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+
+.help-tab {
+  background: #2a2a4a;
+  border: 1px solid #4a4a6a;
+  color: #aaa;
+  padding: 8px 20px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  transition: all 0.2s;
+}
+
+.help-tab.active {
+  background: #3a7bd5;
+  border-color: #4a90d9;
+  color: white;
+}
+
+.help-content {
+  background: #0a0a1a;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  padding: 20px;
+  text-align: left;
+  margin-bottom: 20px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.help-content h3 {
+  color: #4a90d9;
+  margin: 0 0 15px 0;
+  font-size: 18px;
+}
+
+.help-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.help-content td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.help-content td:first-child {
+  color: #4a90d9;
+  font-weight: bold;
+  width: 40%;
+}
+
+.help-content ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.help-content li {
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.help-back {
+  margin-top: 10px;
+}
