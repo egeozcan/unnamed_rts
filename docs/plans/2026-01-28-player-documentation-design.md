@@ -19,25 +19,27 @@ Add comprehensive player documentation using VitePress, a play-first landing pag
 ```
 unnamed_rts/
 ├── src/                    # Existing game source
-├── docs/                   # VitePress documentation site
-│   ├── .vitepress/
-│   │   └── config.ts       # VitePress configuration
-│   ├── index.md            # Landing page (play-first hero)
-│   ├── guide/              # How to play guides
-│   │   ├── getting-started.md
-│   │   ├── controls.md
-│   │   └── economy.md
-│   ├── units/              # Unit encyclopedia
-│   │   ├── infantry.md
-│   │   ├── vehicles.md
-│   │   └── aircraft.md
-│   ├── buildings/          # Building encyclopedia
-│   │   └── index.md
-│   ├── strategy/           # Advanced tactics
-│   │   ├── build-orders.md
-│   │   ├── unit-counters.md
-│   │   └── advanced-tactics.md
-│   └── public/             # Screenshots, images
+├── docs/
+│   ├── plans/              # Development design docs (existing, unchanged)
+│   └── site/               # VitePress documentation site (new)
+│       ├── .vitepress/
+│       │   └── config.ts   # VitePress configuration
+│       ├── index.md        # Landing page (play-first hero)
+│       ├── guide/          # How to play guides
+│       │   ├── getting-started.md
+│       │   ├── controls.md
+│       │   └── economy.md
+│       ├── units/          # Unit encyclopedia
+│       │   ├── infantry.md
+│       │   ├── vehicles.md
+│       │   └── aircraft.md
+│       ├── buildings/      # Building encyclopedia
+│       │   └── index.md
+│       ├── strategy/       # Advanced tactics
+│       │   ├── build-orders.md
+│       │   ├── unit-counters.md
+│       │   └── advanced-tactics.md
+│       └── public/         # Screenshots, images
 ├── dist/                   # Game build output
 └── package.json            # Shared scripts
 ```
@@ -146,7 +148,7 @@ steps:
   - Install dependencies
   - Run tests
   - Build game (npm run build) → dist/
-  - Build docs (npm run docs:build) → docs/.vitepress/dist/
+  - Build docs (npm run docs:build) → docs/site/.vitepress/dist/
   - Copy game build into docs output as /game/ subfolder
   - Deploy combined output to GitHub Pages
 ```
@@ -155,9 +157,9 @@ steps:
 
 ```json
 {
-  "docs:dev": "vitepress dev docs",
-  "docs:build": "vitepress build docs",
-  "docs:preview": "vitepress preview docs"
+  "docs:dev": "vitepress dev docs/site",
+  "docs:build": "vitepress build docs/site",
+  "docs:preview": "vitepress preview docs/site"
 }
 ```
 
@@ -177,20 +179,20 @@ https://username.github.io/unnamed_rts/
 ## Files to Create/Modify
 
 ### New Files
-- `docs/.vitepress/config.ts` - VitePress configuration
-- `docs/index.md` - Landing page
-- `docs/guide/getting-started.md`
-- `docs/guide/controls.md`
-- `docs/guide/economy.md`
-- `docs/guide/production.md`
-- `docs/guide/combat.md`
-- `docs/units/infantry.md`
-- `docs/units/vehicles.md`
-- `docs/units/aircraft.md`
-- `docs/buildings/index.md`
-- `docs/strategy/build-orders.md`
-- `docs/strategy/unit-counters.md`
-- `docs/strategy/advanced-tactics.md`
+- `docs/site/.vitepress/config.ts` - VitePress configuration
+- `docs/site/index.md` - Landing page
+- `docs/site/guide/getting-started.md`
+- `docs/site/guide/controls.md`
+- `docs/site/guide/economy.md`
+- `docs/site/guide/production.md`
+- `docs/site/guide/combat.md`
+- `docs/site/units/infantry.md`
+- `docs/site/units/vehicles.md`
+- `docs/site/units/aircraft.md`
+- `docs/site/buildings/index.md`
+- `docs/site/strategy/build-orders.md`
+- `docs/site/strategy/unit-counters.md`
+- `docs/site/strategy/advanced-tactics.md`
 
 ### Modified Files
 - `src/engine/types.ts` - Add `'paused'` game mode
