@@ -1,4 +1,23 @@
-# Game State Manipulation Tool
+# Scripts
+
+## AI Implementation Scaffolder
+
+Create a new pluggable AI implementation with:
+
+```bash
+npm run ai:new -- my_new_ai
+```
+
+This generates:
+
+- `src/engine/ai/implementations/<name>/index.ts`
+- `src/engine/ai/implementations/<name>/state.ts`
+- `src/engine/ai/implementations/<name>/README.md`
+- `tests/engine/ai_<name>.test.ts`
+
+It also auto-registers the implementation in `src/engine/ai/registry.ts`.
+
+## Game State Manipulation Tool
 
 A command-line tool to manipulate saved game states (JSON files). It allows for removing players, units, and buildings based on various criteria, as well as advancing the game simulation.
 

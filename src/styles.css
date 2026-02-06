@@ -715,30 +715,51 @@ canvas#gameCanvas.attack-move-mode {
     flex-shrink: 0;
 }
 
-.player-type {
+.player-controls {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.player-type,
+.ai-implementation {
     flex: 1;
     background: transparent;
     color: rgba(255, 255, 255, 0.8);
     border: none;
-    padding: 4px 0;
-    font-size: 12px;
+    padding: 3px 0;
+    font-size: 11px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     cursor: pointer;
     transition: color 0.15s;
     -webkit-appearance: none;
     appearance: none;
+    line-height: 1.2;
 }
 
-.player-type:hover {
+.ai-implementation {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ai-implementation.hidden {
+    display: none;
+}
+
+.player-type:hover,
+.ai-implementation:hover {
     color: #fff;
 }
 
-.player-type:focus {
+.player-type:focus,
+.ai-implementation:focus {
     outline: none;
     color: #fff;
 }
 
-.player-type option {
+.player-type option,
+.ai-implementation option {
     background: #1a1a2e;
     color: #fff;
     padding: 8px;
@@ -1666,6 +1687,10 @@ canvas#gameCanvas.attack-move-mode {
 
     .player-type {
         font-size: 13px;
+    }
+
+    .ai-implementation {
+        font-size: 12px;
     }
 
     .map-params {

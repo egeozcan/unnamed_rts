@@ -11,6 +11,7 @@
 
 import { GameState, UnitEntity } from '../../engine/types.js';
 import { getAIState } from '../../engine/ai/state.js';
+import { DEFAULT_AI_IMPLEMENTATION_ID } from '../../engine/ai/registry.js';
 import { isUnit, isHarvester } from '../../engine/type-guards.js';
 import type { DebugEvent } from '../../engine/debug/schemas.js';
 
@@ -31,7 +32,8 @@ export function formatStatus(state: GameState, playerId: number): string {
     const lines: string[] = [];
 
     // Player header
-    const playerType = player.isAi ? `AI (${player.difficulty})` : 'Human';
+    const implementationId = player.aiImplementationId || DEFAULT_AI_IMPLEMENTATION_ID;
+    const playerType = player.isAi ? `AI (${player.difficulty}, ${implementationId})` : 'Human';
     lines.push(`=== Player ${playerId}: ${playerType} ===`);
     lines.push('');
 

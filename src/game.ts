@@ -17,7 +17,7 @@ import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu } from './ui/pause-menu.js';
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
-import { computeAiActions } from './engine/ai/index.js';
+import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
@@ -59,6 +59,7 @@ const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
 let lastFrameTime = 0;
 let gameSpeed: GameSpeed = 2;
 let animationFrameId: number | null = null;
+const aiImplementationOptions = getAIImplementationOptions();
 
 function setGameSpeed(speed: GameSpeed) {
     gameSpeed = speed;
@@ -82,6 +83,21 @@ function setupSkirmishUI() {
     const playerSlots = document.querySelectorAll('.player-slot');
     const observerIndicator = document.getElementById('observer-mode');
 
+    function updateSlotAiControls(slot: Element): void {
+        const slotDiv = slot as HTMLElement;
+        const typeSelect = slot.querySelector('.player-type') as HTMLSelectElement;
+        const implementationSelect = slot.querySelector('.ai-implementation') as HTMLSelectElement | null;
+        if (!implementationSelect) {
+            slotDiv.classList.toggle('disabled', typeSelect.value === 'none');
+            return;
+        }
+
+        const isAiSlot = typeSelect.value !== 'human' && typeSelect.value !== 'none';
+        implementationSelect.disabled = !isAiSlot;
+        implementationSelect.classList.toggle('hidden', !isAiSlot);
+        slotDiv.classList.toggle('disabled', typeSelect.value === 'none');
+    }
+
     function updateObserverMode() {
         const hasHuman = Array.from(playerSlots).some(slot => {
             const select = slot.querySelector('.player-type') as HTMLSelectElement;
@@ -103,20 +119,37 @@ function setupSkirmishUI() {
                         const otherSelect = otherSlot.querySelector('.player-type') as HTMLSelectElement;
                         if (otherSelect.value === 'human') {
                             otherSelect.value = 'medium';
+                            updateSlotAiControls(otherSlot);
                         }
                     }
                 });
             }
 
-            // Update disabled state based on closed
-            const slotDiv = slot as HTMLElement;
-            slotDiv.classList.toggle('disabled', select.value === 'none');
-
+            updateSlotAiControls(slot);
             updateObserverMode();
         });
+
+        updateSlotAiControls(slot);
     });
 
     updateObserverMode();
+}
+
+function populateAiImplementationSelects() {
+    const selects = document.querySelectorAll('.ai-implementation') as NodeListOf<HTMLSelectElement>;
+    for (const select of selects) {
+        const current = select.value || DEFAULT_AI_IMPLEMENTATION_ID;
+        select.innerHTML = '';
+        for (const option of aiImplementationOptions) {
+            const optionNode = document.createElement('option');
+            optionNode.value = option.id;
+            optionNode.textContent = option.name;
+            select.appendChild(optionNode);
+        }
+
+        const hasCurrent = aiImplementationOptions.some(option => option.id === current);
+        select.value = hasCurrent ? current : DEFAULT_AI_IMPLEMENTATION_ID;
+    }
 }
 
 // Get skirmish configuration from UI
@@ -125,13 +158,17 @@ function getSkirmishConfig(): SkirmishConfig {
 
     document.querySelectorAll('.player-slot').forEach((slot, index) => {
         const select = slot.querySelector('.player-type') as HTMLSelectElement;
+        const aiSelect = slot.querySelector('.ai-implementation') as HTMLSelectElement | null;
         const type = select.value as PlayerType;
 
         if (type !== 'none') {
             players.push({
                 slot: index,
                 type,
-                color: PLAYER_COLORS[index]
+                color: PLAYER_COLORS[index],
+                aiImplementationId: type === 'human'
+                    ? undefined
+                    : (aiSelect?.value || DEFAULT_AI_IMPLEMENTATION_ID)
             });
         }
     });
@@ -325,6 +362,7 @@ document.getElementById('restart-btn')?.addEventListener('click', () => {
 });
 
 // Initialize skirmish UI
+populateAiImplementationSelects();
 setupSkirmishUI();
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
@@ -450,7 +488,8 @@ function startGameWithConfig(config: SkirmishConfig) {
     config.players.forEach(p => {
         const isAi = p.type !== 'human';
         const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'dummy' | 'easy' | 'medium' | 'hard';
-        players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color);
+        const aiImplementationId = p.aiImplementationId || DEFAULT_AI_IMPLEMENTATION_ID;
+        players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color, aiImplementationId);
     });
 
     // Get starting positions

@@ -77,11 +77,18 @@ export function canBuild(key: string, category: string, playerId: number, entiti
     return true;
 }
 
-export function createPlayerState(id: number, isAi: boolean, difficulty: 'easy' | 'medium' | 'hard' | 'dummy' = 'medium', color: string = PLAYER_COLORS[id] || '#888888'): PlayerState {
+export function createPlayerState(
+    id: number,
+    isAi: boolean,
+    difficulty: 'easy' | 'medium' | 'hard' | 'dummy' = 'medium',
+    color: string = PLAYER_COLORS[id] || '#888888',
+    aiImplementationId: string = 'classic'
+): PlayerState {
     return {
         id,
         isAi,
         difficulty,
+        aiImplementationId,
         color,
         credits: isAi ? 10000 : 3000,
         maxPower: 0,

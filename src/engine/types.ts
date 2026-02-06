@@ -243,12 +243,15 @@ export type GameMode = 'menu' | 'game' | 'demo' | 'paused';
 // Player type for skirmish configuration
 export type PlayerType = 'human' | 'dummy' | 'easy' | 'medium' | 'hard' | 'none';
 
+export type AIImplementationId = string;
+
 // Skirmish configuration for game setup
 export interface SkirmishConfig {
     readonly players: Array<{
         slot: number;
         type: PlayerType;
         color: string;
+        aiImplementationId?: AIImplementationId;
     }>;
     readonly mapSize: 'small' | 'medium' | 'large' | 'huge';
     readonly resourceDensity: 'low' | 'medium' | 'high';
@@ -259,6 +262,7 @@ export interface PlayerState {
     readonly id: number; // Changed to number to match owner
     readonly isAi: boolean;
     readonly difficulty: 'dummy' | 'easy' | 'medium' | 'hard';
+    readonly aiImplementationId?: AIImplementationId;
     readonly color: string;
     readonly credits: number;
     readonly maxPower: number;
@@ -413,4 +417,3 @@ export const WELL_DENSITY_SETTINGS = {
 // Legacy colors for backwards compatibility
 export const PLAYER_COLOR = PLAYER_COLORS[0];
 export const ENEMY_COLOR = PLAYER_COLORS[1];
-
