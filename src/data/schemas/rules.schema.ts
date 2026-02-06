@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Armor types enum
 export const ArmorTypeSchema = z.enum([
-  'none', 'infantry', 'light', 'medium', 'heavy', 'building'
+  'none', 'infantry', 'light', 'medium', 'heavy', 'building', 'hijacker'
 ]);
 export type ArmorType = z.infer<typeof ArmorTypeSchema>;
 
@@ -120,6 +120,7 @@ export const UnitSchema = z.object({
   fly: z.boolean().optional(),
   canCaptureEnemyBuildings: z.boolean().optional(),
   canRepairFriendlyBuildings: z.boolean().optional(),
+  canHijackVehicles: z.boolean().optional(),
   // Air unit ammo field
   ammo: z.number().positive().optional(),
   // Limit fields - AI will not build more than this count per player

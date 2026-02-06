@@ -149,4 +149,44 @@ export const infantry: Record<string, string> = {
             <line x1="30" y1="30" x2="70" y2="70" stroke="#530" stroke-width="4"/>
         </g>
     </svg>`,
+
+    'hijacker': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+        ${SHARED_DEFS}
+        <defs>
+            <linearGradient id="stealthGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#2a2a2a"/>
+                <stop offset="100%" style="stop-color:#111"/>
+            </linearGradient>
+        </defs>
+        <g filter="url(#shadow)">
+            <!-- Black Stealth Suit -->
+            <ellipse cx="50" cy="50" rx="24" ry="17" fill="url(#stealthGrad)" stroke="#000" stroke-width="2"/>
+            
+            <!-- Tactical Vest (subtle purple accent) -->
+            <path d="M35 45 L40 60 L60 60 L65 45" fill="#1a1a2e" stroke="#3a2855" stroke-width="1"/>
+            <rect x="40" y="48" width="20" height="8" fill="#000" opacity="0.5"/> <!-- Pouches -->
+            
+            <!-- Ski Mask/Balaclava -->
+            <circle cx="50" cy="42" r="14" fill="#111" stroke="#000"/>
+            <ellipse cx="50" cy="42" rx="14" ry="10" fill="#1a1a1a"/>
+            <!-- Eye Slit -->
+            <rect x="38" y="39" width="24" height="6" fill="#000" rx="2"/>
+            <!-- Glowing Eyes -->
+            <ellipse cx="43" cy="42" rx="3" ry="2" fill="#0ff" opacity="0.8"/>
+            <ellipse cx="57" cy="42" rx="3" ry="2" fill="#0ff" opacity="0.8"/>
+            
+            <!-- Arms -->
+            <ellipse cx="28" cy="52" rx="5" ry="5" fill="#222" stroke="#000"/>
+            <ellipse cx="72" cy="52" rx="5" ry="5" fill="#222" stroke="#000"/>
+            
+            <!-- Crowbar Tool -->
+            <rect x="70" y="30" width="5" height="40" fill="#555" rx="1"/>
+            <path d="M70 30 L68 25 L78 25 L75 30" fill="#555"/>
+            <path d="M70 70 L68 75 L70 80 L75 70" fill="#555"/>
+            
+            <!-- EMP Device on Belt -->
+            <ellipse cx="50" cy="65" rx="8" ry="5" fill="#222" stroke="#3a2855"/>
+            <circle cx="50" cy="65" r="3" fill="#0ff" opacity="0.6"/> <!-- Glowing core -->
+        </g>
+    </svg>`,
 };

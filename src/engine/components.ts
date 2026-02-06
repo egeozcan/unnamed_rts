@@ -68,6 +68,13 @@ export interface EngineerComponent {
     readonly repairTargetId?: EntityId | null;
 }
 
+// ============ HIJACKER COMPONENT ============
+// Properties specific to hijacker units (vehicle theft)
+
+export interface HijackerComponent {
+    readonly hijackTargetId?: EntityId | null;
+}
+
 // ============ BUILDING STATE COMPONENT ============
 // Properties specific to buildings
 

@@ -35,6 +35,7 @@ export function updateCombatUnitBehavior(
 
     const spatialGrid = getSpatialGrid();
     const isEngineer = !!(data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings);
+    const isHijacker = !!data.canHijackVehicles;
     const stance: AttackStance = nextEntity.combat.stance || 'aggressive';
     const range = data.range || 100;
 
@@ -42,7 +43,7 @@ export function updateCombatUnitBehavior(
     const isAttackMove = !!nextEntity.combat.attackMoveTarget;
 
     // Auto-acquire target based on stance
-    if (!nextEntity.combat.targetId && (data.damage || isEngineer)) {
+    if (!nextEntity.combat.targetId && (data.damage || isEngineer || isHijacker)) {
         const shouldAutoAcquire = shouldAutoAcquireTarget(nextEntity, stance, isAttackMove);
 
         if (shouldAutoAcquire) {
@@ -76,7 +77,7 @@ export function updateCombatUnitBehavior(
             if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
                 nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
             } else {
-                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, stance);
+                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, isHijacker, stance);
                 nextEntity = result.entity;
                 projectile = result.projectile;
             }
@@ -333,6 +334,7 @@ function findCombatTarget(
 
     const isHealer = data.damage < 0;
     const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
+    const isHijacker = data.canHijackVehicles;
     const range = maxRange ?? ((data.range || 100) + (isHealer ? 100 : 50));
 
     const weaponType = data.weaponType || 'bullet';
@@ -356,6 +358,11 @@ function findCombatTarget(
             if (other.owner !== unit.owner && data.canCaptureEnemyBuildings) return true;
             if (other.owner === unit.owner && other.hp < other.maxHp && data.canRepairFriendlyBuildings) return true;
             return false;
+        } else if (isHijacker) {
+            // Hijackers can only target enemy vehicles
+            if (other.type !== 'UNIT' || other.owner === unit.owner) return false;
+            const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
+            return targetType === 'vehicle';
         } else {
             return other.owner !== unit.owner;
         }
@@ -380,6 +387,7 @@ function handleCombatTarget(
     data: ReturnType<typeof getRuleData>,
     entityList: Entity[],
     isEngineer: boolean,
+    isHijacker: boolean,
     stance: AttackStance
 ): { entity: CombatUnit, projectile: Projectile | null } {
 
@@ -482,6 +490,30 @@ function handleCombatTarget(
         } else {
             // Move to building
             return { entity: moveToward(unit, target.pos, entityList) as CombatUnit, projectile: null };
+        }
+    }
+
+    // Hijacker special behavior - steal enemy vehicles
+    if (isHijacker && target.type === 'UNIT') {
+        const targetUnitData = getRuleData(target.key);
+        const isVehicle = targetUnitData && isUnitData(targetUnitData) && targetUnitData.type === 'vehicle';
+
+        if (isVehicle && target.owner !== unit.owner) {
+            // Entry distance - need to be very close to vehicle
+            const entryRange = 30;
+            if (dist <= entryRange + target.radius) {
+                // Close enough - hijack the vehicle
+                nextUnit = {
+                    ...nextUnit,
+                    dead: true,
+                    movement: { ...nextUnit.movement, moveTarget: null },
+                    hijacker: { ...nextUnit.hijacker, hijackTargetId: target.id }
+                };
+                return { entity: nextUnit, projectile: null };
+            } else {
+                // Move to vehicle
+                return { entity: moveToward(unit, target.pos, entityList) as CombatUnit, projectile: null };
+            }
         }
     }
 

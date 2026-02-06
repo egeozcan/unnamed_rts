@@ -4,18 +4,58 @@
         "repairCostPercentage": 0.3
     },
     "weaponArchetypes": {
-        "bullet": { "archetype": "hitscan", "interceptable": false },
-        "ap_bullet": { "archetype": "hitscan", "interceptable": false },
-        "sniper": { "archetype": "hitscan", "interceptable": false },
-        "laser": { "archetype": "hitscan", "interceptable": false },
-        "cannon": { "archetype": "ballistic", "interceptable": false },
-        "heavy_cannon": { "archetype": "artillery", "interceptable": true, "hp": 150 },
-        "rocket": { "archetype": "rocket", "interceptable": true, "hp": 50 },
-        "missile": { "archetype": "missile", "interceptable": true, "hp": 100 },
-        "air_missile": { "archetype": "missile", "interceptable": true, "hp": 100 },
-        "grenade": { "archetype": "grenade", "interceptable": false },
-        "flame": { "archetype": "hitscan", "interceptable": false },
-        "heal": { "archetype": "hitscan", "interceptable": false }
+        "bullet": {
+            "archetype": "hitscan",
+            "interceptable": false
+        },
+        "ap_bullet": {
+            "archetype": "hitscan",
+            "interceptable": false
+        },
+        "sniper": {
+            "archetype": "hitscan",
+            "interceptable": false
+        },
+        "laser": {
+            "archetype": "hitscan",
+            "interceptable": false
+        },
+        "cannon": {
+            "archetype": "ballistic",
+            "interceptable": false
+        },
+        "heavy_cannon": {
+            "archetype": "artillery",
+            "interceptable": true,
+            "hp": 150
+        },
+        "rocket": {
+            "archetype": "rocket",
+            "interceptable": true,
+            "hp": 50
+        },
+        "missile": {
+            "archetype": "missile",
+            "interceptable": true,
+            "hp": 100
+        },
+        "air_missile": {
+            "archetype": "missile",
+            "interceptable": true,
+            "hp": 100
+        },
+        "grenade": {
+            "archetype": "grenade",
+            "interceptable": false
+        },
+        "flame": {
+            "archetype": "hitscan",
+            "interceptable": false
+        },
+        "heal": {
+            "archetype": "hitscan",
+            "interceptable": false
+        }
     },
     "wells": {
         "well": {
@@ -186,7 +226,10 @@
                 "barracks"
             ],
             "description": "Anti-air defense. Essential against helicopters and harriers. Cannot target ground units.",
-            "interceptionAura": { "radius": 200, "dps": 150 }
+            "interceptionAura": {
+                "radius": 200,
+                "dps": 150
+            }
         },
         "pillbox": {
             "name": "Pillbox",
@@ -330,7 +373,10 @@
                 "barracks"
             ],
             "description": "Anti-armor infantry. Fires rockets with splash damage. Effective vs vehicles and aircraft.",
-            "interceptionAura": { "radius": 60, "dps": 40 }
+            "interceptionAura": {
+                "radius": 60,
+                "dps": 40
+            }
         },
         "engineer": {
             "name": "Engineer",
@@ -602,7 +648,10 @@
                 "tech"
             ],
             "description": "Rocket artillery. Very long range with large splash radius. Fragile, best used behind tank lines.",
-            "interceptionAura": { "radius": 120, "dps": 80 }
+            "interceptionAura": {
+                "radius": 120,
+                "dps": 80
+            }
         },
         "mammoth": {
             "name": "Mammoth Tank",
@@ -708,6 +757,23 @@
                 "factory"
             ],
             "description": "Suicide vehicle. Detonates on impact or death, dealing massive area damage. Chain reactions possible."
+        },
+        "hijacker": {
+            "name": "Hijacker",
+            "type": "infantry",
+            "hp": 50,
+            "cost": 1000,
+            "speed": 2.0,
+            "range": 30,
+            "damage": 0,
+            "w": 15,
+            "armor": "hijacker",
+            "canHijackVehicles": true,
+            "prerequisites": [
+                "barracks",
+                "tech"
+            ],
+            "description": "Specialist infiltrator. Enters enemy vehicles to steal them. Weak vs infantry fire, resilient vs vehicles."
         }
     },
     "armorTypes": {
@@ -716,7 +782,8 @@
         "light": {},
         "medium": {},
         "heavy": {},
-        "building": {}
+        "building": {},
+        "hijacker": {}
     },
     "damageModifiers": {
         "bullet": {
@@ -725,7 +792,8 @@
             "light": 0.4,
             "medium": 0.2,
             "heavy": 0.1,
-            "building": 0.15
+            "building": 0.15,
+            "hijacker": 2.5
         },
         "ap_bullet": {
             "none": 1.0,
@@ -733,7 +801,8 @@
             "light": 1.25,
             "medium": 0.8,
             "heavy": 0.4,
-            "building": 0.4
+            "building": 0.4,
+            "hijacker": 2.0
         },
         "cannon": {
             "none": 1.0,
@@ -741,7 +810,8 @@
             "light": 1.0,
             "medium": 1.0,
             "heavy": 0.6,
-            "building": 1.0
+            "building": 1.0,
+            "hijacker": 0.2
         },
         "heavy_cannon": {
             "none": 1.0,
@@ -749,7 +819,8 @@
             "light": 0.6,
             "medium": 1.0,
             "heavy": 1.25,
-            "building": 1.5
+            "building": 1.5,
+            "hijacker": 0.15
         },
         "rocket": {
             "none": 1.0,
@@ -757,7 +828,8 @@
             "light": 1.0,
             "medium": 1.25,
             "heavy": 1.0,
-            "building": 1.0
+            "building": 1.0,
+            "hijacker": 0.25
         },
         "missile": {
             "none": 1.0,
@@ -765,7 +837,8 @@
             "light": 0.6,
             "medium": 1.0,
             "heavy": 1.5,
-            "building": 1.25
+            "building": 1.25,
+            "hijacker": 0.2
         },
         "flame": {
             "none": 1.0,
@@ -773,7 +846,8 @@
             "light": 1.25,
             "medium": 0.5,
             "heavy": 0.35,
-            "building": 0.6
+            "building": 0.6,
+            "hijacker": 1.5
         },
         "sniper": {
             "none": 1.0,
@@ -781,7 +855,8 @@
             "light": 0.3,
             "medium": 0.15,
             "heavy": 0.05,
-            "building": 0.05
+            "building": 0.05,
+            "hijacker": 3.0
         },
         "laser": {
             "none": 1.0,
@@ -789,7 +864,8 @@
             "light": 1.0,
             "medium": 1.0,
             "heavy": 1.0,
-            "building": 1.0
+            "building": 1.0,
+            "hijacker": 0.8
         },
         "grenade": {
             "none": 1.0,
@@ -797,7 +873,8 @@
             "light": 0.9,
             "medium": 0.5,
             "heavy": 0.3,
-            "building": 0.8
+            "building": 0.8,
+            "hijacker": 1.2
         },
         "heal": {
             "none": 1.0,
@@ -805,7 +882,8 @@
             "light": 1.0,
             "medium": 1.0,
             "heavy": 1.0,
-            "building": 1.0
+            "building": 1.0,
+            "hijacker": 1.0
         },
         "air_missile": {
             "none": 1.0,
@@ -813,7 +891,8 @@
             "light": 1.5,
             "medium": 1.25,
             "heavy": 1.0,
-            "building": 1.5
+            "building": 1.5,
+            "hijacker": 0.2
         },
         "explosion": {
             "none": 1.0,
@@ -821,7 +900,8 @@
             "light": 1.25,
             "medium": 1.0,
             "heavy": 0.75,
-            "building": 1.5
+            "building": 1.5,
+            "hijacker": 0.8
         }
     },
     "weaponTargeting": {

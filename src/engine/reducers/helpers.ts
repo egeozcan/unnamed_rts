@@ -215,7 +215,8 @@ export function createEntity(x: number, y: number, owner: number, type: 'UNIT' |
                 key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
                 movement: createDefaultMovement(),
                 combat: createDefaultCombat(),
-                engineer: key === 'engineer' ? { captureTargetId: null, repairTargetId: null } : undefined
+                engineer: key === 'engineer' ? { captureTargetId: null, repairTargetId: null } : undefined,
+                hijacker: key === 'hijacker' ? { hijackTargetId: null } : undefined
             };
         }
     } else if (type === 'BUILDING') {

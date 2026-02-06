@@ -3,6 +3,7 @@ import {
     CombatComponent,
     HarvesterComponent,
     EngineerComponent,
+    HijackerComponent,
     BuildingStateComponent,
     WellComponent,
     AirUnitComponent,
@@ -64,7 +65,7 @@ export class Vector {
 
 export type UnitKey =
     | 'harvester'
-    | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando'
+    | 'rifle' | 'rocket' | 'engineer' | 'medic' | 'sniper' | 'flamer' | 'grenadier' | 'commando' | 'hijacker'
     | 'jeep' | 'apc' | 'light' | 'heavy' | 'flame_tank' | 'stealth' | 'artillery' | 'mlrs' | 'mammoth'
     | 'heli' | 'harrier' | 'mcv' | 'induction_rig' | 'demo_truck';
 
@@ -104,6 +105,7 @@ export interface CombatUnit extends BaseEntity {
     readonly movement: MovementComponent;
     readonly combat: CombatComponent;
     readonly engineer?: EngineerComponent; // Only for engineer units
+    readonly hijacker?: HijackerComponent; // Only for hijacker units
 }
 
 // Harvester units (special unit with harvesting capability)
@@ -174,6 +176,7 @@ export type {
     CombatComponent,
     HarvesterComponent,
     EngineerComponent,
+    HijackerComponent,
     BuildingStateComponent,
     WellComponent,
     AirUnitComponent,

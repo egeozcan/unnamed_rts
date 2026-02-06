@@ -546,6 +546,17 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                     engineer: { ...ent.engineer, repairTargetId: null }
                 };
             }
+
+            // Handle Hijacker vehicle takeover - mark hijacker dead but keep target ID for post-loop processing
+            // (Processing hijacks inline would be overwritten when target entity is updated later in loop)
+            if (ent.key === 'hijacker' && 'hijacker' in ent && ent.hijacker?.hijackTargetId) {
+                // Mark hijacker as dead, but keep the hijackTargetId for post-loop processing
+                nextEntities[id] = {
+                    ...ent,
+                    dead: true
+                    // NOTE: hijackTargetId preserved intentionally - will be processed after all entity updates
+                };
+            }
         } else if (entity.type === 'BUILDING') {
             const res = updateBuilding(entity, state.entities, entityList);
             nextEntities[id] = res.entity;
@@ -661,6 +672,29 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                     };
                 }
             }
+        }
+    }
+
+    // Post-loop: Process hijacker vehicle takeovers (must happen after all entity updates)
+    for (const id in nextEntities) {
+        const ent = nextEntities[id] as UnitEntity;
+        if (ent.type === 'UNIT' && ent.key === 'hijacker' && 'hijacker' in ent && ent.hijacker?.hijackTargetId && ent.dead) {
+            const hijackTargetId = ent.hijacker.hijackTargetId;
+            const hijackTarget = nextEntities[hijackTargetId] as UnitEntity | undefined;
+            if (hijackTarget && hijackTarget.type === 'UNIT' && hijackTarget.combat && hijackTarget.owner !== ent.owner) {
+                // Transfer vehicle ownership to hijacker's owner
+                nextEntities[hijackTargetId] = {
+                    ...hijackTarget,
+                    owner: ent.owner,
+                    combat: { ...hijackTarget.combat, flash: 30, targetId: null },
+                    movement: { ...hijackTarget.movement, moveTarget: null }
+                };
+            }
+            // Clear hijacker's target ID (it's already marked dead)
+            nextEntities[id] = {
+                ...ent,
+                hijacker: { hijackTargetId: null }
+            };
         }
     }
 
