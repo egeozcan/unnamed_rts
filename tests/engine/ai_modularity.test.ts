@@ -19,6 +19,7 @@ describe('AI modularity', () => {
     it('exposes implementation options for setup UI', () => {
         const options = getAIImplementationOptions();
         expect(options.some(option => option.id === DEFAULT_AI_IMPLEMENTATION_ID)).toBe(true);
+        expect(options.some(option => option.id === 'eco_tank_all_in')).toBe(true);
     });
 
     it('resolves unknown implementation ids to the default implementation', () => {

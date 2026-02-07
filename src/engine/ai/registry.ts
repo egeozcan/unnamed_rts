@@ -1,5 +1,6 @@
 import { AIImplementation, AIImplementationOption } from './contracts.js';
 import { classicAIImplementation } from './implementations/classic/index.js';
+import { ecoTankAllInAIImplementation } from './implementations/eco_tank_all_in/index.js';
 // @ai-implementation-imports
 
 export const DEFAULT_AI_IMPLEMENTATION_ID = 'classic';
@@ -41,6 +42,7 @@ export function resetAIImplementations(playerId?: number): void {
 
 const builtInImplementations: AIImplementation[] = [
     classicAIImplementation,
+    ecoTankAllInAIImplementation,
     // @ai-implementation-list
 ];
 
