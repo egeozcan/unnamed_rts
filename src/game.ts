@@ -21,6 +21,7 @@ import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
+import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
 type GameSpeed = 1 | 2 | 3 | 4 | 5;
@@ -149,6 +150,39 @@ function populateAiImplementationSelects() {
 
         const hasCurrent = aiImplementationOptions.some(option => option.id === current);
         select.value = hasCurrent ? current : DEFAULT_AI_IMPLEMENTATION_ID;
+    }
+}
+
+function getSafeLocalStorage(): Storage | null {
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+}
+
+function persistSkirmishMenuSettings() {
+    const storage = getSafeLocalStorage();
+    if (!storage) return;
+    const settings = collectSkirmishSettingsFromUI();
+    saveSkirmishSettingsToStorage(storage, settings);
+}
+
+function restoreSkirmishMenuSettings() {
+    const storage = getSafeLocalStorage();
+    if (!storage) return;
+
+    const slotCount = document.querySelectorAll('.player-slot').length;
+    const settings = loadSkirmishSettingsFromStorage(storage, slotCount);
+    if (!settings) return;
+    applySkirmishSettingsToUI(settings);
+}
+
+function setupSkirmishPersistence() {
+    const selectors = '.player-type, .ai-implementation, #map-size, #resource-density, #rock-density';
+    const elements = document.querySelectorAll(selectors);
+    for (const element of elements) {
+        element.addEventListener('change', persistSkirmishMenuSettings);
     }
 }
 
@@ -348,6 +382,7 @@ function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entit
 
 // Start button handler
 document.getElementById('start-skirmish-btn')?.addEventListener('click', () => {
+    persistSkirmishMenuSettings();
     const config = getSkirmishConfig();
     if (config.players.length < 2) {
         alert('You need at least 2 players to start a game!');
@@ -363,7 +398,9 @@ document.getElementById('restart-btn')?.addEventListener('click', () => {
 
 // Initialize skirmish UI
 populateAiImplementationSelects();
+restoreSkirmishMenuSettings();
 setupSkirmishUI();
+setupSkirmishPersistence();
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
 function reconstructVectors(state: GameState): GameState {
