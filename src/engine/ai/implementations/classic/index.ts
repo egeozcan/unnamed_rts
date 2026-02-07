@@ -1,4 +1,4 @@
-import { GameState, Action } from '../../../types.js';
+import { GameState, Action, PlayerState, Vector } from '../../../types.js';
 import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
@@ -45,6 +45,114 @@ import {
 } from '../../action_combat.js';
 import { updateHarvesterAI } from '../../harvester/index.js';
 import { AIImplementation } from '../../contracts.js';
+import { RULES } from '../../../../data/schemas/index.js';
+
+const GREEDY_RUSH_MIN_TICK = 900; // 15 seconds
+const GREEDY_RUSH_MIN_COMBAT_UNITS = 3;
+const GREEDY_RUSH_VENGEANCE_BOOST = 250;
+const NON_COMBAT_UNIT_KEYS = new Set(['harvester', 'mcv', 'engineer', 'induction_rig']);
+
+function isCombatUnitKey(key: string): boolean {
+    if (NON_COMBAT_UNIT_KEYS.has(key)) {
+        return false;
+    }
+    const unitData = RULES.units[key];
+    return Boolean(unitData && unitData.damage > 0);
+}
+
+function isProducingCombatUnits(player: PlayerState | undefined): boolean {
+    if (!player) return false;
+
+    const productionKeys: string[] = [];
+    const queues = [player.queues.infantry, player.queues.vehicle, player.queues.air];
+
+    for (const queue of queues) {
+        if (queue.current) {
+            productionKeys.push(queue.current);
+        }
+        if (queue.queued && queue.queued.length > 0) {
+            productionKeys.push(...queue.queued);
+        }
+    }
+
+    return productionKeys.some(isCombatUnitKey);
+}
+
+function isProducingDefenseBuildings(player: PlayerState | undefined): boolean {
+    if (!player) return false;
+
+    const queuedBuildingKeys: string[] = [];
+    if (player.queues.building.current) {
+        queuedBuildingKeys.push(player.queues.building.current);
+    }
+    if (player.queues.building.queued && player.queues.building.queued.length > 0) {
+        queuedBuildingKeys.push(...player.queues.building.queued);
+    }
+    if (player.readyToPlace) {
+        queuedBuildingKeys.push(player.readyToPlace);
+    }
+
+    return queuedBuildingKeys.some(key => Boolean(RULES.buildings[key]?.isDefense));
+}
+
+type GreedyRushTarget = {
+    ownerId: number;
+    targetPos: Vector;
+};
+
+function findGreedyRushTarget(
+    state: GameState,
+    cache: ReturnType<typeof createEntityCache>,
+    playerId: number,
+    baseCenter: Vector
+): GreedyRushTarget | null {
+    if (state.tick < GREEDY_RUSH_MIN_TICK) {
+        return null;
+    }
+
+    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1);
+    let bestTarget: GreedyRushTarget | null = null;
+    let bestDistance = Infinity;
+
+    for (const ownerId of ownerIds) {
+        const enemyBuildings = getBuildingsForOwner(cache, ownerId);
+        const enemyUnits = getUnitsForOwner(cache, ownerId);
+        if (enemyBuildings.length === 0) continue;
+
+        const hasRefinery = enemyBuildings.some(b => b.key === 'refinery');
+        const hasProduction = enemyBuildings.some(b => b.key === 'barracks' || b.key === 'factory' || b.key === 'airforce_command');
+        if (!hasRefinery || !hasProduction) {
+            continue;
+        }
+
+        const enemyCombatUnits = enemyUnits.filter(u => isCombatUnitKey(u.key));
+        const enemyDefenses = enemyBuildings.filter(b => Boolean(RULES.buildings[b.key]?.isDefense));
+        const enemyPlayerState = state.players[ownerId];
+
+        if (enemyCombatUnits.length > 0) continue;
+        if (enemyDefenses.length > 0) continue;
+        if (isProducingCombatUnits(enemyPlayerState)) continue;
+        if (isProducingDefenseBuildings(enemyPlayerState)) continue;
+
+        const primaryTarget =
+            enemyBuildings.find(b => b.key === 'conyard') ||
+            enemyBuildings.find(b => b.key === 'factory') ||
+            enemyBuildings.find(b => b.key === 'barracks') ||
+            enemyBuildings.find(b => b.key === 'refinery') ||
+            enemyBuildings[0];
+
+        const distanceToTarget = primaryTarget.pos.dist(baseCenter);
+        if (distanceToTarget < bestDistance) {
+            bestDistance = distanceToTarget;
+            bestTarget = {
+                ownerId,
+                targetPos: primaryTarget.pos
+            };
+        }
+    }
+
+    return bestTarget;
+}
 
 /**
  * Main AI Logic Loop.
@@ -172,6 +280,25 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
         baseCenter
     );
 
+    const greedyRushTarget = findGreedyRushTarget(state, cache, playerId, baseCenter);
+    const shouldGreedyRush = !isDummy &&
+        aiState.strategy !== 'all_in' &&
+        threatsNearBase.length === 0 &&
+        combatUnits.length >= GREEDY_RUSH_MIN_COMBAT_UNITS &&
+        greedyRushTarget !== null;
+
+    if (shouldGreedyRush && greedyRushTarget) {
+        aiState.strategy = 'attack';
+        aiState.lastStrategyChange = state.tick;
+        aiState.attackGroup = combatUnits.map(unit => unit.id);
+        aiState.harassGroup = [];
+        aiState.enemyBaseLocation = greedyRushTarget.targetPos;
+        aiState.vengeanceScores[greedyRushTarget.ownerId] = Math.max(
+            aiState.vengeanceScores[greedyRushTarget.ownerId] || 0,
+            GREEDY_RUSH_VENGEANCE_BOOST
+        );
+    }
+
     // 3. Execute Actions based on State
 
     // --- ECONOMY & PRODUCTION ---
@@ -215,7 +342,7 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
     }
 
     if (aiState.strategy === 'attack' || aiState.strategy === 'all_in') {
-        const ignoreSizeLimit = aiState.strategy === 'all_in';
+        const ignoreSizeLimit = aiState.strategy === 'all_in' || shouldGreedyRush;
         actions.push(...handleAttack(state, playerId, aiState, combatUnits, enemies, baseCenter, personality, ignoreSizeLimit));
 
         if (aiState.strategy === 'all_in') {
