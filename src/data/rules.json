@@ -806,7 +806,7 @@
         },
         "cannon": {
             "none": 1.0,
-            "infantry": 0.4,
+            "infantry": 0.35,
             "light": 1.0,
             "medium": 1.0,
             "heavy": 0.6,

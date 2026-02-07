@@ -31,6 +31,54 @@ import {
 } from './utils.js';
 import { getAIState, findBaseCenter } from './state.js';
 import { findCaptureOpportunities } from './planning.js';
+
+const TANK_ADVANTAGE_MIN_ENEMY_ARMORED_UNITS = 2;
+const TANK_ADVANTAGE_MIN_ABSOLUTE_LEAD = 1;
+const TANK_ADVANTAGE_MIN_RATIO = 1.25;
+const TANK_ADVANTAGE_STRONG_ABSOLUTE_LEAD = 2;
+const TANK_ADVANTAGE_STRONG_RATIO = 1.6;
+
+function isArmoredCombatUnit(entity: Entity): boolean {
+    if (entity.type !== 'UNIT' || entity.dead) {
+        return false;
+    }
+
+    const unitData = RULES.units[entity.key];
+    if (!unitData) {
+        return false;
+    }
+
+    if (unitData.damage <= 0) {
+        return false;
+    }
+
+    return unitData.armor === 'medium' || unitData.armor === 'heavy';
+}
+
+function getEnemyTankAdvantage(state: GameState, playerId: number, enemies: Entity[]): {
+    hasAdvantage: boolean;
+    isStrongAdvantage: boolean;
+} {
+    const enemyArmoredCount = enemies.filter(isArmoredCombatUnit).length;
+    if (enemyArmoredCount < TANK_ADVANTAGE_MIN_ENEMY_ARMORED_UNITS) {
+        return { hasAdvantage: false, isStrongAdvantage: false };
+    }
+
+    const myArmoredCount = Object.values(state.entities).filter(e =>
+        e.owner === playerId && isArmoredCombatUnit(e)
+    ).length;
+
+    if (myArmoredCount === 0) {
+        return { hasAdvantage: true, isStrongAdvantage: enemyArmoredCount >= TANK_ADVANTAGE_STRONG_ABSOLUTE_LEAD };
+    }
+
+    const unitLead = enemyArmoredCount - myArmoredCount;
+    const ratio = enemyArmoredCount / myArmoredCount;
+    const hasAdvantage = unitLead >= TANK_ADVANTAGE_MIN_ABSOLUTE_LEAD || ratio >= TANK_ADVANTAGE_MIN_RATIO;
+    const isStrongAdvantage = unitLead >= TANK_ADVANTAGE_STRONG_ABSOLUTE_LEAD || ratio >= TANK_ADVANTAGE_STRONG_RATIO;
+    return { hasAdvantage, isStrongAdvantage };
+}
+
 export function handleEconomy(
     state: GameState,
     playerId: number,
@@ -534,7 +582,12 @@ export function handleEconomy(
 
     // Get counter-building unit preferences based on enemy composition
     const counterUnits = getCounterUnits(aiState.enemyIntelligence.dominantArmor, prefs);
-    const counterInfantry = counterUnits.infantry;
+    const tankAdvantage = getEnemyTankAdvantage(state, playerId, enemies);
+    const enemyHasTankAdvantage = tankAdvantage.hasAdvantage;
+    const enemyHasStrongTankAdvantage = tankAdvantage.isStrongAdvantage;
+    const counterInfantry = enemyHasTankAdvantage
+        ? ['rocket', ...counterUnits.infantry.filter(key => key !== 'rocket')]
+        : counterUnits.infantry;
     const counterVehicle = counterUnits.vehicle;
 
     if (player.credits > creditThreshold) {
@@ -552,6 +605,12 @@ export function handleEconomy(
             // PANIC: Build EVERYTHING possible
             if (hasBarracks && infantryQueueEmpty) buildInfantry = true;
             if (hasFactory && vehicleQueueEmpty) buildVehicle = true;
+        } else if (enemyHasTankAdvantage && hasBarracks && infantryQueueEmpty) {
+            // Enemy armor lead: push anti-tank infantry, and go infantry-heavy when armor deficit is severe.
+            buildInfantry = true;
+            if (hasFactory && vehicleQueueEmpty && !enemyHasStrongTankAdvantage) {
+                buildVehicle = true;
+            }
         } else {
             // NORMAL: Staggered
             if (hasBarracks && infantryQueueEmpty && hasFactory && vehicleQueueEmpty) {
@@ -578,7 +637,9 @@ export function handleEconomy(
                 ? ['rifle', 'flamer', 'grenadier', 'rocket'] // Cheapest first for max units
                 : isPanic
                     ? ['rocket', 'rifle']
-                    : counterInfantry;
+                    : enemyHasStrongTankAdvantage
+                        ? ['rocket']
+                        : counterInfantry;
 
             for (const key of list) {
                 const data = RULES.units[key];
@@ -816,7 +877,9 @@ export function handleEconomy(
         const situationStable = !isPanic && aiState.threatLevel < 60;
 
         if (mcvReqsMet && canAffordRecoveryMcv && situationStable) {
-            console.log(`[MCV] P${playerId} queueing MCV for RECOVERY (no conyard, threat=${aiState.threatLevel})`);
+            if (import.meta.env?.DEV) {
+                console.log(`[MCV] P${playerId} queueing MCV for RECOVERY (no conyard, threat=${aiState.threatLevel})`);
+            }
             actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
         }
         return actions;
@@ -853,7 +916,9 @@ export function handleEconomy(
         }
     }
     if (hasDistantOre) {
-        console.log(`[MCV] P${playerId} queueing MCV for expansion (conyards=${existingConyards.length}/${MAX_BASES})`);
+        if (import.meta.env?.DEV) {
+            console.log(`[MCV] P${playerId} queueing MCV for expansion (conyards=${existingConyards.length}/${MAX_BASES})`);
+        }
         actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'mcv', playerId } });
     }
 
