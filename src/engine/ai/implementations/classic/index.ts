@@ -50,6 +50,10 @@ import { RULES } from '../../../../data/schemas/index.js';
 const GREEDY_RUSH_MIN_TICK = 900; // 15 seconds
 const GREEDY_RUSH_MIN_COMBAT_UNITS = 3;
 const GREEDY_RUSH_VENGEANCE_BOOST = 250;
+const BOOM_RUSH_MIN_TICK = 1200; // 20 seconds - needs more scouting data
+const BOOM_RUSH_MIN_BOOM_SCORE = 30;
+const BOOM_RUSH_MAX_DEFENSES = 1;
+const BOOM_RUSH_VENGEANCE_BOOST = 200;
 const NON_COMBAT_UNIT_KEYS = new Set(['harvester', 'mcv', 'engineer', 'induction_rig']);
 
 function isCombatUnitKey(key: string): boolean {
@@ -144,6 +148,69 @@ function findGreedyRushTarget(
         const distanceToTarget = primaryTarget.pos.dist(baseCenter);
         if (distanceToTarget < bestDistance) {
             bestDistance = distanceToTarget;
+            bestTarget = {
+                ownerId,
+                targetPos: primaryTarget.pos
+            };
+        }
+    }
+
+    return bestTarget;
+}
+
+type BoomRushTarget = {
+    ownerId: number;
+    targetPos: Vector;
+};
+
+function findBoomingRushTarget(
+    state: GameState,
+    cache: ReturnType<typeof createEntityCache>,
+    playerId: number,
+    baseCenter: Vector,
+    aiState: ReturnType<typeof getAIState>
+): BoomRushTarget | null {
+    if (state.tick < BOOM_RUSH_MIN_TICK) {
+        return null;
+    }
+
+    const myCombatUnits = getUnitsForOwner(cache, playerId).filter(u => isCombatUnitKey(u.key));
+    if (myCombatUnits.length < GREEDY_RUSH_MIN_COMBAT_UNITS) {
+        return null;
+    }
+
+    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1);
+    let bestTarget: BoomRushTarget | null = null;
+    let bestScore = -Infinity;
+
+    for (const ownerId of ownerIds) {
+        const boomScore = aiState.enemyIntelligence.boomScores[ownerId] || 0;
+        if (boomScore < BOOM_RUSH_MIN_BOOM_SCORE) continue;
+
+        const enemyBuildings = getBuildingsForOwner(cache, ownerId);
+        const enemyUnits = getUnitsForOwner(cache, ownerId);
+        if (enemyBuildings.length === 0) continue;
+
+        const enemyCombatUnits = enemyUnits.filter(u => isCombatUnitKey(u.key));
+        const enemyDefenses = enemyBuildings.filter(b => Boolean(RULES.buildings[b.key]?.isDefense));
+
+        // Allow some combat units, but we must outnumber them
+        if (enemyCombatUnits.length >= myCombatUnits.length) continue;
+        // Allow up to 1 defense building
+        if (enemyDefenses.length > BOOM_RUSH_MAX_DEFENSES) continue;
+
+        const primaryTarget =
+            enemyBuildings.find(b => b.key === 'conyard') ||
+            enemyBuildings.find(b => b.key === 'factory') ||
+            enemyBuildings.find(b => b.key === 'barracks') ||
+            enemyBuildings.find(b => b.key === 'refinery') ||
+            enemyBuildings[0];
+
+        const distanceToTarget = primaryTarget.pos.dist(baseCenter);
+        // Score by boom level + proximity (closer is better)
+        const score = boomScore * 10 - distanceToTarget;
+        if (score > bestScore) {
+            bestScore = score;
             bestTarget = {
                 ownerId,
                 targetPos: primaryTarget.pos
@@ -299,6 +366,28 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
         );
     }
 
+    // Boom rush: detect economic booming and attack before they mass tanks
+    const boomRushTarget = !shouldGreedyRush
+        ? findBoomingRushTarget(state, cache, playerId, baseCenter, aiState)
+        : null;
+    const shouldBoomRush = !isDummy &&
+        aiState.strategy !== 'all_in' &&
+        threatsNearBase.length === 0 &&
+        combatUnits.length >= GREEDY_RUSH_MIN_COMBAT_UNITS &&
+        boomRushTarget !== null;
+
+    if (shouldBoomRush && boomRushTarget) {
+        aiState.strategy = 'attack';
+        aiState.lastStrategyChange = state.tick;
+        aiState.attackGroup = combatUnits.map(unit => unit.id);
+        aiState.harassGroup = [];
+        aiState.enemyBaseLocation = boomRushTarget.targetPos;
+        aiState.vengeanceScores[boomRushTarget.ownerId] = Math.max(
+            aiState.vengeanceScores[boomRushTarget.ownerId] || 0,
+            BOOM_RUSH_VENGEANCE_BOOST
+        );
+    }
+
     // 3. Execute Actions based on State
 
     // --- ECONOMY & PRODUCTION ---
@@ -342,7 +431,7 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
     }
 
     if (aiState.strategy === 'attack' || aiState.strategy === 'all_in') {
-        const ignoreSizeLimit = aiState.strategy === 'all_in' || shouldGreedyRush;
+        const ignoreSizeLimit = aiState.strategy === 'all_in' || shouldGreedyRush || shouldBoomRush;
         actions.push(...handleAttack(state, playerId, aiState, combatUnits, enemies, baseCenter, personality, ignoreSizeLimit));
 
         if (aiState.strategy === 'all_in') {

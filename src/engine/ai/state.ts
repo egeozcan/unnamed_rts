@@ -46,7 +46,8 @@ export function getAIState(playerId: number): AIPlayerState {
                 lastUpdate: 0,
                 unitCounts: {},
                 buildingCounts: {},
-                dominantArmor: 'mixed'
+                dominantArmor: 'mixed',
+                boomScores: {}
             },
             vengeanceScores: {},
             lastCombatTick: 0,
@@ -151,11 +152,55 @@ export function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[
         else if (lightCount > total * 0.4) dominantArmor = 'light';
     }
 
+    // Compute per-enemy boom scores (only after tick 600 when we have scouting data)
+    const boomScores: Record<number, number> = {};
+    if (tick >= 600) {
+        const enemiesByOwner: Record<number, Entity[]> = {};
+        for (const e of enemies) {
+            if (e.owner === -1) continue;
+            if (!enemiesByOwner[e.owner]) enemiesByOwner[e.owner] = [];
+            enemiesByOwner[e.owner].push(e);
+        }
+
+        for (const ownerIdStr in enemiesByOwner) {
+            const ownerId = Number(ownerIdStr);
+            const ownerEntities = enemiesByOwner[ownerId];
+            let refineryCount = 0;
+            let harvesterCount = 0;
+            let combatUnitCount = 0;
+            let defenseCount = 0;
+
+            for (const e of ownerEntities) {
+                if (e.type === 'BUILDING') {
+                    if (e.key === 'refinery') refineryCount++;
+                    const bdata = RULES.buildings[e.key];
+                    if (bdata?.isDefense) defenseCount++;
+                } else if (e.type === 'UNIT') {
+                    if (e.key === 'harvester') {
+                        harvesterCount++;
+                    } else {
+                        const udata = RULES.units?.[e.key];
+                        if (udata && udata.damage > 0) combatUnitCount++;
+                    }
+                }
+            }
+
+            const score = Math.max(0, Math.min(100,
+                (refineryCount > 1 ? (refineryCount - 1) * 15 : 0) +
+                (harvesterCount > 2 ? (harvesterCount - 2) * 5 : 0) -
+                combatUnitCount * 12 -
+                defenseCount * 15
+            ));
+            boomScores[ownerId] = score;
+        }
+    }
+
     aiState.enemyIntelligence = {
         lastUpdate: tick,
         unitCounts,
         buildingCounts,
-        dominantArmor
+        dominantArmor,
+        boomScores
     };
 }
 

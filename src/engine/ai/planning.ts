@@ -127,7 +127,15 @@ export function updateStrategy(
     const diffMods = getDifficultyModifiers(difficulty);
     const baseAttackThreshold = personality.attack_threshold || ATTACK_GROUP_MIN_SIZE;
     const baseHarassThreshold = personality.harass_threshold || HARASS_GROUP_SIZE;
-    const attackThreshold = Math.ceil(baseAttackThreshold * diffMods.attackGroupSizeMultiplier);
+
+    // Lower attack threshold when facing a booming enemy
+    const maxBoomScore = Object.values(aiState.enemyIntelligence.boomScores).reduce(
+        (max, s) => Math.max(max, s), 0
+    );
+    const boomReduction = maxBoomScore >= 50 ? 2 : maxBoomScore >= 30 ? 1 : 0;
+    const adjustedAttackThreshold = Math.max(3, baseAttackThreshold - boomReduction);
+
+    const attackThreshold = Math.ceil(adjustedAttackThreshold * diffMods.attackGroupSizeMultiplier);
     const harassThreshold = Math.ceil(baseHarassThreshold * diffMods.attackGroupSizeMultiplier);
 
     // Scale strategy cooldown by difficulty (easy AI adapts slower)
@@ -371,11 +379,18 @@ export function evaluateInvestmentPriority(
         ? combatUnits.length / enemyCombatUnits.length
         : 2.0; // If no enemy combat units, we're strong
 
+    // Check if any enemy is booming
+    const maxBoomScore = Object.values(aiState.enemyIntelligence.boomScores).reduce(
+        (max, s) => Math.max(max, s), 0
+    );
+
     // Decision matrix
     if (aiState.threatLevel > 70) {
         aiState.investmentPriority = 'defense';
     } else if (aiState.economyScore < 30) {
         aiState.investmentPriority = 'economy';
+    } else if (maxBoomScore >= 30 && combatUnits.length < enemyCombatUnits.length * 1.5 + 6) {
+        aiState.investmentPriority = 'warfare';
     } else if (armyRatio < 0.6) {
         aiState.investmentPriority = 'warfare';
     } else if (player.credits > 2000 && aiState.economyScore < 70) {

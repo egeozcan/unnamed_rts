@@ -58,6 +58,7 @@ export interface AIPlayerState {
         unitCounts: Record<string, number>;
         buildingCounts: Record<string, number>;
         dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed';
+        boomScores: Record<number, number>;
     };
     // Vengeance tracking: damage received from each player (higher = more likely to target)
     vengeanceScores: Record<number, number>;
