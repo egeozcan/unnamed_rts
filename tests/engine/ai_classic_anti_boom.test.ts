@@ -94,6 +94,56 @@ describe('Classic AI anti-boom counter-strategy', () => {
         expect(attackIssued).toBe(true);
     });
 
+    it('rushes eco tank all-in style enemies with low defenses while they are queuing tanks', () => {
+        const entities: Record<EntityId, Entity> = {
+            // Classic AI base and army
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 300, 300),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 340, 360),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 400, 330),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 430, 380),
+            ai_tank_1: createEntity('ai_tank_1', 1, 'UNIT', 'light', 470, 430),
+            ai_tank_2: createEntity('ai_tank_2', 1, 'UNIT', 'light', 500, 430),
+            ai_tank_3: createEntity('ai_tank_3', 1, 'UNIT', 'light', 530, 430),
+            ai_tank_4: createEntity('ai_tank_4', 1, 'UNIT', 'medium', 560, 430),
+
+            // Eco/tank all-in style enemy: high eco, little static defense, early tank queue
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2200, 2200),
+            enemy_ref_1: createEntity('enemy_ref_1', 0, 'BUILDING', 'refinery', 2240, 2260),
+            enemy_ref_2: createEntity('enemy_ref_2', 0, 'BUILDING', 'refinery', 2180, 2260),
+            enemy_ref_3: createEntity('enemy_ref_3', 0, 'BUILDING', 'refinery', 2260, 2200),
+            enemy_barracks: createEntity('enemy_barracks', 0, 'BUILDING', 'barracks', 2150, 2200),
+            enemy_factory: createEntity('enemy_factory', 0, 'BUILDING', 'factory', 2200, 2150),
+            enemy_harv_1: createEntity('enemy_harv_1', 0, 'UNIT', 'harvester', 2300, 2320),
+            enemy_harv_2: createEntity('enemy_harv_2', 0, 'UNIT', 'harvester', 2320, 2300),
+            enemy_harv_3: createEntity('enemy_harv_3', 0, 'UNIT', 'harvester', 2340, 2320),
+            enemy_harv_4: createEntity('enemy_harv_4', 0, 'UNIT', 'harvester', 2360, 2300),
+            enemy_harv_5: createEntity('enemy_harv_5', 0, 'UNIT', 'harvester', 2380, 2320),
+            enemy_tank_1: createEntity('enemy_tank_1', 0, 'UNIT', 'light', 2200, 2280)
+        };
+
+        const baseState = createTestState(entities, 901);
+        const state: GameState = {
+            ...baseState,
+            players: {
+                ...baseState.players,
+                0: {
+                    ...baseState.players[0],
+                    queues: {
+                        ...baseState.players[0].queues,
+                        vehicle: { current: 'heavy', progress: 0, invested: 0, queued: [] }
+                    }
+                }
+            }
+        };
+
+        const actions = computeAiActions(state, 1);
+        const aiState = getAIState(1);
+
+        expect(aiState.strategy).toBe('attack');
+        expect(aiState.vengeanceScores[0] || 0).toBeGreaterThanOrEqual(220);
+        expect(actions.some(a => a.type === 'COMMAND_ATTACK')).toBe(true);
+    });
+
     it('does not boom rush when enemy has matching army size', () => {
         const entities: Record<EntityId, Entity> = {
             // Classic AI base and army (4 units)
@@ -166,6 +216,53 @@ describe('Classic AI anti-boom counter-strategy', () => {
         expect(aiState.vengeanceScores[0] || 0).toBeLessThan(200);
     });
 
+    it('does not low-defense rush without a clear army advantage', () => {
+        const entities: Record<EntityId, Entity> = {
+            // Classic AI base and army (3 units)
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 300, 300),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 340, 360),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 400, 330),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 430, 380),
+            ai_tank_1: createEntity('ai_tank_1', 1, 'UNIT', 'light', 470, 430),
+            ai_tank_2: createEntity('ai_tank_2', 1, 'UNIT', 'light', 500, 430),
+            ai_tank_3: createEntity('ai_tank_3', 1, 'UNIT', 'light', 530, 430),
+
+            // Eco-heavy enemy but with matching army size
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2200, 2200),
+            enemy_ref_1: createEntity('enemy_ref_1', 0, 'BUILDING', 'refinery', 2240, 2260),
+            enemy_ref_2: createEntity('enemy_ref_2', 0, 'BUILDING', 'refinery', 2180, 2260),
+            enemy_ref_3: createEntity('enemy_ref_3', 0, 'BUILDING', 'refinery', 2260, 2200),
+            enemy_factory: createEntity('enemy_factory', 0, 'BUILDING', 'factory', 2200, 2150),
+            enemy_harv_1: createEntity('enemy_harv_1', 0, 'UNIT', 'harvester', 2300, 2320),
+            enemy_harv_2: createEntity('enemy_harv_2', 0, 'UNIT', 'harvester', 2320, 2300),
+            enemy_harv_3: createEntity('enemy_harv_3', 0, 'UNIT', 'harvester', 2340, 2320),
+            enemy_harv_4: createEntity('enemy_harv_4', 0, 'UNIT', 'harvester', 2360, 2300),
+            enemy_tank_1: createEntity('enemy_tank_1', 0, 'UNIT', 'light', 2200, 2280),
+            enemy_tank_2: createEntity('enemy_tank_2', 0, 'UNIT', 'light', 2220, 2280),
+            enemy_tank_3: createEntity('enemy_tank_3', 0, 'UNIT', 'heavy', 2240, 2280)
+        };
+
+        const baseState = createTestState(entities, 901);
+        const state: GameState = {
+            ...baseState,
+            players: {
+                ...baseState.players,
+                0: {
+                    ...baseState.players[0],
+                    queues: {
+                        ...baseState.players[0].queues,
+                        vehicle: { current: 'heavy', progress: 0, invested: 0, queued: [] }
+                    }
+                }
+            }
+        };
+
+        computeAiActions(state, 1);
+        const aiState = getAIState(1);
+
+        expect(aiState.vengeanceScores[0] || 0).toBeLessThan(200);
+    });
+
     it('does not boom rush before tick 1200', () => {
         const entities: Record<EntityId, Entity> = {
             // Classic AI base and army
@@ -196,7 +293,21 @@ describe('Classic AI anti-boom counter-strategy', () => {
         };
 
         // Tick 1000: before boom rush threshold (but after greedy rush threshold)
-        const state = createTestState(entities, 1000);
+        // Queueing defense blocks the low-defense punish path so this test isolates boom timing.
+        const baseState = createTestState(entities, 1000);
+        const state: GameState = {
+            ...baseState,
+            players: {
+                ...baseState.players,
+                0: {
+                    ...baseState.players[0],
+                    queues: {
+                        ...baseState.players[0].queues,
+                        building: { current: 'turret', progress: 0, invested: 0, queued: [] }
+                    }
+                }
+            }
+        };
         computeAiActions(state, 1);
         const aiState = getAIState(1);
 
