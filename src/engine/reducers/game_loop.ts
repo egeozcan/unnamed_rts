@@ -113,6 +113,8 @@ export function tick(state: GameState): GameState {
     // Temporary state for interception checks (uses updatedEntities from this tick)
     const interceptionState = { ...state, entities: updatedEntities };
 
+    const headless = state.headless;
+
     [...state.projectiles, ...newProjs].forEach(p => {
         // Apply AA interception damage to interceptable projectiles
         const interceptedProj = applyInterception(interceptionState, p);
@@ -122,9 +124,8 @@ export function tick(state: GameState): GameState {
         }
         const res = updateProjectile(interceptedProj, updatedEntities, state.config.width, state.config.height);
         if (!res.proj.dead) {
-            // Update trail points before adding to nextProjectiles
-            const projWithTrail = updateProjectileTrail(res.proj);
-            nextProjectiles.push(projWithTrail);
+            // Update trail points before adding to nextProjectiles (skip in headless mode)
+            nextProjectiles.push(headless ? res.proj : updateProjectileTrail(res.proj));
         }
         if (res.damage) {
             damageEvents.push(res.damage);
@@ -221,7 +222,7 @@ export function tick(state: GameState): GameState {
     }
 
     // Process Demo Truck Explosions (chain reactions)
-    const explosionResult = processExplosions(updatedEntities, nextTick);
+    const explosionResult = processExplosions(updatedEntities, nextTick, headless);
     // Note: We use a mutable reference approach here since updatedEntities is from destructuring
     // Copy the explosion-processed entities back into updatedEntities object
     for (const id in explosionResult.entities) {
@@ -388,46 +389,54 @@ export function tick(state: GameState): GameState {
         }
     }
 
-    // Clear command indicator after 2 seconds (120 ticks)
-    const INDICATOR_DURATION = 120;
-    const nextCommandIndicator = state.commandIndicator &&
-        (nextTick - state.commandIndicator.startTick < INDICATOR_DURATION)
-        ? state.commandIndicator
-        : null;
-
-    // Update screen shake (decay or trigger new)
+    // Skip visual-only computations in headless mode
+    let nextCommandIndicator: typeof state.commandIndicator = null;
     let nextCamera = state.camera;
-    if (triggerScreenShake) {
-        // Trigger new screen shake from explosion
-        nextCamera = {
-            ...state.camera,
-            shakeIntensity: 10,
-            shakeDuration: 15
-        };
-    } else if (state.camera.shakeDuration && state.camera.shakeDuration > 0) {
-        // Decay existing shake
-        nextCamera = {
-            ...state.camera,
-            shakeDuration: state.camera.shakeDuration - 1
-        };
-        if (nextCamera.shakeDuration === 0) {
-            nextCamera = {
-                ...nextCamera,
-                shakeIntensity: undefined,
-                shakeDuration: undefined
-            };
-        }
-    }
+    let nextParticles: typeof state.particles;
 
-    // Update particles (decay life, remove dead)
-    const existingParticles = state.particles
-        .map(p => ({
-            ...p,
-            pos: new Vector(p.pos.x + p.vel.x, p.pos.y + p.vel.y),
-            life: p.life - 1
-        }))
-        .filter(p => p.life > 0);
-    const nextParticles = [...existingParticles, ...explosionParticles];
+    if (headless) {
+        nextParticles = [];
+    } else {
+        // Clear command indicator after 2 seconds (120 ticks)
+        const INDICATOR_DURATION = 120;
+        nextCommandIndicator = state.commandIndicator &&
+            (nextTick - state.commandIndicator.startTick < INDICATOR_DURATION)
+            ? state.commandIndicator
+            : null;
+
+        // Update screen shake (decay or trigger new)
+        if (triggerScreenShake) {
+            // Trigger new screen shake from explosion
+            nextCamera = {
+                ...state.camera,
+                shakeIntensity: 10,
+                shakeDuration: 15
+            };
+        } else if (state.camera.shakeDuration && state.camera.shakeDuration > 0) {
+            // Decay existing shake
+            nextCamera = {
+                ...state.camera,
+                shakeDuration: state.camera.shakeDuration - 1
+            };
+            if (nextCamera.shakeDuration === 0) {
+                nextCamera = {
+                    ...nextCamera,
+                    shakeIntensity: undefined,
+                    shakeDuration: undefined
+                };
+            }
+        }
+
+        // Update particles (decay life, remove dead)
+        const existingParticles = state.particles
+            .map(p => ({
+                ...p,
+                pos: new Vector(p.pos.x + p.vel.x, p.pos.y + p.vel.y),
+                life: p.life - 1
+            }))
+            .filter(p => p.life > 0);
+        nextParticles = [...existingParticles, ...explosionParticles];
+    }
 
     return {
         ...state,
@@ -1110,7 +1119,8 @@ export function applySplashDamage(
  */
 function processExplosions(
     entities: Record<EntityId, Entity>,
-    _tick: number
+    _tick: number,
+    headless?: boolean
 ): { entities: Record<EntityId, Entity>; particles: Particle[]; explosionCount: number } {
     const explosionQueue: ExplosionEvent[] = [];
     const explodedIds = new Set<EntityId>();
@@ -1143,8 +1153,10 @@ function processExplosions(
     while (explosionQueue.length > 0) {
         const explosion = explosionQueue.shift()!;
 
-        // Spawn explosion particles
-        particles = particles.concat(spawnExplosionParticles(explosion.pos, explosion.radius));
+        // Spawn explosion particles (skip in headless mode)
+        if (!headless) {
+            particles = particles.concat(spawnExplosionParticles(explosion.pos, explosion.radius));
+        }
 
         // Apply splash damage to all entities in radius
         for (const id in updatedEntities) {

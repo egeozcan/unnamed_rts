@@ -133,6 +133,7 @@ function createGameState(
         running: true,
         mode: 'demo',
         difficulty: 'easy',
+        headless: true,
         entities,
         players,
         config: { width: mapWidth, height: mapHeight, resourceDensity, rockDensity },
@@ -146,13 +147,15 @@ interface GameResult {
 }
 
 function runGame(state: GameState, maxTicks: number, verbose: boolean): GameResult {
+    // Pre-compute player IDs to avoid Object.keys() + parseInt() every tick
+    const playerIds = Object.keys(state.players).map(s => parseInt(s, 10));
+
     resetAIState(0);
     resetAIState(1);
 
     for (let t = 0; t < maxTicks; t++) {
         // Run AI for each player
-        for (const pidStr of Object.keys(state.players)) {
-            const pid = parseInt(pidStr, 10);
+        for (const pid of playerIds) {
             const player = state.players[pid];
             if (player?.isAi) {
                 const aiActions = computeAiActions(state, pid);
@@ -166,14 +169,18 @@ function runGame(state: GameState, maxTicks: number, verbose: boolean): GameResu
         state = tick(state);
 
         if (verbose && t % 1000 === 0 && t > 0) {
-            const p0Credits = state.players[0]?.credits ?? 0;
-            const p1Credits = state.players[1]?.credits ?? 0;
-            const p0Units = Object.values(state.entities).filter(e => e.owner === 0 && e.type === 'UNIT' && !e.dead).length;
-            const p1Units = Object.values(state.entities).filter(e => e.owner === 1 && e.type === 'UNIT' && !e.dead).length;
-            const p0Buildings = Object.values(state.entities).filter(e => e.owner === 0 && e.type === 'BUILDING' && !e.dead).length;
-            const p1Buildings = Object.values(state.entities).filter(e => e.owner === 1 && e.type === 'BUILDING' && !e.dead).length;
+            // Single-pass entity counting
+            const units = [0, 0];
+            const buildings = [0, 0];
+            for (const id in state.entities) {
+                const e = state.entities[id];
+                if (e.dead) continue;
+                if (e.owner !== 0 && e.owner !== 1) continue;
+                if (e.type === 'UNIT') units[e.owner]++;
+                else if (e.type === 'BUILDING') buildings[e.owner]++;
+            }
             process.stdout.write(
-                `  t=${t}: P0(${p0Credits}cr,${p0Units}u,${p0Buildings}b) P1(${p1Credits}cr,${p1Units}u,${p1Buildings}b)\n`
+                `  t=${t}: P0(${state.players[0]?.credits ?? 0}cr,${units[0]}u,${buildings[0]}b) P1(${state.players[1]?.credits ?? 0}cr,${units[1]}u,${buildings[1]}b)\n`
             );
         }
 

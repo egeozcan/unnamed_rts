@@ -327,6 +327,7 @@ export interface GameState {
     readonly notification?: { text: string; type: 'info' | 'error'; tick: number } | null;
     readonly attackMoveMode: boolean;
     readonly commandIndicator?: CommandIndicator | null;
+    readonly headless?: boolean;
 }
 
 // Discriminated union for all game actions
