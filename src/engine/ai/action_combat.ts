@@ -1941,3 +1941,122 @@ export function handleEngineerCapture(
 
     return actions;
 }
+
+/**
+ * Handle hijacker assault - send hijackers to steal high-value enemy vehicles
+ */
+export function handleHijackerAssault(
+    state: GameState,
+    playerId: number,
+    enemies: Entity[],
+    _aiState: AIPlayerState,
+    _baseCenter: Vector
+): Action[] {
+    const actions: Action[] = [];
+
+    // Find idle hijackers (owned, alive, no current target)
+    const idleHijackers: Entity[] = [];
+    for (const id in state.entities) {
+        const entity = state.entities[id];
+        if (entity.owner === playerId && !entity.dead &&
+            entity.type === 'UNIT' && entity.key === 'hijacker') {
+            const unit = entity as UnitEntity;
+            if (!unit.combat?.targetId) {
+                idleHijackers.push(entity);
+            }
+        }
+    }
+
+    if (idleHijackers.length === 0 || enemies.length === 0) {
+        return actions;
+    }
+
+    // Find enemy vehicles and score them
+    const vehicleScores: { entity: Entity; score: number }[] = [];
+
+    const vehicleValueScores: Record<string, number> = {
+        mcv: 250,
+        mammoth: 200,
+        harvester: 180,    // High priority: denies enemy income + gains a free 1000cr unit
+        heavy: 150,
+        mlrs: 120,
+        artillery: 120,
+        light: 80,
+        flame_tank: 80,
+        stealth: 80,
+        apc: 60,
+        jeep: 60
+    };
+
+    for (const enemy of enemies) {
+        if (enemy.type !== 'UNIT' || enemy.dead) continue;
+        const unitData = RULES.units[enemy.key];
+        if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
+        // Skip other hijackers and demo trucks
+        if (enemy.key === 'hijacker' || enemy.key === 'demo_truck' || enemy.key === 'induction_rig') continue;
+
+        let score = vehicleValueScores[enemy.key] ?? 50;
+
+        // Low HP bonus
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio < 0.5) score += 40;
+
+        // Distance penalty from closest hijacker
+        const closestDist = Math.min(...idleHijackers.map(h => h.pos.dist(enemy.pos)));
+        score -= closestDist / 10;
+
+        vehicleScores.push({ entity: enemy, score });
+    }
+
+    if (vehicleScores.length === 0) return actions;
+
+    // Sort by score descending
+    vehicleScores.sort((a, b) => b.score - a.score);
+
+    // Assign one hijacker per target
+    const targetedVehicles = new Set<EntityId>();
+
+    for (const hijacker of idleHijackers) {
+        let bestTarget: Entity | null = null;
+        let bestScore = -Infinity;
+
+        for (const { entity, score } of vehicleScores) {
+            if (targetedVehicles.has(entity.id)) continue;
+
+            // Per-hijacker distance adjustment
+            const dist = hijacker.pos.dist(entity.pos);
+            const adjustedScore = score - dist / 10;
+
+            if (adjustedScore > bestScore) {
+                bestScore = adjustedScore;
+                bestTarget = entity;
+            }
+        }
+
+        if (bestTarget && bestScore > 0) {
+            targetedVehicles.add(bestTarget.id);
+            actions.push({
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: [hijacker.id], targetId: bestTarget.id }
+            });
+
+            if (import.meta.env?.DEV) {
+                DebugEvents.emit('decision', {
+                    tick: state.tick,
+                    playerId,
+                    entityId: hijacker.id,
+                    data: {
+                        category: 'combat',
+                        action: 'hijacker-assault',
+                        reason: `target=${bestTarget.key}:${bestTarget.id.slice(0, 8)}, score=${bestScore.toFixed(0)}`,
+                        targetId: bestTarget.id,
+                        targetKey: bestTarget.key,
+                        scores: { targetScore: bestScore }
+                    }
+                });
+            }
+        }
+    }
+
+    return actions;
+}
