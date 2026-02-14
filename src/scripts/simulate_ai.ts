@@ -3,13 +3,13 @@
  * Runs multiple headless games between two AI implementations and reports win rates.
  *
  * Usage:
- *   npx tsx src/scripts/simulate_ai.ts [--games N] [--ai1 id] [--ai2 id] [--difficulty d] [--max-ticks N] [--map-size s]
+ *   npx tsx src/scripts/simulate_ai.ts [--games N] [--ai1 id] [--ai2 id] [--difficulty d] [--max-ticks N] [--map-size s] [--legacy-turn-order]
  *
  * Defaults:
  *   --games 10 --ai1 classic --ai2 infantry_fortress --difficulty hard --max-ticks 30000 --map-size medium
  */
 
-import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit } from '../engine/types.js';
+import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit, Action } from '../engine/types.js';
 import { INITIAL_STATE, update, createPlayerState, tick } from '../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../engine/ai/index.js';
 import { generateMap, getStartingPositions } from '../game-utils.js';
@@ -29,6 +29,7 @@ function parseArgs() {
         resourceDensity: 'medium' as 'low' | 'medium' | 'high',
         rockDensity: 'medium' as 'low' | 'medium' | 'high',
         verbose: false,
+        fairTurnOrder: true,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -42,6 +43,7 @@ function parseArgs() {
         else if (arg === '--resource-density') config.resourceDensity = args[++i] as typeof config.resourceDensity;
         else if (arg === '--rock-density') config.rockDensity = args[++i] as typeof config.rockDensity;
         else if (arg === '--verbose' || arg === '-v') config.verbose = true;
+        else if (arg === '--legacy-turn-order') config.fairTurnOrder = false;
         else if (arg === '--help') {
             console.log(`
 AI vs AI Simulation
@@ -55,6 +57,7 @@ Usage:
   --map-size <s>            Map size: small, medium, large, huge (default: medium)
   --resource-density <d>    Resource density: low, medium, high (default: medium)
   --rock-density <d>        Rock density: low, medium, high (default: medium)
+  --legacy-turn-order       Use old sequential action order (higher bias)
   --verbose, -v             Print per-tick progress
 `);
             process.exit(0);
@@ -146,7 +149,13 @@ interface GameResult {
     reason: string;
 }
 
-function runGame(state: GameState, maxTicks: number, verbose: boolean): GameResult {
+function runGame(
+    state: GameState,
+    maxTicks: number,
+    verbose: boolean,
+    gameIndex: number,
+    fairTurnOrder: boolean
+): GameResult {
     // Pre-compute player IDs to avoid Object.keys() + parseInt() every tick
     const playerIds = Object.keys(state.players).map(s => parseInt(s, 10));
 
@@ -154,13 +163,47 @@ function runGame(state: GameState, maxTicks: number, verbose: boolean): GameResu
     resetAIState(1);
 
     for (let t = 0; t < maxTicks; t++) {
-        // Run AI for each player
-        for (const pid of playerIds) {
-            const player = state.players[pid];
-            if (player?.isAi) {
-                const aiActions = computeAiActions(state, pid);
-                for (const action of aiActions) {
-                    state = update(state, action);
+        if (!fairTurnOrder) {
+            // Legacy behavior: fixed player order and immediate application.
+            for (const pid of playerIds) {
+                const player = state.players[pid];
+                if (player?.isAi) {
+                    const aiActions = computeAiActions(state, pid);
+                    for (const action of aiActions) {
+                        state = update(state, action);
+                    }
+                }
+            }
+        } else {
+            // Bias-reduced behavior:
+            // 1) All players decide from the same state snapshot.
+            // 2) Actions are interleaved in a rotating initiative order.
+            const actionListsByPlayer = new Map<number, Action[]>();
+            for (const pid of playerIds) {
+                const player = state.players[pid];
+                if (!player?.isAi) continue;
+                actionListsByPlayer.set(pid, computeAiActions(state, pid));
+            }
+
+            const activePlayerIds = playerIds.filter(pid => actionListsByPlayer.has(pid));
+            if (activePlayerIds.length > 0) {
+                const startIdx = (gameIndex + t) % activePlayerIds.length;
+                const orderedPlayerIds = activePlayerIds
+                    .slice(startIdx)
+                    .concat(activePlayerIds.slice(0, startIdx));
+
+                let maxActions = 0;
+                for (const pid of orderedPlayerIds) {
+                    const count = actionListsByPlayer.get(pid)?.length ?? 0;
+                    if (count > maxActions) maxActions = count;
+                }
+
+                for (let actionIndex = 0; actionIndex < maxActions; actionIndex++) {
+                    for (const pid of orderedPlayerIds) {
+                        const actions = actionListsByPlayer.get(pid);
+                        if (!actions || actionIndex >= actions.length) continue;
+                        state = update(state, actions[actionIndex]);
+                    }
                 }
             }
         }
@@ -216,6 +259,7 @@ function main() {
     console.log(`Games: ${config.games}`);
     console.log(`Max ticks: ${config.maxTicks}`);
     console.log(`Map: ${config.mapSize}, resources: ${config.resourceDensity}, rocks: ${config.rockDensity}`);
+    console.log(`Turn order: ${config.fairTurnOrder ? 'fair (interleaved + rotating)' : 'legacy (sequential)'}`);
     console.log(`---`);
 
     let ai1Wins = 0;
@@ -231,7 +275,7 @@ function main() {
         );
 
         const startTime = Date.now();
-        const result = runGame(state, config.maxTicks, config.verbose);
+        const result = runGame(state, config.maxTicks, config.verbose, game, config.fairTurnOrder);
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
         tickCounts.push(result.ticks);

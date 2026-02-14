@@ -22,6 +22,11 @@ export const AIPersonalitySchema = z.object({
   // Attack group sizing
   min_attack_group_size: z.number().positive().optional(), // Minimum units to start attack (default: 5)
   max_attack_group_size: z.number().positive().optional(), // Maximum units in attack group (default: 15)
+  // Logic overrides
+  strict_unit_preferences: z.boolean().optional(),         // If true, forces use of unit_preferences over calculated counters
+  // Production parameters
+  max_surplus_production_buildings: z.number().positive().optional(), // Max factories/barracks to build (default: 3)
+  surplus_production_threshold: z.number().positive().optional(),     // Credits needed to start surplus production (default: 6000)
 });
 export type AIPersonality = z.infer<typeof AIPersonalitySchema>;
 

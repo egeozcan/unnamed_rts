@@ -89,6 +89,11 @@ export function handleEconomy(
     enemies: Entity[]
 ): Action[] {
     const actions: Action[] = [];
+
+    // Debug Genius AI Eco
+    if (personality.attack_threshold === 1 && state.tick % 1000 === 0) {
+        console.log(`[Genius Eco ${playerId}] Credits: ${player.credits}, Priority: ${aiState.investmentPriority}, Queue: B=${player.queues.building.current} V=${player.queues.vehicle.current} I=${player.queues.infantry.current}`);
+    }
     const buildOrder = personality.build_order_priority;
 
     // ===== CORE CAPABILITY CHECK =====
@@ -200,7 +205,7 @@ export function handleEconomy(
                         }
                     });
                 }
-                return actions; // Focus on harvesters
+                // Don't return, let other queues work
             }
         }
 
@@ -245,13 +250,13 @@ export function handleEconomy(
                         }
                     });
                 }
-                return actions;
+                // Don't return
             } else if (!canReachTarget && buildingQueueEmpty && existingPowerPlants < MAX_POWER_FOR_EXPANSION) {
                 // BUILDING WALK: Build power plant toward the ore (limited number)
                 const powerData = RULES.buildings['power'];
                 if (powerData && player.credits >= powerData.cost) {
                     actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId } });
-                    return actions;
+                    // Don't return
                 }
             }
         }
@@ -295,7 +300,7 @@ export function handleEconomy(
 
             if (hasUnclaimedAccessibleOre && canBuildRefinery && refineryData && player.credits >= refineryData.cost) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
-                return actions;
+                // Don't return
             }
         }
     } else if (aiState.investmentPriority === 'defense') {
@@ -310,73 +315,6 @@ export function handleEconomy(
         }
     }
 
-    // ===== PEACETIME ECONOMY EXPANSION =====
-    const isPeacetime = aiState.threatLevel <= 20 &&
-        (aiState.investmentPriority === 'balanced' || aiState.investmentPriority === 'warfare');
-
-    if (isPeacetime) {
-        // 1. Build harvesters if below ideal (personality-driven ratio)
-        const harvRatioPeace = personality.harvester_ratio ?? 2;
-        const idealHarvesters = Math.max(Math.ceil(refineries.length * harvRatioPeace), 2);
-        const canBuildHarvester = refineries.length > 0;
-
-        if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
-            const harvData = RULES.units['harvester'];
-            const harvReqsMet = checkPrerequisites('harvester', buildings);
-            // Use a higher credit threshold for peacetime - only spend surplus
-            const peacetimeCreditThreshold = 800;
-            if (harvData && harvReqsMet && player.credits >= harvData.cost + peacetimeCreditThreshold) {
-                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
-                return actions; // Prioritize harvester production in peacetime
-            }
-        }
-
-        // 2. Build additional refinery if we have accessible ore without refinery coverage
-        // CRITICAL FIX: Only if below max refineries
-        if (hasConyard && buildingQueueEmpty && !hasEnoughRefineries) {
-            const refineryData = RULES.buildings['refinery'];
-            const canBuildRefinery = checkPrerequisites('refinery', buildings);
-            const BUILD_RADIUS = 400;
-
-            // Find ore patches within build range that don't have a nearby refinery (from ANY player)
-            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-            const allRefineries = Object.values(state.entities).filter(e =>
-                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
-            );
-            const nonDefenseBuildings = buildings.filter(b => {
-                const bData = RULES.buildings[b.key];
-                return !bData?.isDefense;
-            });
-
-            let hasUnclaimedAccessibleOre = false;
-            for (const ore of allOre) {
-                // Check if ore is within build range
-                let isAccessible = false;
-                for (const b of nonDefenseBuildings) {
-                    if (b.pos.dist(ore.pos) < BUILD_RADIUS + 150) {
-                        isAccessible = true;
-                        break;
-                    }
-                }
-                if (!isAccessible) continue;
-
-                // CRITICAL FIX: Check if ore already has a refinery nearby from ANY player
-                const hasNearbyRefinery = allRefineries.some(r => r.pos.dist(ore.pos) < 300);
-                if (!hasNearbyRefinery) {
-                    hasUnclaimedAccessibleOre = true;
-                    break;
-                }
-            }
-
-            // Build refinery if we have money and unclaimed accessible ore
-            const peacetimeRefineryThreshold = 1000;
-            if (hasUnclaimedAccessibleOre && canBuildRefinery && refineryData &&
-                player.credits >= refineryData.cost + peacetimeRefineryThreshold) {
-                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
-                return actions; // Prioritize refinery expansion
-            }
-        }
-    }
 
     // ===== SURPLUS DEFENSE BUILDING =====
     if (hasConyard && player.credits >= SURPLUS_DEFENSE_THRESHOLD && aiState.threatLevel === 0 && buildingQueueEmpty) {
@@ -399,9 +337,9 @@ export function handleEconomy(
     }
 
     // ===== SURPLUS PRODUCTION BUILDINGS =====
-    const SURPLUS_PRODUCTION_THRESHOLD = 6000; // Higher threshold for production buildings
-    const MAX_SURPLUS_BARRACKS = 3;
-    const MAX_SURPLUS_FACTORIES = 3;
+    const SURPLUS_PRODUCTION_THRESHOLD = personality.surplus_production_threshold ?? 6000; // Default: 6000
+    const MAX_SURPLUS_BARRACKS = personality.max_surplus_production_buildings ?? 3; // Default: 3
+    const MAX_SURPLUS_FACTORIES = personality.max_surplus_production_buildings ?? 3; // Default: 3
 
     if (hasConyard && player.credits >= SURPLUS_PRODUCTION_THRESHOLD && aiState.threatLevel <= 20 && buildingQueueEmpty) {
         const existingBarracks = countProductionBuildings('infantry', buildings);
@@ -452,6 +390,75 @@ export function handleEconomy(
             }
         }
     }
+
+    // ===== PEACETIME ECONOMY EXPANSION =====
+    const isPeacetime = aiState.threatLevel <= 20 &&
+        (aiState.investmentPriority === 'balanced' || aiState.investmentPriority === 'warfare');
+
+    if (isPeacetime) {
+        // 1. Build harvesters if below ideal (personality-driven ratio)
+        const harvRatioPeace = personality.harvester_ratio ?? 2;
+        const idealHarvesters = Math.max(Math.ceil(refineries.length * harvRatioPeace), 2);
+        const canBuildHarvester = refineries.length > 0;
+
+        if (harvesters.length < idealHarvesters && hasFactory && vehicleQueueEmpty && canBuildHarvester) {
+            const harvData = RULES.units['harvester'];
+            const harvReqsMet = checkPrerequisites('harvester', buildings);
+            // Use a higher credit threshold for peacetime - only spend surplus
+            const peacetimeCreditThreshold = 800;
+            if (harvData && harvReqsMet && player.credits >= harvData.cost + peacetimeCreditThreshold) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'harvester', playerId } });
+                // Don't return
+            }
+        }
+
+        // 2. Build additional refinery if we have accessible ore without refinery coverage
+        // CRITICAL FIX: Only if below max refineries
+        if (hasConyard && buildingQueueEmpty && !hasEnoughRefineries) {
+            const refineryData = RULES.buildings['refinery'];
+            const canBuildRefinery = checkPrerequisites('refinery', buildings);
+            const BUILD_RADIUS = 400;
+
+            // Find ore patches within build range that don't have a nearby refinery (from ANY player)
+            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+            const allRefineries = Object.values(state.entities).filter(e =>
+                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
+            );
+            const nonDefenseBuildings = buildings.filter(b => {
+                const bData = RULES.buildings[b.key];
+                return !bData?.isDefense;
+            });
+
+            let hasUnclaimedAccessibleOre = false;
+            for (const ore of allOre) {
+                // Check if ore is within build range
+                let isAccessible = false;
+                for (const b of nonDefenseBuildings) {
+                    if (b.pos.dist(ore.pos) < BUILD_RADIUS + 150) {
+                        isAccessible = true;
+                        break;
+                    }
+                }
+                if (!isAccessible) continue;
+
+                // CRITICAL FIX: Check if ore already has a refinery nearby from ANY player
+                const hasNearbyRefinery = allRefineries.some(r => r.pos.dist(ore.pos) < 300);
+                if (!hasNearbyRefinery) {
+                    hasUnclaimedAccessibleOre = true;
+                    break;
+                }
+            }
+
+            // Build refinery if we have money and unclaimed accessible ore
+            const peacetimeRefineryThreshold = 1000;
+            if (hasUnclaimedAccessibleOre && canBuildRefinery && refineryData &&
+                player.credits >= refineryData.cost + peacetimeRefineryThreshold) {
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'refinery', playerId } });
+                // Don't return
+            }
+        }
+    }
+
 
     // ===== EXPANSION REFINERY PRIORITY =====
     // After deploying an MCV at an expansion, prioritize building a refinery there.
@@ -581,7 +588,11 @@ export function handleEconomy(
     const infantryQueueEmpty = !player.queues.infantry.current;
 
     // Get counter-building unit preferences based on enemy composition
-    const counterUnits = getCounterUnits(aiState.enemyIntelligence.dominantArmor, prefs);
+    const counterUnits = getCounterUnits(
+        aiState.enemyIntelligence.dominantArmor,
+        prefs,
+        personality.strict_unit_preferences
+    );
     const tankAdvantage = getEnemyTankAdvantage(state, playerId, enemies);
     const enemyHasTankAdvantage = tankAdvantage.hasAdvantage;
     const enemyHasStrongTankAdvantage = tankAdvantage.isStrongAdvantage;
@@ -827,8 +838,8 @@ export function handleEconomy(
             // 4. Not already at max rigs (limit to 3 for now)
             const MAX_INDUCTION_RIGS = 3;
             const wantsRig = accessibleWells.length > 0 &&
-                             existingRigs.length < accessibleWells.length &&
-                             totalRigs < MAX_INDUCTION_RIGS;
+                existingRigs.length < accessibleWells.length &&
+                totalRigs < MAX_INDUCTION_RIGS;
 
             // Higher credit threshold - this is an expensive strategic investment
             const rigCreditThreshold = creditBuffer + 1500;
@@ -1435,7 +1446,7 @@ export function handleBuildingPlacement(
         }
     } else if (key === 'barracks' || key === 'factory') {
         searchRadiusMin = 120;
-        searchRadiusMax = 350;
+        searchRadiusMax = 600; // Increased to allow expansion if base is crowded
     } else if (key === 'power' && distantOreTarget) {
         // Power plants can be used for "building walk" expansion towards distant ore
         // BUT only if we don't already have too many power plants
@@ -1492,8 +1503,14 @@ export function handleBuildingPlacement(
     }
 
     // Try multiple spots
-    const attempts = 50;
+    const attempts = 100; // Increased from 50
     for (let i = 0; i < attempts; i++) {
+        // Fallback Strategy: If we fail initial attempts, try expanding further out
+        if (i === 50 && (key === 'factory' || key === 'barracks' || key === 'refinery' || key === 'airforce_command' || key === 'service_depot')) {
+            searchCenter = expansionFront;
+            searchRadiusMax += 200;
+        }
+
         const ang = Math.random() * Math.PI * 2;
         const dist = searchRadiusMin + Math.random() * (searchRadiusMax - searchRadiusMin);
         const x = searchCenter.x + Math.cos(ang) * dist;
@@ -1598,6 +1615,13 @@ export function handleBuildingPlacement(
         actions.push({
             type: 'PLACE_BUILDING',
             payload: { key: key, x: bestSpot.x, y: bestSpot.y, playerId }
+        });
+    } else {
+        // Failsafe: if we can't place it after 100 attempts, cancel it to unblock queue
+        // We get full refund for ready-to-place buildings, so we can try again
+        actions.push({
+            type: 'CANCEL_BUILD',
+            payload: { category: 'building', playerId }
         });
     }
 

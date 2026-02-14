@@ -1,5 +1,5 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, PLAYER_COLORS, Action, ResourceEntity, RockEntity, WellEntity, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
+import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, PLAYER_COLORS, Action, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
 import { initPathfindingWorker } from './engine/utils.js';
 
 declare global {
@@ -8,7 +8,6 @@ declare global {
         startGame?: typeof startGameWithConfig;
     }
 }
-import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateActionCursor } from './ui/index.js';
@@ -22,6 +21,7 @@ import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
+import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap } from './game-utils.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
 type GameSpeed = 1 | 2 | 3 | 4 | 5;
@@ -61,6 +61,48 @@ let lastFrameTime = 0;
 let gameSpeed: GameSpeed = 2;
 let animationFrameId: number | null = null;
 const aiImplementationOptions = getAIImplementationOptions();
+
+function applyAiActionsForTick(state: GameState, initiativeSeed: number): GameState {
+    const aiPlayerIds = Object.keys(state.players)
+        .map(Number)
+        .filter(pid => state.players[pid]?.isAi);
+
+    if (aiPlayerIds.length === 0) {
+        return state;
+    }
+
+    const actionListsByPlayer = new Map<number, Action[]>();
+    for (const pid of aiPlayerIds) {
+        actionListsByPlayer.set(pid, computeAiActions(state, pid));
+    }
+
+    const activePlayerIds = aiPlayerIds.filter(pid => (actionListsByPlayer.get(pid)?.length ?? 0) > 0);
+    if (activePlayerIds.length === 0) {
+        return state;
+    }
+
+    const startIdx = initiativeSeed % activePlayerIds.length;
+    const orderedPlayerIds = activePlayerIds
+        .slice(startIdx)
+        .concat(activePlayerIds.slice(0, startIdx));
+
+    let maxActions = 0;
+    for (const pid of orderedPlayerIds) {
+        const count = actionListsByPlayer.get(pid)?.length ?? 0;
+        if (count > maxActions) maxActions = count;
+    }
+
+    let nextState = state;
+    for (let actionIndex = 0; actionIndex < maxActions; actionIndex++) {
+        for (const pid of orderedPlayerIds) {
+            const playerActions = actionListsByPlayer.get(pid);
+            if (!playerActions || actionIndex >= playerActions.length) continue;
+            nextState = update(nextState, playerActions[actionIndex]);
+        }
+    }
+
+    return nextState;
+}
 
 function setGameSpeed(speed: GameSpeed) {
     gameSpeed = speed;
@@ -216,168 +258,12 @@ function getSkirmishConfig(): SkirmishConfig {
 
 // Get starting positions for players based on map size
 function getStartingPositions(mapWidth: number, mapHeight: number, numPlayers: number): Vector[] {
-    const margin = 350; // Distance from edge
-    const centerX = mapWidth / 2;
-    const centerY = mapHeight / 2;
-
-    // 8 positions: corners + mid-edges for maximum spacing
-    const positions = [
-        new Vector(margin, margin),                          // Top-left (0)
-        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right (1)
-        new Vector(mapWidth - margin, margin),               // Top-right (2)
-        new Vector(margin, mapHeight - margin),              // Bottom-left (3)
-        new Vector(centerX, margin),                         // Top-center (4)
-        new Vector(centerX, mapHeight - margin),             // Bottom-center (5)
-        new Vector(margin, centerY),                         // Left-center (6)
-        new Vector(mapWidth - margin, centerY)               // Right-center (7)
-    ];
-    return positions.slice(0, numPlayers);
+    return getStartingPositionsForMap(mapWidth, mapHeight, numPlayers);
 }
 
 // Generate map entities
 function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number } {
-    const entities: Record<EntityId, Entity> = {};
-    const mapDims = MAP_SIZES[config.mapSize];
-    const { width: mapWidth, height: mapHeight } = mapDims;
-    const density = DENSITY_SETTINGS[config.resourceDensity];
-    const rockSettings = DENSITY_SETTINGS[config.rockDensity];
-
-    // Calculate spawn zones to avoid for rocks
-    const margin = 350;
-    const spawnRadius = 200; // Keep rocks away from spawn areas
-    const spawnZones = [
-        new Vector(margin, margin),                          // Top-left
-        new Vector(mapWidth - margin, mapHeight - margin),   // Bottom-right
-        new Vector(mapWidth - margin, margin),               // Top-right
-        new Vector(margin, mapHeight - margin)               // Bottom-left
-    ];
-
-    // Helper to check if position is near any spawn zone
-    function isNearSpawnZone(x: number, y: number): boolean {
-        for (const zone of spawnZones) {
-            if (new Vector(x, y).dist(zone) < spawnRadius) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Generate resources in clusters
-    const resourceCount = density.resources;
-    const numClusters = Math.floor(resourceCount / 8) + 3; // More resources = more clusters
-    const resourcesPerCluster = Math.ceil(resourceCount / numClusters);
-
-    // Generate cluster centers in the middle area of the map
-    const clusterCenters: Vector[] = [];
-    for (let c = 0; c < numClusters; c++) {
-        const cx = 500 + Math.random() * (mapWidth - 1000);
-        const cy = 500 + Math.random() * (mapHeight - 1000);
-        clusterCenters.push(new Vector(cx, cy));
-    }
-
-    // Generate resources around cluster centers
-    let resourceId = 0;
-    for (const center of clusterCenters) {
-        const clusterSize = resourcesPerCluster + Math.floor(Math.random() * 5) - 2;
-        for (let i = 0; i < clusterSize && resourceId < resourceCount; i++) {
-            // Random position within cluster radius (50-150 from center)
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 20 + Math.random() * 100;
-            const x = center.x + Math.cos(angle) * dist;
-            const y = center.y + Math.sin(angle) * dist;
-
-            // Skip if out of bounds
-            if (x < 100 || x > mapWidth - 100 || y < 100 || y > mapHeight - 100) continue;
-
-            const id = 'res_' + resourceId++;
-            const resourceEntity: ResourceEntity = {
-                id, owner: -1, type: 'RESOURCE', key: 'ore',
-                pos: new Vector(x, y), prevPos: new Vector(x, y),
-                hp: 1000, maxHp: 1000, w: 25, h: 25, radius: 12, dead: false
-            };
-            entities[id] = resourceEntity;
-        }
-    }
-
-    // Generate rocks (impassable obstacles) - avoid spawn zones
-    const rockCount = rockSettings.rocks;
-    let rocksPlaced = 0;
-    let attempts = 0;
-    const maxAttempts = rockCount * 10;
-
-    while (rocksPlaced < rockCount && attempts < maxAttempts) {
-        attempts++;
-        const x = 300 + Math.random() * (mapWidth - 600);
-        const y = 300 + Math.random() * (mapHeight - 600);
-
-        // Skip if too close to a spawn zone
-        if (isNearSpawnZone(x, y)) {
-            continue;
-        }
-
-        const size = 30 + Math.random() * 40;
-        const id = 'rock_' + rocksPlaced;
-        const rockEntity: RockEntity = {
-            id, owner: -1, type: 'ROCK', key: 'rock',
-            pos: new Vector(x, y), prevPos: new Vector(x, y),
-            hp: 9999, maxHp: 9999, w: size, h: size, radius: size / 2, dead: false
-        };
-        entities[id] = rockEntity;
-        rocksPlaced++;
-    }
-
-    // Generate ore wells (neutral resource generators)
-    const wellCount = WELL_DENSITY_SETTINGS[config.resourceDensity];
-    let wellsPlaced = 0;
-    let wellAttempts = 0;
-    const maxWellAttempts = wellCount * 20;
-
-    while (wellsPlaced < wellCount && wellAttempts < maxWellAttempts) {
-        wellAttempts++;
-
-        // Place wells in middle area of map (600px from edges)
-        const x = 600 + Math.random() * (mapWidth - 1200);
-        const y = 600 + Math.random() * (mapHeight - 1200);
-
-        // Skip if too close to a spawn zone
-        if (isNearSpawnZone(x, y)) {
-            continue;
-        }
-
-        // Check not too close to existing wells (min 400px apart)
-        let tooClose = false;
-        for (const id in entities) {
-            const e = entities[id];
-            if (e.type === 'WELL') {
-                if (new Vector(x, y).dist(e.pos) < 400) {
-                    tooClose = true;
-                    break;
-                }
-            }
-        }
-        if (tooClose) continue;
-
-        const id = 'well_' + wellsPlaced;
-        const wellEntity: WellEntity = {
-            id,
-            owner: -1,
-            type: 'WELL',
-            key: 'well',
-            pos: new Vector(x, y),
-            prevPos: new Vector(x, y),
-            hp: 9999,
-            maxHp: 9999,
-            w: 50,
-            h: 50,
-            radius: 25,
-            dead: false,
-            well: createDefaultWellComponent()
-        };
-        entities[id] = wellEntity;
-        wellsPlaced++;
-    }
-
-    return { entities, mapWidth, mapHeight };
+    return generateSkirmishMap(config);
 }
 
 // Start button handler
@@ -1202,20 +1088,7 @@ function gameLoop(timestamp: number = 0) {
         const ticksToRun = TICKS_PER_GAME_SPEED[gameSpeed];
 
         for (let t = 0; t < ticksToRun; t++) {
-            // AI Logic - iterate over ALL AI players
-            let aiActions: Action[] = [];
-            for (const pidStr in currentState.players) {
-                const pid = parseInt(pidStr);
-                const player = currentState.players[pid];
-                if (player.isAi) {
-                    const actions = computeAiActions(currentState, pid);
-                    aiActions.push(...actions);
-                }
-            }
-
-            for (const action of aiActions) {
-                currentState = update(currentState, action);
-            }
+            currentState = applyAiActionsForTick(currentState, currentState.tick + t);
 
             currentState = update(currentState, { type: 'TICK' });
         }

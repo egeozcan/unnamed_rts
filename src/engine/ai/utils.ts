@@ -513,8 +513,16 @@ export function isValidPlacement(
 
 export function getCounterUnits(
     dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
-    _defaultPrefs?: { infantry?: string[]; vehicle?: string[] }
+    prefs?: { infantry?: string[]; vehicle?: string[] },
+    forcePrefs: boolean = false
 ): CounterUnits {
+    if (forcePrefs && prefs) {
+        return {
+            infantry: prefs.infantry || [],
+            vehicle: prefs.vehicle || []
+        };
+    }
+
     switch (dominantArmor) {
         case 'infantry':
             return {

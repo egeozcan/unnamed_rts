@@ -97,6 +97,238 @@ export function calculatePower(pid: number, entities: Record<EntityId, Entity>):
     return p;
 }
 
+function generateMirroredTwoPlayerEntities(
+    mapWidth: number,
+    mapHeight: number,
+    resourceCount: number,
+    rockCount: number,
+    wellCount: number,
+    spawnZones: Vector[]
+): Record<EntityId, Entity> {
+    const entities: Record<EntityId, Entity> = {};
+    const centerX = mapWidth / 2;
+    const centerY = mapHeight / 2;
+    const spawnRadius = 200;
+
+    function isNearSpawnZone(x: number, y: number): boolean {
+        for (const zone of spawnZones) {
+            if (new Vector(x, y).dist(zone) < spawnRadius) return true;
+        }
+        return false;
+    }
+
+    function isPrimaryHalf(x: number, y: number): boolean {
+        return x < centerX || (x === centerX && y <= centerY);
+    }
+
+    function isWithinBounds(x: number, y: number, pad: number): boolean {
+        return x >= pad && x <= mapWidth - pad && y >= pad && y <= mapHeight - pad;
+    }
+
+    function mirrorPos(x: number, y: number): Vector {
+        return new Vector(mapWidth - x, mapHeight - y);
+    }
+
+    // ---- Resources (mirrored clusters) ----
+    let resourceId = 0;
+    const mirroredResourceTarget = resourceCount - (resourceCount % 2);
+
+    function addResource(x: number, y: number): void {
+        const id = `res_${resourceId++}`;
+        const resource: ResourceEntity = {
+            id,
+            owner: -1,
+            type: 'RESOURCE',
+            key: 'ore',
+            pos: new Vector(x, y),
+            prevPos: new Vector(x, y),
+            hp: 1000,
+            maxHp: 1000,
+            w: 25,
+            h: 25,
+            radius: 12,
+            dead: false
+        };
+        entities[id] = resource;
+    }
+
+    function tryPlaceResourcePair(x: number, y: number): boolean {
+        if (resourceId >= mirroredResourceTarget) return false;
+        if (!isPrimaryHalf(x, y) || !isWithinBounds(x, y, 100)) return false;
+
+        const mirrored = mirrorPos(x, y);
+        if (!isWithinBounds(mirrored.x, mirrored.y, 100)) return false;
+        if (Math.abs(mirrored.x - x) < 0.1 && Math.abs(mirrored.y - y) < 0.1) return false;
+
+        addResource(x, y);
+        addResource(mirrored.x, mirrored.y);
+        return true;
+    }
+
+    const numClusters = Math.floor(resourceCount / 8) + 3;
+    const resourcesPerCluster = Math.ceil(resourceCount / Math.max(1, numClusters));
+    const clusterCenters: Vector[] = [];
+    for (let c = 0; c < numClusters; c++) {
+        let found = false;
+        for (let attempt = 0; attempt < 40; attempt++) {
+            const cx = 500 + Math.random() * (mapWidth - 1000);
+            const cy = 500 + Math.random() * (mapHeight - 1000);
+            if (!isPrimaryHalf(cx, cy)) continue;
+            clusterCenters.push(new Vector(cx, cy));
+            found = true;
+            break;
+        }
+        if (!found) {
+            clusterCenters.push(new Vector(centerX - 150, centerY));
+        }
+    }
+
+    for (const center of clusterCenters) {
+        const clusterSize = resourcesPerCluster + Math.floor(Math.random() * 5) - 2;
+        for (let i = 0; i < clusterSize && resourceId < mirroredResourceTarget; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 20 + Math.random() * 100;
+            const x = center.x + Math.cos(angle) * dist;
+            const y = center.y + Math.sin(angle) * dist;
+            tryPlaceResourcePair(x, y);
+        }
+    }
+
+    let resourceAttempts = 0;
+    while (resourceId < mirroredResourceTarget && resourceAttempts < mirroredResourceTarget * 20) {
+        resourceAttempts++;
+        const x = 100 + Math.random() * (centerX - 120);
+        const y = 100 + Math.random() * (mapHeight - 200);
+        tryPlaceResourcePair(x, y);
+    }
+
+    if (resourceCount % 2 === 1) {
+        addResource(centerX, centerY);
+    }
+
+    // ---- Rocks (mirrored obstacles) ----
+    let rockId = 0;
+    let rocksPlaced = 0;
+    const mirroredRockTarget = rockCount - (rockCount % 2);
+
+    function addRock(x: number, y: number, size: number): void {
+        const id = `rock_${rockId++}`;
+        const rock: RockEntity = {
+            id,
+            owner: -1,
+            type: 'ROCK',
+            key: 'rock',
+            pos: new Vector(x, y),
+            prevPos: new Vector(x, y),
+            hp: 9999,
+            maxHp: 9999,
+            w: size,
+            h: size,
+            radius: size / 2,
+            dead: false
+        };
+        entities[id] = rock;
+    }
+
+    function tryPlaceRockPair(x: number, y: number, size: number): boolean {
+        if (rocksPlaced >= mirroredRockTarget) return false;
+        if (!isPrimaryHalf(x, y) || !isWithinBounds(x, y, 300)) return false;
+        if (isNearSpawnZone(x, y)) return false;
+
+        const mirrored = mirrorPos(x, y);
+        if (!isWithinBounds(mirrored.x, mirrored.y, 300)) return false;
+        if (isNearSpawnZone(mirrored.x, mirrored.y)) return false;
+        if (Math.abs(mirrored.x - x) < 0.1 && Math.abs(mirrored.y - y) < 0.1) return false;
+
+        addRock(x, y, size);
+        addRock(mirrored.x, mirrored.y, size);
+        rocksPlaced += 2;
+        return true;
+    }
+
+    let rockAttempts = 0;
+    while (rocksPlaced < mirroredRockTarget && rockAttempts < mirroredRockTarget * 30) {
+        rockAttempts++;
+        const x = 300 + Math.random() * (centerX - 350);
+        const y = 300 + Math.random() * (mapHeight - 600);
+        const size = 30 + Math.random() * 40;
+        tryPlaceRockPair(x, y, size);
+    }
+
+    if (rockCount % 2 === 1) {
+        const size = 30 + Math.random() * 40;
+        addRock(centerX, centerY, size);
+    }
+
+    // ---- Wells (mirrored neutral economy) ----
+    let nextWellId = 0;
+    let wellsPlaced = 0;
+    const mirroredWellTarget = wellCount - (wellCount % 2);
+    const placedWells: Vector[] = [];
+
+    function canPlaceWell(pos: Vector): boolean {
+        if (!isWithinBounds(pos.x, pos.y, 500)) return false;
+        if (isNearSpawnZone(pos.x, pos.y)) return false;
+        for (const existing of placedWells) {
+            if (pos.dist(existing) < 400) return false;
+        }
+        return true;
+    }
+
+    function addWell(pos: Vector): void {
+        const id = `well_${nextWellId++}`;
+        const well: WellEntity = {
+            id,
+            owner: -1,
+            type: 'WELL',
+            key: 'well',
+            pos,
+            prevPos: new Vector(pos.x, pos.y),
+            hp: 9999,
+            maxHp: 9999,
+            w: 50,
+            h: 50,
+            radius: 25,
+            dead: false,
+            well: createDefaultWellComponent()
+        };
+        entities[id] = well;
+        placedWells.push(pos);
+    }
+
+    function tryPlaceWellPair(x: number, y: number): boolean {
+        if (wellsPlaced >= mirroredWellTarget) return false;
+        if (!isPrimaryHalf(x, y)) return false;
+
+        const pos = new Vector(x, y);
+        const mirrored = mirrorPos(x, y);
+        if (Math.abs(mirrored.x - x) < 0.1 && Math.abs(mirrored.y - y) < 0.1) return false;
+        if (!canPlaceWell(pos) || !canPlaceWell(mirrored)) return false;
+
+        addWell(pos);
+        addWell(mirrored);
+        wellsPlaced += 2;
+        return true;
+    }
+
+    let wellAttempts = 0;
+    while (wellsPlaced < mirroredWellTarget && wellAttempts < mirroredWellTarget * 50) {
+        wellAttempts++;
+        const x = 500 + Math.random() * (centerX - 550);
+        const y = 500 + Math.random() * (mapHeight - 1000);
+        tryPlaceWellPair(x, y);
+    }
+
+    if (wellCount % 2 === 1) {
+        const centerWell = new Vector(centerX, centerY);
+        if (canPlaceWell(centerWell)) {
+            addWell(centerWell);
+        }
+    }
+
+    return entities;
+}
+
 /**
  * Generate map entities including resources and rocks.
  */
@@ -114,6 +346,19 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
     // Calculate spawn zones to avoid for rocks (use all player positions)
     const spawnRadius = 200; // Keep rocks away from spawn areas
     const spawnZones = playerPositions;
+
+    // 2-player skirmish maps use mirrored generation to minimize positional bias.
+    if (numPlayers === 2) {
+        const mirroredEntities = generateMirroredTwoPlayerEntities(
+            mapWidth,
+            mapHeight,
+            density.resources,
+            rockSettings.rocks,
+            WELL_DENSITY_SETTINGS[config.resourceDensity],
+            spawnZones
+        );
+        return { entities: mirroredEntities, mapWidth, mapHeight };
+    }
 
     // Helper to check if position is near any spawn zone
     function isNearSpawnZone(x: number, y: number): boolean {

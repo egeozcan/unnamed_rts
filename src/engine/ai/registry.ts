@@ -2,7 +2,10 @@ import { AIImplementation, AIImplementationOption } from './contracts.js';
 import { classicAIImplementation } from './implementations/classic/index.js';
 import { ecoTankAllInAIImplementation } from './implementations/eco_tank_all_in/index.js';
 import { infantryFortressAIImplementation } from './implementations/infantry_fortress/index.js';
+import { geniusAIImplementation } from './implementations/genius/index.js';
+import { hydraAIImplementation } from './implementations/hydra/index.js';
 // @ai-implementation-imports
+import { AuroraSovereignAIImplementation } from './implementations/aurora_sovereign/index.js';
 
 export const DEFAULT_AI_IMPLEMENTATION_ID = 'classic';
 
@@ -45,6 +48,9 @@ const builtInImplementations: AIImplementation[] = [
     classicAIImplementation,
     ecoTankAllInAIImplementation,
     infantryFortressAIImplementation,
+    geniusAIImplementation,
+    hydraAIImplementation,
+    AuroraSovereignAIImplementation,
     // @ai-implementation-list
 ];
 
