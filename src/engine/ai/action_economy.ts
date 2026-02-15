@@ -666,6 +666,17 @@ export function handleEconomy(
             }
         }
 
+        // Respect single-vehicle-per-tick: earlier economy logic may already
+        // have queued a vehicle (for example a harvester), so skip staggered
+        // vehicle production in that case.
+        const queuedVehicleBeforeStaggered = actions.some(a =>
+            a.type === 'START_BUILD' &&
+            (a.payload as { category: string }).category === 'vehicle'
+        );
+        if (queuedVehicleBeforeStaggered) {
+            buildVehicle = false;
+        }
+
         // Execute vehicle production with counter-building
         let vehicleBuilt = false;
         if (buildVehicle) {
@@ -1506,8 +1517,12 @@ export function handleBuildingPlacement(
     const attempts = 100; // Increased from 50
     for (let i = 0; i < attempts; i++) {
         // Fallback Strategy: If we fail initial attempts, try expanding further out
-        if (i === 50 && (key === 'factory' || key === 'barracks' || key === 'refinery' || key === 'airforce_command' || key === 'service_depot')) {
+        if (i === 50 && (key === 'factory' || key === 'barracks' || key === 'airforce_command' || key === 'service_depot')) {
             searchCenter = expansionFront;
+            searchRadiusMax += 200;
+        } else if (i === 50 && key === 'refinery') {
+            // Keep refinery search anchored to the selected ore target and only
+            // widen radius; falling back to base can pick enemy-claimed fields.
             searchRadiusMax += 200;
         }
 
