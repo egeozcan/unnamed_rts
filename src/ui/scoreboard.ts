@@ -1,11 +1,20 @@
 
 import { GameState } from '../engine/types.js';
 import { calculatePlayerScores, PlayerScore } from '../engine/scores.js';
+import { shouldRunCadencedUpdate } from './cadence.js';
 
 let scoreboardContainer: HTMLElement | null = null;
-let lastUpdateTick = -1;
+let lastScoreboardTick = -1;
+let lastScoreboardTimeMs = -Infinity;
+
+const SCOREBOARD_MIN_TICK_DELTA = 10;
+const SCOREBOARD_MIN_TIME_DELTA_MS = 120;
 
 export function initScoreboard() {
+    // Reset cadence state for new games/HMR remounts.
+    lastScoreboardTick = -1;
+    lastScoreboardTimeMs = -Infinity;
+
     // Create container if it doesn't exist
     if (!scoreboardContainer) {
         scoreboardContainer = document.createElement('div');
@@ -15,12 +24,25 @@ export function initScoreboard() {
     }
 }
 
-export function updateScoreboard(state: GameState) {
+export function updateScoreboard(state: GameState, nowMs?: number) {
     if (!scoreboardContainer) return;
 
-    // Throttle updates to every 10 ticks to save DOM operations
-    if (state.tick === lastUpdateTick || state.tick % 10 !== 0) return;
-    lastUpdateTick = state.tick;
+    const currentTimeMs = nowMs ?? (
+        typeof performance !== 'undefined' ? performance.now() : Date.now()
+    );
+    if (!shouldRunCadencedUpdate({
+        currentTick: state.tick,
+        currentTimeMs,
+        lastTick: lastScoreboardTick,
+        lastTimeMs: lastScoreboardTimeMs,
+        minTickDelta: SCOREBOARD_MIN_TICK_DELTA,
+        minTimeDeltaMs: SCOREBOARD_MIN_TIME_DELTA_MS
+    })) {
+        return;
+    }
+
+    lastScoreboardTick = state.tick;
+    lastScoreboardTimeMs = currentTimeMs;
 
     const scores = calculatePlayerScores(state);
     // Filter out eliminated players (no buildings and no MCV)

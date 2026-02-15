@@ -13,6 +13,7 @@ import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateActionCursor } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
+import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu } from './ui/pause-menu.js';
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
@@ -60,7 +61,12 @@ const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
 let lastFrameTime = 0;
 let gameSpeed: GameSpeed = 2;
 let animationFrameId: number | null = null;
+let lastButtonsTick = -1;
+let lastButtonsTimeMs = -Infinity;
 const aiImplementationOptions = getAIImplementationOptions();
+
+const BUTTONS_MIN_TICK_DELTA = 5;
+const BUTTONS_MIN_TIME_DELTA_MS = 80;
 
 function applyAiActionsForTick(state: GameState, initiativeSeed: number): GameState {
     const aiPlayerIds = Object.keys(state.players)
@@ -398,6 +404,8 @@ function reconstructVectors(state: GameState): GameState {
 
 function startGameWithConfig(config: SkirmishConfig) {
     hideMenu();
+    lastButtonsTick = -1;
+    lastButtonsTimeMs = -Infinity;
 
     // Generate map
     const { entities, mapWidth, mapHeight } = generateMap(config);
@@ -1110,8 +1118,17 @@ function gameLoop(timestamp: number = 0) {
         updatePower(cachedPower.out, cachedPower.in);
     }
 
-    if (currentState.tick % 5 === 0) {
+    if (shouldRunCadencedUpdate({
+        currentTick: currentState.tick,
+        currentTimeMs: timestamp,
+        lastTick: lastButtonsTick,
+        lastTimeMs: lastButtonsTimeMs,
+        minTickDelta: BUTTONS_MIN_TICK_DELTA,
+        minTimeDeltaMs: BUTTONS_MIN_TIME_DELTA_MS
+    })) {
         updateButtonsUI();
+        lastButtonsTick = currentState.tick;
+        lastButtonsTimeMs = timestamp;
     }
 
     // Expose state for debugging
@@ -1186,7 +1203,7 @@ function gameLoop(timestamp: number = 0) {
     );
 
     // Scoreboard
-    updateScoreboard(currentState);
+    updateScoreboard(currentState, timestamp);
 
     // Observer Minimap Toggle
     if (currentState.mode === 'demo') {
