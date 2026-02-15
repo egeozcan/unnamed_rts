@@ -502,12 +502,13 @@ export function updateEntities(
 
     for (const id in nextEntities) {
         const entity = nextEntities[id];
+        if (entity.type === 'UNIT' && entity.key === 'demo_truck') {
+            // Include dead demo trucks so tick() can process death-triggered explosions.
+            hasDemoTruck = true;
+        }
         if (entity.dead) continue;
 
         if (entity.type === 'UNIT') {
-            if (entity.key === 'demo_truck') {
-                hasDemoTruck = true;
-            }
             // Check if this is an air unit (harrier) - use different state machine
             if (isAirUnit(entity)) {
                 const airRes = updateAirUnitState(entity, state.entities, entityList);
