@@ -18,6 +18,12 @@ let currentPathTick = 0;
 
 // Update the current tick for path caching (call from game loop)
 export function setPathCacheTick(tick: number): void {
+    // Tick can move backwards between matches/tests. Without clearing here,
+    // stale cached paths (including cached null) remain "fresh" because
+    // (newTick - oldTick) becomes negative and still passes TTL checks.
+    if (tick < currentPathTick) {
+        pathCache.clear();
+    }
     currentPathTick = tick;
 }
 
@@ -924,4 +930,3 @@ function hasLineOfSight(from: Vector, to: Vector, entityRadius: number, ownerId?
     }
     return true;
 }
-

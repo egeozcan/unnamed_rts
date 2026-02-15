@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
 import { GameState, Vector, Entity, EntityId, HarvesterUnit } from '../../src/engine/types';
+import { findPath, refreshCollisionGrid, setPathCacheTick } from '../../src/engine/utils';
 import {
     createTestCombatUnit,
     createTestHarvester,
@@ -49,6 +50,27 @@ describe('Pathfinding Issues', () => {
     }
 
     describe('Erratic Movement', () => {
+        it('clears stale path cache entries when tick rewinds', () => {
+            // First map: start tile is blocked, so path result is cached as null.
+            let blockedState = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };
+            blockedState = spawnBuilding(blockedState, 100, 100, 100, 100, 'blocker');
+            refreshCollisionGrid(blockedState.entities, blockedState.config, [0, 1]);
+            setPathCacheTick(500);
+
+            const start = new Vector(100, 100);
+            const goal = new Vector(200, 100);
+            expect(findPath(start, goal, 14, 0)).toBeNull();
+
+            // Second map: same coordinates are now clear. Rewinding tick must invalidate cache.
+            const clearState = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };
+            refreshCollisionGrid(clearState.entities, clearState.config, [0, 1]);
+            setPathCacheTick(1);
+
+            const path = findPath(start, goal, 14, 0);
+            expect(path).not.toBeNull();
+            expect(path!.length).toBeGreaterThan(0);
+        });
+
         it('should have minimal direction changes when pathing to a clear destination', () => {
             // A unit moving straight should not jitter/zigzag
             let state = { ...INITIAL_STATE, running: true, entities: {} as Record<EntityId, Entity> };

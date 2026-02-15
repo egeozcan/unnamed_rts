@@ -135,6 +135,27 @@ function handleFullCargo(
     if (nextHarvester.harvester.baseTargetId) {
         const ref = allEntities[nextHarvester.harvester.baseTargetId];
         if (ref && !ref.dead) {
+            const refineryTop = ref.pos.y - ref.h / 2;
+            const horizontalBlockBand = ref.w / 2 + nextHarvester.radius + 8;
+            const isAboveRefineryFace =
+                nextHarvester.pos.y < refineryTop &&
+                Math.abs(nextHarvester.pos.x - ref.pos.x) < horizontalBlockBand;
+
+            if (isAboveRefineryFace) {
+                const side = nextHarvester.pos.x <= ref.pos.x ? -1 : 1;
+                const rawApproachPos = new Vector(
+                    ref.pos.x + side * (ref.w / 2 + nextHarvester.radius + 20),
+                    ref.pos.y + ref.h / 2 + nextHarvester.radius + 10
+                );
+                const approachPos = new Vector(
+                    Math.max(0, Math.min(mapConfig.width - 1, rawApproachPos.x)),
+                    Math.max(0, Math.min(mapConfig.height - 1, rawApproachPos.y))
+                );
+                if (nextHarvester.pos.dist(approachPos) > 25) {
+                    return moveToward(nextHarvester, approachPos, entityList, true) as HarvesterUnit;
+                }
+            }
+
             // Target "Docking Point" (bottom of refinery)
             // Clamp dock position to map bounds to prevent pathfinding issues
             const rawDockPos = ref.pos.add(new Vector(0, 100));
