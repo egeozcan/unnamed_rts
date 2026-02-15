@@ -1,5 +1,5 @@
 import { GameState, Action, Entity, isActionType } from '../../../types.js';
-import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -207,14 +207,14 @@ function queueTankIfPossible(
     });
 }
 
-export function computeEcoTankAllInAiActions(state: GameState, playerId: number): Action[] {
+export function computeEcoTankAllInAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
     if (!player) return actions;
 
     const aiState = getAIState(playerId);
 
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -368,7 +368,8 @@ export function computeEcoTankAllInAiActions(state: GameState, playerId: number)
             player,
             ecoTankAllInPersonality,
             aiState,
-            enemies
+            enemies,
+            cache
         );
         economyActions = removeProactiveDefenseBuilds(economyActions, hasImmediateThreat);
         economyActions = removeInfantryAndExtraBarracksBuilds(economyActions, myBuildings);
@@ -395,7 +396,8 @@ export function computeEcoTankAllInAiActions(state: GameState, playerId: number)
         aiState.harvesterAI,
         playerId,
         state,
-        player.difficulty
+        player.difficulty,
+        cache
     );
     aiState.harvesterAI = harvesterResult.harvesterAI;
     actions.push(...harvesterResult.actions);
@@ -436,6 +438,6 @@ export const ecoTankAllInAIImplementation: AIImplementation = {
     id: 'eco_tank_all_in',
     name: 'Eco Tank All-In',
     description: 'Fast economy into heavy tank massing, then committed attack pressure.',
-    computeActions: ({ state, playerId }) => computeEcoTankAllInAiActions(state, playerId),
+    computeActions: ({ state, playerId, entityCache }) => computeEcoTankAllInAiActions(state, playerId, entityCache),
     reset: resetAIState
 };

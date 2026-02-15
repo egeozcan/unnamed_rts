@@ -1,5 +1,5 @@
 import { GameState, Action, Entity, Vector, isActionType } from '../../../types.js';
-import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -531,7 +531,7 @@ function findBestAttackTarget(
 // Main Hydra AI Logic
 // ============================================================================
 
-export function computeHydraAiActions(state: GameState, playerId: number): Action[] {
+export function computeHydraAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
     if (!player) return actions;
@@ -540,7 +540,7 @@ export function computeHydraAiActions(state: GameState, playerId: number): Actio
     const personality = { ...hydraPersonality };
 
     // PERFORMANCE: Use cached entity lookups
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -757,7 +757,7 @@ export function computeHydraAiActions(state: GameState, playerId: number): Actio
     actions.push(...handleAllInSell(state, playerId, myBuildings, aiState));
 
     // Core economy handling
-    actions.push(...(handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies) || []));
+    actions.push(...(handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies, cache) || []));
 
     // Building repairs
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
@@ -776,7 +776,8 @@ export function computeHydraAiActions(state: GameState, playerId: number): Actio
         aiState.harvesterAI,
         playerId,
         state,
-        'hard'
+        'hard',
+        cache
     );
     aiState.harvesterAI = harvesterResult.harvesterAI;
     actions.push(...harvesterResult.actions);
@@ -853,6 +854,6 @@ export const hydraAIImplementation: AIImplementation = {
     id: 'hydra',
     name: 'Hydra',
     description: 'Adaptive multi-pronged strategy with fast economy and relentless dual-production pressure.',
-    computeActions: ({ state, playerId }) => computeHydraAiActions(state, playerId),
+    computeActions: ({ state, playerId, entityCache }) => computeHydraAiActions(state, playerId, entityCache),
     reset: resetAIState
 };

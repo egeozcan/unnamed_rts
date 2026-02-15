@@ -8,6 +8,7 @@ import {
 } from '../../src/engine/ai/registry.js';
 import { resolveAIImplementationId, computeAiActionsForPlayer } from '../../src/engine/ai/controller.js';
 import type { AIImplementation } from '../../src/engine/ai/contracts.js';
+import { createEntityCache } from '../../src/engine/perf.js';
 
 describe('AI modularity', () => {
     it('registers classic implementation by default', () => {
@@ -55,5 +56,30 @@ describe('AI modularity', () => {
         };
 
         expect(() => registerAIImplementation(duplicateClassic)).toThrow('already registered');
+    });
+
+    it('passes shared entity cache through controller context', () => {
+        const captured: { cache?: ReturnType<typeof createEntityCache> } = {};
+        const implementationId = `test_shared_cache_${Date.now()}`;
+        registerAIImplementation({
+            id: implementationId,
+            name: 'Test Shared Cache',
+            computeActions: (context) => {
+                captured.cache = context.entityCache;
+                return [];
+            }
+        });
+
+        const state = {
+            ...INITIAL_STATE,
+            players: {
+                1: createPlayerState(1, true, 'medium', '#ff4444', implementationId)
+            },
+            entities: {}
+        };
+
+        const sharedCache = createEntityCache(state.entities);
+        computeAiActionsForPlayer(state, 1, sharedCache);
+        expect(captured.cache).toBe(sharedCache);
     });
 });

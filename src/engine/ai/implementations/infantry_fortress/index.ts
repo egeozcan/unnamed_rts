@@ -1,5 +1,5 @@
 import { GameState, Action, Entity, UnitEntity, Vector, EntityId, isActionType } from '../../../types.js';
-import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -720,14 +720,14 @@ function findRushTarget(
     return bestTarget;
 }
 
-export function computeInfantryFortressAiActions(state: GameState, playerId: number): Action[] {
+export function computeInfantryFortressAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
     if (!player) return actions;
 
     const aiState = getAIState(playerId);
 
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -880,7 +880,8 @@ export function computeInfantryFortressAiActions(state: GameState, playerId: num
         player,
         infantryFortressPersonality,
         aiState,
-        enemies
+        enemies,
+        cache
     );
 
     // Redirect non-harvester, non-demo_truck vehicle builds to infantry
@@ -915,7 +916,8 @@ export function computeInfantryFortressAiActions(state: GameState, playerId: num
         aiState.harvesterAI,
         playerId,
         state,
-        player.difficulty
+        player.difficulty,
+        cache
     );
     aiState.harvesterAI = harvesterResult.harvesterAI;
     actions.push(...harvesterResult.actions);
@@ -961,6 +963,6 @@ export const infantryFortressAIImplementation: AIImplementation = {
     id: 'infantry_fortress',
     name: 'Infantry Fortress',
     description: 'Heavy base defenses with infantry swarms, hijackers, demo trucks, and engineers.',
-    computeActions: ({ state, playerId }) => computeInfantryFortressAiActions(state, playerId),
+    computeActions: ({ state, playerId, entityCache }) => computeInfantryFortressAiActions(state, playerId, entityCache),
     reset: resetAIState
 };

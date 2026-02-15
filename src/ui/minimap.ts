@@ -1,4 +1,4 @@
-import { Entity, PLAYER_COLORS } from '../engine/types.js';
+import { Entity, EntityId, PLAYER_COLORS } from '../engine/types.js';
 
 let minimapCtx: CanvasRenderingContext2D | null = null;
 let minimapCanvas: HTMLCanvasElement | null = null;
@@ -48,6 +48,10 @@ function setupClickHandler(canvas: HTMLCanvasElement) {
     });
 }
 
+function isCanvasVisible(canvas: HTMLCanvasElement): boolean {
+    return canvas.offsetParent !== null && canvas.width > 0 && canvas.height > 0;
+}
+
 
 export function initMinimap() {
     // Regular sidebar minimap
@@ -81,7 +85,7 @@ export function setMinimapClickHandler(handler: (worldX: number, worldY: number)
 function renderToContext(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
-    entities: Entity[],
+    entities: Record<EntityId, Entity>,
     camera: { x: number; y: number },
     zoom: number,
     canvasWidth: number,
@@ -109,7 +113,8 @@ function renderToContext(
 
     // Draw entities
     const time = Date.now();
-    for (const e of entities) {
+    for (const id in entities) {
+        const e = entities[id];
         if (e.dead) continue;
 
         // Check for induction rig - render with glow
@@ -188,7 +193,7 @@ function renderToContext(
 }
 
 export function renderMinimap(
-    entities: Entity[],
+    entities: Record<EntityId, Entity>,
     camera: { x: number; y: number },
     zoom: number,
     canvasWidth: number,
@@ -202,12 +207,12 @@ export function renderMinimap(
     currentMapHeight = mapHeight;
 
     // Render to regular minimap if visible
-    if (minimapCtx && minimapCanvas) {
+    if (minimapCtx && minimapCanvas && isCanvasVisible(minimapCanvas)) {
         renderToContext(minimapCtx, minimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, lowPower, mapWidth, mapHeight);
     }
 
     // Render to observer minimap if visible
-    if (observerMinimapCtx && observerMinimapCanvas) {
+    if (observerMinimapCtx && observerMinimapCanvas && isCanvasVisible(observerMinimapCanvas)) {
         renderToContext(observerMinimapCtx, observerMinimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, false, mapWidth, mapHeight);
     }
 }

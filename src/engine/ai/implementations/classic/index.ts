@@ -1,5 +1,5 @@
 import { GameState, Action, PlayerState, Vector } from '../../../types.js';
-import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -461,7 +461,7 @@ function appendEcoCounterFallbackProduction(
  * Main AI Logic Loop.
  * This is the existing/default ("classic") implementation and preserves legacy behavior.
  */
-export function computeClassicAiActions(state: GameState, playerId: number): Action[] {
+export function computeClassicAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
     if (!player) return actions;
@@ -474,7 +474,7 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
     let personality = getPersonalityForPlayer(playerId);
 
     // PERFORMANCE OPTIMIZATION: Use cached entity lookups
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -718,7 +718,7 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
     actions.push(...handleEmergencySell(state, playerId, myBuildings, player, aiState));
     actions.push(...handleLastResortSell(state, playerId, myBuildings, player, aiState));
     actions.push(...handleAllInSell(state, playerId, myBuildings, aiState));
-    let economyActions = handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies);
+    let economyActions = handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies, cache);
     if (hasEcoTankAllInOpponent) {
         const existingRefineries = myBuildings.filter(b => b.key === 'refinery' && !b.dead).length;
         economyActions = economyActions.filter(action => {
@@ -757,7 +757,8 @@ export function computeClassicAiActions(state: GameState, playerId: number): Act
         aiState.harvesterAI,
         playerId,
         state,
-        player.difficulty
+        player.difficulty,
+        cache
     );
     aiState.harvesterAI = harvesterResult.harvesterAI;
     actions.push(...harvesterResult.actions);
@@ -826,6 +827,6 @@ export const classicAIImplementation: AIImplementation = {
     id: 'classic',
     name: 'Classic',
     description: 'Current built-in RTS AI behavior.',
-    computeActions: ({ state, playerId }) => computeClassicAiActions(state, playerId),
+    computeActions: ({ state, playerId, entityCache }) => computeClassicAiActions(state, playerId, entityCache),
     reset: resetAIState
 };

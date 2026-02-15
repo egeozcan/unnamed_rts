@@ -23,7 +23,7 @@ import {
     ResourceEntity,
     Action
 } from '../../types.js';
-import { createEntityCache, getEnemiesOf } from '../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf } from '../../perf.js';
 import {
     HarvesterAIState,
     HARVESTER_AI_CONSTANTS
@@ -154,7 +154,8 @@ export function updateHarvesterAI(
     harvesterAI: HarvesterAIState,
     playerId: number,
     state: GameState,
-    difficulty: AiDifficulty
+    difficulty: AiDifficulty,
+    sharedCache?: EntityCache
 ): HarvesterAIResult {
     // Early exit for difficulties that don't use harvester AI
     if (difficulty === 'dummy' || difficulty === 'easy') {
@@ -167,7 +168,7 @@ export function updateHarvesterAI(
     const tick = state.tick;
 
     // Create entity cache for efficient lookups
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
 
     // Get player's harvesters
     const playerUnits = cache.unitsByOwner.get(playerId) || [];

@@ -12,6 +12,7 @@
 import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit, Action } from '../engine/types.js';
 import { INITIAL_STATE, update, createPlayerState, tick } from '../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../engine/ai/index.js';
+import { createEntityCache } from '../engine/perf.js';
 import { generateMap, getStartingPositions } from '../game-utils.js';
 
 // Ensure AI implementations are registered
@@ -242,6 +243,7 @@ function runGame(
             // Bias-reduced behavior:
             // 1) All players decide from the same state snapshot.
             // 2) Actions are interleaved in a rotating initiative order.
+            const sharedEntityCache = createEntityCache(state.entities);
             let activeCount = 0;
             for (let i = 0; i < playerIds.length; i++) {
                 const pid = playerIds[i];
@@ -249,7 +251,7 @@ function runGame(
                     actionListsByPlayer[i] = null;
                     continue;
                 }
-                actionListsByPlayer[i] = computeAiActions(state, pid);
+                actionListsByPlayer[i] = computeAiActions(state, pid, sharedEntityCache);
                 activeIndices[activeCount++] = i;
             }
 

@@ -1,4 +1,5 @@
 import { Action, GameState } from '../types.js';
+import { EntityCache } from '../perf.js';
 import { getAIImplementation, DEFAULT_AI_IMPLEMENTATION_ID } from './registry.js';
 
 const warnedUnknownImplementationIds = new Set<string>();
@@ -22,7 +23,7 @@ export function resolveAIImplementationId(state: GameState, playerId: number): s
     return DEFAULT_AI_IMPLEMENTATION_ID;
 }
 
-export function computeAiActionsForPlayer(state: GameState, playerId: number): Action[] {
+export function computeAiActionsForPlayer(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const player = state.players[playerId];
     if (!player) {
         return [];
@@ -37,6 +38,7 @@ export function computeAiActionsForPlayer(state: GameState, playerId: number): A
     return implementation.computeActions({
         state,
         playerId,
-        difficulty: player.difficulty
+        difficulty: player.difficulty,
+        entityCache: sharedCache
     });
 }
