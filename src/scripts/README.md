@@ -17,6 +17,27 @@ This generates:
 
 It also auto-registers the implementation in `src/engine/ai/registry.ts`.
 
+## AI Simulation / Benchmark
+
+Headless AI-vs-AI simulation:
+
+```bash
+npm run ai:simulate -- --games 10 --ai1 classic --ai2 hydra --max-ticks 30000
+```
+
+Deterministic performance benchmark mode:
+
+```bash
+npm run ai:bench -- --games 4 --max-ticks 10000 --benchmark-runs 10 --benchmark-warmup 2 --seed 42
+```
+
+Key options:
+
+- `--seed <N>` deterministic replay seed
+- `--benchmark-runs <N>` measured benchmark repetitions
+- `--benchmark-warmup <N>` warmup repetitions before measured runs
+- `--legacy-turn-order` use sequential action ordering
+
 ## Game State Manipulation Tool
 
 A command-line tool to manipulate saved game states (JSON files). It allows for removing players, units, and buildings based on various criteria, as well as advancing the game simulation.

@@ -53,6 +53,10 @@ export function update(state: GameState, action: Action): GameState {
         case 'CANCEL_PLACEMENT':
             return { ...state, placingBuilding: null };
         case 'COMMAND_MOVE': {
+            if (state.headless) {
+                // Headless simulations don't render command indicators.
+                return commandMove(state, action.payload);
+            }
             const newState = commandMove(state, action.payload);
             // Only show indicator for human commands (units in selection)
             const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
@@ -66,6 +70,10 @@ export function update(state: GameState, action: Action): GameState {
             };
         }
         case 'COMMAND_ATTACK': {
+            if (state.headless) {
+                // Headless simulations don't render command indicators.
+                return commandAttack(state, action.payload);
+            }
             const target = state.entities[action.payload.targetId];
             const newState = commandAttack(state, action.payload);
             // Only show indicator for human commands (units in selection)
@@ -106,6 +114,10 @@ export function update(state: GameState, action: Action): GameState {
         case 'DEQUEUE_UNIT':
             return dequeueUnit(state, action.payload);
         case 'COMMAND_ATTACK_MOVE': {
+            if (state.headless) {
+                // Headless simulations don't render command indicators.
+                return commandAttackMove(state, action.payload);
+            }
             const newState = commandAttackMove(state, action.payload);
             // Only show indicator for human commands (units in selection)
             const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));

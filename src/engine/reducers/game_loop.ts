@@ -22,6 +22,7 @@ const MAX_TRAIL_POINTS = 30;
 export function tick(state: GameState): GameState {
     if (!state.running) return state;
 
+    const headless = state.headless === true;
     const nextTick = state.tick + 1;
 
     // Update path cache tick for proper cache invalidation
@@ -76,7 +77,12 @@ export function tick(state: GameState): GameState {
 
     // Entity Updates
     const updateState = { ...state, players: nextPlayers, entities: nextEntities };
-    const { entities: updatedEntities, projectiles: newProjs, creditsEarned } = updateEntities(updateState);
+    const {
+        entities: updatedEntities,
+        projectiles: newProjs,
+        creditsEarned,
+        hasDemoTruck
+    } = updateEntities(updateState, headless);
 
     // Apply Credits (with difficulty modifier for AI players)
     for (const pidStr in creditsEarned) {
@@ -112,8 +118,6 @@ export function tick(state: GameState): GameState {
     let splashEvents: { projectile: Projectile; hitPos: Vector }[] = [];
     // Temporary state for interception checks (uses updatedEntities from this tick)
     const interceptionState = { ...state, entities: updatedEntities };
-
-    const headless = state.headless;
 
     [...state.projectiles, ...newProjs].forEach(p => {
         // Apply AA interception damage to interceptable projectiles
@@ -222,7 +226,9 @@ export function tick(state: GameState): GameState {
     }
 
     // Process Demo Truck Explosions (chain reactions)
-    const explosionResult = processExplosions(updatedEntities, nextTick, headless);
+    const explosionResult = hasDemoTruck
+        ? processExplosions(updatedEntities, nextTick, headless)
+        : { entities: updatedEntities, particles: [], explosionCount: 0 };
     // Note: We use a mutable reference approach here since updatedEntities is from destructuring
     // Copy the explosion-processed entities back into updatedEntities object
     for (const id in explosionResult.entities) {
@@ -453,18 +459,30 @@ export function tick(state: GameState): GameState {
     };
 }
 
-export function updateEntities(state: GameState): { entities: Record<EntityId, Entity>, projectiles: Projectile[], particles: Particle[], creditsEarned: Record<number, number> } {
+export function updateEntities(
+    state: GameState,
+    headless: boolean = false
+): {
+    entities: Record<EntityId, Entity>,
+    projectiles: Projectile[],
+    particles: Particle[],
+    creditsEarned: Record<number, number>,
+    hasDemoTruck: boolean
+} {
     let nextEntities = { ...state.entities };
     let newProjectiles: Projectile[] = [];
     let newParticles: Particle[] = [];
     let creditsEarned: Record<number, number> = {};
+    let hasDemoTruck = false;
 
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
     const playerIds = Object.keys(state.players).map(Number);
     refreshCollisionGrid(state.entities, state.config, playerIds);
 
     // Sync grids to pathfinding web worker (if enabled)
-    syncGridsToWorker(playerIds);
+    if (!headless) {
+        syncGridsToWorker(playerIds);
+    }
 
     // NOTE: Spatial grid was already rebuilt in tick() before updateWells
     // No need to rebuild again - new ore from wells is rare and minor
@@ -487,6 +505,9 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
         if (entity.dead) continue;
 
         if (entity.type === 'UNIT') {
+            if (entity.key === 'demo_truck') {
+                hasDemoTruck = true;
+            }
             // Check if this is an air unit (harrier) - use different state machine
             if (isAirUnit(entity)) {
                 const airRes = updateAirUnitState(entity, state.entities, entityList);
@@ -591,7 +612,7 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
                 currentEnt = { ...currentEnt, prevPos: currentEnt.pos, pos: currentEnt.pos.add(vel) };
                 const data = getRuleData(currentEnt.key);
                 const canFly = data && isUnitData(data) && data.fly;
-                if (data && !canFly) {
+                if (data && !canFly && !headless) {
                     // Smooth rotation
                     const targetRot = Math.atan2(vel.y, vel.x);
                     let diff = targetRot - currentEnt.movement.rotation;
@@ -618,20 +639,23 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
             }
 
             // Update cooldown and flash in combat component
-            if (currentEnt.combat.cooldown > 0 || currentEnt.combat.flash > 0) {
+            const shouldUpdateCombatTimers = headless
+                ? currentEnt.combat.cooldown > 0
+                : (currentEnt.combat.cooldown > 0 || currentEnt.combat.flash > 0);
+            if (shouldUpdateCombatTimers) {
                 nextEntities[id] = {
                     ...currentEnt,
                     combat: {
                         ...currentEnt.combat,
                         cooldown: Math.max(0, currentEnt.combat.cooldown - 1),
-                        flash: Math.max(0, currentEnt.combat.flash - 1)
+                        flash: headless ? currentEnt.combat.flash : Math.max(0, currentEnt.combat.flash - 1)
                     }
                 };
                 currentEnt = nextEntities[id] as UnitEntity;
             }
 
-            // Update turret angle to track target
-            if (currentEnt.combat.targetId) {
+            // Turret angles are visual-only; skip in headless simulation.
+            if (!headless && currentEnt.combat.targetId) {
                 const target = nextEntities[currentEnt.combat.targetId];
                 if (target && !target.dead) {
                     const deltaX = target.pos.x - currentEnt.pos.x;
@@ -652,17 +676,20 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
         } else if (currentEnt.type === 'BUILDING' && currentEnt.combat) {
             let combat = currentEnt.combat;
             // Update cooldown and flash for defense buildings
-            if (combat.cooldown > 0 || combat.flash > 0) {
+            const shouldUpdateCombatTimers = headless
+                ? combat.cooldown > 0
+                : (combat.cooldown > 0 || combat.flash > 0);
+            if (shouldUpdateCombatTimers) {
                 combat = {
                     ...combat,
                     cooldown: Math.max(0, combat.cooldown - 1),
-                    flash: Math.max(0, combat.flash - 1)
+                    flash: headless ? combat.flash : Math.max(0, combat.flash - 1)
                 };
                 nextEntities[id] = { ...currentEnt, combat };
             }
 
-            // Update turret angle to track target for defense buildings
-            if (combat.targetId) {
+            // Turret angles are visual-only; skip in headless simulation.
+            if (!headless && combat.targetId) {
                 const target = nextEntities[combat.targetId];
                 if (target && !target.dead) {
                     const deltaX = target.pos.x - currentEnt.pos.x;
@@ -736,7 +763,13 @@ export function updateEntities(state: GameState): { entities: Record<EntityId, E
         }
     }
 
-    return { entities: nextEntities, projectiles: newProjectiles, particles: newParticles, creditsEarned };
+    return {
+        entities: nextEntities,
+        projectiles: newProjectiles,
+        particles: newParticles,
+        creditsEarned,
+        hasDemoTruck
+    };
 }
 
 // Mutable version of Entity for collision resolution (allows position updates)

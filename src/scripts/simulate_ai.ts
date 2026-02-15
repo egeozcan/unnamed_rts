@@ -3,7 +3,7 @@
  * Runs multiple headless games between two AI implementations and reports win rates.
  *
  * Usage:
- *   npx tsx src/scripts/simulate_ai.ts [--games N] [--ai1 id] [--ai2 id] [--difficulty d] [--max-ticks N] [--map-size s] [--legacy-turn-order]
+ *   npx tsx src/scripts/simulate_ai.ts [--games N] [--ai1 id] [--ai2 id] [--difficulty d] [--max-ticks N] [--map-size s] [--legacy-turn-order] [--seed N] [--benchmark]
  *
  * Defaults:
  *   --games 10 --ai1 classic --ai2 infantry_fortress --difficulty hard --max-ticks 30000 --map-size medium
@@ -17,9 +17,52 @@ import { generateMap, getStartingPositions } from '../game-utils.js';
 // Ensure AI implementations are registered
 import '../engine/ai/registry.js';
 
+interface SimConfig {
+    games: number;
+    ai1: string;
+    ai2: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    maxTicks: number;
+    mapSize: 'small' | 'medium' | 'large' | 'huge';
+    resourceDensity: 'low' | 'medium' | 'high';
+    rockDensity: 'low' | 'medium' | 'high';
+    verbose: boolean;
+    fairTurnOrder: boolean;
+    seed: number | null;
+    benchmark: boolean;
+    benchmarkRuns: number;
+    benchmarkWarmup: number;
+}
+
+function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function withSeededRandom<T>(seed: number, fn: () => T): T {
+    const originalRandom = Math.random;
+    Math.random = mulberry32(seed);
+    try {
+        return fn();
+    } finally {
+        Math.random = originalRandom;
+    }
+}
+
+function deriveGameSeed(baseSeed: number, gameIndex: number): number {
+    // Deterministic per-game seed derived from one base seed.
+    return (baseSeed + Math.imul(gameIndex + 1, 0x9E3779B1)) >>> 0;
+}
+
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: SimConfig = {
         games: 10,
         ai1: 'classic',
         ai2: 'infantry_fortress',
@@ -30,6 +73,10 @@ function parseArgs() {
         rockDensity: 'medium' as 'low' | 'medium' | 'high',
         verbose: false,
         fairTurnOrder: true,
+        seed: null,
+        benchmark: false,
+        benchmarkRuns: 8,
+        benchmarkWarmup: 2,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -44,6 +91,10 @@ function parseArgs() {
         else if (arg === '--rock-density') config.rockDensity = args[++i] as typeof config.rockDensity;
         else if (arg === '--verbose' || arg === '-v') config.verbose = true;
         else if (arg === '--legacy-turn-order') config.fairTurnOrder = false;
+        else if (arg === '--seed') config.seed = parseInt(args[++i], 10);
+        else if (arg === '--benchmark') config.benchmark = true;
+        else if (arg === '--benchmark-runs') config.benchmarkRuns = parseInt(args[++i], 10);
+        else if (arg === '--benchmark-warmup') config.benchmarkWarmup = parseInt(args[++i], 10);
         else if (arg === '--help') {
             console.log(`
 AI vs AI Simulation
@@ -57,6 +108,10 @@ Usage:
   --map-size <s>            Map size: small, medium, large, huge (default: medium)
   --resource-density <d>    Resource density: low, medium, high (default: medium)
   --rock-density <d>        Rock density: low, medium, high (default: medium)
+  --seed <N>                Deterministic RNG seed (default: random)
+  --benchmark               Run deterministic performance benchmark mode
+  --benchmark-runs <N>      Measured benchmark runs (default: 8)
+  --benchmark-warmup <N>    Warmup runs before timing (default: 2)
   --legacy-turn-order       Use old sequential action order (higher bias)
   --verbose, -v             Print per-tick progress
 `);
@@ -149,6 +204,14 @@ interface GameResult {
     reason: string;
 }
 
+interface SimulationSummary {
+    ai1Wins: number;
+    ai2Wins: number;
+    draws: number;
+    tickCounts: number[];
+    elapsedMs: number;
+}
+
 function runGame(
     state: GameState,
     maxTicks: number,
@@ -158,49 +221,51 @@ function runGame(
 ): GameResult {
     // Pre-compute player IDs to avoid Object.keys() + parseInt() every tick
     const playerIds = Object.keys(state.players).map(s => parseInt(s, 10));
+    const aiPlayerIds = playerIds.filter(pid => state.players[pid]?.isAi);
+    const actionListsByPlayer: (Action[] | null)[] = new Array(playerIds.length).fill(null);
+    const activeIndices: number[] = new Array(playerIds.length).fill(-1);
 
-    resetAIState(0);
-    resetAIState(1);
+    for (const pid of aiPlayerIds) {
+        resetAIState(pid);
+    }
 
     for (let t = 0; t < maxTicks; t++) {
         if (!fairTurnOrder) {
             // Legacy behavior: fixed player order and immediate application.
-            for (const pid of playerIds) {
-                const player = state.players[pid];
-                if (player?.isAi) {
-                    const aiActions = computeAiActions(state, pid);
-                    for (const action of aiActions) {
-                        state = update(state, action);
-                    }
+            for (const pid of aiPlayerIds) {
+                const aiActions = computeAiActions(state, pid);
+                for (const action of aiActions) {
+                    state = update(state, action);
                 }
             }
         } else {
             // Bias-reduced behavior:
             // 1) All players decide from the same state snapshot.
             // 2) Actions are interleaved in a rotating initiative order.
-            const actionListsByPlayer = new Map<number, Action[]>();
-            for (const pid of playerIds) {
-                const player = state.players[pid];
-                if (!player?.isAi) continue;
-                actionListsByPlayer.set(pid, computeAiActions(state, pid));
+            let activeCount = 0;
+            for (let i = 0; i < playerIds.length; i++) {
+                const pid = playerIds[i];
+                if (!state.players[pid]?.isAi) {
+                    actionListsByPlayer[i] = null;
+                    continue;
+                }
+                actionListsByPlayer[i] = computeAiActions(state, pid);
+                activeIndices[activeCount++] = i;
             }
 
-            const activePlayerIds = playerIds.filter(pid => actionListsByPlayer.has(pid));
-            if (activePlayerIds.length > 0) {
-                const startIdx = (gameIndex + t) % activePlayerIds.length;
-                const orderedPlayerIds = activePlayerIds
-                    .slice(startIdx)
-                    .concat(activePlayerIds.slice(0, startIdx));
-
+            if (activeCount > 0) {
+                const startOffset = (gameIndex + t) % activeCount;
                 let maxActions = 0;
-                for (const pid of orderedPlayerIds) {
-                    const count = actionListsByPlayer.get(pid)?.length ?? 0;
+                for (let i = 0; i < activeCount; i++) {
+                    const actionList = actionListsByPlayer[activeIndices[i]];
+                    const count = actionList ? actionList.length : 0;
                     if (count > maxActions) maxActions = count;
                 }
 
                 for (let actionIndex = 0; actionIndex < maxActions; actionIndex++) {
-                    for (const pid of orderedPlayerIds) {
-                        const actions = actionListsByPlayer.get(pid);
+                    for (let i = 0; i < activeCount; i++) {
+                        const orderedActiveIndex = (startOffset + i) % activeCount;
+                        const actions = actionListsByPlayer[activeIndices[orderedActiveIndex]];
                         if (!actions || actionIndex >= actions.length) continue;
                         state = update(state, actions[actionIndex]);
                     }
@@ -248,55 +313,142 @@ function runGame(
     return { winner: null, ticks: maxTicks, reason: 'timeout' };
 }
 
-function main() {
-    const config = parseArgs();
-
-    console.log(`\nAI vs AI Simulation`);
-    console.log(`==================`);
-    console.log(`AI 1 (Player 0): ${config.ai1}`);
-    console.log(`AI 2 (Player 1): ${config.ai2}`);
-    console.log(`Difficulty: ${config.difficulty}`);
-    console.log(`Games: ${config.games}`);
-    console.log(`Max ticks: ${config.maxTicks}`);
-    console.log(`Map: ${config.mapSize}, resources: ${config.resourceDensity}, rocks: ${config.rockDensity}`);
-    console.log(`Turn order: ${config.fairTurnOrder ? 'fair (interleaved + rotating)' : 'legacy (sequential)'}`);
-    console.log(`---`);
-
+function runSimulationSeries(config: SimConfig, printPerGame: boolean): SimulationSummary {
     let ai1Wins = 0;
     let ai2Wins = 0;
     let draws = 0;
     const tickCounts: number[] = [];
+    const seriesStartNs = process.hrtime.bigint();
 
     for (let game = 0; game < config.games; game++) {
-        const state = createGameState(
-            config.ai1, config.ai2,
-            config.difficulty, config.mapSize,
-            config.resourceDensity, config.rockDensity
-        );
+        const runOneGame = () => {
+            const state = createGameState(
+                config.ai1, config.ai2,
+                config.difficulty, config.mapSize,
+                config.resourceDensity, config.rockDensity
+            );
+            const gameStartNs = process.hrtime.bigint();
+            const result = runGame(state, config.maxTicks, config.verbose, game, config.fairTurnOrder);
+            const elapsedMs = Number(process.hrtime.bigint() - gameStartNs) / 1_000_000;
+            return { result, elapsedMs };
+        };
 
-        const startTime = Date.now();
-        const result = runGame(state, config.maxTicks, config.verbose, game, config.fairTurnOrder);
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const gameSeed = config.seed === null ? null : deriveGameSeed(config.seed, game);
+        const { result, elapsedMs } = gameSeed === null
+            ? runOneGame()
+            : withSeededRandom(gameSeed, runOneGame);
 
         tickCounts.push(result.ticks);
 
         if (result.winner === 0) {
             ai1Wins++;
-            console.log(`Game ${game + 1}: ${config.ai1} wins at tick ${result.ticks} (${elapsed}s)`);
+            if (printPerGame) {
+                console.log(`Game ${game + 1}: ${config.ai1} wins at tick ${result.ticks} (${(elapsedMs / 1000).toFixed(1)}s)`);
+            }
         } else if (result.winner === 1) {
             ai2Wins++;
-            console.log(`Game ${game + 1}: ${config.ai2} wins at tick ${result.ticks} (${elapsed}s)`);
+            if (printPerGame) {
+                console.log(`Game ${game + 1}: ${config.ai2} wins at tick ${result.ticks} (${(elapsedMs / 1000).toFixed(1)}s)`);
+            }
         } else {
             draws++;
-            console.log(`Game ${game + 1}: ${result.reason} at tick ${result.ticks} (${elapsed}s)`);
+            if (printPerGame) {
+                console.log(`Game ${game + 1}: ${result.reason} at tick ${result.ticks} (${(elapsedMs / 1000).toFixed(1)}s)`);
+            }
         }
     }
 
+    const elapsedMs = Number(process.hrtime.bigint() - seriesStartNs) / 1_000_000;
+    return { ai1Wins, ai2Wins, draws, tickCounts, elapsedMs };
+}
+
+function mean(values: number[]): number {
+    if (values.length === 0) return 0;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function median(values: number[]): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) {
+        return (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+    return sorted[mid];
+}
+
+function stddev(values: number[]): number {
+    if (values.length <= 1) return 0;
+    const avg = mean(values);
+    const variance = mean(values.map(v => (v - avg) ** 2));
+    return Math.sqrt(variance);
+}
+
+function main() {
+    const config = parseArgs();
+    const effectiveSeed = config.seed ?? (config.benchmark ? 1337 : null);
+    const runConfig: SimConfig = {
+        ...config,
+        seed: effectiveSeed
+    };
+
+    console.log(`\nAI vs AI Simulation`);
+    console.log(`==================`);
+    console.log(`AI 1 (Player 0): ${runConfig.ai1}`);
+    console.log(`AI 2 (Player 1): ${runConfig.ai2}`);
+    console.log(`Difficulty: ${runConfig.difficulty}`);
+    console.log(`Games: ${runConfig.games}`);
+    console.log(`Max ticks: ${runConfig.maxTicks}`);
+    console.log(`Map: ${runConfig.mapSize}, resources: ${runConfig.resourceDensity}, rocks: ${runConfig.rockDensity}`);
+    console.log(`Turn order: ${runConfig.fairTurnOrder ? 'fair (interleaved + rotating)' : 'legacy (sequential)'}`);
+    if (runConfig.seed !== null) {
+        console.log(`Seed: ${runConfig.seed}${config.seed === null && config.benchmark ? ' (benchmark default)' : ''}`);
+    }
+    console.log(`---`);
+
+    if (runConfig.benchmark) {
+        const warmupRuns = Math.max(0, runConfig.benchmarkWarmup);
+        const measuredRuns = Math.max(1, runConfig.benchmarkRuns);
+        const totalTicksPerSeries = runConfig.games * runConfig.maxTicks;
+        console.log(`Benchmark: ${warmupRuns} warmup + ${measuredRuns} measured run(s)`);
+
+        for (let i = 0; i < warmupRuns; i++) {
+            runSimulationSeries(runConfig, false);
+            console.log(`Warmup ${i + 1}/${warmupRuns} complete`);
+        }
+
+        const runTimesMs: number[] = [];
+        const runTicksPerSec: number[] = [];
+
+        for (let i = 0; i < measuredRuns; i++) {
+            const summary = runSimulationSeries(runConfig, false);
+            const ticks = summary.tickCounts.reduce((a, b) => a + b, 0);
+            const ticksPerSec = ticks / (summary.elapsedMs / 1000);
+            runTimesMs.push(summary.elapsedMs);
+            runTicksPerSec.push(ticksPerSec);
+            console.log(`Run ${i + 1}/${measuredRuns}: ${(summary.elapsedMs / 1000).toFixed(3)}s, ${ticksPerSec.toFixed(0)} ticks/s`);
+        }
+
+        console.log(`\n==================`);
+        console.log(`Benchmark Results:`);
+        console.log(`  Mean time: ${(mean(runTimesMs) / 1000).toFixed(3)}s`);
+        console.log(`  Median time: ${(median(runTimesMs) / 1000).toFixed(3)}s`);
+        console.log(`  Std dev: ${(stddev(runTimesMs) / 1000).toFixed(3)}s`);
+        console.log(`  Mean throughput: ${mean(runTicksPerSec).toFixed(0)} ticks/s`);
+        console.log(`  Median throughput: ${median(runTicksPerSec).toFixed(0)} ticks/s`);
+        console.log(`  Workload size: up to ${totalTicksPerSeries} ticks/run`);
+        console.log();
+        return;
+    }
+
+    const summary = runSimulationSeries(runConfig, true);
+    const { ai1Wins, ai2Wins, draws, tickCounts } = summary;
+
     console.log(`\n==================`);
     console.log(`Results:`);
-    console.log(`  ${config.ai1}: ${ai1Wins} wins (${(ai1Wins / config.games * 100).toFixed(1)}%)`);
-    console.log(`  ${config.ai2}: ${ai2Wins} wins (${(ai2Wins / config.games * 100).toFixed(1)}%)`);
-    console.log(`  Draws/Timeouts: ${draws} (${(draws / config.games * 100).toFixed(1)}%)`);
+    console.log(`  ${runConfig.ai1}: ${ai1Wins} wins (${(ai1Wins / runConfig.games * 100).toFixed(1)}%)`);
+    console.log(`  ${runConfig.ai2}: ${ai2Wins} wins (${(ai2Wins / runConfig.games * 100).toFixed(1)}%)`);
+    console.log(`  Draws/Timeouts: ${draws} (${(draws / runConfig.games * 100).toFixed(1)}%)`);
 
     const avgTicks = tickCounts.reduce((a, b) => a + b, 0) / tickCounts.length;
     console.log(`  Avg game length: ${Math.round(avgTicks)} ticks`);

@@ -45,6 +45,8 @@ Open http://localhost:5173 in your browser to play.
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Generate test coverage report to `./coverage/` |
 | `npm run manipulate-state` | CLI tool for game state manipulation |
+| `npm run ai:simulate -- ...` | Headless AI vs AI simulation runner |
+| `npm run ai:bench -- ...` | Deterministic AI simulation benchmark runner |
 
 Run a single test file:
 ```bash
@@ -287,6 +289,26 @@ Features:
 - Remove players, units, or buildings
 - List units by distance
 - Advance game simulation
+
+### AI Simulation and Benchmarking
+
+Run headless AI vs AI simulations:
+
+```bash
+npm run ai:simulate -- --games 10 --ai1 hydra --ai2 classic --max-ticks 20000
+```
+
+Run deterministic benchmark mode (repeatable throughput/timing):
+
+```bash
+npm run ai:bench -- --games 4 --max-ticks 10000 --benchmark-runs 10 --benchmark-warmup 2 --seed 42
+```
+
+Useful flags:
+- `--seed <N>` for deterministic replay
+- `--benchmark-runs <N>` for measured runs
+- `--benchmark-warmup <N>` for warmup runs
+- `--legacy-turn-order` to benchmark the old sequential action order
 
 ## Configuration
 
