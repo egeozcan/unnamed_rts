@@ -21,6 +21,7 @@ import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
+import { createEntityCache } from './engine/perf.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
 import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap } from './game-utils.js';
 
@@ -67,6 +68,97 @@ const aiImplementationOptions = getAIImplementationOptions();
 
 const BUTTONS_MIN_TICK_DELTA = 5;
 const BUTTONS_MIN_TIME_DELTA_MS = 80;
+const MINIMAP_MIN_TICK_DELTA = 2;
+const MINIMAP_MIN_TIME_DELTA_MS = 66;
+const BIRDS_EYE_MIN_TICK_DELTA = 2;
+const BIRDS_EYE_MIN_TIME_DELTA_MS = 83;
+const DEBUG_UI_MIN_TICK_DELTA = 3;
+const DEBUG_UI_MIN_TIME_DELTA_MS = 100;
+const FRAME_TIMING_WINDOW = 300;
+
+interface RollingTimingWindow {
+    values: Float64Array;
+    index: number;
+    count: number;
+    sum: number;
+}
+
+interface FrameStageTimingSummary {
+    avg: number;
+    p95: number;
+    max: number;
+}
+
+interface FrameTimingSummary {
+    sampleCount: number;
+    simMs: FrameStageTimingSummary;
+    renderMs: FrameStageTimingSummary;
+    uiMs: FrameStageTimingSummary;
+    frameMs: FrameStageTimingSummary;
+}
+
+function createRollingTimingWindow(size: number): RollingTimingWindow {
+    return {
+        values: new Float64Array(size),
+        index: 0,
+        count: 0,
+        sum: 0
+    };
+}
+
+function recordRollingTiming(window: RollingTimingWindow, value: number): void {
+    const clampedValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+    if (window.count === window.values.length) {
+        window.sum -= window.values[window.index];
+    } else {
+        window.count++;
+    }
+
+    window.values[window.index] = clampedValue;
+    window.sum += clampedValue;
+    window.index = (window.index + 1) % window.values.length;
+}
+
+function summarizeRollingTiming(window: RollingTimingWindow): FrameStageTimingSummary {
+    if (window.count === 0) {
+        return { avg: 0, p95: 0, max: 0 };
+    }
+
+    const sample = Array.from(window.values.slice(0, window.count));
+    sample.sort((a, b) => a - b);
+    const p95Index = Math.min(sample.length - 1, Math.ceil(sample.length * 0.95) - 1);
+    const max = sample[sample.length - 1];
+
+    return {
+        avg: window.sum / window.count,
+        p95: sample[p95Index],
+        max
+    };
+}
+
+const simTimingWindow = createRollingTimingWindow(FRAME_TIMING_WINDOW);
+const renderTimingWindow = createRollingTimingWindow(FRAME_TIMING_WINDOW);
+const uiTimingWindow = createRollingTimingWindow(FRAME_TIMING_WINDOW);
+const frameTimingWindow = createRollingTimingWindow(FRAME_TIMING_WINDOW);
+
+let lastMinimapTick = -1;
+let lastMinimapTimeMs = -Infinity;
+let lastBirdsEyeTick = -1;
+let lastBirdsEyeTimeMs = -Infinity;
+let lastDebugUiTick = -1;
+let lastDebugUiTimeMs = -Infinity;
+let latestFrameTimingSummary: FrameTimingSummary | null = null;
+let wasDebugMode = false;
+
+function buildFrameTimingSummary(): FrameTimingSummary {
+    return {
+        sampleCount: frameTimingWindow.count,
+        simMs: summarizeRollingTiming(simTimingWindow),
+        renderMs: summarizeRollingTiming(renderTimingWindow),
+        uiMs: summarizeRollingTiming(uiTimingWindow),
+        frameMs: summarizeRollingTiming(frameTimingWindow)
+    };
+}
 
 function applyAiActionsForTick(state: GameState, initiativeSeed: number): GameState {
     const aiPlayerIds = Object.keys(state.players)
@@ -77,9 +169,10 @@ function applyAiActionsForTick(state: GameState, initiativeSeed: number): GameSt
         return state;
     }
 
+    const sharedEntityCache = createEntityCache(state.entities);
     const actionListsByPlayer = new Map<number, Action[]>();
     for (const pid of aiPlayerIds) {
-        actionListsByPlayer.set(pid, computeAiActions(state, pid));
+        actionListsByPlayer.set(pid, computeAiActions(state, pid, sharedEntityCache));
     }
 
     const activePlayerIds = aiPlayerIds.filter(pid => (actionListsByPlayer.get(pid)?.length ?? 0) > 0);
@@ -1089,6 +1182,9 @@ function gameLoop(timestamp: number = 0) {
         return;
     }
 
+    const frameStartMs = performance.now();
+    const simStartMs = frameStartMs;
+
     if (currentState.debugMode) {
         // Just render, don't update
     } else {
@@ -1101,6 +1197,10 @@ function gameLoop(timestamp: number = 0) {
             currentState = update(currentState, { type: 'TICK' });
         }
     }
+    const simMs = performance.now() - simStartMs;
+
+    let uiMs = 0;
+    const preRenderUiStartMs = performance.now();
 
     // Update UI - use human player's data, or first player if observer
     const displayPlayerId = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
@@ -1130,6 +1230,7 @@ function gameLoop(timestamp: number = 0) {
         lastButtonsTick = currentState.tick;
         lastButtonsTimeMs = timestamp;
     }
+    uiMs += performance.now() - preRenderUiStartMs;
 
     // Expose state for debugging
     window.GAME_STATE = currentState;
@@ -1137,6 +1238,7 @@ function gameLoop(timestamp: number = 0) {
 
     // Camera & Zoom Input
     const input = getInputState();
+    const renderStartMs = performance.now();
 
     const oldZoom = currentState.zoom;
     const newZoom = handleZoomInput(oldZoom);
@@ -1185,22 +1287,33 @@ function gameLoop(timestamp: number = 0) {
         const mouseWorldY = currentState.camera.y + input.mouse.y / currentState.zoom;
         updateActionCursor(currentState, mouseWorldX, mouseWorldY, humanPlayerId);
     }
+    const renderMs = performance.now() - renderStartMs;
 
+    const postRenderUiStartMs = performance.now();
     // Minimap
     const size = renderer.getSize();
     const lowPower = cachedPower.out < cachedPower.in;
-    // OPTIMIZATION: Pass entities record directly instead of creating array with Object.values()
-    // The minimap function can iterate over the record if needed
-    renderMinimap(
-        Object.values(currentState.entities),
-        currentState.camera,
-        currentState.zoom,
-        size.width,
-        size.height,
-        lowPower,
-        currentState.config.width,
-        currentState.config.height
-    );
+    if (shouldRunCadencedUpdate({
+        currentTick: currentState.tick,
+        currentTimeMs: timestamp,
+        lastTick: lastMinimapTick,
+        lastTimeMs: lastMinimapTimeMs,
+        minTickDelta: MINIMAP_MIN_TICK_DELTA,
+        minTimeDeltaMs: MINIMAP_MIN_TIME_DELTA_MS
+    })) {
+        renderMinimap(
+            currentState.entities,
+            currentState.camera,
+            currentState.zoom,
+            size.width,
+            size.height,
+            lowPower,
+            currentState.config.width,
+            currentState.config.height
+        );
+        lastMinimapTick = currentState.tick;
+        lastMinimapTimeMs = timestamp;
+    }
 
     // Scoreboard
     updateScoreboard(currentState, timestamp);
@@ -1214,10 +1327,46 @@ function gameLoop(timestamp: number = 0) {
     }
 
     // Bird's Eye View
-    renderBirdsEye(currentState, size.width, size.height);
+    if (!currentState.showBirdsEye) {
+        renderBirdsEye(currentState, size.width, size.height);
+    } else if (shouldRunCadencedUpdate({
+        currentTick: currentState.tick,
+        currentTimeMs: timestamp,
+        lastTick: lastBirdsEyeTick,
+        lastTimeMs: lastBirdsEyeTimeMs,
+        minTickDelta: BIRDS_EYE_MIN_TICK_DELTA,
+        minTimeDeltaMs: BIRDS_EYE_MIN_TIME_DELTA_MS
+    })) {
+        renderBirdsEye(currentState, size.width, size.height);
+        lastBirdsEyeTick = currentState.tick;
+        lastBirdsEyeTimeMs = timestamp;
+    }
 
     // Debug UI
-    updateDebugUI(currentState);
+    if (currentState.debugMode && shouldRunCadencedUpdate({
+        currentTick: currentState.tick,
+        currentTimeMs: timestamp,
+        lastTick: lastDebugUiTick,
+        lastTimeMs: lastDebugUiTimeMs,
+        minTickDelta: DEBUG_UI_MIN_TICK_DELTA,
+        minTimeDeltaMs: DEBUG_UI_MIN_TIME_DELTA_MS
+    })) {
+        updateDebugUI(currentState, latestFrameTimingSummary);
+        lastDebugUiTick = currentState.tick;
+        lastDebugUiTimeMs = timestamp;
+        wasDebugMode = true;
+    } else if (!currentState.debugMode && wasDebugMode) {
+        updateDebugUI(currentState, latestFrameTimingSummary);
+        wasDebugMode = false;
+    }
+    uiMs += performance.now() - postRenderUiStartMs;
+
+    const frameMs = performance.now() - frameStartMs;
+    recordRollingTiming(simTimingWindow, simMs);
+    recordRollingTiming(renderTimingWindow, renderMs);
+    recordRollingTiming(uiTimingWindow, uiMs);
+    recordRollingTiming(frameTimingWindow, frameMs);
+    latestFrameTimingSummary = buildFrameTimingSummary();
 
     animationFrameId = requestAnimationFrame(gameLoop);
 }

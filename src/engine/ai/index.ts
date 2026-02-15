@@ -1,4 +1,5 @@
 import { GameState, Action } from '../types.js';
+import { EntityCache } from '../perf.js';
 
 // Public AI module exports
 export * from './types.js';
@@ -67,8 +68,8 @@ import {
 import { computeAiActionsForPlayer } from './controller.js';
 import { computeClassicAiActions } from './implementations/classic/index.js';
 
-export function computeAiActions(state: GameState, playerId: number): Action[] {
-    return computeAiActionsForPlayer(state, playerId);
+export function computeAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
+    return computeAiActionsForPlayer(state, playerId, sharedCache);
 }
 
 // Export internal functions for testing and backward compatibility

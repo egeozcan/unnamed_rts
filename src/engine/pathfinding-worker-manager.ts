@@ -33,6 +33,8 @@ class PathfindingWorkerManager {
     private pendingRequests: Map<number, PendingRequest> = new Map();
     private enabled = true;
     private initPromise: Promise<void> | null = null;
+    private collisionGridScratch: Uint8Array | null = null;
+    private dangerGridScratchByPlayer = new Map<number, Uint8Array>();
 
     // Request timeout in ms
     private readonly REQUEST_TIMEOUT = 1000;
@@ -138,16 +140,19 @@ class PathfindingWorkerManager {
     updateCollisionGrid(grid: Uint8Array, gridW: number, gridH: number): void {
         if (!this.isEnabled()) return;
 
-        // Transfer a copy of the grid to the worker
-        const gridCopy = new Uint8Array(grid);
+        if (!this.collisionGridScratch || this.collisionGridScratch.length !== grid.length) {
+            this.collisionGridScratch = new Uint8Array(grid.length);
+        }
+        this.collisionGridScratch.set(grid);
+
         this.worker!.postMessage({
             type: 'updateCollision',
             data: {
-                data: gridCopy.buffer,
+                data: this.collisionGridScratch,
                 gridW,
                 gridH
             }
-        }, [gridCopy.buffer]);
+        });
     }
 
     /**
@@ -156,14 +161,20 @@ class PathfindingWorkerManager {
     updateDangerGrid(playerId: number, grid: Uint8Array): void {
         if (!this.isEnabled()) return;
 
-        const gridCopy = new Uint8Array(grid);
+        let scratch = this.dangerGridScratchByPlayer.get(playerId);
+        if (!scratch || scratch.length !== grid.length) {
+            scratch = new Uint8Array(grid.length);
+            this.dangerGridScratchByPlayer.set(playerId, scratch);
+        }
+        scratch.set(grid);
+
         this.worker!.postMessage({
             type: 'updateDanger',
             data: {
                 playerId,
-                data: gridCopy.buffer
+                data: scratch
             }
-        }, [gridCopy.buffer]);
+        });
     }
 
     /**
@@ -300,6 +311,8 @@ class PathfindingWorkerManager {
             this.ready = false;
         }
         this.pendingRequests.clear();
+        this.collisionGridScratch = null;
+        this.dangerGridScratchByPlayer.clear();
     }
 }
 

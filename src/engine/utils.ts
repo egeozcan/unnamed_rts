@@ -31,22 +31,46 @@ function getPathCacheKey(startGx: number, startGy: number, goalGx: number, goalG
     return `${startGx},${startGy}->${goalGx},${goalGy}:${ownerId ?? -1}`;
 }
 
+function areUint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Dynamic Grid Manager - allows resizing based on map config
 class GridManager {
     private _gridW: number = DEFAULT_GRID_W;
     private _gridH: number = DEFAULT_GRID_H;
     private _collisionGrid: Uint8Array;
     private _dangerGrids: Record<number, Uint8Array>;
+    private _collisionRevision = 0;
+    private _dangerRevisions: Record<number, number>;
+    private _lastCollisionSnapshot: Uint8Array;
+    private _lastDangerSnapshots: Record<number, Uint8Array>;
 
     constructor() {
         this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
         this._dangerGrids = {}; // Danger grids created on-demand for each player
+        this._dangerRevisions = {};
+        this._lastCollisionSnapshot = new Uint8Array(this._collisionGrid.length);
+        this._lastDangerSnapshots = {};
     }
 
     get gridW(): number { return this._gridW; }
     get gridH(): number { return this._gridH; }
     get collisionGrid(): Uint8Array { return this._collisionGrid; }
     get dangerGrids(): Record<number, Uint8Array> { return this._dangerGrids; }
+    get collisionRevision(): number { return this._collisionRevision; }
+
+    getDangerRevision(playerId: number): number {
+        return this._dangerRevisions[playerId] || 0;
+    }
 
     // Resize grids if map config changed
     ensureSize(mapWidth: number, mapHeight: number): void {
@@ -57,11 +81,15 @@ class GridManager {
             this._gridW = newGridW;
             this._gridH = newGridH;
             this._collisionGrid = new Uint8Array(this._gridW * this._gridH);
+            this._lastCollisionSnapshot = new Uint8Array(this._collisionGrid.length);
+            this._collisionRevision++;
             // Recreate danger grids for all existing players
             const existingPlayerIds = Object.keys(this._dangerGrids).map(Number);
             this._dangerGrids = {};
             for (const pid of existingPlayerIds) {
                 this._dangerGrids[pid] = new Uint8Array(this._gridW * this._gridH);
+                this._dangerRevisions[pid] = (this._dangerRevisions[pid] || 0) + 1;
+                this._lastDangerSnapshots[pid] = new Uint8Array(this._gridW * this._gridH);
             }
         }
     }
@@ -78,6 +106,36 @@ class GridManager {
     ensureDangerGrid(playerId: number): void {
         if (!this._dangerGrids[playerId]) {
             this._dangerGrids[playerId] = new Uint8Array(this._gridW * this._gridH);
+            this._dangerRevisions[playerId] = this._dangerRevisions[playerId] || 0;
+            this._lastDangerSnapshots[playerId] = new Uint8Array(this._gridW * this._gridH);
+        }
+    }
+
+    refreshRevisions(playerIds: number[]): void {
+        if (this._lastCollisionSnapshot.length !== this._collisionGrid.length ||
+            !areUint8ArraysEqual(this._collisionGrid, this._lastCollisionSnapshot)) {
+            if (this._lastCollisionSnapshot.length !== this._collisionGrid.length) {
+                this._lastCollisionSnapshot = new Uint8Array(this._collisionGrid.length);
+            }
+            this._lastCollisionSnapshot.set(this._collisionGrid);
+            this._collisionRevision++;
+        }
+
+        for (const playerId of playerIds) {
+            const currentDanger = this._dangerGrids[playerId];
+            if (!currentDanger) continue;
+
+            const lastSnapshot = this._lastDangerSnapshots[playerId];
+            if (!lastSnapshot || lastSnapshot.length !== currentDanger.length) {
+                this._lastDangerSnapshots[playerId] = new Uint8Array(currentDanger);
+                this._dangerRevisions[playerId] = (this._dangerRevisions[playerId] || 0) + 1;
+                continue;
+            }
+
+            if (!areUint8ArraysEqual(currentDanger, lastSnapshot)) {
+                lastSnapshot.set(currentDanger);
+                this._dangerRevisions[playerId] = (this._dangerRevisions[playerId] || 0) + 1;
+            }
         }
     }
 
@@ -210,6 +268,8 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
             }
         }
     }
+
+    gridManager.refreshRevisions(allPlayerIds);
 }
 
 /**
@@ -263,7 +323,12 @@ export async function initPathfindingWorker(mapWidth: number, mapHeight: number)
     const gridW = Math.ceil(mapWidth / TILE_SIZE);
     const gridH = Math.ceil(mapHeight / TILE_SIZE);
     await pathfindingWorker.init(gridW, gridH);
+    lastSyncedCollisionRevision = -1;
+    lastSyncedDangerRevisions.clear();
 }
+
+let lastSyncedCollisionRevision = -1;
+const lastSyncedDangerRevisions = new Map<number, number>();
 
 /**
  * Sync collision and danger grids to the pathfinding worker.
@@ -272,18 +337,29 @@ export async function initPathfindingWorker(mapWidth: number, mapHeight: number)
 export function syncGridsToWorker(playerIds: number[]): void {
     if (!pathfindingWorker.isEnabled()) return;
 
-    // Sync collision grid
-    pathfindingWorker.updateCollisionGrid(
-        gridManager.collisionGrid,
-        gridManager.gridW,
-        gridManager.gridH
-    );
+    const collisionRevision = gridManager.collisionRevision;
+    if (collisionRevision !== lastSyncedCollisionRevision) {
+        pathfindingWorker.updateCollisionGrid(
+            gridManager.collisionGrid,
+            gridManager.gridW,
+            gridManager.gridH
+        );
+        lastSyncedCollisionRevision = collisionRevision;
+    }
 
     // Sync danger grids for each player
     for (const playerId of playerIds) {
         const dangerGrid = gridManager.dangerGrids[playerId];
-        if (dangerGrid) {
+        const dangerRevision = gridManager.getDangerRevision(playerId);
+        if (dangerGrid && lastSyncedDangerRevisions.get(playerId) !== dangerRevision) {
             pathfindingWorker.updateDangerGrid(playerId, dangerGrid);
+            lastSyncedDangerRevisions.set(playerId, dangerRevision);
+        }
+    }
+
+    for (const trackedPlayerId of Array.from(lastSyncedDangerRevisions.keys())) {
+        if (!playerIds.includes(trackedPlayerId)) {
+            lastSyncedDangerRevisions.delete(trackedPlayerId);
         }
     }
 }

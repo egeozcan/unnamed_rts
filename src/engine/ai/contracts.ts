@@ -1,4 +1,5 @@
 import { Action, GameState } from '../types.js';
+import { EntityCache } from '../perf.js';
 
 export type AIImplementationDifficulty = 'dummy' | 'easy' | 'medium' | 'hard';
 
@@ -6,6 +7,7 @@ export interface AIImplementationContext {
     readonly state: GameState;
     readonly playerId: number;
     readonly difficulty: AIImplementationDifficulty;
+    readonly entityCache?: EntityCache;
 }
 
 export interface AIImplementation {

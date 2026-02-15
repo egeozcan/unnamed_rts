@@ -1,6 +1,6 @@
 import { GameState, Action } from '../../../types.js';
 import { RULES } from '../../../../data/schemas/index.js';
-import { createEntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     findBaseCenter,
@@ -75,7 +75,7 @@ const GENIUS_PERSONALITY = {
     surplus_production_threshold: 3000
 };
 
-export function computeGeniusAiActions(state: GameState, playerId: number): Action[] {
+export function computeGeniusAiActions(state: GameState, playerId: number, sharedCache?: EntityCache): Action[] {
     const actions: Action[] = [];
     const player = state.players[playerId];
     if (!player) return actions;
@@ -97,7 +97,7 @@ export function computeGeniusAiActions(state: GameState, playerId: number): Acti
     };
 
     // PERFORMANCE OPTIMIZATION: Use cached entity lookups
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -250,7 +250,7 @@ export function computeGeniusAiActions(state: GameState, playerId: number): Acti
 
     // Genius Economy: standard economy handling but effectively uses the tuned personality
     // We pass 'hard' difficulty
-    actions.push(...(handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies) || []));
+    actions.push(...(handleEconomy(state, playerId, myBuildings, player, personality, aiState, enemies, cache) || []));
 
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
@@ -262,7 +262,8 @@ export function computeGeniusAiActions(state: GameState, playerId: number): Acti
         aiState.harvesterAI,
         playerId,
         state,
-        'hard'
+        'hard',
+        cache
     );
     aiState.harvesterAI = harvesterResult.harvesterAI;
     actions.push(...harvesterResult.actions);
@@ -344,5 +345,6 @@ export const geniusAIImplementation = {
     id: 'genius',
     name: 'Genius',
     description: 'An advanced AI that uses superior tactics and economy.',
-    computeActions: ({ state, playerId }: { state: GameState, playerId: number }) => computeGeniusAiActions(state, playerId)
+    computeActions: ({ state, playerId, entityCache }: { state: GameState, playerId: number, entityCache?: EntityCache }) =>
+        computeGeniusAiActions(state, playerId, entityCache)
 };

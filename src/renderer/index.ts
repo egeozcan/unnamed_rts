@@ -8,6 +8,13 @@ import { isAirUnit } from '../engine/entity-helpers.js';
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
     private canvas: HTMLCanvasElement;
+    private readonly selectionSet = new Set<string>();
+    private readonly screenCulledEntities: Entity[] = [];
+    private readonly resourceEntities: Entity[] = [];
+    private readonly rockEntities: Entity[] = [];
+    private readonly wellEntities: Entity[] = [];
+    private readonly unitBuildingEntities: Entity[] = [];
+    private readonly primaryBuildingIds = new Set<string>();
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -39,6 +46,11 @@ export class Renderer {
     render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null, scrollOrigin: { x: number; y: number } | null = null) {
         const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
+
+        this.selectionSet.clear();
+        for (const selectedId of selection) {
+            this.selectionSet.add(selectedId);
+        }
 
         // Clear
         ctx.fillStyle = '#2d3322';
@@ -80,32 +92,39 @@ export class Renderer {
         const queryRadius = Math.sqrt(viewWidth * viewWidth + viewHeight * viewHeight) / 2;
 
         const visibleEntities = getSpatialGrid().queryRadius(viewCenterX, viewCenterY, queryRadius);
+        const screenCulledEntities = this.screenCulledEntities;
+        screenCulledEntities.length = 0;
 
-        // OPTIMIZATION: Early culling - filter out entities outside screen bounds before sorting
-        // This is more precise than the spatial grid query and happens before expensive sorting
-        const screenCulledEntities = visibleEntities.filter(e => {
-            if (e.dead) return false;
+        // OPTIMIZATION: Early culling - filter out entities outside screen bounds before sorting.
+        for (const e of visibleEntities) {
+            if (e.dead) continue;
 
             // Quick screen bounds check using world coordinates
             const screenX = (e.pos.x - cameraX) * zoom;
             const screenY = (e.pos.y - cameraY) * zoom;
             const screenRadius = e.radius * zoom;
 
-            return screenX + screenRadius >= -100 &&
+            if (screenX + screenRadius >= -100 &&
                 screenX - screenRadius <= canvasWidth + 100 &&
                 screenY + screenRadius >= -100 &&
-                screenY - screenRadius <= canvasHeight + 100;
-        });
+                screenY - screenRadius <= canvasHeight + 100) {
+                screenCulledEntities.push(e);
+            }
+        }
 
         // Sort only visible entities by Y for proper layering
         const sortedEntities = screenCulledEntities.sort((a, b) => a.pos.y - b.pos.y);
 
         // OPTIMIZATION: Batch entities by type to reduce context state changes
         // Group entities into batches: RESOURCE, ROCK, WELL, then UNIT/BUILDING by owner
-        const resourceEntities: Entity[] = [];
-        const rockEntities: Entity[] = [];
-        const wellEntities: Entity[] = [];
-        const unitBuildingEntities: Entity[] = [];
+        const resourceEntities = this.resourceEntities;
+        const rockEntities = this.rockEntities;
+        const wellEntities = this.wellEntities;
+        const unitBuildingEntities = this.unitBuildingEntities;
+        resourceEntities.length = 0;
+        rockEntities.length = 0;
+        wellEntities.length = 0;
+        unitBuildingEntities.length = 0;
 
         for (const entity of sortedEntities) {
             if (entity.type === 'RESOURCE') {
@@ -121,22 +140,22 @@ export class Renderer {
 
         // Draw resources (no owner-specific colors)
         for (const entity of resourceEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw rocks (no owner-specific colors)
         for (const entity of rockEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw wells (no owner-specific colors)
         for (const entity of wellEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw units and buildings (batched by owner for color caching)
         for (const entity of unitBuildingEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, selection.includes(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
         }
 
         // Draw rally points for selected production buildings (barracks/factory only)
@@ -151,17 +170,18 @@ export class Renderer {
         }
 
         // Draw primary building indicators
-        const PRIMARY_BUILDING_MAP: Record<string, 'infantry' | 'vehicle'> = {
-            'barracks': 'infantry',
-            'factory': 'vehicle'
-        };
-        for (const id in entities) {
-            const entity = entities[id];
-            if (entity.type !== 'BUILDING' || entity.dead) continue;
-            const category = PRIMARY_BUILDING_MAP[entity.key];
-            if (!category) continue;
-            const player = state.players[entity.owner];
-            if (player?.primaryBuildings?.[category] === id) {
+        const primaryBuildingIds = this.primaryBuildingIds;
+        primaryBuildingIds.clear();
+        for (const pid in state.players) {
+            const player = state.players[Number(pid)];
+            const primaryBuildings = player?.primaryBuildings;
+            if (!primaryBuildings) continue;
+            if (primaryBuildings.infantry) primaryBuildingIds.add(primaryBuildings.infantry);
+            if (primaryBuildings.vehicle) primaryBuildingIds.add(primaryBuildings.vehicle);
+        }
+        for (const buildingId of primaryBuildingIds) {
+            const entity = entities[buildingId];
+            if (entity && entity.type === 'BUILDING' && !entity.dead) {
                 this.drawPrimaryIndicator(entity, effectiveCamera, zoom);
             }
         }
@@ -184,7 +204,7 @@ export class Renderer {
 
         // Building placement preview
         if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
-            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, Object.values(entities), localPlayerId);
+            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, entities, localPlayerId);
         }
 
 
@@ -862,7 +882,7 @@ export class Renderer {
         mousePos: { x: number; y: number },
         camera: { x: number; y: number },
         zoom: number,
-        entities: Entity[],
+        entities: Record<string, Entity>,
         localPlayerId: number | null
     ) {
         const ctx = this.ctx;
@@ -876,7 +896,8 @@ export class Renderer {
 
         // Draw build radius indicators for player buildings
         ctx.save();
-        for (const e of entities) {
+        for (const id in entities) {
+            const e = entities[id];
             if (e.owner === playerId && e.type === 'BUILDING' && !e.dead) {
                 const s = this.worldToScreen(e.pos, camera, zoom);
                 ctx.strokeStyle = 'rgba(255,255,255,0.2)';
@@ -887,17 +908,24 @@ export class Renderer {
         }
 
         // Draw ghost building
-        const sc = this.worldToScreen(new Vector(mx, my), camera, zoom);
+        const sc = {
+            x: (mx - camera.x) * zoom,
+            y: (my - camera.y) * zoom
+        };
         ctx.fillStyle = valid ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.5)';
         ctx.fillRect(sc.x - (b.w / 2) * zoom, sc.y - (b.h / 2) * zoom, b.w * zoom, b.h * zoom);
         ctx.restore();
     }
 
-    private isValidBuildLocation(x: number, y: number, owner: number, entities: Entity[]): boolean {
+    private isValidBuildLocation(x: number, y: number, owner: number, entities: Record<string, Entity>): boolean {
         let near = false;
-        for (const e of entities) {
+        const buildRadiusSq = BUILD_RADIUS * BUILD_RADIUS;
+        for (const id in entities) {
+            const e = entities[id];
             if (e.owner === owner && e.type === 'BUILDING' && !e.dead) {
-                if (e.pos.dist(new Vector(x, y)) < BUILD_RADIUS) {
+                const dx = e.pos.x - x;
+                const dy = e.pos.y - y;
+                if ((dx * dx + dy * dy) < buildRadiusSq) {
                     near = true;
                     break;
                 }
@@ -905,9 +933,15 @@ export class Renderer {
         }
 
         // Also check no collision with existing entities
-        for (const e of entities) {
-            if (!e.dead && e.pos.dist(new Vector(x, y)) < (e.radius + 45)) {
-                return false;
+        for (const id in entities) {
+            const e = entities[id];
+            if (!e.dead) {
+                const dx = e.pos.x - x;
+                const dy = e.pos.y - y;
+                const minDistance = e.radius + 45;
+                if ((dx * dx + dy * dy) < (minDistance * minDistance)) {
+                    return false;
+                }
             }
         }
 
@@ -940,7 +974,9 @@ export class Renderer {
 
             // Check collision
             const s = this.worldToScreen(entity.pos, camera, zoom);
-            const dist = Math.sqrt(Math.pow(s.x - mousePos.x, 2) + Math.pow(s.y - mousePos.y, 2));
+            const dx = s.x - mousePos.x;
+            const dy = s.y - mousePos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
             // Adjusted radius for simpler hit detection
             // Use slightly larger radius to make hovering easier
@@ -1007,4 +1043,3 @@ export class Renderer {
         }
     }
 }
-

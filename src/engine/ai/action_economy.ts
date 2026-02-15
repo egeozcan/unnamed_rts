@@ -1,4 +1,5 @@
 import { GameState, Action, Entity, PlayerState, BuildingEntity, Vector, UnitEntity, HarvesterUnit, ResourceEntity } from '../types.js';
+import { EntityCache } from '../perf.js';
 import { RULES, AIPersonality } from '../../data/schemas/index.js';
 import { AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
@@ -55,7 +56,7 @@ function isArmoredCombatUnit(entity: Entity): boolean {
     return unitData.armor === 'medium' || unitData.armor === 'heavy';
 }
 
-function getEnemyTankAdvantage(state: GameState, playerId: number, enemies: Entity[]): {
+function getEnemyTankAdvantage(enemies: Entity[], ownedEntities: Entity[]): {
     hasAdvantage: boolean;
     isStrongAdvantage: boolean;
 } {
@@ -64,9 +65,7 @@ function getEnemyTankAdvantage(state: GameState, playerId: number, enemies: Enti
         return { hasAdvantage: false, isStrongAdvantage: false };
     }
 
-    const myArmoredCount = Object.values(state.entities).filter(e =>
-        e.owner === playerId && isArmoredCombatUnit(e)
-    ).length;
+    const myArmoredCount = ownedEntities.filter(e => isArmoredCombatUnit(e)).length;
 
     if (myArmoredCount === 0) {
         return { hasAdvantage: true, isStrongAdvantage: enemyArmoredCount >= TANK_ADVANTAGE_STRONG_ABSOLUTE_LEAD };
@@ -86,7 +85,8 @@ export function handleEconomy(
     player: PlayerState,
     personality: AIPersonality,
     aiState: AIPlayerState,
-    enemies: Entity[]
+    enemies: Entity[],
+    entityCache?: EntityCache
 ): Action[] {
     const actions: Action[] = [];
 
@@ -95,6 +95,12 @@ export function handleEconomy(
         console.log(`[Genius Eco ${playerId}] Credits: ${player.credits}, Priority: ${aiState.investmentPriority}, Queue: B=${player.queues.building.current} V=${player.queues.vehicle.current} I=${player.queues.infantry.current}`);
     }
     const buildOrder = personality.build_order_priority;
+    const allEntities = entityCache?.all ?? Object.values(state.entities);
+    const allAliveEntities = entityCache?.alive ?? allEntities.filter(e => !e.dead);
+    const ownedEntities = entityCache?.byOwner.get(playerId) ?? allAliveEntities.filter(e => e.owner === playerId);
+    const ownedUnits = entityCache?.unitsByOwner.get(playerId) ?? ownedEntities.filter((e): e is UnitEntity => e.type === 'UNIT');
+    const allOre = entityCache?.resources ?? allAliveEntities.filter((e): e is ResourceEntity => e.type === 'RESOURCE');
+    const allRefineries = allAliveEntities.filter((e): e is BuildingEntity => e.type === 'BUILDING' && e.key === 'refinery');
 
     // ===== CORE CAPABILITY CHECK =====
     // A conyard (deployed MCV) is required to build new buildings
@@ -103,9 +109,7 @@ export function handleEconomy(
     // ===== INVESTMENT PRIORITY HANDLING =====
 
     // Count current harvesters and refineries
-    const harvesters = Object.values(state.entities).filter(e =>
-        e.owner === playerId && e.type === 'UNIT' && e.key === 'harvester' && !e.dead
-    );
+    const harvesters = ownedUnits.filter(e => e.key === 'harvester');
     const refineries = buildings.filter(b => b.key === 'refinery' && !b.dead);
     const hasFactory = hasProductionBuildingFor('vehicle', buildings);
     const buildingQueueEmpty = !player.queues.building.current;
@@ -269,10 +273,6 @@ export function handleEconomy(
             const BUILD_RADIUS = 400;
 
             // Check for accessible ore without a refinery (from ANY player, not just ours)
-            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-            const allRefineries = Object.values(state.entities).filter(e =>
-                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
-            );
             const nonDefenseBuildings = buildings.filter(b => {
                 const bData = RULES.buildings[b.key];
                 return !bData?.isDefense;
@@ -376,10 +376,7 @@ export function handleEconomy(
 
         if (serviceDepotReqsMet && serviceDepotData) {
             // Count damaged combat units (below 70% HP)
-            const damagedUnits = Object.values(state.entities).filter(e =>
-                e.owner === playerId &&
-                e.type === 'UNIT' &&
-                !e.dead &&
+            const damagedUnits = ownedUnits.filter(e =>
                 e.key !== 'harvester' &&
                 e.hp < e.maxHp * 0.7
             );
@@ -420,10 +417,6 @@ export function handleEconomy(
             const BUILD_RADIUS = 400;
 
             // Find ore patches within build range that don't have a nearby refinery (from ANY player)
-            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-            const allRefineries = Object.values(state.entities).filter(e =>
-                e.type === 'BUILDING' && e.key === 'refinery' && !e.dead
-            );
             const nonDefenseBuildings = buildings.filter(b => {
                 const bData = RULES.buildings[b.key];
                 return !bData?.isDefense;
@@ -473,7 +466,6 @@ export function handleEconomy(
 
             if (!hasNearbyRefinery) {
                 // This conyard has no refinery nearby - check if there's ore to harvest
-                const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
                 const oreNearConyard = allOre.some(ore => ore.pos.dist(conyard.pos) < 800);
 
                 if (oreNearConyard) {
@@ -593,7 +585,7 @@ export function handleEconomy(
         prefs,
         personality.strict_unit_preferences
     );
-    const tankAdvantage = getEnemyTankAdvantage(state, playerId, enemies);
+    const tankAdvantage = getEnemyTankAdvantage(enemies, ownedEntities);
     const enemyHasTankAdvantage = tankAdvantage.hasAdvantage;
     const enemyHasStrongTankAdvantage = tankAdvantage.isStrongAdvantage;
     const counterInfantry = enemyHasTankAdvantage
@@ -733,9 +725,7 @@ export function handleEconomy(
 
             if (captureOps.length > 0) {
                 // Count existing engineers
-                const existingEngineers = Object.values(state.entities).filter(e =>
-                    e.owner === playerId && e.type === 'UNIT' && e.key === 'engineer' && !e.dead
-                ).length;
+                const existingEngineers = ownedUnits.filter(e => e.key === 'engineer').length;
 
                 // Limit to 2 engineers at a time (fragile + expensive)
                 const maxEngineers = Math.min(2, captureOps.length);
@@ -764,9 +754,7 @@ export function handleEconomy(
         );
         if (hasFactory && vehicleQueueEmpty && !isPanic && aiState.strategy !== 'all_in' && !queuedVehicleForDemoCheck) {
             // Count existing demo trucks
-            const existingDemoTrucks = Object.values(state.entities).filter(e =>
-                e.owner === playerId && e.type === 'UNIT' && e.key === 'demo_truck' && !e.dead
-            ).length;
+            const existingDemoTrucks = ownedUnits.filter(e => e.key === 'demo_truck').length;
 
             // Limit to 2 demo trucks at a time (expensive + suicide units)
             const maxDemoTrucks = 2;
@@ -800,9 +788,7 @@ export function handleEconomy(
         // Count total slots available (6 per airforce command) and current harriers
         const airforceCommands = buildings.filter(b => b.key === 'airforce_command' && !b.dead);
         const totalSlots = airforceCommands.length * 6;
-        const currentHarriers = Object.values(state.entities).filter(
-            e => e.type === 'UNIT' && e.key === 'harrier' && e.owner === playerId && !e.dead
-        ).length;
+        const currentHarriers = ownedUnits.filter(e => e.key === 'harrier').length;
         const harriersInQueue = player.queues.air.current ? 1 : 0;
         const hasAvailableSlots = (currentHarriers + harriersInQueue) < totalSlots;
 
@@ -877,7 +863,7 @@ export function handleEconomy(
     );
 
     // Debug: find all MCVs for this player
-    const allMcvs = Object.values(state.entities).filter((e: Entity) => e.key === 'mcv' && !e.dead);
+    const allMcvs = allAliveEntities.filter((e: Entity) => e.key === 'mcv');
     const existingMcvs = allMcvs.filter(e => e.owner === playerId);
 
     const existingConyards = buildings.filter(b => b.key === 'conyard' && !b.dead);
@@ -917,7 +903,7 @@ export function handleEconomy(
     if (!baseCenter) return actions;
 
     let hasDistantOre = false;
-    for (const e of Object.values(state.entities)) {
+    for (const e of allEntities) {
         const entity = e as Entity;
         if (entity.type !== 'RESOURCE' || entity.dead) continue;
 

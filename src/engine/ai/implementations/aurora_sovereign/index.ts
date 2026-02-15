@@ -1,5 +1,5 @@
 import { Action, Entity, GameState, isActionType } from '../../../types.js';
-import { createEntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { RULES } from '../../../../data/schemas/index.js';
 import { AIImplementation, AIImplementationDifficulty } from '../../contracts.js';
 import { computeClassicAiActions } from '../classic/index.js';
@@ -255,7 +255,12 @@ function maybeSetRallyPoints(
     }
 }
 
-export function computeAuroraSovereignAiActions(state: GameState, playerId: number, difficulty: AIImplementationDifficulty): Action[] {
+export function computeAuroraSovereignAiActions(
+    state: GameState,
+    playerId: number,
+    difficulty: AIImplementationDifficulty,
+    sharedCache?: EntityCache
+): Action[] {
     void difficulty;
 
     const player = state.players[playerId];
@@ -270,9 +275,8 @@ export function computeAuroraSovereignAiActions(state: GameState, playerId: numb
         runtime.switchedToBalanced = true;
     }
 
-    let actions = computeClassicAiActions(state, playerId);
-
-    const cache = createEntityCache(state.entities);
+    const cache = sharedCache ?? createEntityCache(state.entities);
+    let actions = computeClassicAiActions(state, playerId, cache);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
@@ -380,7 +384,8 @@ export const AuroraSovereignAIImplementation: AIImplementation = {
     id: 'aurora_sovereign',
     name: 'Aurora Sovereign, Warden of the Ninth Dawn',
     description: 'A relentless strategist that forces decisive timing pushes and anti-stalemate finishers.',
-    computeActions: ({ state, playerId, difficulty }) => computeAuroraSovereignAiActions(state, playerId, difficulty),
+    computeActions: ({ state, playerId, difficulty, entityCache }) =>
+        computeAuroraSovereignAiActions(state, playerId, difficulty, entityCache),
     reset: (playerId?: number) => {
         if (playerId === undefined) {
             runtimeByPlayer.clear();

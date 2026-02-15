@@ -638,6 +638,28 @@ let debugOverlayInitialized = false;
 let debugContentRendered = false;
 let currentDebugState: GameState | null = null;
 
+interface FrameStageTimingSummary {
+    avg: number;
+    p95: number;
+    max: number;
+}
+
+export interface FrameTimingSummary {
+    sampleCount: number;
+    simMs: FrameStageTimingSummary;
+    renderMs: FrameStageTimingSummary;
+    uiMs: FrameStageTimingSummary;
+    frameMs: FrameStageTimingSummary;
+}
+
+function formatFrameTimingValue(value: number): string {
+    return Number.isFinite(value) ? value.toFixed(2) : '0.00';
+}
+
+function formatFrameTimingLine(label: string, stat: FrameStageTimingSummary): string {
+    return `<p><strong>${label}:</strong> avg ${formatFrameTimingValue(stat.avg)}ms | p95 ${formatFrameTimingValue(stat.p95)}ms | max ${formatFrameTimingValue(stat.max)}ms</p>`;
+}
+
 export function setLoadGameStateCallback(callback: (state: GameState) => void) {
     onLoadGameState = callback;
 }
@@ -651,7 +673,7 @@ export function refreshDebugUI() {
     debugContentRendered = false;
 }
 
-export function updateDebugUI(state: GameState) {
+export function updateDebugUI(state: GameState, frameTimingSummary?: FrameTimingSummary | null) {
     currentDebugState = state;
 
     let debugOverlay = document.getElementById('debug-overlay');
@@ -739,6 +761,13 @@ export function updateDebugUI(state: GameState) {
             <p><strong>Entities:</strong> ${entityCounts.units} units, ${entityCounts.buildings} buildings, ${entityCounts.resources} resources</p>
             <p><strong>Projectiles:</strong> ${entityCounts.projectiles} | <strong>Particles:</strong> ${entityCounts.particles}</p>
             <p><strong>Map:</strong> ${state.config.width}x${state.config.height}</p>
+            ${frameTimingSummary ? `
+            <p><strong>Frame Samples:</strong> ${frameTimingSummary.sampleCount}</p>
+            ${formatFrameTimingLine('Simulation', frameTimingSummary.simMs)}
+            ${formatFrameTimingLine('Render', frameTimingSummary.renderMs)}
+            ${formatFrameTimingLine('UI', frameTimingSummary.uiMs)}
+            ${formatFrameTimingLine('Frame', frameTimingSummary.frameMs)}
+            ` : ''}
         `;
     }
 
@@ -1555,4 +1584,3 @@ export function updateActionCursor(
     // Default: no cursor change
     clearCursors();
 }
-

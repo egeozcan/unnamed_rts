@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { shouldRunCadencedUpdate } from '../../src/ui/cadence';
 
 describe('shouldRunCadencedUpdate', () => {
@@ -66,4 +66,68 @@ describe('shouldRunCadencedUpdate', () => {
 
         expect(result).toBe(true);
     });
+
+    it('caps minimap cadence updates under fake timers', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(0));
+
+        let updates = 0;
+        let lastTick = -1;
+        let lastTimeMs = -Infinity;
+        let tick = 0;
+
+        for (let frame = 0; frame < 120; frame++) {
+            const nowMs = Date.now();
+            if (shouldRunCadencedUpdate({
+                currentTick: tick,
+                currentTimeMs: nowMs,
+                lastTick,
+                lastTimeMs,
+                minTickDelta: 2,
+                minTimeDeltaMs: 66
+            })) {
+                updates++;
+                lastTick = tick;
+                lastTimeMs = nowMs;
+            }
+            tick += 1;
+            vi.advanceTimersByTime(16);
+        }
+
+        expect(updates).toBeLessThanOrEqual(30);
+    });
+
+    it('caps birds-eye cadence updates under fake timers', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(0));
+
+        let updates = 0;
+        let lastTick = -1;
+        let lastTimeMs = -Infinity;
+        let tick = 0;
+
+        for (let frame = 0; frame < 120; frame++) {
+            const nowMs = Date.now();
+            if (shouldRunCadencedUpdate({
+                currentTick: tick,
+                currentTimeMs: nowMs,
+                lastTick,
+                lastTimeMs,
+                minTickDelta: 2,
+                minTimeDeltaMs: 83
+            })) {
+                updates++;
+                lastTick = tick;
+                lastTimeMs = nowMs;
+            }
+            tick += 1;
+            vi.advanceTimersByTime(16);
+        }
+
+        expect(updates).toBeLessThanOrEqual(24);
+    });
+});
+
+afterEach(() => {
+    vi.useRealTimers();
 });
