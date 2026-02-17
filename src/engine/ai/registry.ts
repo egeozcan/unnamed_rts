@@ -5,6 +5,7 @@ import { infantryFortressAIImplementation } from './implementations/infantry_for
 import { geniusAIImplementation } from './implementations/genius/index.js';
 import { hydraAIImplementation } from './implementations/hydra/index.js';
 // @ai-implementation-imports
+import { SaboteurCircusAIImplementation } from './implementations/saboteur_circus/index.js';
 import { AuroraSovereignAIImplementation } from './implementations/aurora_sovereign/index.js';
 
 export const DEFAULT_AI_IMPLEMENTATION_ID = 'classic';
@@ -51,6 +52,7 @@ const builtInImplementations: AIImplementation[] = [
     geniusAIImplementation,
     hydraAIImplementation,
     AuroraSovereignAIImplementation,
+    SaboteurCircusAIImplementation,
     // @ai-implementation-list
 ];
 
