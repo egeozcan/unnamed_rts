@@ -37,7 +37,8 @@ describe('Movement Stability', () => {
             debugMode: false,
             showMinimap: false,
             showBirdsEye: false,
-            attackMoveMode: false
+            attackMoveMode: false,
+            fogOfWar: {}
         };
 
         // Create a extreme clump of 40 heavy tanks

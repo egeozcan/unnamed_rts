@@ -28,6 +28,10 @@ function getSightRange(key: string): number {
  * Reveals tiles within each owned entity's sight range.
  * Tiles are permanently revealed (additive only, never reset to 0).
  *
+ * NOTE: We mutate the Uint8Array in-place for performance.
+ * This is safe ONLY because fog is additive-only (tiles go 0 -> 1, never back).
+ * If re-fogging is ever added, this must create a new Uint8Array copy.
+ *
  * Returns the same fogOfWar record reference if nothing changed,
  * or a new record with updated Uint8Arrays for players whose fog changed.
  */
@@ -39,6 +43,7 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
     if (playerIds.length === 0) return fogOfWar;
 
     const gridW = Math.ceil(config.width / TILE_SIZE);
+    const gridH = Math.ceil(config.height / TILE_SIZE);
 
     // Track which players had changes
     let anyChanged = false;
@@ -63,7 +68,6 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
             const centerTileX = Math.floor(entity.pos.x / TILE_SIZE);
             const centerTileY = Math.floor(entity.pos.y / TILE_SIZE);
 
-            const gridH = Math.ceil(config.height / TILE_SIZE);
             const minTX = Math.max(0, centerTileX - sightTiles);
             const maxTX = Math.min(gridW - 1, centerTileX + sightTiles);
             const minTY = Math.max(0, centerTileY - sightTiles);

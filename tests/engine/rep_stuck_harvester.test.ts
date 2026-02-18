@@ -36,7 +36,8 @@ describe('Unit Stuck Pathing Priority', () => {
             repairMode: false,
             difficulty: 'easy',
             placingBuilding: null,
-            winner: null
+            winner: null,
+            fogOfWar: {}
         };
     }
 

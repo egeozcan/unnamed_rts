@@ -58,7 +58,7 @@ export function tick(state: GameState): GameState {
     rebuildSpatialGrid(nextEntities);
 
     // Update fog of war (visual only, skip in headless mode)
-    const nextFogOfWar = headless || !state.fogOfWar ? (state.fogOfWar ?? {}) : updateFogOfWar({ ...state, entities: nextEntities });
+    const nextFogOfWar = headless ? state.fogOfWar : updateFogOfWar({ ...state, entities: nextEntities });
 
     // Update Wells - spawn new ore and grow existing ore near wells
     // Also handles induction rig income generation
