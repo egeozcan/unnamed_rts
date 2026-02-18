@@ -1309,6 +1309,8 @@ function gameLoop(timestamp: number = 0) {
         minTickDelta: MINIMAP_MIN_TICK_DELTA,
         minTimeDeltaMs: MINIMAP_MIN_TIME_DELTA_MS
     })) {
+        const fogGrid = humanPlayerId !== null ? currentState.fogOfWar?.[humanPlayerId] : undefined;
+        const fogGridW = fogGrid ? Math.ceil(currentState.config.width / 40) : undefined;
         renderMinimap(
             currentState.entities,
             currentState.camera,
@@ -1317,7 +1319,9 @@ function gameLoop(timestamp: number = 0) {
             size.height,
             lowPower,
             currentState.config.width,
-            currentState.config.height
+            currentState.config.height,
+            fogGrid,
+            fogGridW
         );
         lastMinimapTick = currentState.tick;
         lastMinimapTimeMs = timestamp;

@@ -92,7 +92,9 @@ function renderToContext(
     canvasHeight: number,
     lowPower: boolean,
     mapWidth: number,
-    mapHeight: number
+    mapHeight: number,
+    fogGrid?: Uint8Array,
+    fogGridW?: number
 ) {
     const width = canvas.width;
     const height = canvas.height;
@@ -116,6 +118,13 @@ function renderToContext(
     for (const id in entities) {
         const e = entities[id];
         if (e.dead) continue;
+
+        // Fog of war check — skip entities on unrevealed tiles
+        if (fogGrid && fogGridW) {
+            const tileX = Math.floor(e.pos.x / 40);
+            const tileY = Math.floor(e.pos.y / 40);
+            if (fogGrid[tileY * fogGridW + tileX] === 0) continue;
+        }
 
         // Check for induction rig - render with glow
         if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed') {
@@ -181,6 +190,19 @@ function renderToContext(
         ctx.fillRect(e.pos.x * sx, e.pos.y * sy, 3, 3);
     }
 
+    // Draw fog overlay on minimap
+    if (fogGrid && fogGridW) {
+        const fogGridH = Math.ceil(mapHeight / 40);
+        ctx.fillStyle = '#000';
+        for (let ty = 0; ty < fogGridH; ty++) {
+            for (let tx = 0; tx < fogGridW; tx++) {
+                if (fogGrid[ty * fogGridW + tx] === 0) {
+                    ctx.fillRect(tx * 40 * sx, ty * 40 * sy, 40 * sx + 1, 40 * sy + 1);
+                }
+            }
+        }
+    }
+
     // Draw viewport rectangle
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
@@ -200,7 +222,9 @@ export function renderMinimap(
     canvasHeight: number,
     lowPower: boolean,
     mapWidth: number = 3000,
-    mapHeight: number = 3000
+    mapHeight: number = 3000,
+    fogGrid?: Uint8Array,
+    fogGridW?: number
 ) {
     // Store current map size for click handling
     currentMapWidth = mapWidth;
@@ -208,11 +232,11 @@ export function renderMinimap(
 
     // Render to regular minimap if visible
     if (minimapCtx && minimapCanvas && isCanvasVisible(minimapCanvas)) {
-        renderToContext(minimapCtx, minimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, lowPower, mapWidth, mapHeight);
+        renderToContext(minimapCtx, minimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, lowPower, mapWidth, mapHeight, fogGrid, fogGridW);
     }
 
     // Render to observer minimap if visible
     if (observerMinimapCtx && observerMinimapCanvas && isCanvasVisible(observerMinimapCanvas)) {
-        renderToContext(observerMinimapCtx, observerMinimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, false, mapWidth, mapHeight);
+        renderToContext(observerMinimapCtx, observerMinimapCanvas, entities, camera, zoom, canvasWidth, canvasHeight, false, mapWidth, mapHeight, fogGrid, fogGridW);
     }
 }
