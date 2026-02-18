@@ -15,6 +15,7 @@ import { getDifficultyModifiers } from '../ai/utils';
 import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
 import { getDemoTruckExplosionStats } from './demo_truck';
+import { updateFogOfWar } from './fog';
 import { DebugEvents } from '../debug/events';
 
 const MAX_TRAIL_POINTS = 30;
@@ -55,6 +56,9 @@ export function tick(state: GameState): GameState {
 
     // Rebuild spatial grid for updateWells usage (it needs to query nearby ores/blockers)
     rebuildSpatialGrid(nextEntities);
+
+    // Update fog of war (visual only, skip in headless mode)
+    const nextFogOfWar = headless || !state.fogOfWar ? (state.fogOfWar ?? {}) : updateFogOfWar({ ...state, entities: nextEntities });
 
     // Update Wells - spawn new ore and grow existing ore near wells
     // Also handles induction rig income generation
@@ -455,7 +459,8 @@ export function tick(state: GameState): GameState {
         winner: nextWinner,
         running: nextRunning,
         notification: nextNotification,
-        commandIndicator: nextCommandIndicator
+        commandIndicator: nextCommandIndicator,
+        fogOfWar: nextFogOfWar
     };
 }
 

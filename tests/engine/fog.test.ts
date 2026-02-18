@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { INITIAL_STATE } from '../../src/engine/reducer';
+import { INITIAL_STATE, update } from '../../src/engine/reducer';
 import { createFogGrid, updateFogOfWar } from '../../src/engine/reducers/fog';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
 import { GameState, Vector, TILE_SIZE } from '../../src/engine/types';
@@ -306,5 +306,32 @@ describe('Fog of War', () => {
             // Player 2 should NOT see player 0's unit area
             expect(result[2][p0CenterTY * gridW + p0CenterTX]).toBe(0);
         });
+    });
+});
+
+describe('Fog of War - Game Loop Integration', () => {
+    it('should update fog on each tick', () => {
+        const fogGrid = createFogGrid(3000, 3000);
+        const unit = createTestCombatUnit({ owner: 0, x: 200, y: 200, key: 'rifle' });
+        const state: GameState = {
+            ...INITIAL_STATE,
+            running: true,
+            mode: 'game',
+            config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
+            fogOfWar: { 0: fogGrid },
+            entities: { [unit.id]: unit },
+            players: {
+                0: { ...INITIAL_STATE.players[0], isAi: false },
+                1: { ...INITIAL_STATE.players[1], isAi: true }
+            }
+        };
+
+        const nextState = update(state, { type: 'TICK' });
+
+        // Fog should have been updated - tile at unit position should be revealed
+        const grid = nextState.fogOfWar[0];
+        const tileX = Math.floor(200 / 40); // 5
+        const tileY = Math.floor(200 / 40); // 5
+        expect(grid[tileY * 75 + tileX]).toBe(1);
     });
 });
