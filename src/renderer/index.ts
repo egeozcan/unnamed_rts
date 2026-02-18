@@ -994,6 +994,51 @@ export class Renderer {
                 }
             }
         }
+
+        // Edge smoothing — draw gradients at fog boundaries
+        const halfTile = tileScreenSize / 2;
+        for (let ty = startTileY; ty <= endTileY; ty++) {
+            for (let tx = startTileX; tx <= endTileX; tx++) {
+                if (fogGrid[ty * gridW + tx] !== 1) continue; // Only process revealed tiles
+
+                const screenX = (tx * TILE_SIZE - camera.x) * zoom;
+                const screenY = (ty * TILE_SIZE - camera.y) * zoom;
+
+                // Check cardinal neighbors for unrevealed tiles
+                // Top
+                if (ty > 0 && fogGrid[(ty - 1) * gridW + tx] === 0) {
+                    const grad = ctx.createLinearGradient(screenX, screenY, screenX, screenY + halfTile);
+                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(screenX, screenY, tileScreenSize, halfTile);
+                }
+                // Bottom
+                if (ty < gridH - 1 && fogGrid[(ty + 1) * gridW + tx] === 0) {
+                    const grad = ctx.createLinearGradient(screenX, screenY + tileScreenSize, screenX, screenY + halfTile);
+                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(screenX, screenY + halfTile, tileScreenSize, halfTile);
+                }
+                // Left
+                if (tx > 0 && fogGrid[ty * gridW + (tx - 1)] === 0) {
+                    const grad = ctx.createLinearGradient(screenX, screenY, screenX + halfTile, screenY);
+                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(screenX, screenY, halfTile, tileScreenSize);
+                }
+                // Right
+                if (tx < gridW - 1 && fogGrid[ty * gridW + (tx + 1)] === 0) {
+                    const grad = ctx.createLinearGradient(screenX + tileScreenSize, screenY, screenX + halfTile, screenY);
+                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(screenX + halfTile, screenY, halfTile, tileScreenSize);
+                }
+            }
+        }
     }
 
     private drawTooltip(
