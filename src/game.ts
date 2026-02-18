@@ -21,6 +21,7 @@ import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
+import { createFogGrid } from './engine/reducers/fog.js';
 import { createEntityCache } from './engine/perf.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
 import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap } from './game-utils.js';
@@ -570,6 +571,12 @@ function startGameWithConfig(config: SkirmishConfig) {
         entities[harvId] = harvesterEntity;
     });
 
+    // Initialize fog of war for human player only
+    const fogOfWar: Record<number, Uint8Array> = {};
+    if (humanPlayerId !== null) {
+        fogOfWar[humanPlayerId] = createFogGrid(mapWidth, mapHeight);
+    }
+
     // Build game state
     const isObserverMode = humanPlayerId === null;
     let state: GameState = {
@@ -579,6 +586,7 @@ function startGameWithConfig(config: SkirmishConfig) {
         difficulty: 'easy', // Legacy field
         entities: entities,
         players: players,
+        fogOfWar,
         config: {
             width: mapWidth,
             height: mapHeight,
