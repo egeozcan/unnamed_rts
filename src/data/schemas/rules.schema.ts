@@ -97,6 +97,7 @@ export const BuildingSchema = z.object({
   description: z.string().optional(),
   // AA interception aura - damages enemy projectiles passing through
   interceptionAura: InterceptionAuraSchema.optional(),
+  sightRange: z.number().positive().optional(),
 });
 export type Building = z.infer<typeof BuildingSchema>;
 
@@ -134,6 +135,7 @@ export const UnitSchema = z.object({
   description: z.string().optional(),
   // AA interception aura - damages enemy projectiles passing through
   interceptionAura: InterceptionAuraSchema.optional(),
+  sightRange: z.number().positive().optional(),
 });
 export type Unit = z.infer<typeof UnitSchema>;
 

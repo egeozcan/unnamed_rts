@@ -123,7 +123,8 @@
             "armor": "building",
             "capturable": true,
             "prerequisites": [],
-            "description": "The heart of your base. Required to construct all other buildings. Protect it at all costs!"
+            "description": "The heart of your base. Required to construct all other buildings. Protect it at all costs!",
+            "sightRange": 240
         },
         "power": {
             "name": "Power Plant",
@@ -138,7 +139,8 @@
             "prerequisites": [
                 "conyard"
             ],
-            "description": "Generates power for your base. Build multiple to support advanced buildings and defenses."
+            "description": "Generates power for your base. Build multiple to support advanced buildings and defenses.",
+            "sightRange": 160
         },
         "refinery": {
             "name": "Refinery",
@@ -154,7 +156,8 @@
                 "conyard",
                 "power"
             ],
-            "description": "Processes ore into credits. Comes with a free Harvester. Build near ore fields for efficiency."
+            "description": "Processes ore into credits. Comes with a free Harvester. Build near ore fields for efficiency.",
+            "sightRange": 200
         },
         "barracks": {
             "name": "Barracks",
@@ -170,7 +173,8 @@
                 "conyard",
                 "power"
             ],
-            "description": "Trains infantry units. Cheap and quick to build. Essential for early defense and unlocking other buildings."
+            "description": "Trains infantry units. Cheap and quick to build. Essential for early defense and unlocking other buildings.",
+            "sightRange": 200
         },
         "factory": {
             "name": "War Factory",
@@ -187,7 +191,8 @@
                 "refinery",
                 "barracks"
             ],
-            "description": "Produces tanks and vehicles. Key to building a strong army. Also builds MCVs and Induction Rigs."
+            "description": "Produces tanks and vehicles. Key to building a strong army. Also builds MCVs and Induction Rigs.",
+            "sightRange": 200
         },
         "turret": {
             "name": "Gun Turret",
@@ -206,7 +211,8 @@
                 "conyard",
                 "barracks"
             ],
-            "description": "Anti-ground defense. Effective against vehicles and infantry. Cannot target aircraft."
+            "description": "Anti-ground defense. Effective against vehicles and infantry. Cannot target aircraft.",
+            "sightRange": 320
         },
         "sam_site": {
             "name": "SAM Site",
@@ -229,7 +235,8 @@
             "interceptionAura": {
                 "radius": 200,
                 "dps": 150
-            }
+            },
+            "sightRange": 480
         },
         "pillbox": {
             "name": "Pillbox",
@@ -248,7 +255,8 @@
                 "conyard",
                 "barracks"
             ],
-            "description": "Cheap anti-infantry defense. Fast firing but weak against armor. Good for base perimeters."
+            "description": "Cheap anti-infantry defense. Fast firing but weak against armor. Good for base perimeters.",
+            "sightRange": 220
         },
         "obelisk": {
             "name": "Obelisk",
@@ -267,7 +275,8 @@
                 "conyard",
                 "tech"
             ],
-            "description": "Advanced laser defense. Devastating damage against all targets. High power drain. Requires Tech Center."
+            "description": "Advanced laser defense. Devastating damage against all targets. High power drain. Requires Tech Center.",
+            "sightRange": 400
         },
         "tech": {
             "name": "Tech Center",
@@ -283,7 +292,8 @@
                 "factory"
             ],
             "maxCount": 1,
-            "description": "Unlocks advanced units and buildings. Grants access to Mammoth Tanks, Commandos, Artillery, and the Obelisk."
+            "description": "Unlocks advanced units and buildings. Grants access to Mammoth Tanks, Commandos, Artillery, and the Obelisk.",
+            "sightRange": 200
         },
         "airforce_command": {
             "name": "Air-Force Command",
@@ -302,7 +312,8 @@
             ],
             "landingSlots": 6,
             "reloadTicks": 120,
-            "description": "Produces and rearms aircraft. Select this building and right-click an enemy to launch all docked Harriers at once."
+            "description": "Produces and rearms aircraft. Select this building and right-click an enemy to launch all docked Harriers at once.",
+            "sightRange": 200
         },
         "service_depot": {
             "name": "Service Depot",
@@ -321,7 +332,8 @@
             "repairRadius": 90,
             "repairRate": 2,
             "maxCount": 1,
-            "description": "Automatically repairs nearby vehicles for free. Move damaged tanks close to heal them over time."
+            "description": "Automatically repairs nearby vehicles for free. Move damaged tanks close to heal them over time.",
+            "sightRange": 200
         },
         "induction_rig_deployed": {
             "name": "Induction Rig",
@@ -335,7 +347,8 @@
             "hidden": true,
             "prerequisites": [],
             "inductionEfficiency": 0.8,
-            "description": "Deployed on an ore well. Provides infinite resource extraction. Glows on minimap for easy tracking."
+            "description": "Deployed on an ore well. Provides infinite resource extraction. Glows on minimap for easy tracking.",
+            "sightRange": 200
         }
     },
     "units": {
@@ -354,7 +367,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Basic infantry. Cheap and fast to train. Effective in groups against infantry, weak against armor."
+            "description": "Basic infantry. Cheap and fast to train. Effective in groups against infantry, weak against armor.",
+            "sightRange": 200
         },
         "rocket": {
             "name": "Rocket",
@@ -376,7 +390,8 @@
             "interceptionAura": {
                 "radius": 60,
                 "dps": 40
-            }
+            },
+            "sightRange": 240
         },
         "engineer": {
             "name": "Engineer",
@@ -394,7 +409,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Support unit. Right-click enemy buildings to capture them. Right-click friendly buildings to repair."
+            "description": "Support unit. Right-click enemy buildings to capture them. Right-click friendly buildings to repair.",
+            "sightRange": 160
         },
         "medic": {
             "name": "Medic",
@@ -411,7 +427,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Healer unit. Automatically heals nearby friendly infantry. Keep behind front lines for best results."
+            "description": "Healer unit. Automatically heals nearby friendly infantry. Keep behind front lines for best results.",
+            "sightRange": 200
         },
         "sniper": {
             "name": "Sniper",
@@ -429,7 +446,8 @@
                 "barracks",
                 "tech"
             ],
-            "description": "Long-range specialist. Extreme range and damage, one-shots most infantry. Fragile and slow to fire."
+            "description": "Long-range specialist. Extreme range and damage, one-shots most infantry. Fragile and slow to fire.",
+            "sightRange": 500
         },
         "flamer": {
             "name": "Flamethrower",
@@ -447,7 +465,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Short-range area damage. Devastating vs grouped infantry and buildings. Very short range, vulnerable."
+            "description": "Short-range area damage. Devastating vs grouped infantry and buildings. Very short range, vulnerable.",
+            "sightRange": 160
         },
         "grenadier": {
             "name": "Grenadier",
@@ -465,7 +484,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Splash damage infantry. Grenades deal area damage. Good vs infantry groups and light vehicles."
+            "description": "Splash damage infantry. Grenades deal area damage. Good vs infantry groups and light vehicles.",
+            "sightRange": 200
         },
         "commando": {
             "name": "Commando",
@@ -483,7 +503,8 @@
                 "barracks",
                 "tech"
             ],
-            "description": "Elite soldier. Fast, tough, armor-piercing rounds. Expensive but extremely effective vs all targets."
+            "description": "Elite soldier. Fast, tough, armor-piercing rounds. Expensive but extremely effective vs all targets.",
+            "sightRange": 280
         },
         "harvester": {
             "name": "Harvester",
@@ -502,7 +523,8 @@
                 "refinery",
                 "factory"
             ],
-            "description": "Resource gatherer. Automatically collects ore and returns to Refinery. Right-click ore fields to redirect."
+            "description": "Resource gatherer. Automatically collects ore and returns to Refinery. Right-click ore fields to redirect.",
+            "sightRange": 200
         },
         "jeep": {
             "name": "Ranger",
@@ -520,7 +542,8 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Fast scout vehicle. Very fast with drive-by attacks. Great for harassing and early scouting."
+            "description": "Fast scout vehicle. Very fast with drive-by attacks. Great for harassing and early scouting.",
+            "sightRange": 320
         },
         "apc": {
             "name": "APC",
@@ -538,7 +561,8 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Fast armored transport. Good speed and armor-piercing gun. Can fire while moving."
+            "description": "Fast armored transport. Good speed and armor-piercing gun. Can fire while moving.",
+            "sightRange": 240
         },
         "light": {
             "name": "Light Tank",
@@ -556,7 +580,8 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Balanced main battle tank. Good mix of speed, armor and firepower. Can fire while moving."
+            "description": "Balanced main battle tank. Good mix of speed, armor and firepower. Can fire while moving.",
+            "sightRange": 240
         },
         "heavy": {
             "name": "Heavy Tank",
@@ -573,7 +598,8 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Heavy assault tank. Strong armor and powerful cannon. Slower but hits much harder than Light Tank."
+            "description": "Heavy assault tank. Strong armor and powerful cannon. Slower but hits much harder than Light Tank.",
+            "sightRange": 260
         },
         "flame_tank": {
             "name": "Flame Tank",
@@ -591,7 +617,8 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Anti-infantry vehicle. Sprays flames dealing heavy splash damage. Excellent vs infantry blobs."
+            "description": "Anti-infantry vehicle. Sprays flames dealing heavy splash damage. Excellent vs infantry blobs.",
+            "sightRange": 200
         },
         "stealth": {
             "name": "Stealth Tank",
@@ -609,7 +636,8 @@
                 "factory",
                 "tech"
             ],
-            "description": "Fast missile tank. Good speed and damage. Requires Tech Center."
+            "description": "Fast missile tank. Good speed and damage. Requires Tech Center.",
+            "sightRange": 280
         },
         "artillery": {
             "name": "Artillery",
@@ -628,7 +656,8 @@
                 "factory",
                 "tech"
             ],
-            "description": "Long-range siege unit. Massive range and damage with splash. Paper-thin armor, keep protected."
+            "description": "Long-range siege unit. Massive range and damage with splash. Paper-thin armor, keep protected.",
+            "sightRange": 400
         },
         "mlrs": {
             "name": "MLRS",
@@ -651,7 +680,8 @@
             "interceptionAura": {
                 "radius": 120,
                 "dps": 80
-            }
+            },
+            "sightRange": 380
         },
         "mammoth": {
             "name": "Mammoth Tank",
@@ -669,7 +699,8 @@
                 "factory",
                 "tech"
             ],
-            "description": "Ultimate tank. Massive HP, devastating firepower. Slow and very expensive, but nearly unstoppable."
+            "description": "Ultimate tank. Massive HP, devastating firepower. Slow and very expensive, but nearly unstoppable.",
+            "sightRange": 280
         },
         "heli": {
             "name": "Helicopter",
@@ -687,7 +718,8 @@
             "prerequisites": [
                 "tech"
             ],
-            "description": "Attack helicopter. Good speed and sustained rocket fire. Vulnerable to anti-air but flexible."
+            "description": "Attack helicopter. Good speed and sustained rocket fire. Vulnerable to anti-air but flexible.",
+            "sightRange": 320
         },
         "harrier": {
             "name": "Harrier",
@@ -707,7 +739,8 @@
                 "airforce_command"
             ],
             "canAttackWhileMoving": true,
-            "description": "Strike fighter. Very fast, high damage pass. Must return to Air-Force Command to reload after each attack."
+            "description": "Strike fighter. Very fast, high damage pass. Must return to Air-Force Command to reload after each attack.",
+            "sightRange": 320
         },
         "mcv": {
             "name": "MCV",
@@ -722,7 +755,8 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Mobile Construction Vehicle. Double-click or press Enter to deploy into a Construction Yard. Cannot attack."
+            "description": "Mobile Construction Vehicle. Double-click or press Enter to deploy into a Construction Yard. Cannot attack.",
+            "sightRange": 280
         },
         "induction_rig": {
             "name": "Induction Rig",
@@ -738,7 +772,8 @@
                 "factory",
                 "refinery"
             ],
-            "description": "Deploys on ore wells for infinite resources. Right-click on a golden well to deploy. Great for late-game economy."
+            "description": "Deploys on ore wells for infinite resources. Right-click on a golden well to deploy. Great for late-game economy.",
+            "sightRange": 200
         },
         "demo_truck": {
             "name": "Demo Truck",
@@ -756,7 +791,8 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Suicide vehicle. Detonates on impact or death, dealing massive area damage. Chain reactions possible."
+            "description": "Suicide vehicle. Detonates on impact or death, dealing massive area damage. Chain reactions possible.",
+            "sightRange": 200
         },
         "hijacker": {
             "name": "Hijacker",
@@ -772,7 +808,8 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Specialist infiltrator. Enters enemy vehicles to steal them. Weak vs infantry fire, resilient vs vehicles."
+            "description": "Specialist infiltrator. Enters enemy vehicles to steal them. Weak vs infantry fire, resilient vs vehicles.",
+            "sightRange": 160
         }
     },
     "armorTypes": {
