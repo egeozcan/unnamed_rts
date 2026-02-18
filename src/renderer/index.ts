@@ -1,4 +1,4 @@
-import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS, CommandIndicator } from '../engine/types.js';
+import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS, CommandIndicator, TILE_SIZE } from '../engine/types.js';
 import { getAsset, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
@@ -95,9 +95,20 @@ export class Renderer {
         const screenCulledEntities = this.screenCulledEntities;
         screenCulledEntities.length = 0;
 
+        // Fog of war filtering
+        const fogGrid = localPlayerId !== null ? state.fogOfWar?.[localPlayerId] : undefined;
+        const fogGridW = fogGrid ? Math.ceil(state.config.width / TILE_SIZE) : 0;
+
         // OPTIMIZATION: Early culling - filter out entities outside screen bounds before sorting.
         for (const e of visibleEntities) {
             if (e.dead) continue;
+
+            // Fog of war — skip entities on unrevealed tiles
+            if (fogGrid) {
+                const tileX = Math.floor(e.pos.x / TILE_SIZE);
+                const tileY = Math.floor(e.pos.y / TILE_SIZE);
+                if (fogGrid[tileY * fogGridW + tileX] === 0) continue;
+            }
 
             // Quick screen bounds check using world coordinates
             const screenX = (e.pos.x - cameraX) * zoom;
@@ -195,6 +206,11 @@ export class Renderer {
         // Draw particles
         for (const particle of particles) {
             this.drawParticle(particle, effectiveCamera, zoom);
+        }
+
+        // Draw fog of war overlay
+        if (fogGrid) {
+            this.drawFogOverlay(ctx, fogGrid, fogGridW, effectiveCamera, zoom, canvasWidth, canvasHeight, state.config.height);
         }
 
         // Draw command indicator (move/attack target)
@@ -946,6 +962,38 @@ export class Renderer {
         }
 
         return near;
+    }
+
+    private drawFogOverlay(
+        ctx: CanvasRenderingContext2D,
+        fogGrid: Uint8Array,
+        gridW: number,
+        camera: { x: number; y: number },
+        zoom: number,
+        canvasWidth: number,
+        canvasHeight: number,
+        mapHeight: number
+    ) {
+        const gridH = Math.ceil(mapHeight / TILE_SIZE);
+        const tileScreenSize = TILE_SIZE * zoom;
+
+        // Calculate visible tile range
+        const startTileX = Math.max(0, Math.floor(camera.x / TILE_SIZE));
+        const startTileY = Math.max(0, Math.floor(camera.y / TILE_SIZE));
+        const endTileX = Math.min(gridW - 1, Math.floor((camera.x + canvasWidth / zoom) / TILE_SIZE));
+        const endTileY = Math.min(gridH - 1, Math.floor((camera.y + canvasHeight / zoom) / TILE_SIZE));
+
+        // Draw solid black for unrevealed tiles
+        ctx.fillStyle = '#000';
+        for (let ty = startTileY; ty <= endTileY; ty++) {
+            for (let tx = startTileX; tx <= endTileX; tx++) {
+                if (fogGrid[ty * gridW + tx] === 0) {
+                    const screenX = (tx * TILE_SIZE - camera.x) * zoom;
+                    const screenY = (ty * TILE_SIZE - camera.y) * zoom;
+                    ctx.fillRect(screenX, screenY, tileScreenSize + 1, tileScreenSize + 1);
+                }
+            }
+        }
     }
 
     private drawTooltip(
