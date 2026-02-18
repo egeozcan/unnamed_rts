@@ -328,6 +328,7 @@ export interface GameState {
     readonly attackMoveMode: boolean;
     readonly commandIndicator?: CommandIndicator | null;
     readonly headless?: boolean;
+    readonly fogOfWar: Record<number, Uint8Array>;
 }
 
 // Discriminated union for all game actions

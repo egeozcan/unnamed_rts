@@ -37,7 +37,8 @@ export const INITIAL_STATE: GameState = {
     showMinimap: true,
     showBirdsEye: false,
     notification: null,
-    attackMoveMode: false
+    attackMoveMode: false,
+    fogOfWar: {}
 };
 
 export function update(state: GameState, action: Action): GameState {
