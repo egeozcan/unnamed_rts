@@ -1177,12 +1177,13 @@ function gameLoop(timestamp: number = 0) {
     }
     lastFrameTime = timestamp - (elapsed % FRAME_TIME);
 
-    if (!currentState.running) {
+    let skipSim = !currentState.running;
+    if (skipSim) {
         checkWinCondition();
-        return;
+        // Skip early return to allow panning and viewing the map after game ends
     }
 
-    if (currentState.mode === 'paused') {
+    if (currentState.mode === 'paused' && !skipSim) {
         // Still render but don't update
         const input = getInputState();
         renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
@@ -1193,7 +1194,7 @@ function gameLoop(timestamp: number = 0) {
     const frameStartMs = performance.now();
     const simStartMs = frameStartMs;
 
-    if (currentState.debugMode) {
+    if (currentState.debugMode || skipSim) {
         // Just render, don't update
     } else {
         // Determine how many ticks to run based on speed setting
@@ -1226,7 +1227,7 @@ function gameLoop(timestamp: number = 0) {
         updatePower(cachedPower.out, cachedPower.in);
     }
 
-    if (shouldRunCadencedUpdate({
+    if (skipSim || shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastButtonsTick,
@@ -1301,7 +1302,7 @@ function gameLoop(timestamp: number = 0) {
     // Minimap
     const size = renderer.getSize();
     const lowPower = cachedPower.out < cachedPower.in;
-    if (shouldRunCadencedUpdate({
+    if (skipSim || shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastMinimapTick,
@@ -1341,7 +1342,7 @@ function gameLoop(timestamp: number = 0) {
     // Bird's Eye View
     if (!currentState.showBirdsEye) {
         renderBirdsEye(currentState, size.width, size.height);
-    } else if (shouldRunCadencedUpdate({
+    } else if (skipSim || shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastBirdsEyeTick,
@@ -1355,14 +1356,14 @@ function gameLoop(timestamp: number = 0) {
     }
 
     // Debug UI
-    if (currentState.debugMode && shouldRunCadencedUpdate({
+    if (currentState.debugMode && (skipSim || shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastDebugUiTick,
         lastTimeMs: lastDebugUiTimeMs,
         minTickDelta: DEBUG_UI_MIN_TICK_DELTA,
         minTimeDeltaMs: DEBUG_UI_MIN_TIME_DELTA_MS
-    })) {
+    }))) {
         updateDebugUI(currentState, latestFrameTimingSummary);
         lastDebugUiTick = currentState.tick;
         lastDebugUiTimeMs = timestamp;
@@ -1403,6 +1404,8 @@ function checkWinCondition() {
         const endScreen = document.getElementById('end-screen');
         const endTitle = document.getElementById('end-title');
         if (endScreen && endTitle) {
+            if (endScreen.classList.contains('visible')) return;
+
             endScreen.classList.add('visible');
             if (currentState.winner === -1) {
                 // Draw

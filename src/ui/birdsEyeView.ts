@@ -252,7 +252,10 @@ export function initBirdsEye() {
         birdsEyeOverlay.id = 'birds-eye-overlay';
         birdsEyeOverlay.innerHTML = `
             <div class="birds-eye-header">
-                <span class="birds-eye-title">TACTICAL OVERVIEW</span>
+                <div>
+                    <span class="birds-eye-title">TACTICAL OVERVIEW</span>
+                    <span id="birds-eye-tick" style="color: #888; font-family: 'Courier New', monospace; font-size: 16px; margin-left: 15px; font-weight: bold;"></span>
+                </div>
                 <span class="birds-eye-hint">Click to jump | Press B or ESC to close</span>
             </div>
             <div class="birds-eye-content">
@@ -338,6 +341,11 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
     }
 
     birdsEyeOverlay!.style.display = 'flex';
+
+    const tickEl = document.getElementById('birds-eye-tick');
+    if (tickEl) {
+        tickEl.textContent = `TICK: ${state.tick}`;
+    }
 
     // Calculate canvas size to fit screen with padding
     const padding = 80;
