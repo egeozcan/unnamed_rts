@@ -6,14 +6,10 @@
  *   npx tsx src/scripts/simulate_ai.ts [--games N] [--ai1 id] [--ai2 id] [--difficulty d] [--max-ticks N] [--map-size s] [--legacy-turn-order] [--seed N] [--benchmark]
  *
  * Defaults:
- *   --games 10 --ai1 classic --ai2 infantry_fortress --difficulty hard --max-ticks 30000 --map-size medium
+ *   --games 10 --ai1 classic --ai2 infantry_fortress --difficulty hard --max-ticks 40000 --map-size medium
  */
 
-import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit, Action } from '../engine/types.js';
-import { INITIAL_STATE, update, createPlayerState, tick } from '../engine/reducer.js';
-import { computeAiActions, resetAIState } from '../engine/ai/index.js';
-import { createEntityCache } from '../engine/perf.js';
-import { generateMap, getStartingPositions } from '../game-utils.js';
+import { deriveGameSeed, withSeededRandom, createGameState, runGame } from './sim_runner.js';
 
 // Ensure AI implementations are registered
 import '../engine/ai/registry.js';
@@ -35,31 +31,7 @@ interface SimConfig {
     benchmarkWarmup: number;
 }
 
-function mulberry32(seed: number): () => number {
-    let a = seed >>> 0;
-    return () => {
-        a = (a + 0x6D2B79F5) >>> 0;
-        let t = a;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
 
-function withSeededRandom<T>(seed: number, fn: () => T): T {
-    const originalRandom = Math.random;
-    Math.random = mulberry32(seed);
-    try {
-        return fn();
-    } finally {
-        Math.random = originalRandom;
-    }
-}
-
-function deriveGameSeed(baseSeed: number, gameIndex: number): number {
-    // Deterministic per-game seed derived from one base seed.
-    return (baseSeed + Math.imul(gameIndex + 1, 0x9E3779B1)) >>> 0;
-}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -68,7 +40,7 @@ function parseArgs() {
         ai1: 'classic',
         ai2: 'infantry_fortress',
         difficulty: 'hard' as 'easy' | 'medium' | 'hard',
-        maxTicks: 30000,
+        maxTicks: 40000,
         mapSize: 'medium' as 'small' | 'medium' | 'large' | 'huge',
         resourceDensity: 'medium' as 'low' | 'medium' | 'high',
         rockDensity: 'medium' as 'low' | 'medium' | 'high',
@@ -105,7 +77,7 @@ Usage:
   --ai1 <id>               First AI implementation ID (default: classic)
   --ai2 <id>               Second AI implementation ID (default: infantry_fortress)
   --difficulty <d>          AI difficulty: easy, medium, hard (default: hard)
-  --max-ticks <N>           Max ticks per game before draw (default: 30000)
+  --max-ticks <N>           Max ticks per game before draw (default: 40000)
   --map-size <s>            Map size: small, medium, large, huge (default: medium)
   --resource-density <d>    Resource density: low, medium, high (default: medium)
   --rock-density <d>        Rock density: low, medium, high (default: medium)
@@ -122,88 +94,7 @@ Usage:
     return config;
 }
 
-function createGameState(
-    ai1Id: string,
-    ai2Id: string,
-    difficulty: 'easy' | 'medium' | 'hard',
-    mapSize: 'small' | 'medium' | 'large' | 'huge',
-    resourceDensity: 'low' | 'medium' | 'high',
-    rockDensity: 'low' | 'medium' | 'high'
-): GameState {
-    const config = {
-        players: [
-            { slot: 0, type: difficulty as string, color: '#4488ff', aiImplementationId: ai1Id },
-            { slot: 1, type: difficulty as string, color: '#ff4444', aiImplementationId: ai2Id },
-        ] as any,
-        mapSize,
-        resourceDensity,
-        rockDensity,
-    };
 
-    const { entities, mapWidth, mapHeight } = generateMap(config);
-    const positions = getStartingPositions(mapWidth, mapHeight, 2);
-
-    // Create players
-    const players: Record<number, PlayerState> = {
-        0: createPlayerState(0, true, difficulty, '#4488ff', ai1Id),
-        1: createPlayerState(1, true, difficulty, '#ff4444', ai2Id),
-    };
-
-    // Create base entities for each player (mirroring game.ts startGameWithConfig)
-    for (let slot = 0; slot < 2; slot++) {
-        const pos = positions[slot];
-
-        // Construction Yard
-        const cyId = `cy_p${slot}`;
-        const conyardEntity: BuildingEntity = {
-            id: cyId, owner: slot, type: 'BUILDING', key: 'conyard',
-            pos, prevPos: pos,
-            hp: 3000, maxHp: 3000, w: 90, h: 90, radius: 45, dead: false,
-            building: { isRepairing: false, placedTick: 0 }
-        };
-        entities[cyId] = conyardEntity;
-
-        // Harvester
-        const harvId = `harv_p${slot}`;
-        const harvPos = pos.add(new Vector(80, 50));
-        const harvesterEntity: HarvesterUnit = {
-            id: harvId, owner: slot, type: 'UNIT', key: 'harvester',
-            pos: harvPos, prevPos: harvPos,
-            hp: 1000, maxHp: 1000, w: 35, h: 35, radius: 17, dead: false,
-            movement: {
-                vel: new Vector(0, 0), rotation: 0,
-                moveTarget: null, path: null, pathIdx: 0,
-                finalDest: null, stuckTimer: 0,
-                unstuckDir: null, unstuckTimer: 0
-            },
-            combat: {
-                targetId: null, lastAttackerId: null,
-                cooldown: 0, flash: 0, turretAngle: 0
-            },
-            harvester: {
-                cargo: 0, resourceTargetId: null, baseTargetId: null
-            }
-        };
-        entities[harvId] = harvesterEntity;
-    }
-
-    return {
-        ...INITIAL_STATE,
-        running: true,
-        mode: 'demo',
-        difficulty: 'easy',
-        headless: true,
-        entities,
-        players,
-        config: { width: mapWidth, height: mapHeight, resourceDensity, rockDensity },
-    };
-}
-
-interface GameResult {
-    winner: number | null; // 0, 1, or null (draw/timeout)
-    ticks: number;
-    reason: string;
-}
 
 interface SimulationSummary {
     ai1Wins: number;
@@ -213,107 +104,7 @@ interface SimulationSummary {
     elapsedMs: number;
 }
 
-function runGame(
-    state: GameState,
-    maxTicks: number,
-    verbose: boolean,
-    gameIndex: number,
-    fairTurnOrder: boolean
-): GameResult {
-    // Pre-compute player IDs to avoid Object.keys() + parseInt() every tick
-    const playerIds = Object.keys(state.players).map(s => parseInt(s, 10));
-    const aiPlayerIds = playerIds.filter(pid => state.players[pid]?.isAi);
-    const actionListsByPlayer: (Action[] | null)[] = new Array(playerIds.length).fill(null);
-    const activeIndices: number[] = new Array(playerIds.length).fill(-1);
 
-    for (const pid of aiPlayerIds) {
-        resetAIState(pid);
-    }
-
-    for (let t = 0; t < maxTicks; t++) {
-        if (!fairTurnOrder) {
-            // Legacy behavior: fixed player order and immediate application.
-            for (const pid of aiPlayerIds) {
-                const aiActions = computeAiActions(state, pid);
-                for (const action of aiActions) {
-                    state = update(state, action);
-                }
-            }
-        } else {
-            // Bias-reduced behavior:
-            // 1) All players decide from the same state snapshot.
-            // 2) Actions are interleaved in a rotating initiative order.
-            const sharedEntityCache = createEntityCache(state.entities);
-            let activeCount = 0;
-            for (let i = 0; i < playerIds.length; i++) {
-                const pid = playerIds[i];
-                if (!state.players[pid]?.isAi) {
-                    actionListsByPlayer[i] = null;
-                    continue;
-                }
-                actionListsByPlayer[i] = computeAiActions(state, pid, sharedEntityCache);
-                activeIndices[activeCount++] = i;
-            }
-
-            if (activeCount > 0) {
-                const startOffset = (gameIndex + t) % activeCount;
-                let maxActions = 0;
-                for (let i = 0; i < activeCount; i++) {
-                    const actionList = actionListsByPlayer[activeIndices[i]];
-                    const count = actionList ? actionList.length : 0;
-                    if (count > maxActions) maxActions = count;
-                }
-
-                for (let actionIndex = 0; actionIndex < maxActions; actionIndex++) {
-                    for (let i = 0; i < activeCount; i++) {
-                        const orderedActiveIndex = (startOffset + i) % activeCount;
-                        const actions = actionListsByPlayer[activeIndices[orderedActiveIndex]];
-                        if (!actions || actionIndex >= actions.length) continue;
-                        state = update(state, actions[actionIndex]);
-                    }
-                }
-            }
-        }
-
-        // Tick the game
-        state = tick(state);
-
-        if (verbose && t % 1000 === 0 && t > 0) {
-            // Single-pass entity counting
-            const units = [0, 0];
-            const buildings = [0, 0];
-            for (const id in state.entities) {
-                const e = state.entities[id];
-                if (e.dead) continue;
-                if (e.owner !== 0 && e.owner !== 1) continue;
-                if (e.type === 'UNIT') units[e.owner]++;
-                else if (e.type === 'BUILDING') buildings[e.owner]++;
-            }
-            process.stdout.write(
-                `  t=${t}: P0(${state.players[0]?.credits ?? 0}cr,${units[0]}u,${buildings[0]}b) P1(${state.players[1]?.credits ?? 0}cr,${units[1]}u,${buildings[1]}b)\n`
-            );
-        }
-
-        // Check for winner
-        if (state.winner !== null) {
-            return {
-                winner: state.winner === -1 ? null : state.winner,
-                ticks: state.tick,
-                reason: state.winner === -1 ? 'draw' : `player ${state.winner} won`
-            };
-        }
-
-        if (!state.running) {
-            return {
-                winner: state.winner === -1 ? null : state.winner,
-                ticks: state.tick,
-                reason: 'game stopped'
-            };
-        }
-    }
-
-    return { winner: null, ticks: maxTicks, reason: 'timeout' };
-}
 
 function runSimulationSeries(config: SimConfig, printPerGame: boolean): SimulationSummary {
     let ai1Wins = 0;
