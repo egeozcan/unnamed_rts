@@ -267,7 +267,7 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
 
     // OPTIMIZATION: Skip whisker avoidance for stationary units or when explicitly skipped
     // Also skip if we have a valid path (pathfinding already avoids obstacles)
-    const shouldSkipWhiskers = skipWhiskerAvoidance || (!entity.movement.moveTarget && !entity.combat.targetId && !hasValidPath);
+    const shouldSkipWhiskers = skipWhiskerAvoidance || (!entity.movement.moveTarget && !entity.combat.targetId && !hasValidPath) || !!entity.movement.repairTargetId;
 
     if (!shouldSkipWhiskers) {
         const angles = hasValidPath ? [0, 0.3, -0.3] : [0, 0.4, -0.4, 0.8, -0.8];

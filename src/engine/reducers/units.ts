@@ -275,6 +275,17 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                         movement: { ...entity.movement, moveTarget: spreadPos || null, path: null },
                         combat: { ...entity.combat, targetId: targetId }
                     };
+                } else if (target && target.owner === entity.owner && target.key === 'service_depot') {
+                    // Right click friendly service depot - go dock instead of attack
+                    const unitData = getRuleData(entity.key);
+                    const isVehicle = unitData && isUnitData(unitData) && unitData.type === 'vehicle';
+                    if (isVehicle && ('combat' in entity)) {
+                        nextEntities[id] = {
+                            ...entity,
+                            movement: { ...entity.movement, moveTarget: target.pos, path: null, repairTargetId: target.id },
+                            combat: { ...entity.combat, targetId: null }
+                        } as any;
+                    }
                 }
             }
         }
@@ -443,12 +454,35 @@ export function updateUnit(
     harvesterCounts?: Record<EntityId, number>
 ): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
 
-    const data = getRuleData(entity.key);
+    let nextEntity = entity;
+
+    // Clear repairTargetId if safely away from depot
+    if (nextEntity.movement.repairTargetId) {
+        const depot = allEntities[nextEntity.movement.repairTargetId];
+        if (!depot || depot.dead) {
+            nextEntity = {
+                ...nextEntity,
+                movement: { ...nextEntity.movement, repairTargetId: null }
+            } as UnitEntity;
+        } else {
+            const dist = nextEntity.pos.dist(depot.pos);
+            const safeDist = depot.radius + nextEntity.radius - 2;
+            const isCommandedAway = nextEntity.movement.moveTarget && nextEntity.movement.moveTarget.dist(depot.pos) > 10;
+            if (isCommandedAway && dist > safeDist) {
+                nextEntity = {
+                    ...nextEntity,
+                    movement: { ...nextEntity.movement, repairTargetId: null }
+                } as UnitEntity;
+            }
+        }
+    }
+
+    const data = getRuleData(nextEntity.key);
 
     // Handle harvester units
-    if (entity.key === 'harvester') {
+    if (nextEntity.key === 'harvester') {
         const result = updateHarvesterBehavior(
-            entity as HarvesterUnit,
+            nextEntity as HarvesterUnit,
             allEntities,
             entityList,
             mapConfig,
@@ -564,8 +598,8 @@ export function updateUnit(
     }
 
     // Handle demo truck units
-    if (isDemoTruck(entity)) {
-        const result = updateDemoTruckBehavior(entity, allEntities);
+    if (isDemoTruck(nextEntity)) {
+        const result = updateDemoTruckBehavior(nextEntity, allEntities);
 
         // If demo truck has a detonation target, move toward it
         if (result.entity.demoTruck.detonationTargetId || result.entity.demoTruck.detonationTargetPos) {
@@ -599,7 +633,7 @@ export function updateUnit(
     // Handle combat units (non-harvester, non-air, non-demo-truck)
     if (data && isUnitData(data)) {
         const result = updateCombatUnitBehavior(
-            entity as CombatUnit,
+            nextEntity as CombatUnit,
             allEntities,
             entityList
         );
@@ -607,7 +641,7 @@ export function updateUnit(
     }
 
     // Fallback for unknown unit types
-    return { entity, projectile: null, creditsEarned: 0, resourceDamage: null };
+    return { entity: nextEntity, projectile: null, creditsEarned: 0, resourceDamage: null };
 }
 
 /**

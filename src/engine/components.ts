@@ -25,6 +25,7 @@ export interface MovementComponent {
     readonly lastDistToMoveTarget?: number;
     readonly bestDistToMoveTarget?: number;
     readonly moveTargetNoProgressTicks?: number;
+    readonly repairTargetId?: EntityId | null;
 }
 
 // ============ COMBAT COMPONENT ============

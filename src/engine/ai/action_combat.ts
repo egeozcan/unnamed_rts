@@ -1791,33 +1791,6 @@ export function handleUnitRepair(
     if (serviceDepots.length === 0) return actions;
 
     const RETREAT_THRESHOLD = 0.4; // Below 40% HP
-    // Service depot is 120x120, so edge is 60 from center. Units should park just outside.
-    const DEPOT_EDGE_OFFSET = 70; // Distance from depot center to park units
-    const DEPOT_PROXIMITY = 50; // Already at depot if within this distance from target position
-
-    // Track units assigned to each depot for congestion handling
-    const depotAssignments: Map<string, number> = new Map();
-
-    // First pass: count units already near each depot (including healthy ones waiting)
-    for (const depot of serviceDepots) {
-        let nearbyCount = 0;
-        for (const unit of combatUnits) {
-            if (unit.dead || unit.type !== 'UNIT') continue;
-            if (unit.key === 'harvester') continue;
-            if (isAirUnit(unit as UnitEntity)) continue;
-
-            // Service depot only repairs vehicles, skip infantry
-            const unitData = RULES.units[unit.key];
-            if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
-
-            const dist = unit.pos.dist(depot.pos);
-            // Count units already near the depot
-            if (dist < DEPOT_EDGE_OFFSET + 40) {
-                nearbyCount++;
-            }
-        }
-        depotAssignments.set(depot.id, nearbyCount);
-    }
 
     for (const unit of combatUnits) {
         if (unit.dead || unit.type !== 'UNIT') continue;
@@ -1850,32 +1823,14 @@ export function handleUnitRepair(
 
             if (!nearestDepot) continue;
 
-            // Get congestion count for this depot and increment it
-            const congestionIndex = depotAssignments.get(nearestDepot.id) || 0;
-            depotAssignments.set(nearestDepot.id, congestionIndex + 1);
-
-            // Calculate target position on depot edge, spread around based on congestion
-            // Use congestion index to spread units around the depot (8 positions around)
-            const angleOffset = (congestionIndex % 8) * (Math.PI / 4); // 45 degree increments
-            const angle = angleOffset;
-
-            const targetX = nearestDepot.pos.x + Math.cos(angle) * DEPOT_EDGE_OFFSET;
-            const targetY = nearestDepot.pos.y + Math.sin(angle) * DEPOT_EDGE_OFFSET;
-
-            // Check if unit is already close to its target position
-            const distToTarget = Math.sqrt(
-                Math.pow(unit.pos.x - targetX, 2) +
-                Math.pow(unit.pos.y - targetY, 2)
-            );
-
-            // Move to depot edge if not already there
-            if (distToTarget > DEPOT_PROXIMITY) {
+            const unitEntity = unit as unknown as UnitEntity;
+            // Only send command if not already docking to this depot
+            if (unitEntity.movement?.repairTargetId !== nearestDepot.id) {
                 actions.push({
-                    type: 'COMMAND_MOVE',
+                    type: 'COMMAND_ATTACK',
                     payload: {
                         unitIds: [unit.id],
-                        x: targetX,
-                        y: targetY
+                        targetId: nearestDepot.id
                     }
                 });
             }

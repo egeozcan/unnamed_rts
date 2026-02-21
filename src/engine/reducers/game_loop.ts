@@ -321,23 +321,41 @@ export function tick(state: GameState): GameState {
                 // Filter for friendly damaged vehicles only (not infantry)
                 if (entity.type !== 'UNIT' || entity.dead) continue;
                 if (entity.owner !== depot.owner) continue;
-                if (entity.hp >= entity.maxHp) continue;
+
+                // Get latest version from updatedEntities (may have been modified this tick)
+                const unit = updatedEntities[entity.id] as UnitEntity;
+                if (!unit || unit.type !== 'UNIT' || unit.dead || unit.hp >= unit.maxHp) continue;
+
+                // Docking logic: target must have THIS depot as repairTargetId
+                if (unit.movement.repairTargetId !== depot.id) continue;
 
                 // Service depot only repairs vehicles, not infantry
                 const unitData = getRuleData(entity.key);
                 if (!unitData || !isUnitData(unitData) || unitData.type !== 'vehicle') continue;
 
-                // Get latest version from updatedEntities (may have been modified this tick)
-                const unit = updatedEntities[entity.id];
-                if (!unit || unit.type !== 'UNIT' || unit.dead || unit.hp >= unit.maxHp) continue;
-
-                // Precise distance check
+                // Precise distance check - must be fully inside or very close to center to be "docked"
                 const dist = unit.pos.dist(depot.pos);
-                if (dist <= repairRadius + unit.radius) {
+                // Building is 120x120 (radius 60). We consider it docked if it's securely on the pad.
+                if (dist <= depot.radius) {
+                    const newHp = Math.min(unit.maxHp, unit.hp + repairRate);
                     updatedEntities[entity.id] = {
                         ...unit,
-                        hp: Math.min(unit.maxHp, unit.hp + repairRate)
+                        hp: newHp
                     };
+
+                    // If fully healed, command the unit to roll out automatically
+                    if (newHp >= unit.maxHp) {
+                        const updated = updatedEntities[entity.id] as UnitEntity;
+                        const rolloutPos = depot.pos.add(new Vector(0, depot.radius + unit.radius + 30));
+                        updatedEntities[entity.id] = {
+                            ...updated,
+                            movement: {
+                                ...updated.movement,
+                                moveTarget: rolloutPos,
+                                path: null
+                            }
+                        };
+                    }
                 }
             }
         }
@@ -872,6 +890,12 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 const minDist = a.radius + b.radius - softOverlap;
 
                 if (dist < minDist && dist > 0.001) {
+                    // Skip collision if A is a vehicle docking to B (Service Depot)
+                    const aUnit = a as unknown as UnitEntity;
+                    if (!isUnitB && b.type === 'BUILDING' && b.key === 'service_depot' && aUnit.movement?.repairTargetId === b.id) {
+                        continue;
+                    }
+
                     hadOverlap = true; // Found an overlap
                     const overlap = minDist - dist;
                     const dir = b.pos.sub(a.pos).norm();
