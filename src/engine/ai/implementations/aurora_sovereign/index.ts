@@ -2,34 +2,31 @@ import { Action, Entity, GameState, isActionType } from '../../../types.js';
 import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { RULES } from '../../../../data/schemas/index.js';
 import { AIImplementation, AIImplementationDifficulty } from '../../contracts.js';
-import { computeClassicAiActions } from '../classic/index.js';
-import { findBaseCenter, getAIState, setPersonalityForPlayer } from '../../state.js';
-import { handleAllInSell } from '../../action_economy.js';
+import { computeAuroraTitanSnapshotAiActions } from './titan_core_snapshot.js';
 import { checkPrerequisites, hasProductionBuildingFor } from '../../utils.js';
+import { getAIState, resetAIState } from '../../state.js';
 
 type RuntimeState = {
-    forcedAllIn: boolean;
-    lastForcedTick: number;
     lastRallyTick: number;
-    switchedToBalanced: boolean;
+    lastPressureTick: number;
 };
 
 const runtimeByPlayer = new Map<number, RuntimeState>();
 
-const EARLY_FORCE_TICK = 4800;
-const STALEMATE_FORCE_TICK = 12000;
-const MIN_FORCE_COMBAT_UNITS = 3;
-const BASE_THREAT_RADIUS = 260;
-const RALLY_COOLDOWN = 240;
+const NON_COMBAT_KEYS = new Set([
+    'harvester',
+    'mcv',
+    'engineer',
+    'induction_rig',
+    'demo_truck',
+    'hijacker',
+    'harrier'
+]);
 
-function isCombatUnit(entity: Entity): boolean {
-    return entity.type === 'UNIT' &&
-        entity.key !== 'harvester' &&
-        entity.key !== 'mcv' &&
-        entity.key !== 'engineer' &&
-        entity.key !== 'induction_rig' &&
-        !entity.dead;
-}
+const BASE_THREAT_RADIUS = 420;
+const RALLY_COOLDOWN = 180;
+const PRESSURE_COOLDOWN = 75;
+const PRESSURE_COOLDOWN_CAUTIOUS = 140;
 
 function getRuntimeState(playerId: number, tick: number): RuntimeState {
     const existing = runtimeByPlayer.get(playerId);
@@ -38,207 +35,460 @@ function getRuntimeState(playerId: number, tick: number): RuntimeState {
     }
 
     const created: RuntimeState = {
-        forcedAllIn: false,
-        lastForcedTick: 0,
         lastRallyTick: 0,
-        switchedToBalanced: false
+        lastPressureTick: 0
     };
     runtimeByPlayer.set(playerId, created);
     return created;
 }
 
-function getEnemyBuildings(enemies: Entity[]): Entity[] {
-    return enemies.filter(e => e.type === 'BUILDING' && !e.dead);
+function isCombatUnit(entity: Entity): boolean {
+    return entity.type === 'UNIT' && !entity.dead && !NON_COMBAT_KEYS.has(entity.key);
 }
 
-function pickPrimaryTarget(
-    enemyBuildings: Entity[],
-    enemies: Entity[],
-    baseCenterDistRef: Entity,
-    tick: number
-): Entity | null {
-    if (tick < 9000) {
-        const enemyHarvesters = enemies.filter(e => e.type === 'UNIT' && e.key === 'harvester' && !e.dead);
-        if (enemyHarvesters.length > 0) {
-            let closest = enemyHarvesters[0];
-            let closestDist = closest.pos.dist(baseCenterDistRef.pos);
-            for (let i = 1; i < enemyHarvesters.length; i++) {
-                const dist = enemyHarvesters[i].pos.dist(baseCenterDistRef.pos);
-                if (dist < closestDist) {
-                    closest = enemyHarvesters[i];
-                    closestDist = dist;
-                }
-            }
-            return closest;
-        }
-    }
+type TacticalProfile = {
+    heavyProfile: boolean;
+    cautiousDefense: boolean;
+    cautiousPressure: boolean;
+    economyConservative: boolean;
+};
 
-    if (enemyBuildings.length > 0) {
-        const priorityKeys = tick < 9000 ?
-            ['refinery', 'factory', 'conyard', 'power', 'barracks'] :
-            ['factory', 'refinery', 'conyard', 'power', 'barracks', 'airforce_command'];
-        for (const key of priorityKeys) {
-            const matches = enemyBuildings.filter(b => b.key === key);
-            if (matches.length > 0) {
-                let best = matches[0];
-                let bestDist = best.pos.dist(baseCenterDistRef.pos);
-                for (let i = 1; i < matches.length; i++) {
-                    const dist = matches[i].pos.dist(baseCenterDistRef.pos);
-                    if (dist < bestDist) {
-                        best = matches[i];
-                        bestDist = dist;
-                    }
-                }
-                return best;
-            }
-        }
-        return enemyBuildings[0];
-    }
+function deriveTacticalProfile(
+    state: GameState,
+    playerId: number,
+    combatCount: number,
+    enemyCombatCount: number,
+    enemyDefenseCount: number,
+    enemyFactoryCount: number,
+    enemyTechCount: number,
+    localThreatCount: number
+): TacticalProfile {
+    const earlyGame = state.tick < 9000;
+    const behindArmy = combatCount + 1 < enemyCombatCount;
+    const sideCompensate = playerId === 1;
+    const nearbyThreat = localThreatCount >= (sideCompensate ? 1 : 2);
 
-    const enemyCombatUnits = enemies.filter(isCombatUnit);
-    if (enemyCombatUnits.length > 0) {
-        return enemyCombatUnits[0];
-    }
-    return enemies.find(e => !e.dead) || null;
+    const enemyAdvancedMacro = enemyFactoryCount >= 2 || enemyTechCount > 0;
+    const enemyEntrenched = enemyDefenseCount >= 2;
+    const heavyProfile = enemyAdvancedMacro ||
+        enemyEntrenched ||
+        enemyCombatCount >= 8 ||
+        behindArmy ||
+        (sideCompensate && state.tick < 6500 && enemyFactoryCount >= 1);
+
+    const cautiousDefense = earlyGame &&
+        (nearbyThreat || behindArmy || enemyCombatCount >= (sideCompensate ? 5 : 6));
+    const cautiousPressure = nearbyThreat ||
+        (behindArmy && state.tick < (sideCompensate ? 14000 : 12000));
+    const economyConservative = (sideCompensate && (nearbyThreat || enemyCombatCount >= combatCount)) ||
+        (behindArmy && state.tick < 12000);
+
+    return { heavyProfile, cautiousDefense, cautiousPressure, economyConservative };
 }
 
-function hasQueuedBuildOfCategory(actions: Action[], category: 'vehicle' | 'infantry'): boolean {
+function hasQueuedBuildOfCategory(actions: Action[], category: 'building' | 'vehicle' | 'infantry'): boolean {
     return actions.some(action =>
         isActionType(action, 'START_BUILD') &&
         action.payload.category === category
     );
 }
 
-function queueFallbackProduction(
+function pickClosestTo(entities: Entity[], from: Entity): Entity | null {
+    if (entities.length === 0) return null;
+    let best = entities[0];
+    let bestDist = best.pos.dist(from.pos);
+    for (let i = 1; i < entities.length; i++) {
+        const dist = entities[i].pos.dist(from.pos);
+        if (dist < bestDist) {
+            best = entities[i];
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
+function pickPressureTarget(
+    state: GameState,
+    enemies: Entity[],
+    baseCenterRef: Entity,
+    heavyProfile: boolean
+): Entity | null {
+    const enemyBuildings = enemies.filter(e => e.type === 'BUILDING' && !e.dead);
+    const enemyHarvesters = enemies.filter(e => e.type === 'UNIT' && e.key === 'harvester' && !e.dead);
+
+    const earlyPriority = heavyProfile
+        ? ['harvester', 'refinery', 'factory', 'conyard', 'power', 'barracks']
+        : ['harvester', 'refinery', 'factory', 'conyard', 'power', 'barracks'];
+    const latePriority = heavyProfile
+        ? ['factory', 'conyard', 'tech', 'refinery', 'power', 'barracks', 'airforce_command']
+        : ['conyard', 'factory', 'refinery', 'tech', 'power', 'barracks', 'airforce_command'];
+    const priorities = state.tick < 7000 ? earlyPriority : latePriority;
+
+    for (const key of priorities) {
+        if (key === 'harvester') {
+            const target = pickClosestTo(enemyHarvesters, baseCenterRef);
+            if (target) return target;
+            continue;
+        }
+        const matches = enemyBuildings.filter(b => b.key === key);
+        const target = pickClosestTo(matches, baseCenterRef);
+        if (target) return target;
+    }
+
+    return pickClosestTo(enemyBuildings, baseCenterRef) ||
+        pickClosestTo(enemies.filter(isCombatUnit), baseCenterRef) ||
+        enemies.find(e => !e.dead) ||
+        null;
+}
+
+function getLocalThreatCount(enemies: Entity[], baseCenterRef: Entity): number {
+    let count = 0;
+    for (const enemy of enemies) {
+        if (enemy.type !== 'UNIT' || enemy.dead || enemy.key === 'harvester') continue;
+        if (enemy.pos.dist(baseCenterRef.pos) <= BASE_THREAT_RADIUS) {
+            count++;
+        }
+    }
+    return count;
+}
+
+function filterHydraActions(
+    actions: Action[],
+    state: GameState,
+    enemyDefenseCount: number,
+    enemyCombatCount: number,
+    combatCount: number
+): Action[] {
+    const filtered: Action[] = [];
+
+    for (const action of actions) {
+        if (!isActionType(action, 'START_BUILD')) {
+            filtered.push(action);
+            continue;
+        }
+
+        const payload = action.payload;
+        if (payload.category === 'infantry') {
+            // Early specialist spam tends to lose tempo in macro mirrors.
+            if ((payload.key === 'engineer' || payload.key === 'hijacker') &&
+                (state.tick < 9000 || combatCount < 8)) {
+                continue;
+            }
+            filtered.push(action);
+            continue;
+        }
+
+        if (payload.category === 'vehicle') {
+            if (payload.key === 'demo_truck') {
+                const shouldAllowDemo =
+                    state.tick >= 9000 &&
+                    combatCount >= 10 &&
+                    enemyDefenseCount >= 2 &&
+                    enemyCombatCount >= 8;
+                if (!shouldAllowDemo) {
+                    continue;
+                }
+            }
+            if (payload.key === 'induction_rig' && (state.tick < 13000 || enemyCombatCount > 0)) {
+                continue;
+            }
+            filtered.push(action);
+            continue;
+        }
+
+        if (payload.category === 'building') {
+            if (payload.key === 'service_depot' && state.tick < 9000) {
+                continue;
+            }
+            filtered.push(action);
+            continue;
+        }
+
+        filtered.push(action);
+    }
+
+    return filtered;
+}
+
+function retargetProductionActions(
+    actions: Action[],
+    state: GameState,
+    myBuildings: Entity[],
+    dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
+    enemyCombatCount: number
+): Action[] {
+    const antiArmorMode = dominantArmor === 'heavy' ||
+        (dominantArmor === 'mixed' && enemyCombatCount >= 9);
+    if (!antiArmorMode) {
+        return actions;
+    }
+
+    const hasTech = myBuildings.some(b => b.key === 'tech' && !b.dead);
+
+    return actions.map(action => {
+        if (!isActionType(action, 'START_BUILD')) {
+            return action;
+        }
+
+        if (action.payload.category === 'infantry' &&
+            action.payload.key !== 'rocket' &&
+            checkPrerequisites('rocket', myBuildings)) {
+            return {
+                ...action,
+                payload: {
+                    ...action.payload,
+                    key: 'rocket'
+                }
+            };
+        }
+
+        if (action.payload.category === 'vehicle') {
+            const replacement =
+                (hasTech && state.tick >= 5200 && checkPrerequisites('mlrs', myBuildings)) ? 'mlrs' :
+                    checkPrerequisites('heavy', myBuildings) ? 'heavy' :
+                        null;
+            if (replacement && action.payload.key !== replacement) {
+                return {
+                    ...action,
+                    payload: {
+                        ...action.payload,
+                        key: replacement
+                    }
+                };
+            }
+        }
+
+        return action;
+    });
+}
+
+function maybeQueueMacroBuilding(
     actions: Action[],
     state: GameState,
     playerId: number,
-    myBuildings: Entity[]
+    myBuildings: Entity[],
+    heavyProfile: boolean,
+    cautiousDefense: boolean,
+    economyConservative: boolean,
+    combatCount: number,
+    enemyCombatCount: number,
+    enemyFactoryCount: number,
+    localThreatCount: number
+): void {
+    const player = state.players[playerId];
+    if (!player) return;
+    if (player.queues.building.current || player.readyToPlace || hasQueuedBuildOfCategory(actions, 'building')) {
+        return;
+    }
+
+    const hasConyard = myBuildings.some(b => b.key === 'conyard' && !b.dead);
+    if (!hasConyard) return;
+
+    let totalPower = 0;
+    let totalDrain = 0;
+    for (const b of myBuildings) {
+        if (b.dead) continue;
+        const data = RULES.buildings[b.key];
+        if (!data) continue;
+        totalPower += data.power || 0;
+        totalDrain += data.drain || 0;
+    }
+
+    if (totalDrain > totalPower - 30 && checkPrerequisites('power', myBuildings)) {
+        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId } });
+        return;
+    }
+
+    const defenseCount = myBuildings.filter(
+        b => !b.dead && Boolean(RULES.buildings[b.key]?.isDefense)
+    ).length;
+    const earlyDefensePressure = state.tick >= 1600 &&
+        state.tick <= 9000 &&
+        (localThreatCount > 0 || enemyCombatCount >= 4 || enemyFactoryCount >= 1);
+    const targetDefenseCount = localThreatCount >= 3 && enemyCombatCount >= 8 && state.tick < 7000 ? 2 : 1;
+    if ((cautiousDefense || earlyDefensePressure) &&
+        defenseCount < targetDefenseCount &&
+        checkPrerequisites('turret', myBuildings)) {
+            actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
+            return;
+    }
+
+    const factoryCount = myBuildings.filter(b => b.key === 'factory' && !b.dead).length;
+    let targetFactoryCount = economyConservative ? 1 : 2;
+    if (!economyConservative &&
+        heavyProfile &&
+        state.tick >= 7000 &&
+        localThreatCount === 0 &&
+        combatCount >= enemyCombatCount - 1 &&
+        player.credits >= 1200) {
+        targetFactoryCount = 3;
+    }
+    if (state.tick >= 2400 && factoryCount < targetFactoryCount && checkPrerequisites('factory', myBuildings)) {
+        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'factory', playerId } });
+        return;
+    }
+
+    const barracksCount = myBuildings.filter(b => b.key === 'barracks' && !b.dead).length;
+    if (!economyConservative &&
+        heavyProfile &&
+        state.tick >= 5600 &&
+        localThreatCount === 0 &&
+        combatCount >= enemyCombatCount &&
+        player.credits >= 900 &&
+        barracksCount < 2 &&
+        checkPrerequisites('barracks', myBuildings)) {
+        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'barracks', playerId } });
+        return;
+    }
+
+    const hasTech = myBuildings.some(b => b.key === 'tech' && !b.dead);
+    if (!economyConservative &&
+        heavyProfile &&
+        !hasTech &&
+        state.tick >= 4200 &&
+        player.credits >= 2200 &&
+        localThreatCount === 0 &&
+        combatCount >= enemyCombatCount - 1 &&
+        checkPrerequisites('tech', myBuildings)) {
+        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'tech', playerId } });
+    }
+}
+
+function maybeQueueFallbackProduction(
+    actions: Action[],
+    state: GameState,
+    playerId: number,
+    myBuildings: Entity[],
+    dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
+    heavyProfile: boolean
 ): void {
     const player = state.players[playerId];
     if (!player) return;
 
-    if (!player.queues.vehicle.current &&
-        hasProductionBuildingFor('vehicle', myBuildings) &&
-        !hasQueuedBuildOfCategory(actions, 'vehicle')) {
-        const vehicleKey = checkPrerequisites('heavy', myBuildings) ? 'heavy' :
-            checkPrerequisites('light', myBuildings) ? 'light' : null;
-        if (vehicleKey) {
-            const cost = RULES.units[vehicleKey]?.cost ?? 0;
-            if (player.credits >= cost) {
-                actions.push({
-                    type: 'START_BUILD',
-                    payload: { category: 'vehicle', key: vehicleKey, playerId }
-                });
-            }
-        }
-    }
-
     if (!player.queues.infantry.current &&
         hasProductionBuildingFor('infantry', myBuildings) &&
         !hasQueuedBuildOfCategory(actions, 'infantry')) {
-        const key = checkPrerequisites('rocket', myBuildings) ? 'rocket' : 'rifle';
-        const cost = RULES.units[key]?.cost ?? 0;
-        if (player.credits >= cost) {
+        const infantryKey =
+            checkPrerequisites('rocket', myBuildings) ? 'rocket' :
+                (dominantArmor === 'infantry' && checkPrerequisites('grenadier', myBuildings)) ? 'grenadier' :
+                    'rifle';
+        actions.push({
+            type: 'START_BUILD',
+            payload: { category: 'infantry', key: infantryKey, playerId }
+        });
+    }
+
+    if (!player.queues.vehicle.current &&
+        hasProductionBuildingFor('vehicle', myBuildings) &&
+        !hasQueuedBuildOfCategory(actions, 'vehicle')) {
+        const hasTech = myBuildings.some(b => b.key === 'tech' && !b.dead);
+        const vehicleKey =
+            (heavyProfile && hasTech && checkPrerequisites('mlrs', myBuildings)) ? 'mlrs' :
+                (heavyProfile && hasTech && checkPrerequisites('artillery', myBuildings)) ? 'artillery' :
+                ((heavyProfile || dominantArmor === 'heavy') && checkPrerequisites('heavy', myBuildings)) ? 'heavy' :
+                    (dominantArmor === 'infantry' && checkPrerequisites('flame_tank', myBuildings)) ? 'flame_tank' :
+                        checkPrerequisites('light', myBuildings) ? 'light' :
+                            null;
+
+        if (vehicleKey) {
             actions.push({
                 type: 'START_BUILD',
-                payload: { category: 'infantry', key, playerId }
+                payload: { category: 'vehicle', key: vehicleKey, playerId }
             });
         }
     }
 }
 
-function tuneBaseActions(
+function maybeForcePressure(
     actions: Action[],
     state: GameState,
-    playerId: number,
-    myBuildings: Entity[],
-    underThreat: boolean
-): Action[] {
-    const refineries = myBuildings.filter(b => b.key === 'refinery' && !b.dead).length;
-    const canHeavy = checkPrerequisites('heavy', myBuildings);
-    const canLight = checkPrerequisites('light', myBuildings);
-    const canRocket = checkPrerequisites('rocket', myBuildings);
+    runtime: RuntimeState,
+    combatUnits: Entity[],
+    enemies: Entity[],
+    target: Entity | null,
+    localThreatCount: number,
+    heavyProfile: boolean,
+    cautiousPressure: boolean
+): void {
+    if (!target) return;
+    if (combatUnits.length < 3) return;
+    const pressureCooldown = cautiousPressure ? PRESSURE_COOLDOWN_CAUTIOUS : PRESSURE_COOLDOWN;
+    if (state.tick - runtime.lastPressureTick < pressureCooldown) return;
 
-    const tuned: Action[] = [];
-    for (const action of actions) {
-        if (!isActionType(action, 'START_BUILD')) {
-            tuned.push(action);
-            continue;
-        }
-
-        const payload = action.payload;
-        if (payload.category === 'building') {
-            if (state.tick < 18000 &&
-                (payload.key === 'tech' || payload.key === 'airforce_command' || payload.key === 'service_depot')) {
-                continue;
-            }
-            if (state.tick < 15000 && payload.key === 'refinery' && refineries >= 2) {
-                continue;
-            }
-            if (!underThreat && state.tick < 7000 && RULES.buildings[payload.key]?.isDefense) {
-                continue;
-            }
-            tuned.push(action);
-            continue;
-        }
-
-        if (payload.category === 'vehicle') {
-            if (payload.key === 'mcv' || payload.key === 'induction_rig' || payload.key === 'demo_truck') {
-                continue;
-            }
-            if (state.tick < 18000 && payload.key !== 'harvester' && payload.key !== 'light' && payload.key !== 'heavy' && payload.key !== 'artillery') {
-                if (canHeavy || canLight) {
-                    tuned.push({
-                        type: 'START_BUILD',
-                        payload: {
-                            category: 'vehicle',
-                            key: canHeavy ? 'heavy' : 'light',
-                            playerId
-                        }
-                    });
-                    continue;
-                }
-            }
-            tuned.push(action);
-            continue;
-        }
-
-        if (payload.category === 'infantry') {
-            if (state.tick < 14000 && (payload.key === 'engineer' || payload.key === 'hijacker' || payload.key === 'sniper')) {
-                continue;
-            }
-            if (state.tick < 12000 && payload.key === 'rifle' && canRocket) {
-                tuned.push({
-                    type: 'START_BUILD',
-                    payload: {
-                        category: 'infantry',
-                        key: 'rocket',
-                        playerId
-                    }
-                });
-                continue;
-            }
-            tuned.push(action);
-            continue;
-        }
-
-        tuned.push(action);
+    const enemyCombatCount = enemies.filter(isCombatUnit).length;
+    const hasAdvantage = combatUnits.length >= enemyCombatCount + 1;
+    if (cautiousPressure) {
+        const hasStrongAdvantage = combatUnits.length >= enemyCombatCount + 2;
+        const latePush = state.tick >= 9000 && combatUnits.length >= 8;
+        if (localThreatCount > 0) return;
+        if (!hasStrongAdvantage && !latePush) return;
+    } else if (heavyProfile) {
+        if (localThreatCount > 0 && !hasAdvantage) return;
+    } else if (localThreatCount > 0 && !hasAdvantage) {
+        return;
     }
 
-    return tuned;
+    let pressureUnits = combatUnits;
+    if (localThreatCount > 0 || cautiousPressure) {
+        const reserveCount = combatUnits.length >= 6 ? 2 : 1;
+        const byTargetDistance = [...combatUnits].sort(
+            (a, b) => a.pos.dist(target.pos) - b.pos.dist(target.pos)
+        );
+        if (byTargetDistance.length - reserveCount >= 3) {
+            pressureUnits = byTargetDistance.slice(0, byTargetDistance.length - reserveCount);
+        }
+    }
+
+    if (pressureUnits.length < 3) return;
+
+    const unitIds = pressureUnits.map(unit => unit.id);
+    actions.push({
+        type: 'COMMAND_ATTACK',
+        payload: {
+            unitIds,
+            targetId: target.id
+        }
+    });
+
+    if (pressureUnits.length >= 6) {
+        actions.push({
+            type: 'COMMAND_ATTACK_MOVE',
+            payload: {
+                unitIds,
+                x: target.pos.x,
+                y: target.pos.y
+            }
+        });
+    }
+
+    runtime.lastPressureTick = state.tick;
 }
 
 function maybeSetRallyPoints(
     actions: Action[],
     state: GameState,
     myBuildings: Entity[],
-    target: Entity,
+    enemies: Entity[],
+    baseCenterRef: Entity,
+    localThreatCount: number,
+    target: Entity | null,
     runtime: RuntimeState
 ): void {
-    if (state.tick - runtime.lastRallyTick < RALLY_COOLDOWN) {
-        return;
+    if (!target) return;
+    if (state.tick - runtime.lastRallyTick < RALLY_COOLDOWN) return;
+
+    let rallyTarget = target;
+    if (localThreatCount > 0) {
+        const nearbyThreats = enemies.filter(
+            enemy =>
+                enemy.type === 'UNIT' &&
+                !enemy.dead &&
+                enemy.key !== 'harvester' &&
+                enemy.pos.dist(baseCenterRef.pos) <= BASE_THREAT_RADIUS
+        );
+        rallyTarget = pickClosestTo(nearbyThreats, baseCenterRef) || baseCenterRef;
     }
+
     runtime.lastRallyTick = state.tick;
     for (const building of myBuildings) {
         if (building.key !== 'factory' && building.key !== 'barracks' && building.key !== 'airforce_command') {
@@ -248,11 +498,100 @@ function maybeSetRallyPoints(
             type: 'SET_RALLY_POINT',
             payload: {
                 buildingId: building.id,
-                x: target.pos.x,
-                y: target.pos.y
+                x: rallyTarget.pos.x,
+                y: rallyTarget.pos.y
             }
         });
     }
+}
+
+function isOwnedUnit(state: GameState, entityId: string, playerId: number): boolean {
+    const entity = state.entities[entityId];
+    return Boolean(entity && entity.type === 'UNIT' && !entity.dead && entity.owner === playerId);
+}
+
+function isOwnedBuilding(state: GameState, entityId: string, playerId: number): boolean {
+    const entity = state.entities[entityId];
+    return Boolean(entity && entity.type === 'BUILDING' && !entity.dead && entity.owner === playerId);
+}
+
+function sanitizeAuroraActions(actions: Action[], state: GameState, playerId: number): Action[] {
+    return actions.filter(action => {
+        switch (action.type) {
+            case 'START_BUILD':
+            case 'PLACE_BUILDING':
+            case 'CANCEL_BUILD':
+            case 'QUEUE_UNIT':
+            case 'DEQUEUE_UNIT':
+                return action.payload.playerId === playerId;
+            case 'SET_PRIMARY_BUILDING':
+                return action.payload.playerId === playerId &&
+                    isOwnedBuilding(state, action.payload.buildingId, playerId);
+            case 'SELL_BUILDING':
+            case 'START_REPAIR':
+            case 'STOP_REPAIR':
+            case 'SET_RALLY_POINT':
+                return isOwnedBuilding(state, action.payload.buildingId, playerId);
+            case 'COMMAND_MOVE':
+            case 'COMMAND_ATTACK':
+            case 'COMMAND_ATTACK_MOVE':
+            case 'SET_STANCE':
+                return action.payload.unitIds.length > 0 &&
+                    action.payload.unitIds.every(unitId => isOwnedUnit(state, unitId, playerId));
+            case 'DEPLOY_MCV':
+            case 'DEPLOY_INDUCTION_RIG':
+                return isOwnedUnit(state, action.payload.unitId, playerId);
+            default:
+                return true;
+        }
+    });
+}
+
+function maybeEnforceLocalDefense(
+    actions: Action[],
+    combatUnits: Entity[],
+    enemies: Entity[],
+    baseCenterRef: Entity,
+    localThreatCount: number,
+    enemyCombatCount: number
+): Action[] {
+    if (combatUnits.length === 0 || localThreatCount === 0) {
+        return actions;
+    }
+
+    const shouldHold = localThreatCount >= 2 || combatUnits.length <= enemyCombatCount;
+    if (!shouldHold) {
+        return actions;
+    }
+
+    const nearbyThreats = enemies.filter(
+        enemy => isCombatUnit(enemy) && enemy.pos.dist(baseCenterRef.pos) <= BASE_THREAT_RADIUS
+    );
+    const focusThreat = pickClosestTo(nearbyThreats, baseCenterRef);
+    if (!focusThreat) {
+        return actions;
+    }
+
+    const defenderIds = combatUnits.map(unit => unit.id);
+    const defenderIdSet = new Set(defenderIds);
+
+    const filtered = actions.filter(action => {
+        if (action.type === 'COMMAND_ATTACK' || action.type === 'COMMAND_ATTACK_MOVE') {
+            return !action.payload.unitIds.some(unitId => defenderIdSet.has(unitId));
+        }
+        return true;
+    });
+
+    return [
+        {
+            type: 'COMMAND_ATTACK',
+            payload: {
+                unitIds: defenderIds,
+                targetId: focusThreat.id
+            }
+        },
+        ...filtered
+    ];
 }
 
 export function computeAuroraSovereignAiActions(
@@ -266,118 +605,107 @@ export function computeAuroraSovereignAiActions(
     const player = state.players[playerId];
     if (!player) return [];
 
-    if (state.tick <= 1) {
-        setPersonalityForPlayer(playerId, 'rusher');
-    }
-    const runtime = getRuntimeState(playerId, state.tick);
-    if (state.tick >= 9000 && !runtime.switchedToBalanced) {
-        setPersonalityForPlayer(playerId, 'balanced');
-        runtime.switchedToBalanced = true;
-    }
-
     const cache = sharedCache ?? createEntityCache(state.entities);
-    let actions = computeClassicAiActions(state, playerId, cache);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
     const enemies = getEnemiesOf(cache, playerId);
-    const enemyBuildings = getEnemyBuildings(enemies);
     const combatUnits = myUnits.filter(isCombatUnit);
-    const harvesters = myUnits.filter(u => u.type === 'UNIT' && u.key === 'harvester' && !u.dead);
+
+    // Delegate core behavior to vendored Titan snapshot.
+    let actions = computeAuroraTitanSnapshotAiActions(state, playerId, cache);
 
     if (myBuildings.length === 0 && myUnits.every(unit => unit.key !== 'mcv')) {
         return actions;
     }
 
-    const baseCenter = findBaseCenter(myBuildings);
-    const localThreats = enemies.filter(enemy =>
-        enemy.type === 'UNIT' &&
-        enemy.key !== 'harvester' &&
-        !enemy.dead &&
-        enemy.pos.dist(baseCenter) <= BASE_THREAT_RADIUS
-    );
-
-    const baseCenterEntity: Entity = myBuildings[0] || myUnits[0];
-    if (!baseCenterEntity) {
+    const baseCenterRef = myBuildings[0] || myUnits[0];
+    if (!baseCenterRef) {
         return actions;
     }
-    const primaryTarget = pickPrimaryTarget(enemyBuildings, enemies, baseCenterEntity, state.tick);
+
+    const enemyDefenseCount = enemies.filter(
+        e => e.type === 'BUILDING' && !e.dead && Boolean(RULES.buildings[e.key]?.isDefense)
+    ).length;
+    const enemyCombatCount = enemies.filter(isCombatUnit).length;
+    const enemyFactoryCount = enemies.filter(e => e.type === 'BUILDING' && !e.dead && e.key === 'factory').length;
+    const enemyTechCount = enemies.filter(e => e.type === 'BUILDING' && !e.dead && e.key === 'tech').length;
+    const localThreatCount = getLocalThreatCount(enemies, baseCenterRef);
+    const tacticalProfile = deriveTacticalProfile(
+        state,
+        playerId,
+        combatUnits.length,
+        enemyCombatCount,
+        enemyDefenseCount,
+        enemyFactoryCount,
+        enemyTechCount,
+        localThreatCount
+    );
+
     const aiState = getAIState(playerId);
-    const enemyCombatUnits = enemies.filter(isCombatUnit);
+    actions = filterHydraActions(actions, state, enemyDefenseCount, enemyCombatCount, combatUnits.length);
+    actions = retargetProductionActions(
+        actions,
+        state,
+        myBuildings,
+        aiState.enemyIntelligence.dominantArmor,
+        enemyCombatCount
+    );
 
-    const hasArmyForPush = combatUnits.length >= MIN_FORCE_COMBAT_UNITS;
-    const hasCombatEdge = combatUnits.length >= enemyCombatUnits.length + 2;
-    const shouldForceByTiming = state.tick >= STALEMATE_FORCE_TICK ||
-        (state.tick >= EARLY_FORCE_TICK && hasArmyForPush && enemyBuildings.length > 0);
-    const shouldForceAllIn = primaryTarget !== null &&
-        (runtime.forcedAllIn || shouldForceByTiming || hasCombatEdge) &&
-        (localThreats.length === 0 || hasCombatEdge);
+    maybeQueueMacroBuilding(
+        actions,
+        state,
+        playerId,
+        myBuildings,
+        tacticalProfile.heavyProfile,
+        tacticalProfile.cautiousDefense,
+        tacticalProfile.economyConservative,
+        combatUnits.length,
+        enemyCombatCount,
+        enemyFactoryCount,
+        localThreatCount
+    );
+    maybeQueueFallbackProduction(
+        actions,
+        state,
+        playerId,
+        myBuildings,
+        aiState.enemyIntelligence.dominantArmor,
+        tacticalProfile.heavyProfile
+    );
 
-    actions = tuneBaseActions(actions, state, playerId, myBuildings, localThreats.length > 0);
+    const runtime = getRuntimeState(playerId, state.tick);
+    const target = pickPressureTarget(state, enemies, baseCenterRef, tacticalProfile.heavyProfile);
 
-    if (primaryTarget &&
-        state.tick >= EARLY_FORCE_TICK &&
-        combatUnits.length >= MIN_FORCE_COMBAT_UNITS &&
-        (localThreats.length === 0 || hasCombatEdge)) {
-        actions.push({
-            type: 'COMMAND_ATTACK',
-            payload: {
-                unitIds: combatUnits.map(unit => unit.id),
-                targetId: primaryTarget.id
-            }
-        });
-    }
-
-    if (shouldForceAllIn) {
-        runtime.forcedAllIn = true;
-        runtime.lastForcedTick = state.tick;
-        if (aiState.allInStartTick === 0) {
-            aiState.allInStartTick = state.tick;
-        }
-        aiState.strategy = 'all_in';
-
-        if (combatUnits.length > 0) {
-            actions.push({
-                type: 'COMMAND_ATTACK',
-                payload: {
-                    unitIds: combatUnits.map(unit => unit.id),
-                    targetId: primaryTarget.id
-                }
-            });
-        }
-
-        if (combatUnits.length >= 6) {
-            actions.push({
-                type: 'COMMAND_ATTACK_MOVE',
-                payload: {
-                    unitIds: combatUnits.map(unit => unit.id),
-                    x: primaryTarget.pos.x,
-                    y: primaryTarget.pos.y
-                }
-            });
-        }
-
-        if (state.tick >= STALEMATE_FORCE_TICK + 1800 && harvesters.length >= 2) {
-            actions.push({
-                type: 'COMMAND_ATTACK',
-                payload: {
-                    unitIds: harvesters.slice(0, 2).map(unit => unit.id),
-                    targetId: primaryTarget.id
-                }
-            });
-        }
-
-        if (state.tick >= STALEMATE_FORCE_TICK + 5000 && combatUnits.length >= enemyCombatUnits.length + 2) {
-            actions.push(...handleAllInSell(state, playerId, myBuildings, aiState));
-        }
-    }
-
-    queueFallbackProduction(actions, state, playerId, myBuildings);
-
-    if (primaryTarget) {
-        maybeSetRallyPoints(actions, state, myBuildings, primaryTarget, runtime);
-    }
-
-    return actions;
+    maybeForcePressure(
+        actions,
+        state,
+        runtime,
+        combatUnits,
+        enemies,
+        target,
+        localThreatCount,
+        tacticalProfile.heavyProfile,
+        tacticalProfile.cautiousPressure
+    );
+    maybeSetRallyPoints(
+        actions,
+        state,
+        myBuildings,
+        enemies,
+        baseCenterRef,
+        localThreatCount,
+        target,
+        runtime
+    );
+    actions = maybeEnforceLocalDefense(
+        actions,
+        combatUnits,
+        enemies,
+        baseCenterRef,
+        localThreatCount,
+        enemyCombatCount
+    );
+    return sanitizeAuroraActions(actions, state, playerId);
 }
 
 export const AuroraSovereignAIImplementation: AIImplementation = {
@@ -389,8 +717,10 @@ export const AuroraSovereignAIImplementation: AIImplementation = {
     reset: (playerId?: number) => {
         if (playerId === undefined) {
             runtimeByPlayer.clear();
+            resetAIState();
             return;
         }
         runtimeByPlayer.delete(playerId);
+        resetAIState(playerId);
     }
 };
