@@ -109,12 +109,12 @@ describe('Unit Counter System - Damage Modifiers', () => {
     describe('Counter Relationships', () => {
         it('flamer beats rifleman (flame > infantry)', () => {
             // Flamer: 20 damage, flame weapon
-            // Rifleman: 60 HP, infantry armor
+            // Rifleman: 80 HP, infantry armor
             const flamerDamage = 20;
             const flameVsInfantryMod = RULES.damageModifiers.flame.infantry;
             const effectiveDamage = flamerDamage * flameVsInfantryMod;
 
-            // Should kill a rifleman in ~2 hits (60 HP / effective damage)
+            // Should kill a rifleman in ~3 hits (80 HP / effective damage)
             expect(effectiveDamage).toBeGreaterThanOrEqual(25);
         });
 
@@ -131,13 +131,13 @@ describe('Unit Counter System - Damage Modifiers', () => {
 
         it('heavy tank beats flamer (cannon > infantry weapon user)', () => {
             // Heavy Tank: 90 damage, cannon weapon
-            // Flamer: 80 HP, infantry armor (but flame weapon does little to heavy)
+            // Flamer: 100 HP, infantry armor (but flame weapon does little to heavy)
             const heavyTankDamage = 90;
             const cannonVsInfantryMod = RULES.damageModifiers.cannon.infantry;
             const effectiveDamage = heavyTankDamage * cannonVsInfantryMod;
 
-            // Heavy tank still does decent damage (36) and can take hits
-            expect(effectiveDamage).toBeGreaterThan(30);
+            // Heavy tank still does meaningful damage (18) but infantry survives longer now
+            expect(effectiveDamage).toBeGreaterThan(15);
 
             // But the flamer's flame does very little damage back to heavy armor
             const flamerVsHeavyMod = RULES.damageModifiers.flame.heavy;
@@ -145,9 +145,9 @@ describe('Unit Counter System - Damage Modifiers', () => {
         });
 
         it('rifleman is weak vs heavy tank (bullet vs heavy)', () => {
-            // Rifleman: 6 damage, bullet weapon
+            // Rifleman: 8 damage, bullet weapon
             // Heavy Tank: 700 HP, heavy armor
-            const rifleDamage = 6;
+            const rifleDamage = 8;
             const bulletVsHeavyMod = RULES.damageModifiers.bullet.heavy;
             const effectiveDamage = rifleDamage * bulletVsHeavyMod;
 

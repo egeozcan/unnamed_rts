@@ -355,12 +355,12 @@
         "rifle": {
             "name": "Rifleman",
             "type": "infantry",
-            "hp": 60,
+            "hp": 80,
             "cost": 100,
             "speed": 2,
             "range": 130,
-            "damage": 6,
-            "rate": 30,
+            "damage": 8,
+            "rate": 25,
             "w": 15,
             "armor": "infantry",
             "weaponType": "bullet",
@@ -373,10 +373,10 @@
         "rocket": {
             "name": "Rocket",
             "type": "infantry",
-            "hp": 70,
+            "hp": 100,
             "cost": 300,
             "speed": 1.5,
-            "range": 220,
+            "range": 240,
             "damage": 35,
             "rate": 65,
             "w": 15,
@@ -396,7 +396,7 @@
         "engineer": {
             "name": "Engineer",
             "type": "infantry",
-            "hp": 50,
+            "hp": 60,
             "cost": 500,
             "speed": 2,
             "range": 30,
@@ -415,7 +415,7 @@
         "medic": {
             "name": "Medic",
             "type": "infantry",
-            "hp": 45,
+            "hp": 60,
             "cost": 350,
             "speed": 2.2,
             "range": 80,
@@ -433,7 +433,7 @@
         "sniper": {
             "name": "Sniper",
             "type": "infantry",
-            "hp": 45,
+            "hp": 50,
             "cost": 800,
             "speed": 1.5,
             "range": 450,
@@ -452,7 +452,7 @@
         "flamer": {
             "name": "Flamethrower",
             "type": "infantry",
-            "hp": 80,
+            "hp": 100,
             "cost": 400,
             "speed": 1.8,
             "range": 80,
@@ -471,9 +471,9 @@
         "grenadier": {
             "name": "Grenadier",
             "type": "infantry",
-            "hp": 65,
+            "hp": 85,
             "cost": 250,
-            "speed": 1.7,
+            "speed": 1.8,
             "range": 180,
             "damage": 40,
             "rate": 70,
@@ -490,7 +490,7 @@
         "commando": {
             "name": "Commando",
             "type": "infantry",
-            "hp": 120,
+            "hp": 150,
             "cost": 1500,
             "speed": 2.5,
             "range": 200,
@@ -797,7 +797,7 @@
         "hijacker": {
             "name": "Hijacker",
             "type": "infantry",
-            "hp": 50,
+            "hp": 60,
             "cost": 600,
             "speed": 2.0,
             "range": 30,
@@ -825,9 +825,9 @@
         "bullet": {
             "none": 1.0,
             "infantry": 1.0,
-            "light": 0.4,
-            "medium": 0.2,
-            "heavy": 0.1,
+            "light": 0.3,
+            "medium": 0.15,
+            "heavy": 0.08,
             "building": 0.15,
             "hijacker": 2.5
         },
@@ -842,7 +842,7 @@
         },
         "cannon": {
             "none": 1.0,
-            "infantry": 0.35,
+            "infantry": 0.2,
             "light": 1.0,
             "medium": 1.0,
             "heavy": 0.6,
@@ -851,7 +851,7 @@
         },
         "heavy_cannon": {
             "none": 1.0,
-            "infantry": 0.2,
+            "infantry": 0.1,
             "light": 0.6,
             "medium": 1.0,
             "heavy": 1.25,
@@ -862,7 +862,7 @@
             "none": 1.0,
             "infantry": 0.4,
             "light": 1.0,
-            "medium": 1.25,
+            "medium": 1.0,
             "heavy": 1.0,
             "building": 1.0,
             "hijacker": 0.25
@@ -906,10 +906,10 @@
         "grenade": {
             "none": 1.0,
             "infantry": 1.5,
-            "light": 0.9,
+            "light": 1.0,
             "medium": 0.5,
             "heavy": 0.3,
-            "building": 0.8,
+            "building": 0.9,
             "hijacker": 1.2
         },
         "heal": {
