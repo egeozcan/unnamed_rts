@@ -5,7 +5,8 @@
  * repeated Object.values() and filter() calls in hot paths.
  */
 
-import { Entity, EntityId } from './types.js';
+import { Entity, EntityId, GameState } from './types.js';
+import { isEnemy } from './teams.js';
 
 /**
  * Cached entity views for a single tick.
@@ -180,12 +181,12 @@ export function ownerHasBuilding(cache: EntityCache, owner: number, buildingKey:
 /**
  * Get all enemies of a player (living entities owned by other players, excluding neutral).
  */
-export function getEnemiesOf(cache: EntityCache, playerId: number): Entity[] {
+export function getEnemiesOf(cache: EntityCache, playerId: number, state?: GameState): Entity[] {
     const enemies: Entity[] = [];
     for (const [owner, entities] of cache.byOwner) {
-        if (owner !== playerId && owner !== -1) {
-            enemies.push(...entities);
-        }
+        if (owner === playerId || owner === -1) continue;
+        if (state && !isEnemy(state, playerId, owner)) continue;
+        enemies.push(...entities);
     }
     return enemies;
 }

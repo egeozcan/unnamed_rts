@@ -217,7 +217,7 @@ export function computeEcoTankAllInAiActions(state: GameState, playerId: number,
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
 
     const hasMCV = myUnits.some(u => u.key === 'mcv');
     if (myBuildings.length === 0 && !hasMCV) {

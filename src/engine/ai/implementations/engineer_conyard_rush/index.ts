@@ -207,7 +207,7 @@ export function computeEngineerConyardRushAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
     const runtimeState = getEngineerConyardRushRuntimeState(playerId);
 
     initializeRuntimeState(runtimeState, myBuildings);

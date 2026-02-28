@@ -557,7 +557,7 @@ export function computeSaboteurCircusAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
     const baseCenter = findBaseCenter(myBuildings);
 
     // Keep this implementation deterministic while still reusing classic AI internals.

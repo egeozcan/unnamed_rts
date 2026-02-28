@@ -1,4 +1,5 @@
 import { GameState, Action, PlayerState, Vector } from '../../../types.js';
+import { isEnemy } from '../../../teams.js';
 import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
@@ -143,7 +144,7 @@ function findGreedyRushTarget(
         return null;
     }
 
-    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1);
+    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1 && isEnemy(state, playerId, ownerId));
     let bestTarget: GreedyRushTarget | null = null;
     let bestDistance = Infinity;
 
@@ -199,7 +200,7 @@ function findLowDefenseRushTarget(
         return null;
     }
 
-    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1);
+    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1 && isEnemy(state, playerId, ownerId));
     let bestTarget: GreedyRushTarget | null = null;
     let bestScore = -Infinity;
 
@@ -281,7 +282,7 @@ function findBoomingRushTarget(
         return null;
     }
 
-    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1);
+    const ownerIds = Array.from(cache.byOwner.keys()).filter(ownerId => ownerId !== playerId && ownerId !== -1 && isEnemy(state, playerId, ownerId));
     let bestTarget: BoomRushTarget | null = null;
     let bestScore = -Infinity;
 
@@ -477,7 +478,7 @@ export function computeClassicAiActions(state: GameState, playerId: number, shar
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
 
     // Check for elimination (no buildings AND no MCV)
     const hasMCV = myUnits.some(u => u.key === 'mcv');

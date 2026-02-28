@@ -543,7 +543,7 @@ export function computeHydraAiActions(state: GameState, playerId: number, shared
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
 
     // Check for elimination
     const hasMCV = myUnits.some(u => u.key === 'mcv');

@@ -198,7 +198,7 @@ export function updateHarvesterAI(
     );
 
     // Get enemy units
-    const enemies = getEnemiesOf(cache, playerId).filter(e => e.type === 'UNIT' && !e.dead);
+    const enemies = getEnemiesOf(cache, playerId, state).filter(e => e.type === 'UNIT' && !e.dead);
 
     // Get player state for desperation calculation
     const player = state.players[playerId];

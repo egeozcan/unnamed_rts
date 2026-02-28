@@ -608,7 +608,7 @@ export function computeAuroraSovereignAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId);
+    const enemies = getEnemiesOf(cache, playerId, state);
     const combatUnits = myUnits.filter(isCombatUnit);
 
     // Delegate core behavior to vendored Titan snapshot.
