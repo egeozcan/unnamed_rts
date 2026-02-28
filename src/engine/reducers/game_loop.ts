@@ -544,7 +544,7 @@ export function updateEntities(
                     }
                 }
             } else {
-                const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts);
+                const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts, state);
                 nextEntities[id] = res.entity;
                 if (res.projectile) newProjectiles.push(res.projectile);
                 if (res.creditsEarned > 0) {
@@ -612,7 +612,7 @@ export function updateEntities(
                 };
             }
         } else if (entity.type === 'BUILDING') {
-            const res = updateBuilding(entity, state.entities, entityList);
+            const res = updateBuilding(entity, state.entities, entityList, state);
             nextEntities[id] = res.entity;
             if (res.projectile) newProjectiles.push(res.projectile);
 

@@ -451,7 +451,8 @@ export function updateUnit(
     entityList: Entity[],
     mapConfig: { width: number, height: number },
     currentTick: number,
-    harvesterCounts?: Record<EntityId, number>
+    harvesterCounts?: Record<EntityId, number>,
+    state?: GameState
 ): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
 
     let nextEntity = entity;
@@ -635,7 +636,8 @@ export function updateUnit(
         const result = updateCombatUnitBehavior(
             nextEntity as CombatUnit,
             allEntities,
-            entityList
+            entityList,
+            state
         );
         return { entity: result.entity, projectile: result.projectile, creditsEarned: 0, resourceDamage: null };
     }

@@ -1,10 +1,11 @@
 import {
-    EntityId, Entity, Projectile, CombatUnit, AttackStance, Vector
+    EntityId, Entity, Projectile, CombatUnit, AttackStance, Vector, GameState
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid } from '../spatial';
 import { moveToward } from './movement';
+import { isAlly, isEnemy } from '../teams';
 
 // Maximum distance a unit will pursue a target when on defensive stance or attack-move
 const DEFENSIVE_PURSUIT_RANGE = 400;
@@ -22,7 +23,8 @@ const DEFENSIVE_PURSUIT_RANGE = 400;
 export function updateCombatUnitBehavior(
     combatUnit: CombatUnit,
     allEntities: Record<EntityId, Entity>,
-    entityList: Entity[]
+    entityList: Entity[],
+    state?: GameState
 ): { entity: CombatUnit, projectile?: Projectile | null } {
 
     let nextEntity: CombatUnit = { ...combatUnit };
@@ -49,7 +51,7 @@ export function updateCombatUnitBehavior(
         if (shouldAutoAcquire) {
             // For hold_ground, only search within weapon range
             const searchRange = stance === 'hold_ground' ? range : undefined;
-            const result = findCombatTarget(nextEntity, data, spatialGrid, searchRange);
+            const result = findCombatTarget(nextEntity, data, spatialGrid, searchRange, state);
 
             if (result) {
                 // Record home position when first acquiring target (for defensive/attack-move)
@@ -77,7 +79,7 @@ export function updateCombatUnitBehavior(
             if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
                 nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
             } else {
-                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, isHijacker, stance);
+                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, isHijacker, stance, state);
                 nextEntity = result.entity;
                 projectile = result.projectile;
             }
@@ -327,7 +329,8 @@ function findCombatTarget(
     unit: CombatUnit,
     data: ReturnType<typeof getRuleData>,
     spatialGrid: ReturnType<typeof getSpatialGrid>,
-    maxRange?: number
+    maxRange?: number,
+    state?: GameState
 ): EntityId | null {
 
     if (!data || !isUnitData(data)) return null;
@@ -352,19 +355,19 @@ function findCombatTarget(
         if (isHealer) {
             // Medics can only heal infantry units
             const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
-            return other.owner === unit.owner && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id && targetType === 'infantry';
+            return isAlly(state!, unit.owner, other.owner) && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id && targetType === 'infantry';
         } else if (isEngineer) {
             if (other.type !== 'BUILDING') return false;
-            if (other.owner !== unit.owner && data.canCaptureEnemyBuildings) return true;
-            if (other.owner === unit.owner && other.hp < other.maxHp && data.canRepairFriendlyBuildings) return true;
+            if (isEnemy(state!, unit.owner, other.owner) && data.canCaptureEnemyBuildings) return true;
+            if (isAlly(state!, unit.owner, other.owner) && other.hp < other.maxHp && data.canRepairFriendlyBuildings) return true;
             return false;
         } else if (isHijacker) {
             // Hijackers can only target enemy vehicles
-            if (other.type !== 'UNIT' || other.owner === unit.owner) return false;
+            if (other.type !== 'UNIT' || isAlly(state!, unit.owner, other.owner)) return false;
             const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
             return targetType === 'vehicle';
         } else {
-            return other.owner !== unit.owner;
+            return isEnemy(state!, unit.owner, other.owner);
         }
     };
 
@@ -388,7 +391,8 @@ function handleCombatTarget(
     entityList: Entity[],
     isEngineer: boolean,
     isHijacker: boolean,
-    stance: AttackStance
+    stance: AttackStance,
+    state?: GameState
 ): { entity: CombatUnit, projectile: Projectile | null } {
 
     if (!data || !isUnitData(data)) {
@@ -471,14 +475,14 @@ function handleCombatTarget(
 
             const targetBuildingData = RULES.buildings[target.key];
             const isCapturable = targetBuildingData?.capturable === true;
-            if (target.owner !== unit.owner && data.canCaptureEnemyBuildings && isCapturable) {
+            if (isEnemy(state!, unit.owner, target.owner) && data.canCaptureEnemyBuildings && isCapturable) {
                 // Capture enemy building - engineer is consumed
                 nextUnit = {
                     ...nextUnit,
                     dead: true,
                     engineer: { ...nextUnit.engineer, captureTargetId: target.id }
                 };
-            } else if (target.owner === unit.owner && data.canRepairFriendlyBuildings && target.hp < target.maxHp) {
+            } else if (isAlly(state!, unit.owner, target.owner) && data.canRepairFriendlyBuildings && target.hp < target.maxHp) {
                 // Repair friendly building - engineer enters and is consumed, building fully healed
                 nextUnit = {
                     ...nextUnit,
@@ -498,7 +502,7 @@ function handleCombatTarget(
         const targetUnitData = getRuleData(target.key);
         const isVehicle = targetUnitData && isUnitData(targetUnitData) && targetUnitData.type === 'vehicle';
 
-        if (isVehicle && target.owner !== unit.owner) {
+        if (isVehicle && isEnemy(state!, unit.owner, target.owner)) {
             // Entry distance - need to be very close to vehicle
             const entryRange = 30;
             if (dist <= entryRange + target.radius) {

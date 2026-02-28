@@ -4,6 +4,7 @@ import {
 import { RULES, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createEntity, getRuleData, createProjectile, killPlayerEntities } from './helpers';
 import { getSpatialGrid } from '../spatial';
+import { isEnemy } from '../teams';
 
 export function placeBuilding(state: GameState, payload: { key: string; x: number; y: number; playerId: number }): GameState {
     const { key, x, y, playerId } = payload;
@@ -225,7 +226,7 @@ export function stopRepair(state: GameState, payload: { buildingId: EntityId; pl
     };
 }
 
-export function updateBuilding(entity: BuildingEntity, allEntities: Record<EntityId, Entity>, _entityList: Entity[]): { entity: BuildingEntity, projectile?: Projectile | null } {
+export function updateBuilding(entity: BuildingEntity, allEntities: Record<EntityId, Entity>, _entityList: Entity[], state?: GameState): { entity: BuildingEntity, projectile?: Projectile | null } {
     let nextEntity: BuildingEntity = { ...entity };
     const data = getRuleData(nextEntity.key);
     let projectile = null;
@@ -242,7 +243,8 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
             const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
 
             // Use spatial grid to query enemies in range
-            const enemiesInRange = spatialGrid.queryEnemiesInRadius(entity.pos.x, entity.pos.y, range, entity.owner);
+            const enemiesInRange = spatialGrid.queryEnemiesInRadius(entity.pos.x, entity.pos.y, range, entity.owner)
+                .filter(e => !state || isEnemy(state, entity.owner, e.owner));
 
             for (const other of enemiesInRange) {
                 if (other.dead) continue;
