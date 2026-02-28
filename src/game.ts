@@ -1440,10 +1440,16 @@ function checkWinCondition() {
                     endTitle.style.color = '#ff4444';
                 }
             } else {
-                // Observer mode - show which player won
-                const winnerColor = PLAYER_COLORS[currentState.winner] || '#ffffff';
-                endTitle.textContent = `PLAYER ${currentState.winner + 1} WINS`;
-                endTitle.style.color = winnerColor;
+                // Observer mode - show which player/team won
+                const winnerTeam = currentState.players[currentState.winner]?.team;
+                if (winnerTeam) {
+                    endTitle.textContent = `TEAM ${winnerTeam} WINS`;
+                    endTitle.style.color = '#ffffff';
+                } else {
+                    const winnerColor = PLAYER_COLORS[currentState.winner] || '#ffffff';
+                    endTitle.textContent = `PLAYER ${currentState.winner + 1} WINS`;
+                    endTitle.style.color = winnerColor;
+                }
             }
         }
     }
