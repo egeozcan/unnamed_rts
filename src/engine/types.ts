@@ -252,6 +252,7 @@ export interface SkirmishConfig {
         type: PlayerType;
         color: string;
         aiImplementationId?: AIImplementationId;
+        team?: 'A' | 'B' | 'C' | 'D' | null;
     }>;
     readonly mapSize: 'small' | 'medium' | 'large' | 'huge';
     readonly resourceDensity: 'low' | 'medium' | 'high';
@@ -278,6 +279,7 @@ export interface PlayerState {
         infantry: EntityId | null;  // Primary barracks
         vehicle: EntityId | null;   // Primary factory
     };
+    readonly team: 'A' | 'B' | 'C' | 'D' | null;
 }
 
 export interface MapConfig {

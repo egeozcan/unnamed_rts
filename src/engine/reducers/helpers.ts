@@ -82,7 +82,8 @@ export function createPlayerState(
     isAi: boolean,
     difficulty: 'easy' | 'medium' | 'hard' | 'dummy' = 'medium',
     color: string = PLAYER_COLORS[id] || '#888888',
-    aiImplementationId: string = 'classic'
+    aiImplementationId: string = 'classic',
+    team: 'A' | 'B' | 'C' | 'D' | null = null
 ): PlayerState {
     return {
         id,
@@ -100,7 +101,8 @@ export function createPlayerState(
             air: { current: null, progress: 0, invested: 0, queued: [] }
         },
         readyToPlace: null,
-        primaryBuildings: { infantry: null, vehicle: null }
+        primaryBuildings: { infantry: null, vehicle: null },
+        team
     };
 }
 
