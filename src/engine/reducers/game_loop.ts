@@ -16,6 +16,7 @@ import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
 import { getDemoTruckExplosionStats } from './demo_truck';
 import { updateFogOfWar } from './fog';
+import { isAlly } from '../teams';
 import { DebugEvents } from '../debug/events';
 
 const MAX_TRAIL_POINTS = 30;
@@ -1362,8 +1363,8 @@ export function applyInterception(state: GameState, projectile: Projectile): Pro
         const aura = data?.interceptionAura;
         if (!aura) continue;
 
-        // Friendly AA doesn't intercept own projectiles
-        if (entity.owner === projectileOwner) continue;
+        // Allied AA doesn't intercept allied projectiles
+        if (isAlly(state, entity.owner, projectileOwner)) continue;
 
         // Check if projectile is in range
         const dist = projectile.pos.dist(entity.pos);
