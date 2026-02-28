@@ -745,6 +745,41 @@ canvas#gameCanvas.attack-move-mode {
     gap: 2px;
 }
 
+.player-team {
+    width: 32px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: none;
+    padding: 2px 0;
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.player-team:hover {
+    color: #fff;
+}
+
+.player-team:focus {
+    outline: none;
+    color: #fff;
+}
+
+.player-team option {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 8px;
+}
+
+.player-team:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
 .player-type,
 .ai-implementation {
     flex: 1;

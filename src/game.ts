@@ -230,7 +230,12 @@ function setupSkirmishUI() {
         const slotDiv = slot as HTMLElement;
         const typeSelect = slot.querySelector('.player-type') as HTMLSelectElement;
         const implementationSelect = slot.querySelector('.ai-implementation') as HTMLSelectElement | null;
+        const teamSelect = slot.querySelector('.player-team') as HTMLSelectElement | null;
+
         if (!implementationSelect) {
+            if (teamSelect) {
+                teamSelect.disabled = typeSelect.value === 'none';
+            }
             slotDiv.classList.toggle('disabled', typeSelect.value === 'none');
             return;
         }
@@ -238,6 +243,12 @@ function setupSkirmishUI() {
         const isAiSlot = typeSelect.value !== 'human' && typeSelect.value !== 'none';
         implementationSelect.disabled = !isAiSlot;
         implementationSelect.classList.toggle('hidden', !isAiSlot);
+
+        // Disable team dropdown when slot is none
+        if (teamSelect) {
+            teamSelect.disabled = typeSelect.value === 'none';
+        }
+
         slotDiv.classList.toggle('disabled', typeSelect.value === 'none');
     }
 
@@ -321,7 +332,7 @@ function restoreSkirmishMenuSettings() {
 }
 
 function setupSkirmishPersistence() {
-    const selectors = '.player-type, .ai-implementation, #map-size, #resource-density, #rock-density';
+    const selectors = '.player-type, .ai-implementation, .player-team, #map-size, #resource-density, #rock-density';
     const elements = document.querySelectorAll(selectors);
     for (const element of elements) {
         element.addEventListener('change', persistSkirmishMenuSettings);
@@ -335,16 +346,19 @@ function getSkirmishConfig(): SkirmishConfig {
     document.querySelectorAll('.player-slot').forEach((slot, index) => {
         const select = slot.querySelector('.player-type') as HTMLSelectElement;
         const aiSelect = slot.querySelector('.ai-implementation') as HTMLSelectElement | null;
+        const teamSelect = slot.querySelector('.player-team') as HTMLSelectElement | null;
         const type = select.value as PlayerType;
 
         if (type !== 'none') {
+            const teamValue = teamSelect?.value || '';
             players.push({
                 slot: index,
                 type,
                 color: PLAYER_COLORS[index],
                 aiImplementationId: type === 'human'
                     ? undefined
-                    : (aiSelect?.value || DEFAULT_AI_IMPLEMENTATION_ID)
+                    : (aiSelect?.value || DEFAULT_AI_IMPLEMENTATION_ID),
+                team: teamValue ? (teamValue as 'A' | 'B' | 'C' | 'D') : null,
             });
         }
     });
@@ -514,7 +528,7 @@ function startGameWithConfig(config: SkirmishConfig) {
         const isAi = p.type !== 'human';
         const difficulty = (p.type === 'human' ? 'medium' : p.type) as 'dummy' | 'easy' | 'medium' | 'hard';
         const aiImplementationId = p.aiImplementationId || DEFAULT_AI_IMPLEMENTATION_ID;
-        players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color, aiImplementationId);
+        players[p.slot] = createPlayerState(p.slot, isAi, difficulty, p.color, aiImplementationId, p.team ?? null);
     });
 
     // Get starting positions

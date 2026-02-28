@@ -7,6 +7,7 @@ type Density = 'low' | 'medium' | 'high';
 export interface PersistedSkirmishPlayerSlot {
     type: PlayerType;
     aiImplementationId: string;
+    team?: string | null;
 }
 
 export interface PersistedSkirmishSettings {
@@ -60,10 +61,12 @@ export function collectSkirmishSettingsFromUI(root: ParentNode = document): Pers
     const players: PersistedSkirmishPlayerSlot[] = playerSlots.map((slot, index) => {
         const typeSelect = slot.querySelector('.player-type') as HTMLSelectElement | null;
         const aiSelect = slot.querySelector('.ai-implementation') as HTMLSelectElement | null;
+        const teamSelect = slot.querySelector('.player-team') as HTMLSelectElement | null;
 
         const type = asPlayerType(typeSelect?.value) ?? defaultPlayerTypeForSlot(index);
         const aiImplementationId = (aiSelect?.value || '').trim() || DEFAULT_AI_IMPLEMENTATION_ID;
-        return { type, aiImplementationId };
+        const teamValue = teamSelect?.value || '';
+        return { type, aiImplementationId, team: teamValue || null };
     });
 
     const mapSizeSelect = root.querySelector('#map-size') as HTMLSelectElement | null;
@@ -97,7 +100,8 @@ export function normalizePersistedSkirmishSettings(
         if (!isRecord(rawSlot)) {
             return {
                 type: defaultType,
-                aiImplementationId: DEFAULT_AI_IMPLEMENTATION_ID
+                aiImplementationId: DEFAULT_AI_IMPLEMENTATION_ID,
+                team: null
             };
         }
 
@@ -105,7 +109,8 @@ export function normalizePersistedSkirmishSettings(
             type: asPlayerType(rawSlot.type) ?? defaultType,
             aiImplementationId: typeof rawSlot.aiImplementationId === 'string' && rawSlot.aiImplementationId.trim().length > 0
                 ? rawSlot.aiImplementationId
-                : DEFAULT_AI_IMPLEMENTATION_ID
+                : DEFAULT_AI_IMPLEMENTATION_ID,
+            team: typeof rawSlot.team === 'string' && ['A', 'B', 'C', 'D'].includes(rawSlot.team) ? rawSlot.team : null
         };
     });
 
@@ -142,6 +147,13 @@ export function applySkirmishSettingsToUI(
             if (hasOption(aiSelect, aiValue)) {
                 aiSelect.value = aiValue;
             }
+        }
+
+        const teamSelect = slot.querySelector('.player-team') as HTMLSelectElement | null;
+        if (teamSelect && slotSettings.team && hasOption(teamSelect, slotSettings.team)) {
+            teamSelect.value = slotSettings.team;
+        } else if (teamSelect) {
+            teamSelect.value = '';
         }
     });
 
