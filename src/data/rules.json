@@ -555,6 +555,7 @@
             "damage": 12,
             "rate": 12,
             "w": 25,
+            "transportCapacity": 5,
             "armor": "light",
             "weaponType": "ap_bullet",
             "prerequisites": [

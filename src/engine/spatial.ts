@@ -62,6 +62,7 @@ export class SpatialGrid {
      */
     insert(entity: Entity): void {
         if (entity.dead) return;
+        if (entity.type === 'UNIT' && entity.movement.transportId) return;
 
         const cellKeys = this.getEntityCellKeys(entity);
         this.entityCells.set(entity.id, cellKeys);

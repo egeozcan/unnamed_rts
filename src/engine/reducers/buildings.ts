@@ -5,6 +5,7 @@ import { RULES, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createEntity, getRuleData, createProjectile, killPlayerEntities } from './helpers';
 import { getSpatialGrid } from '../spatial';
 import { isAlly, isEnemy } from '../teams';
+import { isTransportedUnit } from '../transport';
 
 export function placeBuilding(state: GameState, payload: { key: string; x: number; y: number; playerId: number }): GameState {
     const { key, x, y, playerId } = payload;
@@ -286,7 +287,8 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
 
         if (nextEntity.combat!.targetId) {
             const target = allEntities[nextEntity.combat!.targetId];
-            if (target && !target.dead && entity.pos.dist(target.pos) <= (data.range || 200)) {
+            const targetIsTransported = target && target.type === 'UNIT' && isTransportedUnit(target);
+            if (target && !target.dead && !targetIsTransported && entity.pos.dist(target.pos) <= (data.range || 200)) {
                 if (nextEntity.combat!.cooldown <= 0) {
                     projectile = createProjectile(nextEntity, target);
                     nextEntity = {

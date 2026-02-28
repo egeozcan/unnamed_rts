@@ -5,13 +5,13 @@ import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
 import { placeBuilding, sellBuilding, startRepair, stopRepair, setRallyPoint, setPrimaryBuilding } from './reducers/buildings';
-import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, setStance } from './reducers/units';
+import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, commandUngarrison, setStance } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
 export { createPlayerState, canBuild, calculatePower, createEntity, getRuleData, createProjectile } from './reducers/helpers';
 export { tick } from './reducers/game_loop';
 export { placeBuilding, sellBuilding } from './reducers/buildings';
-export { updateUnit, deployMCV, deployInductionRig, commandAttackMove, setStance } from './reducers/units';
+export { updateUnit, deployMCV, deployInductionRig, commandAttackMove, commandUngarrison, setStance } from './reducers/units';
 
 export const INITIAL_STATE: GameState = {
     running: false,
@@ -131,6 +131,8 @@ export function update(state: GameState, action: Action): GameState {
                 } : state.commandIndicator
             };
         }
+        case 'COMMAND_UNGARRISON':
+            return commandUngarrison(state, action.payload);
         case 'SET_STANCE':
             return setStance(state, action.payload);
         case 'TOGGLE_ATTACK_MOVE_MODE':

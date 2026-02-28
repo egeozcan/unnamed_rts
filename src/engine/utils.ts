@@ -250,7 +250,7 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
                     }
                 }
             }
-        } else if (e.type === 'UNIT' && !e.dead && e.owner !== -1) {
+        } else if (e.type === 'UNIT' && !e.dead && e.owner !== -1 && !e.movement.transportId) {
             // Mark enemy combat units as danger for pathfinding
             // This helps units route around enemy clusters instead of through them
             const unitData = RULES.units[e.key];

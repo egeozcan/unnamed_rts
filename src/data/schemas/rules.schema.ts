@@ -118,6 +118,7 @@ export const UnitSchema = z.object({
   // Optional fields
   splash: z.number().optional(),
   capacity: z.number().optional(),
+  transportCapacity: z.number().optional(),
   fly: z.boolean().optional(),
   canCaptureEnemyBuildings: z.boolean().optional(),
   canRepairFriendlyBuildings: z.boolean().optional(),

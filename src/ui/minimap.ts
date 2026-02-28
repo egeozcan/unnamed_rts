@@ -118,6 +118,7 @@ function renderToContext(
     for (const id in entities) {
         const e = entities[id];
         if (e.dead) continue;
+        if (e.type === 'UNIT' && e.movement.transportId) continue;
 
         // Fog of war check — skip entities on unrevealed tiles
         if (fogGrid && fogGridW) {

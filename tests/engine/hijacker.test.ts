@@ -3,6 +3,7 @@ import { Vector, GameState, CombatUnit } from '../../src/engine/types.js';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer.js';
 import {
     createTestCombatUnit,
+    createTestBuilding,
     addEntitiesToState,
     resetTestEntityCounter
 } from '../../src/engine/test-utils.js';
@@ -91,6 +92,71 @@ describe('Hijacker Unit', () => {
 
             // Hijacker should be consumed
             expect(state.entities['hijacker1']).toBeUndefined();
+        });
+
+        it('should eject mismatched passengers after hijacking a loaded APC', () => {
+            const enemyApc = createTestCombatUnit({
+                id: 'apc1',
+                owner: 1,
+                key: 'apc',
+                x: 500,
+                y: 500,
+                hp: 300,
+                maxHp: 300,
+                targetId: null
+            });
+
+            const enemyPassenger = createTestCombatUnit({
+                id: 'rifle1',
+                owner: 1,
+                key: 'rifle',
+                x: 500,
+                y: 500,
+                hp: 70,
+                maxHp: 100,
+                targetId: null
+            });
+
+            const hijacker = createTestHijacker({
+                id: 'hijacker1',
+                owner: 0,
+                x: 510,
+                y: 500,
+                targetId: 'apc1'
+            });
+
+            const p0Conyard = createTestBuilding({
+                id: 'cy0',
+                owner: 0,
+                key: 'conyard',
+                x: 150,
+                y: 150
+            });
+
+            const p1Conyard = createTestBuilding({
+                id: 'cy1',
+                owner: 1,
+                key: 'conyard',
+                x: 850,
+                y: 850
+            });
+
+            state = addEntitiesToState(state, [
+                p0Conyard,
+                p1Conyard,
+                enemyApc,
+                { ...enemyPassenger, movement: { ...enemyPassenger.movement, transportId: 'apc1' } },
+                hijacker
+            ]);
+
+            state = update(state, { type: 'TICK' });
+
+            const capturedApc = state.entities['apc1'] as CombatUnit;
+            const ejectedPassenger = state.entities['rifle1'] as CombatUnit;
+
+            expect(capturedApc.owner).toBe(0);
+            expect(ejectedPassenger.hp).toBe(70);
+            expect(ejectedPassenger.movement.transportId).toBeFalsy();
         });
 
         it('should not steal friendly vehicles', () => {

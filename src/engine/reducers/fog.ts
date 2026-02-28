@@ -59,6 +59,7 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
         for (const id in entities) {
             const entity = entities[id];
             if (entity.dead) continue;
+            if (entity.type === 'UNIT' && entity.movement.transportId) continue;
             if (!isAlly(state, entity.owner, playerId)) continue;
 
             const sightRange = getSightRange(entity.key);

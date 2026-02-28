@@ -14,6 +14,7 @@ import { updateAirUnitState, updateAirBase } from './air_units';
 import { getDifficultyModifiers } from '../ai/utils';
 import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
+import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isTransportedUnit } from '../transport';
 import { getDemoTruckExplosionStats } from './demo_truck';
 import { updateFogOfWar } from './fog';
 import { isAlly } from '../teams';
@@ -362,6 +363,11 @@ export function tick(state: GameState): GameState {
         }
     }
 
+    // Transport lifecycle:
+    // - Destroyed transports eject all passengers with clamped spill damage (never below 5% HP)
+    // - Ownership mismatch ejects passengers without damage (prevents hidden stranded units)
+    processTransportLifecycle(updatedEntities, state.config);
+
     // Filter dead entities
     let finalEntities: Record<EntityId, Entity> = {};
     const buildingCounts: Record<number, number> = {};
@@ -480,6 +486,11 @@ export function tick(state: GameState): GameState {
         ...state,
         tick: nextTick,
         entities: finalEntities,
+        selection: state.selection.filter(id => {
+            const entity = finalEntities[id];
+            if (!entity || entity.dead) return false;
+            return entity.type !== 'UNIT' || !isTransportedUnit(entity);
+        }),
         players: nextPlayers,
         projectiles: nextProjectiles,
         particles: nextParticles,
@@ -490,6 +501,93 @@ export function tick(state: GameState): GameState {
         commandIndicator: nextCommandIndicator,
         fogOfWar: nextFogOfWar
     };
+}
+
+function calculateUngarrisonPositions(transport: UnitEntity, unitCount: number): Vector[] {
+    if (unitCount <= 0) return [];
+
+    const positions: Vector[] = [];
+    const baseAngle = (transport.id.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 360) * (Math.PI / 180);
+    const radius = transport.radius + 20;
+    for (let i = 0; i < unitCount; i++) {
+        const angle = baseAngle + (Math.PI * 2 * i) / unitCount;
+        positions.push(new Vector(
+            transport.pos.x + Math.cos(angle) * radius,
+            transport.pos.y + Math.sin(angle) * radius
+        ));
+    }
+    return positions;
+}
+
+function processTransportLifecycle(
+    entities: Record<EntityId, Entity>,
+    mapConfig: { width: number; height: number }
+): void {
+    const transports = Object.values(entities)
+        .filter((entity): entity is UnitEntity =>
+            entity.type === 'UNIT' && isGarrisonableTransport(entity)
+        )
+        .sort((a, b) => a.id.localeCompare(b.id));
+
+    for (const transport of transports) {
+        const passengers = getTransportPassengers(entities, transport.id).sort((a, b) => a.id.localeCompare(b.id));
+        if (passengers.length === 0) continue;
+
+        const shouldDamagePassengers = transport.dead;
+        const capacity = getTransportCapacity(transport);
+        const overflowPassengers = passengers.slice(capacity);
+        const mismatchedPassengers = passengers.filter(passenger => passenger.owner !== transport.owner);
+        const toEject = shouldDamagePassengers
+            ? passengers
+            : Array.from(new Map([...overflowPassengers, ...mismatchedPassengers].map(p => [p.id, p])).values());
+        if (toEject.length === 0) continue;
+
+        const ejectPositions = calculateUngarrisonPositions(transport, toEject.length);
+        for (let i = 0; i < toEject.length; i++) {
+            const passenger = entities[toEject[i].id];
+            if (!passenger || passenger.type !== 'UNIT' || passenger.dead) continue;
+            if (passenger.movement.transportId !== transport.id) continue;
+
+            const rawPos = ejectPositions[i] || transport.pos;
+            const clampedPos = new Vector(
+                Math.max(passenger.radius, Math.min(mapConfig.width - passenger.radius, rawPos.x)),
+                Math.max(passenger.radius, Math.min(mapConfig.height - passenger.radius, rawPos.y))
+            );
+
+            const damage = shouldDamagePassengers ? Math.round(passenger.maxHp * 0.6) : 0;
+            const minHp = Math.max(1, Math.ceil(passenger.maxHp * 0.05));
+            const nextHp = shouldDamagePassengers
+                ? Math.max(minHp, passenger.hp - damage)
+                : passenger.hp;
+
+            entities[passenger.id] = {
+                ...passenger,
+                hp: nextHp,
+                dead: false,
+                pos: clampedPos,
+                prevPos: clampedPos,
+                movement: {
+                    ...passenger.movement,
+                    transportId: null,
+                    vel: new Vector(0, 0),
+                    moveTarget: null,
+                    path: null,
+                    pathIdx: 0,
+                    finalDest: null,
+                    stuckTimer: 0,
+                    unstuckDir: null,
+                    unstuckTimer: 0,
+                    avgVel: undefined
+                },
+                combat: {
+                    ...passenger.combat,
+                    targetId: null,
+                    attackMoveTarget: null,
+                    stanceHomePos: null
+                }
+            };
+        }
+    }
 }
 
 export function updateEntities(
@@ -540,6 +638,30 @@ export function updateEntities(
             hasDemoTruck = true;
         }
         if (entity.dead) continue;
+        if (entity.type === 'UNIT' && isTransportedUnit(entity)) {
+            nextEntities[id] = {
+                ...entity,
+                movement: {
+                    ...entity.movement,
+                    vel: new Vector(0, 0),
+                    moveTarget: null,
+                    path: null,
+                    pathIdx: 0,
+                    finalDest: null,
+                    unstuckDir: null,
+                    unstuckTimer: 0,
+                    stuckTimer: 0,
+                    avgVel: undefined
+                },
+                combat: {
+                    ...entity.combat,
+                    targetId: null,
+                    attackMoveTarget: null,
+                    stanceHomePos: null
+                }
+            };
+            continue;
+        }
 
         if (entity.type === 'UNIT') {
             // Check if this is an air unit (harrier) - use different state machine
@@ -819,6 +941,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         const e: MutableEntity = { ...entities[id] };
         workingEntities[id] = e;
         if (e.type === 'UNIT' && !e.dead) {
+            if ((e as unknown as UnitEntity).movement.transportId) continue;
             // Skip flying units from ground collision - they fly above everything
             const unitData = getRuleData(e.key);
             const canFly = unitData && isUnitData(unitData) && unitData.fly === true;
@@ -1047,6 +1170,10 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
     let currentVel = proj.vel;
     const target = entities[proj.targetId];
 
+    if (target && target.type === 'UNIT' && isTransportedUnit(target)) {
+        return { proj: { ...proj, dead: true } };
+    }
+
     // Homing logic for missiles (SAMs, Stealth Tanks)
     // They track their target perfectly
     if (proj.weaponType === 'missile' && target && !target.dead) {
@@ -1135,6 +1262,7 @@ export function applySplashDamage(
         const entity = entities[id];
         if (entity.dead) continue;
         if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+        if (entity.type === 'UNIT' && isTransportedUnit(entity)) continue;
         // Skip the primary target - they already took direct damage
         if (id === projectile.targetId) continue;
 
@@ -1238,6 +1366,7 @@ function processExplosions(
             if (ent.dead || id === explosion.sourceId || ent.owner === -1) continue;
             // Skip resources and rocks
             if (ent.type === 'RESOURCE' || ent.type === 'ROCK') continue;
+            if (ent.type === 'UNIT' && isTransportedUnit(ent)) continue;
 
             const dist = ent.pos.dist(explosion.pos);
             const effectiveRadius = explosion.radius + ent.radius;

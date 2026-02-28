@@ -10,6 +10,7 @@ export type AttackStance = 'aggressive' | 'defensive' | 'hold_ground';
 export interface MovementComponent {
     readonly vel: Vector;
     readonly rotation: number;
+    readonly transportId?: EntityId | null;
     readonly moveTarget: Vector | null;
     readonly path: Vector[] | null;
     readonly pathIdx: number;

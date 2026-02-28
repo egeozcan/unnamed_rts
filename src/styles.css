@@ -410,6 +410,11 @@ canvas#gameCanvas {
     margin-left: auto;
 }
 
+.ungarrison-section {
+    display: flex;
+    align-items: center;
+}
+
 .attack-move-btn {
     padding: 5px 12px;
     background: #333;
@@ -430,6 +435,32 @@ canvas#gameCanvas {
     background: #3a1a0a;
     border-color: #f80;
     color: #f80;
+}
+
+.ungarrison-btn {
+    margin-left: 8px;
+    padding: 5px 10px;
+    background: #333;
+    border: 1px solid #555;
+    color: #888;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.ungarrison-btn:hover {
+    background: #444;
+    color: #aaa;
+}
+
+.ungarrison-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.ungarrison-btn.hidden {
+    display: none;
 }
 
 /* Attack-move cursor */

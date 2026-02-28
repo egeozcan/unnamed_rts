@@ -21,6 +21,7 @@ import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
+import { isTransportedUnit } from './engine/transport.js';
 import { createFogGrid } from './engine/reducers/fog.js';
 import { createEntityCache } from './engine/perf.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
@@ -663,6 +664,13 @@ function startGameWithConfig(config: SkirmishConfig) {
         () => {
             currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
             updateButtonsUI();
+        },
+        () => {
+            currentState = update(currentState, {
+                type: 'COMMAND_UNGARRISON',
+                payload: { unitIds: currentState.selection }
+            });
+            updateButtonsUI();
         }
     );
 
@@ -716,6 +724,13 @@ function startGameWithConfig(config: SkirmishConfig) {
         },
         onToggleAttackMove: () => {
             currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+        },
+        onUngarrison: () => {
+            currentState = update(currentState, {
+                type: 'COMMAND_UNGARRISON',
+                payload: { unitIds: currentState.selection }
+            });
+            updateButtonsUI();
         },
         onTogglePause: () => {
             if (currentState.mode === 'paused') {
@@ -925,6 +940,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         for (const id in currentState.entities) {
             const e = currentState.entities[id];
             if (humanPlayerId !== null && e.owner === humanPlayerId && isUnit(e) && !e.dead &&
+                !isTransportedUnit(e) &&
                 e.pos.x > dragRect.x1 && e.pos.x < dragRect.x2 &&
                 e.pos.y > dragRect.y1 && e.pos.y < dragRect.y2) {
                 // Add to selection if not already selected
@@ -936,7 +952,11 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     } else {
         const entityList = Object.values(currentState.entities);
         const clicked = entityList.find(e =>
-            !e.dead && humanPlayerId !== null && e.owner === humanPlayerId && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
+            !e.dead &&
+            humanPlayerId !== null &&
+            e.owner === humanPlayerId &&
+            !(e.type === 'UNIT' && isTransportedUnit(e)) &&
+            e.pos.dist(new Vector(wx, wy)) < e.radius + 15
         );
         if (clicked) {
             // Check if clicking on already selected MCV -> Deploy
@@ -989,11 +1009,17 @@ function handleRightClick(wx: number, wy: number) {
         return;
     }
 
+    const selectedCommandIds = currentState.selection.filter(id => {
+        const entity = currentState.entities[id];
+        if (!entity || entity.dead) return false;
+        return entity.type !== 'UNIT' || !isTransportedUnit(entity);
+    });
+
     // Cancel attack-move mode if active (but still process the command)
     if (currentState.attackMoveMode) {
         currentState = update(currentState, {
             type: 'COMMAND_ATTACK_MOVE',
-            payload: { unitIds: currentState.selection, x: wx, y: wy }
+            payload: { unitIds: selectedCommandIds, x: wx, y: wy }
         });
         // attackMoveMode is cleared by the reducer
         return;
@@ -1002,7 +1028,7 @@ function handleRightClick(wx: number, wy: number) {
     // Check if a production building is selected - set rally point
     // Only barracks and factory can have rally points (not refinery or airforce_command)
     const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
-    const selectedIds = currentState.selection;
+    const selectedIds = selectedCommandIds;
     if (selectedIds.length === 1) {
         const selectedEntity = currentState.entities[selectedIds[0]];
         if (selectedEntity && selectedEntity.type === 'BUILDING' && selectedEntity.owner === humanPlayerId) {
@@ -1022,6 +1048,7 @@ function handleRightClick(wx: number, wy: number) {
     let targetId: EntityId | null = null;
     const entityList = Object.values(currentState.entities);
     for (const ent of entityList) {
+        if (ent.type === 'UNIT' && isTransportedUnit(ent)) continue;
         if (!ent.dead && ent.pos.dist(new Vector(wx, wy)) < ent.radius + 5) {
             targetId = ent.id;
             break;
@@ -1500,6 +1527,13 @@ if (import.meta.hot) {
                 onToggleAttackMove: () => {
                     currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
                 },
+                onUngarrison: () => {
+                    currentState = update(currentState, {
+                        type: 'COMMAND_UNGARRISON',
+                        payload: { unitIds: currentState.selection }
+                    });
+                    updateButtonsUI();
+                },
                 onTogglePause: () => {
                     if (currentState.mode === 'paused') {
                         // Resume
@@ -1537,6 +1571,13 @@ if (import.meta.hot) {
                 },
                 () => {
                     currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+                    updateButtonsUI();
+                },
+                () => {
+                    currentState = update(currentState, {
+                        type: 'COMMAND_UNGARRISON',
+                        payload: { unitIds: currentState.selection }
+                    });
                     updateButtonsUI();
                 }
             );

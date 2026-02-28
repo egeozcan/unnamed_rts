@@ -112,6 +112,33 @@ describe('Unit Control', () => {
             expect(tank.movement.moveTarget).toBeNull();
             expect(tank.combat.targetId).toBe('enemy1');
         });
+
+        it('should allow infantry to board a friendly APC via COMMAND_ATTACK', () => {
+            let state = createTestState();
+
+            state = {
+                ...state,
+                entities: {
+                    ...state.entities,
+                    'cy0': createBuilding('cy0', 0, new Vector(100, 500)),
+                    'cy1': createBuilding('cy1', 1, new Vector(900, 500)),
+                    'apc1': createUnit('apc1', 0, new Vector(500, 500), 'apc'),
+                    'rifle1': createUnit('rifle1', 0, new Vector(510, 500), 'rifle')
+                }
+            };
+
+            state = update(state, {
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: ['rifle1'], targetId: 'apc1' }
+            });
+
+            for (let i = 0; i < 10; i++) {
+                state = update(state, { type: 'TICK' });
+            }
+
+            const rifle = state.entities['rifle1'] as UnitEntity;
+            expect(rifle.movement.transportId).toBe('apc1');
+        });
     });
 
     describe('Harvester manual control', () => {

@@ -356,6 +356,7 @@ export type Action =
     | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'COMMAND_ATTACK_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
+    | { type: 'COMMAND_UNGARRISON'; payload: { unitIds: EntityId[] } }
     | { type: 'SET_STANCE'; payload: { unitIds: EntityId[]; stance: AttackStance } }
     | { type: 'TOGGLE_ATTACK_MOVE_MODE' }
     | { type: 'SET_RALLY_POINT'; payload: { buildingId: EntityId; x: number; y: number } }

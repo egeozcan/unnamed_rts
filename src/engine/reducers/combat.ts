@@ -6,6 +6,7 @@ import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid } from '../spatial';
 import { moveToward } from './movement';
 import { isAlly, isEnemy } from '../teams';
+import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
 
 // Maximum distance a unit will pursue a target when on defensive stance or attack-move
 const DEFENSIVE_PURSUIT_RANGE = 400;
@@ -29,6 +30,24 @@ export function updateCombatUnitBehavior(
 
     let nextEntity: CombatUnit = { ...combatUnit };
     let projectile: Projectile | null = null;
+
+    if (nextEntity.movement.transportId) {
+        return {
+            entity: {
+                ...nextEntity,
+                combat: { ...nextEntity.combat, targetId: null, attackMoveTarget: null, stanceHomePos: null },
+                movement: {
+                    ...nextEntity.movement,
+                    vel: new Vector(0, 0),
+                    moveTarget: null,
+                    path: null,
+                    pathIdx: 0,
+                    finalDest: null
+                }
+            },
+            projectile: null
+        };
+    }
 
     const data = getRuleData(nextEntity.key);
     if (!data || !isUnitData(data)) {
@@ -73,13 +92,16 @@ export function updateCombatUnitBehavior(
     if (nextEntity.combat.targetId) {
         const target = allEntities[nextEntity.combat.targetId];
         // Clear target if: dead, gone, or healer's target is fully healed
-        const shouldClearTarget = !target || target.dead || (isHealer && target.hp >= target.maxHp);
+        const shouldClearTarget = !target ||
+            target.dead ||
+            (target.type === 'UNIT' && isTransportedUnit(target)) ||
+            (isHealer && target.hp >= target.maxHp);
         if (target && !shouldClearTarget) {
             // Check if we should give up pursuit (defensive/attack-move distance limit)
             if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
                 nextEntity = clearTargetAndReturnHome(nextEntity, isAttackMove);
             } else {
-                const result = handleCombatTarget(nextEntity, target, data, entityList, isEngineer, isHijacker, stance, state);
+                const result = handleCombatTarget(nextEntity, target, allEntities, data, entityList, isEngineer, isHijacker, stance, state);
                 nextEntity = result.entity;
                 projectile = result.projectile;
             }
@@ -345,6 +367,7 @@ function findCombatTarget(
 
     const predicate = (other: Entity) => {
         if (other.dead || other.owner === -1) return false;
+        if (other.type === 'UNIT' && isTransportedUnit(other)) return false;
 
         // Check weapon targeting capabilities (air vs ground)
         const otherData = getRuleData(other.key);
@@ -387,6 +410,7 @@ function findCombatTarget(
 function handleCombatTarget(
     unit: CombatUnit,
     target: Entity,
+    allEntities: Record<EntityId, Entity>,
     data: ReturnType<typeof getRuleData>,
     entityList: Entity[],
     isEngineer: boolean,
@@ -397,6 +421,56 @@ function handleCombatTarget(
 
     if (!data || !isUnitData(data)) {
         return { entity: unit, projectile: null };
+    }
+
+    if (target.type === 'UNIT' && isGarrisonableTransport(target) && isInfantryUnit(unit) && target.owner === unit.owner) {
+        const distToTransport = unit.pos.dist(target.pos);
+        const entryRange = target.radius + unit.radius + 10;
+
+        if (distToTransport <= entryRange) {
+            const passengers = getTransportPassengers(allEntities, target.id);
+            const capacity = getTransportCapacity(target);
+            const hasRoom = passengers.length < capacity;
+
+            if (hasRoom) {
+                return {
+                    entity: {
+                        ...unit,
+                        movement: {
+                            ...unit.movement,
+                            transportId: target.id,
+                            vel: new Vector(0, 0),
+                            moveTarget: null,
+                            path: null,
+                            pathIdx: 0,
+                            finalDest: null,
+                            stuckTimer: 0,
+                            unstuckDir: null,
+                            unstuckTimer: 0,
+                            avgVel: undefined
+                        },
+                        combat: {
+                            ...unit.combat,
+                            targetId: null,
+                            attackMoveTarget: null,
+                            stanceHomePos: null
+                        }
+                    },
+                    projectile: null
+                };
+            }
+
+            return {
+                entity: {
+                    ...unit,
+                    combat: { ...unit.combat, targetId: null },
+                    movement: { ...unit.movement, moveTarget: null, path: null, pathIdx: 0 }
+                },
+                projectile: null
+            };
+        }
+
+        return { entity: moveToward(unit, target.pos, entityList) as CombatUnit, projectile: null };
     }
 
     // Check if this unit can actually attack the target type (air vs ground)

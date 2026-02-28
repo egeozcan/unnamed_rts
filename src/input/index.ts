@@ -62,6 +62,7 @@ let onToggleBirdsEye: (() => void) | null = null;
 let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
+let onUngarrison: (() => void) | null = null;
 let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
 let onTogglePause: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
@@ -80,6 +81,7 @@ export function initInput(
         onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
         onSetStance?: (stance: AttackStance) => void;
         onToggleAttackMove?: () => void;
+        onUngarrison?: () => void;
         onDoubleClick?: (wx: number, wy: number) => void;
         onTogglePause?: () => void;
         getZoom: () => number;
@@ -96,6 +98,7 @@ export function initInput(
     onSetSpeed = callbacks.onSetSpeed;
     onSetStance = callbacks.onSetStance || null;
     onToggleAttackMove = callbacks.onToggleAttackMove || null;
+    onUngarrison = callbacks.onUngarrison || null;
     onDoubleClick = callbacks.onDoubleClick || null;
     onTogglePause = callbacks.onTogglePause || null;
     getZoom = callbacks.getZoom;
@@ -186,6 +189,10 @@ function setupEventListeners() {
         // Attack-move toggle
         if (e.key === 'a' || e.key === 'A') {
             onToggleAttackMove?.();
+        }
+        // Ungarrison selected transports
+        if (e.key === 'u' || e.key === 'U') {
+            onUngarrison?.();
         }
         // Pause game
         if (e.key === ' ' || e.key === 'p' || e.key === 'P') {

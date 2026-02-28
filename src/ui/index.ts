@@ -3,6 +3,7 @@ import { GameState, Entity, EntityId, Vector, AttackStance, UnitEntity } from '.
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
+import { getTransportPassengers, isGarrisonableTransport, isTransportedUnit } from '../engine/transport.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
@@ -12,6 +13,7 @@ let onToggleSellMode: (() => void) | null = null;
 let onToggleRepairMode: (() => void) | null = null;
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
+let onUngarrison: (() => void) | null = null;
 
 // Track if DOM listeners are already attached (for HMR support)
 let listenersInitialized = false;
@@ -1242,11 +1244,13 @@ let commandBarListenersInitialized = false;
  */
 export function initCommandBar(
     setStance: (stance: AttackStance) => void,
-    toggleAttackMove: () => void
+    toggleAttackMove: () => void,
+    ungarrison: () => void
 ) {
     // Always update callbacks (for HMR support)
     onSetStance = setStance;
     onToggleAttackMove = toggleAttackMove;
+    onUngarrison = ungarrison;
 
     // Only set up DOM listeners once - callbacks are updated via module variables
     if (!commandBarListenersInitialized) {
@@ -1254,6 +1258,7 @@ export function initCommandBar(
         const defensiveBtn = document.getElementById('stance-defensive');
         const holdBtn = document.getElementById('stance-hold');
         const attackMoveBtn = document.getElementById('attack-move-btn');
+        const ungarrisonBtn = document.getElementById('ungarrison-btn');
 
         if (aggressiveBtn) {
             aggressiveBtn.addEventListener('click', () => onSetStance?.('aggressive'));
@@ -1266,6 +1271,9 @@ export function initCommandBar(
         }
         if (attackMoveBtn) {
             attackMoveBtn.addEventListener('click', () => onToggleAttackMove?.());
+        }
+        if (ungarrisonBtn) {
+            ungarrisonBtn.addEventListener('click', () => onUngarrison?.());
         }
 
         commandBarListenersInitialized = true;
@@ -1281,22 +1289,26 @@ export function updateCommandBar(state: GameState) {
     const canvas = document.getElementById('gameCanvas');
     if (!commandBar) return;
 
+    const selectedUnits = state.selection
+        .map(id => state.entities[id])
+        .filter((entity): entity is UnitEntity => Boolean(entity && isUnit(entity) && !isTransportedUnit(entity)));
+
     // Check if we have combat units selected (not harvesters, MCVs)
-    const hasCombatUnits = state.selection.some(id => {
-        const entity = state.entities[id];
-        return entity && isUnit(entity) &&
-            entity.key !== 'harvester' && entity.key !== 'mcv';
-    });
+    const hasCombatUnits = selectedUnits.some(entity =>
+        entity.key !== 'harvester' && entity.key !== 'mcv'
+    );
+    const hasLoadedTransportSelected = selectedUnits.some(entity =>
+        isGarrisonableTransport(entity) && getTransportPassengers(state.entities, entity.id).length > 0
+    );
 
     // Show/hide command bar
-    if (hasCombatUnits) {
+    if (hasCombatUnits || hasLoadedTransportSelected) {
         commandBar.classList.remove('hidden');
 
         // Get the dominant stance of selected units
-        const stances = state.selection
-            .map(id => state.entities[id])
-            .filter(e => e && isUnit(e) && e.key !== 'harvester' && e.key !== 'mcv')
-            .map(e => (e as UnitEntity).combat?.stance || 'aggressive');
+        const stances = selectedUnits
+            .filter(e => e.key !== 'harvester' && e.key !== 'mcv')
+            .map(e => e.combat?.stance || 'aggressive');
 
         // Find most common stance
         const stanceCounts = stances.reduce((acc, s) => {
@@ -1324,6 +1336,12 @@ export function updateCommandBar(state: GameState) {
         }
     } else {
         commandBar.classList.add('hidden');
+    }
+
+    const ungarrisonBtn = document.getElementById('ungarrison-btn');
+    if (ungarrisonBtn) {
+        ungarrisonBtn.classList.toggle('hidden', !hasLoadedTransportSelected);
+        (ungarrisonBtn as HTMLButtonElement).disabled = !hasLoadedTransportSelected;
     }
 
     // Update attack-move button and canvas cursor
@@ -1373,6 +1391,7 @@ function getSelectionInfo(state: GameState, playerId: number): {
         const entity = state.entities[id];
         if (!entity || entity.dead || entity.owner !== playerId) continue;
         if (!isUnit(entity)) continue;
+        if (isTransportedUnit(entity)) continue;
 
         hasUnits = true;
 
@@ -1401,6 +1420,7 @@ function getEntityAtPosition(entities: Record<EntityId, Entity>, wx: number, wy:
     for (const id in entities) {
         const entity = entities[id];
         if (entity.dead) continue;
+        if (entity.type === 'UNIT' && isTransportedUnit(entity)) continue;
 
         // For buildings, use rectangular bounds
         if (entity.type === 'BUILDING') {
@@ -1432,6 +1452,7 @@ function canAnyUnitAttackTarget(state: GameState, targetEntity: Entity, playerId
         const entity = state.entities[id];
         if (!entity || entity.dead || entity.owner !== playerId) continue;
         if (!isUnit(entity)) continue;
+        if (isTransportedUnit(entity)) continue;
 
         const unitData = RULES.units[entity.key];
         if (!unitData || unitData.damage <= 0) continue;

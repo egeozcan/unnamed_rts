@@ -5,6 +5,7 @@ import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
 import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
+import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
 import { updateHarvesterBehavior } from './harvester';
 import { updateCombatUnitBehavior } from './combat';
 import { updateDemoTruckBehavior, setDetonationTarget } from './demo_truck';
@@ -53,7 +54,7 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
     const movableUnits: UnitEntity[] = [];
     for (const id of unitIds) {
         const entity = state.entities[id];
-        if (entity && entity.owner !== -1 && entity.type === 'UNIT' && !isAirUnit(entity)) {
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT' && !isAirUnit(entity) && !isTransportedUnit(entity)) {
             movableUnits.push(entity);
         }
     }
@@ -108,6 +109,77 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
     return { ...state, entities: nextEntities };
 }
 
+function calculateUngarrisonPositions(transport: UnitEntity, unitCount: number): Vector[] {
+    if (unitCount <= 0) return [];
+
+    const positions: Vector[] = [];
+    const baseAngle = (transport.id.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 360) * (Math.PI / 180);
+    const radius = transport.radius + 20;
+    for (let i = 0; i < unitCount; i++) {
+        const angle = baseAngle + (Math.PI * 2 * i) / unitCount;
+        positions.push(new Vector(
+            transport.pos.x + Math.cos(angle) * radius,
+            transport.pos.y + Math.sin(angle) * radius
+        ));
+    }
+    return positions;
+}
+
+export function commandUngarrison(state: GameState, payload: { unitIds: EntityId[] }): GameState {
+    const { unitIds } = payload;
+    let nextEntities = { ...state.entities };
+    let changed = false;
+
+    for (const id of unitIds) {
+        const entity = nextEntities[id];
+        if (!entity || entity.type !== 'UNIT' || !isGarrisonableTransport(entity) || entity.dead) continue;
+
+        const passengers = getTransportPassengers(nextEntities, entity.id).sort((a, b) => a.id.localeCompare(b.id));
+        if (passengers.length === 0) continue;
+
+        const unloadPositions = calculateUngarrisonPositions(entity, passengers.length);
+        for (let i = 0; i < passengers.length; i++) {
+            const passenger = nextEntities[passengers[i].id] as UnitEntity | undefined;
+            if (!passenger || passenger.dead || passenger.movement.transportId !== entity.id) continue;
+
+            const targetPos = unloadPositions[i] || entity.pos;
+            const clampedPos = new Vector(
+                Math.max(passenger.radius, Math.min(state.config.width - passenger.radius, targetPos.x)),
+                Math.max(passenger.radius, Math.min(state.config.height - passenger.radius, targetPos.y))
+            );
+
+            nextEntities[passenger.id] = {
+                ...passenger,
+                pos: clampedPos,
+                prevPos: clampedPos,
+                movement: {
+                    ...passenger.movement,
+                    transportId: null,
+                    vel: new Vector(0, 0),
+                    moveTarget: null,
+                    path: null,
+                    pathIdx: 0,
+                    finalDest: null,
+                    stuckTimer: 0,
+                    unstuckDir: null,
+                    unstuckTimer: 0,
+                    avgVel: undefined
+                },
+                combat: {
+                    ...passenger.combat,
+                    targetId: null,
+                    attackMoveTarget: null,
+                    stanceHomePos: null
+                }
+            };
+            changed = true;
+        }
+    }
+
+    if (!changed) return state;
+    return { ...state, entities: nextEntities };
+}
+
 /**
  * Calculate spread positions around a target for attack commands.
  * Units spread in a ring around the target to avoid bunching up.
@@ -145,7 +217,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     const { unitIds, targetId } = payload;
     const target = state.entities[targetId];
 
-    if (!target) {
+    if (!target || (target.type === 'UNIT' && isTransportedUnit(target))) {
         return state;
     }
 
@@ -180,7 +252,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     for (const id of expandedUnitIds) {
         const entity = state.entities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT' &&
-            entity.key !== 'harvester' && !isAirUnit(entity) &&
+            entity.key !== 'harvester' && !isAirUnit(entity) && !isTransportedUnit(entity) &&
             target.owner !== entity.owner) {
             attackers.push(entity);
         }
@@ -206,7 +278,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     let nextEntities = { ...state.entities };
     for (const id of expandedUnitIds) {
         const entity = nextEntities[id];
-        if (entity && entity.owner !== -1 && entity.type === 'UNIT') {
+        if (entity && entity.owner !== -1 && entity.type === 'UNIT' && !isTransportedUnit(entity)) {
             // Special handling for harvesters: right-clicking on resources or refineries
             // enables auto-harvesting mode
             if (entity.key === 'harvester' && target) {
@@ -266,6 +338,36 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                     nextEntities[id] = setDetonationTarget(entity, targetId, null);
                 }
             } else {
+                if (target && target.owner === entity.owner && isGarrisonableTransport(target) && isInfantryUnit(entity)) {
+                    const capacity = getTransportCapacity(target);
+                    const passengerCount = getTransportPassengers(nextEntities, target.id).length;
+                    if (capacity > 0 && passengerCount < capacity) {
+                        nextEntities[id] = {
+                            ...entity,
+                            movement: {
+                                ...entity.movement,
+                                moveTarget: null,
+                                path: null,
+                                pathIdx: 0,
+                                finalDest: null,
+                                repairTargetId: null
+                            },
+                            combat: {
+                                ...entity.combat,
+                                targetId: targetId,
+                                attackMoveTarget: null,
+                                stanceHomePos: null
+                            }
+                        };
+                    } else {
+                        nextEntities[id] = {
+                            ...entity,
+                            combat: { ...entity.combat, targetId: null }
+                        };
+                    }
+                    continue;
+                }
+
                 // Normal combat unit attack behavior - only target enemies
                 if (target && target.owner !== entity.owner) {
                     // Use spread position if assigned, otherwise approach directly
@@ -660,7 +762,7 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
     for (const id of unitIds) {
         const entity = state.entities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT' &&
-            entity.key !== 'harvester' && entity.key !== 'mcv' && !isAirUnit(entity)) {
+            entity.key !== 'harvester' && entity.key !== 'mcv' && !isAirUnit(entity) && !isTransportedUnit(entity)) {
             movableUnits.push(entity);
         }
     }
@@ -720,7 +822,7 @@ export function setStance(state: GameState, payload: { unitIds: EntityId[]; stan
 
     for (const id of unitIds) {
         const entity = nextEntities[id];
-        if (entity && entity.type === 'UNIT' && entity.combat) {
+        if (entity && entity.type === 'UNIT' && entity.combat && !isTransportedUnit(entity)) {
             // Only apply stance to combat units (exclude harvesters and MCVs)
             if (entity.key !== 'harvester' && entity.key !== 'mcv') {
                 nextEntities[id] = {

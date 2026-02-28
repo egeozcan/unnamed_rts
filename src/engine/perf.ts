@@ -77,7 +77,8 @@ export function createEntityCache(entities: Record<EntityId, Entity>): EntityCac
         const e = entities[id];
         all.push(e);
 
-        if (e.dead) continue;
+        const isTransported = e.type === 'UNIT' && e.movement.transportId != null;
+        if (e.dead || isTransported) continue;
 
         alive.push(e);
 
