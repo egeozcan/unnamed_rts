@@ -5,6 +5,7 @@ import { infantryFortressAIImplementation } from './implementations/infantry_for
 import { geniusAIImplementation } from './implementations/genius/index.js';
 import { hydraAIImplementation } from './implementations/hydra/index.js';
 // @ai-implementation-imports
+import { EngineerConyardRushAIImplementation } from './implementations/engineer_conyard_rush/index.js';
 import { TitanAIImplementation } from './implementations/titan/index.js';
 import { SentinelOpportunistAIImplementation } from './implementations/sentinel_opportunist/index.js';
 import { SaboteurCircusAIImplementation } from './implementations/saboteur_circus/index.js';
@@ -57,6 +58,7 @@ const builtInImplementations: AIImplementation[] = [
     SaboteurCircusAIImplementation,
     SentinelOpportunistAIImplementation,
     TitanAIImplementation,
+    EngineerConyardRushAIImplementation,
     // @ai-implementation-list
 ];
 

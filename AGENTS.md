@@ -124,6 +124,12 @@ npm run build
 npm run ai:tournament -- --games-per-matchup 2 --max-ticks 40000
 ```
 
+When running tournaments on a machine in active use, prefer lower CPU priority:
+
+```bash
+nice -n 15 npm run ai:tournament -- --games-per-matchup 2 --max-ticks 40000
+```
+
 Recommended quick iteration probes:
 
 ```bash
