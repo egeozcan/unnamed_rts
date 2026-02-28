@@ -409,7 +409,16 @@ export function tick(state: GameState): GameState {
         if (alivePlayers.length === 1) {
             nextWinner = alivePlayers[0];
             nextRunning = false; // Stop game on win
-
+        } else if (alivePlayers.length > 1) {
+            // Team-aware victory: all alive players must share the same team
+            const firstTeam = nextPlayers[alivePlayers[0]]?.team;
+            if (firstTeam != null) {
+                const allSameTeam = alivePlayers.every(pid => nextPlayers[pid]?.team === firstTeam);
+                if (allSameTeam) {
+                    nextWinner = alivePlayers[0];
+                    nextRunning = false;
+                }
+            }
         } else if (alivePlayers.length === 0 && Object.keys(nextPlayers).length > 0) {
             // Draw or everyone destroyed?
             nextWinner = -1; // -1 for draw

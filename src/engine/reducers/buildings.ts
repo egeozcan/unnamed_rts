@@ -136,25 +136,38 @@ export function sellBuilding(state: GameState, payload: { buildingId: EntityId; 
             .map(Number)
             .filter(pid => (buildingCounts[pid] || 0) > 0 || (mcvCounts[pid] || 0) > 0);
 
+        let winner: number | null = null;
         if (alivePlayers.length === 1) {
-            // Kill loser entities
-            const winner = alivePlayers[0];
-            const losers = Object.keys(newState.players).map(Number).filter(id => id !== winner);
+            winner = alivePlayers[0];
+        } else if (alivePlayers.length > 1) {
+            const firstTeam = newState.players[alivePlayers[0]]?.team;
+            if (firstTeam != null) {
+                const allSameTeam = alivePlayers.every(pid => newState.players[pid]?.team === firstTeam);
+                if (allSameTeam) {
+                    winner = alivePlayers[0];
+                }
+            }
+        } else if (alivePlayers.length === 0 && Object.keys(newState.players).length > 0) {
+            winner = -1;
+        }
+
+        if (winner !== null) {
+            const losers = Object.keys(newState.players).map(Number).filter(id => {
+                if (winner === -1) return true; // draw: kill all
+                const winnerTeam = newState.players[winner!]?.team;
+                if (winnerTeam != null) {
+                    return newState.players[id]?.team !== winnerTeam;
+                }
+                return id !== winner;
+            });
             let finalEntities = { ...newState.entities };
             for (const loserId of losers) {
                 finalEntities = killPlayerEntities(finalEntities, loserId);
             }
-
             return {
                 ...newState,
                 entities: finalEntities,
-                winner: winner,
-                running: false
-            };
-        } else if (alivePlayers.length === 0 && Object.keys(newState.players).length > 0) {
-            return {
-                ...newState,
-                winner: -1,
+                winner,
                 running: false
             };
         }
