@@ -4,7 +4,7 @@ import {
 import { RULES, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createEntity, getRuleData, createProjectile, killPlayerEntities } from './helpers';
 import { getSpatialGrid } from '../spatial';
-import { isEnemy } from '../teams';
+import { isAlly, isEnemy } from '../teams';
 
 export function placeBuilding(state: GameState, payload: { key: string; x: number; y: number; playerId: number }): GameState {
     const { key, x, y, playerId } = payload;
@@ -14,12 +14,12 @@ export function placeBuilding(state: GameState, payload: { key: string; x: numbe
     // === BUILD RANGE VALIDATION ===
     // Building must be within BUILD_RADIUS of an existing building (excluding defenses)
     const BUILD_RADIUS = 400;
-    const myBuildings = Object.values(state.entities).filter(e =>
-        e.owner === playerId && e.type === 'BUILDING' && !e.dead
+    const allyBuildings = Object.values(state.entities).filter(e =>
+        e.type === 'BUILDING' && !e.dead && isAlly(state, e.owner, playerId)
     );
 
     let withinBuildRange = false;
-    for (const b of myBuildings) {
+    for (const b of allyBuildings) {
         const bData = RULES.buildings[b.key];
         // Defense buildings don't extend build range
         if (bData?.isDefense) continue;
@@ -32,7 +32,7 @@ export function placeBuilding(state: GameState, payload: { key: string; x: numbe
     }
 
     // Reject placement if not within build range (unless this is first building)
-    if (myBuildings.length > 0 && !withinBuildRange) {
+    if (allyBuildings.length > 0 && !withinBuildRange) {
         console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) is outside build range`);
         return state;
     }
