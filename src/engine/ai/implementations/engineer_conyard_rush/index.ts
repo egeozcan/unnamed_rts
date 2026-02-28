@@ -2,8 +2,10 @@ import { Action, Entity, EntityId, GameState, isActionType, PlayerState, UnitEnt
 import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { getTransportCapacity, getTransportPassengers, isTransportedUnit } from '../../../transport.js';
 import { AIImplementation } from '../../contracts.js';
+import { checkPrerequisites } from '../../utils.js';
 import { computeClassicAiActions } from '../classic/index.js';
 import { getEngineerConyardRushRuntimeState, resetEngineerConyardRushRuntimeState } from './state.js';
+import { RULES } from '../../../../data/schemas/index.js';
 
 const ENGINEERS_PER_ENEMY_CONYARD = 2;
 const MIN_ENGINEER_FORCE = 3;
@@ -11,9 +13,25 @@ const MIN_APC_FORCE = 1;
 const DEFAULT_APC_CAPACITY = 5;
 const APC_UNLOAD_RANGE = 120;
 const APC_KEY = 'apc';
+const MIN_DEFENSES_AFTER_CAPTURE = 5;
+const DEFENSES_PER_CONYARD = 2;
+const MIN_REFINERIES_AFTER_CAPTURE = 2;
+const MAX_REFINERIES_AFTER_CAPTURE = 4;
+const MIN_HARVESTERS_AFTER_CAPTURE = 4;
+const HARVESTERS_PER_REFINERY_AFTER_CAPTURE = 2;
+const CRITICAL_POST_CAPTURE_POWER_MARGIN = 0;
+const LOW_POST_CAPTURE_POWER_MARGIN = 20;
+const POST_CAPTURE_LOW_PRIORITY_BUILDINGS = new Set(['tech', 'airforce_command']);
+const DEFENSE_BUILD_ORDER = ['turret', 'sam_site', 'pillbox', 'obelisk'] as const;
+
+type StartBuildAction = Extract<Action, { type: 'START_BUILD' }>;
 
 function isAliveConyard(entity: Entity): boolean {
     return entity.type === 'BUILDING' && entity.key === 'conyard' && !entity.dead;
+}
+
+function isAliveRefinery(entity: Entity): boolean {
+    return entity.type === 'BUILDING' && entity.key === 'refinery' && !entity.dead;
 }
 
 function countQueuedByKey(queue: PlayerState['queues'][keyof PlayerState['queues']], key: string): number {
@@ -30,6 +48,126 @@ function countQueuedEngineers(player: PlayerState): number {
 
 function countQueuedApcs(player: PlayerState): number {
     return countQueuedByKey(player.queues.vehicle, APC_KEY);
+}
+
+function isStartBuildAction(action: Action): action is StartBuildAction {
+    return isActionType(action, 'START_BUILD');
+}
+
+function isDefenseBuildingKey(key: string): boolean {
+    return Boolean(RULES.buildings[key]?.isDefense);
+}
+
+function countStartBuildActions(
+    actions: Action[],
+    playerId: number,
+    category: StartBuildAction['payload']['category'],
+    key?: string
+): number {
+    let count = 0;
+    for (const action of actions) {
+        if (!isStartBuildAction(action)) continue;
+        if (action.payload.playerId !== playerId) continue;
+        if (action.payload.category !== category) continue;
+        if (key && action.payload.key !== key) continue;
+        count += 1;
+    }
+    return count;
+}
+
+function countDefenseStartBuildActions(actions: Action[], playerId: number): number {
+    let count = 0;
+    for (const action of actions) {
+        if (!isStartBuildAction(action)) continue;
+        if (action.payload.playerId !== playerId) continue;
+        if (action.payload.category !== 'building') continue;
+        if (!isDefenseBuildingKey(action.payload.key)) continue;
+        count += 1;
+    }
+    return count;
+}
+
+function countQueuedDefenseBuildings(player: PlayerState): number {
+    let count = 0;
+    if (player.readyToPlace && isDefenseBuildingKey(player.readyToPlace)) {
+        count += 1;
+    }
+    if (player.queues.building.current && isDefenseBuildingKey(player.queues.building.current)) {
+        count += 1;
+    }
+    for (const queued of player.queues.building.queued ?? []) {
+        if (isDefenseBuildingKey(queued)) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+function countQueuedRefineries(player: PlayerState): number {
+    let count = 0;
+    if (player.readyToPlace === 'refinery') {
+        count += 1;
+    }
+    if (player.queues.building.current === 'refinery') {
+        count += 1;
+    }
+    for (const queued of player.queues.building.queued ?? []) {
+        if (queued === 'refinery') {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+function hasBuildingQueueCommitted(player: PlayerState): boolean {
+    if (player.readyToPlace) return true;
+    if (player.queues.building.current) return true;
+    if ((player.queues.building.queued ?? []).length > 0) return true;
+    return false;
+}
+
+function hasVehicleQueuePlanned(player: PlayerState, actions: Action[]): boolean {
+    if (player.queues.vehicle.current) return true;
+    if ((player.queues.vehicle.queued ?? []).length > 0) return true;
+    return actions.some(action =>
+        isStartBuildAction(action) &&
+        action.payload.playerId === player.id &&
+        action.payload.category === 'vehicle'
+    );
+}
+
+function upsertBuildingStartAction(
+    actions: Action[],
+    player: PlayerState,
+    key: string,
+    myBuildings: Entity[]
+): boolean {
+    if (!checkPrerequisites(key, myBuildings)) {
+        return false;
+    }
+    const cost = RULES.buildings[key]?.cost;
+    if (cost === undefined || player.credits < cost) {
+        return false;
+    }
+
+    const existingBuildIndex = actions.findIndex(action =>
+        isStartBuildAction(action) &&
+        action.payload.playerId === player.id &&
+        action.payload.category === 'building'
+    );
+
+    const nextAction: Action = {
+        type: 'START_BUILD',
+        payload: { category: 'building', key, playerId: player.id }
+    };
+
+    if (existingBuildIndex >= 0) {
+        actions[existingBuildIndex] = nextAction;
+        return true;
+    }
+
+    actions.push(nextAction);
+    return true;
 }
 
 function hasBuildingBuildPlanned(player: PlayerState, actions: Action[], key: 'barracks' | 'factory'): boolean {
@@ -337,12 +475,17 @@ function trackEnemyConyards(runtimeState: ReturnType<typeof getEngineerConyardRu
     }
 }
 
-function getCapturedConyardSellActions(
+function trackEnemyRefineries(runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>, enemyRefineries: Entity[]): void {
+    for (const refinery of enemyRefineries) {
+        runtimeState.trackedEnemyRefineryIds.add(refinery.id);
+    }
+}
+
+function updateCaptureTracking(
     state: GameState,
     playerId: number,
     runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>
-): Action[] {
-    const actions: Action[] = [];
+): void {
     for (const conyardId of Array.from(runtimeState.trackedEnemyConyardIds)) {
         const conyard = state.entities[conyardId];
         if (!conyard || !isAliveConyard(conyard) || runtimeState.initialOwnedConyardIds.has(conyardId)) {
@@ -351,14 +494,214 @@ function getCapturedConyardSellActions(
         }
 
         if (conyard.owner === playerId) {
+            runtimeState.successfulCapturedConyardIds.add(conyardId);
+        }
+    }
+}
+
+function getCapturedRefinerySellActions(
+    state: GameState,
+    playerId: number,
+    runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>
+): Action[] {
+    const actions: Action[] = [];
+    for (const refineryId of Array.from(runtimeState.trackedEnemyRefineryIds)) {
+        const refinery = state.entities[refineryId];
+        if (!refinery || !isAliveRefinery(refinery) || runtimeState.initialOwnedRefineryIds.has(refineryId)) {
+            runtimeState.trackedEnemyRefineryIds.delete(refineryId);
+            continue;
+        }
+
+        if (refinery.owner === playerId) {
             actions.push({
                 type: 'SELL_BUILDING',
-                payload: { buildingId: conyardId, playerId }
+                payload: { buildingId: refineryId, playerId }
             });
-            runtimeState.trackedEnemyConyardIds.delete(conyardId);
+            runtimeState.trackedEnemyRefineryIds.delete(refineryId);
         }
     }
     return actions;
+}
+
+function removePostCaptureRushBuilds(actions: Action[], playerId: number): Action[] {
+    return actions.filter(action => {
+        if (!isStartBuildAction(action)) return true;
+        if (action.payload.playerId !== playerId) return true;
+        if (action.payload.category === 'infantry' && action.payload.key === 'engineer') {
+            return false;
+        }
+        if (action.payload.category === 'vehicle' && action.payload.key === APC_KEY) {
+            return false;
+        }
+        return true;
+    });
+}
+
+function removeLowPriorityPostCaptureBuildingBuilds(actions: Action[], playerId: number): Action[] {
+    return actions.filter(action => {
+        if (!isStartBuildAction(action)) return true;
+        if (action.payload.playerId !== playerId) return true;
+        if (action.payload.category !== 'building') return true;
+        return !POST_CAPTURE_LOW_PRIORITY_BUILDINGS.has(action.payload.key);
+    });
+}
+
+function queuePostCaptureBuildingPriority(
+    actions: Action[],
+    player: PlayerState,
+    myBuildings: Entity[],
+    runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>
+): void {
+    const hasConyard = myBuildings.some(isAliveConyard);
+    if (!hasConyard) {
+        return;
+    }
+    if (hasBuildingQueueCommitted(player)) {
+        return;
+    }
+
+    const powerMargin = player.maxPower - player.usedPower;
+    if (powerMargin <= CRITICAL_POST_CAPTURE_POWER_MARGIN &&
+        upsertBuildingStartAction(actions, player, 'power', myBuildings)) {
+        return;
+    }
+
+    const hasBarracks = myBuildings.some(building => building.type === 'BUILDING' && building.key === 'barracks' && !building.dead);
+    if (!hasBarracks && !hasBarracksBuildPlanned(player, actions) &&
+        upsertBuildingStartAction(actions, player, 'barracks', myBuildings)) {
+        return;
+    }
+
+    const hasFactory = myBuildings.some(building => building.type === 'BUILDING' && building.key === 'factory' && !building.dead);
+    if (!hasFactory && !hasFactoryBuildPlanned(player, actions) &&
+        upsertBuildingStartAction(actions, player, 'factory', myBuildings)) {
+        return;
+    }
+
+    const aliveConyards = myBuildings.filter(isAliveConyard);
+    const capturedConyards = aliveConyards.filter(conyard => !runtimeState.initialOwnedConyardIds.has(conyard.id));
+    const desiredDefenseCount = Math.max(
+        MIN_DEFENSES_AFTER_CAPTURE,
+        capturedConyards.length * DEFENSES_PER_CONYARD + 3
+    );
+    const defenseFloor = Math.max(3, capturedConyards.length + 2);
+    const currentDefenseCount = myBuildings.filter(building =>
+        building.type === 'BUILDING' && !building.dead && isDefenseBuildingKey(building.key)
+    ).length;
+    const projectedDefenseCount = currentDefenseCount +
+        countQueuedDefenseBuildings(player) +
+        countDefenseStartBuildActions(actions, player.id);
+
+    const currentRefineryCount = myBuildings.filter(building =>
+        building.type === 'BUILDING' && !building.dead && building.key === 'refinery'
+    ).length;
+    const desiredRefineryCount = Math.min(
+        MAX_REFINERIES_AFTER_CAPTURE,
+        Math.max(MIN_REFINERIES_AFTER_CAPTURE, capturedConyards.length + 2)
+    );
+    const projectedRefineryCount = currentRefineryCount +
+        countQueuedRefineries(player) +
+        countStartBuildActions(actions, player.id, 'building', 'refinery');
+
+    if (projectedDefenseCount < defenseFloor) {
+        for (const defenseKey of DEFENSE_BUILD_ORDER) {
+            if (upsertBuildingStartAction(actions, player, defenseKey, myBuildings)) {
+                return;
+            }
+        }
+    }
+
+    if (projectedRefineryCount < desiredRefineryCount &&
+        upsertBuildingStartAction(actions, player, 'refinery', myBuildings)) {
+        return;
+    }
+
+    if (projectedDefenseCount < desiredDefenseCount) {
+        for (const defenseKey of DEFENSE_BUILD_ORDER) {
+            if (upsertBuildingStartAction(actions, player, defenseKey, myBuildings)) {
+                return;
+            }
+        }
+    }
+
+    if (powerMargin < LOW_POST_CAPTURE_POWER_MARGIN) {
+        upsertBuildingStartAction(actions, player, 'power', myBuildings);
+    }
+}
+
+function enforcePostCaptureHarvesterBias(
+    actions: Action[],
+    player: PlayerState,
+    myBuildings: Entity[],
+    myUnits: Entity[],
+    successfulCaptureCount: number
+): Action[] {
+    const hasFactory = myBuildings.some(building => building.type === 'BUILDING' && building.key === 'factory' && !building.dead);
+    if (!hasFactory) {
+        return actions;
+    }
+
+    const refineryCount = myBuildings.filter(building =>
+        building.type === 'BUILDING' && building.key === 'refinery' && !building.dead
+    ).length;
+    if (refineryCount === 0) {
+        return actions;
+    }
+
+    const desiredHarvesterCount = Math.max(
+        MIN_HARVESTERS_AFTER_CAPTURE,
+        refineryCount * HARVESTERS_PER_REFINERY_AFTER_CAPTURE + Math.min(successfulCaptureCount, 2)
+    );
+    const currentHarvesterCount = myUnits.filter(unit => unit.type === 'UNIT' && unit.key === 'harvester' && !unit.dead).length;
+    const projectedHarvesterCount = currentHarvesterCount +
+        countQueuedByKey(player.queues.vehicle, 'harvester') +
+        countStartBuildActions(actions, player.id, 'vehicle', 'harvester');
+    if (projectedHarvesterCount >= desiredHarvesterCount) {
+        return actions;
+    }
+
+    if (!checkPrerequisites('harvester', myBuildings)) {
+        return actions;
+    }
+
+    const harvesterCost = RULES.units.harvester?.cost ?? 0;
+    if (player.credits < harvesterCost) {
+        return actions;
+    }
+
+    let replacedVehicleBuild = false;
+    const remappedActions: Action[] = actions.map(action => {
+        if (!isStartBuildAction(action)) {
+            return action;
+        }
+        if (action.payload.playerId !== player.id) {
+            return action;
+        }
+        if (action.payload.category !== 'vehicle') {
+            return action;
+        }
+        if (action.payload.key === 'harvester' || action.payload.key === 'mcv') {
+            return action;
+        }
+        if (replacedVehicleBuild) {
+            return action;
+        }
+        replacedVehicleBuild = true;
+        return {
+            type: 'START_BUILD',
+            payload: { category: 'vehicle', key: 'harvester', playerId: player.id }
+        } satisfies Action;
+    });
+
+    if (replacedVehicleBuild || hasVehicleQueuePlanned(player, remappedActions)) {
+        return remappedActions;
+    }
+
+    remappedActions.push({
+        type: 'START_BUILD',
+        payload: { category: 'vehicle', key: 'harvester', playerId: player.id }
+    } satisfies Action);
+    return remappedActions;
 }
 
 function initializeRuntimeState(runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>, myBuildings: Entity[]): void {
@@ -367,6 +710,10 @@ function initializeRuntimeState(runtimeState: ReturnType<typeof getEngineerConya
     for (const building of myBuildings) {
         if (isAliveConyard(building)) {
             runtimeState.initialOwnedConyardIds.add(building.id);
+            continue;
+        }
+        if (isAliveRefinery(building)) {
+            runtimeState.initialOwnedRefineryIds.add(building.id);
         }
     }
     runtimeState.initialized = true;
@@ -382,7 +729,7 @@ export function computeEngineerConyardRushAiActions(
         return [];
     }
 
-    const actions = computeClassicAiActions(state, playerId, sharedCache);
+    let actions = computeClassicAiActions(state, playerId, sharedCache);
 
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
@@ -392,6 +739,35 @@ export function computeEngineerConyardRushAiActions(
 
     initializeRuntimeState(runtimeState, myBuildings);
 
+    const enemyConyards = enemies.filter(entity =>
+        isAliveConyard(entity) &&
+        !runtimeState.initialOwnedConyardIds.has(entity.id)
+    );
+    const enemyRefineries = enemies.filter(entity =>
+        isAliveRefinery(entity) &&
+        !runtimeState.initialOwnedRefineryIds.has(entity.id)
+    );
+
+    trackEnemyConyards(runtimeState, enemyConyards);
+    trackEnemyRefineries(runtimeState, enemyRefineries);
+    updateCaptureTracking(state, playerId, runtimeState);
+
+    const hasSuccessfulCapture = runtimeState.successfulCapturedConyardIds.size > 0;
+    if (hasSuccessfulCapture) {
+        actions = removeLowPriorityPostCaptureBuildingBuilds(actions, playerId);
+        queuePostCaptureBuildingPriority(actions, player, myBuildings, runtimeState);
+        actions = enforcePostCaptureHarvesterBias(
+            actions,
+            player,
+            myBuildings,
+            myUnits,
+            runtimeState.successfulCapturedConyardIds.size
+        );
+        if (enemyConyards.length === 0) {
+            actions = removePostCaptureRushBuilds(actions, playerId);
+        }
+    }
+
     let allEngineerCount = 0;
     for (const id in state.entities) {
         const entity = state.entities[id];
@@ -400,11 +776,6 @@ export function computeEngineerConyardRushAiActions(
         }
     }
 
-    const enemyConyards = enemies.filter(entity =>
-        isAliveConyard(entity) &&
-        !runtimeState.initialOwnedConyardIds.has(entity.id)
-    );
-
     const engineers = myUnits
         .filter(unit => unit.type === 'UNIT' && unit.key === 'engineer' && !unit.dead)
         .map(unit => unit as UnitEntity);
@@ -412,11 +783,12 @@ export function computeEngineerConyardRushAiActions(
         .filter(unit => unit.type === 'UNIT' && unit.key === APC_KEY && !unit.dead)
         .map(unit => unit as UnitEntity);
 
-    trackEnemyConyards(runtimeState, enemyConyards);
-    enqueueEngineerProduction(actions, player, myBuildings, allEngineerCount, enemyConyards.length);
-    enqueueApcProduction(actions, player, myBuildings, apcs.length, allEngineerCount, enemyConyards.length);
-    actions.push(...getEngineerRushActions(state, engineers, apcs, enemyConyards, runtimeState));
-    actions.push(...getCapturedConyardSellActions(state, playerId, runtimeState));
+    if (enemyConyards.length > 0) {
+        enqueueEngineerProduction(actions, player, myBuildings, allEngineerCount, enemyConyards.length);
+        enqueueApcProduction(actions, player, myBuildings, apcs.length, allEngineerCount, enemyConyards.length);
+        actions.push(...getEngineerRushActions(state, engineers, apcs, enemyConyards, runtimeState));
+    }
+    actions.push(...getCapturedRefinerySellActions(state, playerId, runtimeState));
 
     return actions;
 }
@@ -424,7 +796,7 @@ export function computeEngineerConyardRushAiActions(
 export const EngineerConyardRushAIImplementation: AIImplementation = {
     id: 'engineer_conyard_rush',
     name: 'Engineer Conyard Rush',
-    description: 'Prioritizes engineer captures on enemy construction yards and instantly sells captured yards.',
+    description: 'Prioritizes enemy conyard captures, then fortifies captured ground and pivots into economic scaling.',
     computeActions: ({ state, playerId, entityCache }) => computeEngineerConyardRushAiActions(state, playerId, entityCache),
     reset: resetEngineerConyardRushRuntimeState
 };

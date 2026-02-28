@@ -7,10 +7,51 @@ import { getSpatialGrid } from '../spatial';
 import { isAlly, isEnemy } from '../teams';
 import { isTransportedUnit } from '../transport';
 
+function rectOverlap(r1: { l: number; r: number; t: number; b: number }, r2: { l: number; r: number; t: number; b: number }): boolean {
+    return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
+}
+
+function overlapsPlacementBlocker(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    entities: Record<EntityId, Entity>
+): boolean {
+    const placementRect = {
+        l: x - w / 2,
+        r: x + w / 2,
+        t: y - h / 2,
+        b: y + h / 2
+    };
+
+    for (const entity of Object.values(entities)) {
+        if (entity.dead) continue;
+        if (entity.type !== 'BUILDING' && entity.type !== 'RESOURCE' && entity.type !== 'ROCK' && entity.type !== 'WELL') {
+            continue;
+        }
+
+        const blockerRect = {
+            l: entity.pos.x - entity.w / 2,
+            r: entity.pos.x + entity.w / 2,
+            t: entity.pos.y - entity.h / 2,
+            b: entity.pos.y + entity.h / 2
+        };
+
+        if (rectOverlap(placementRect, blockerRect)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 export function placeBuilding(state: GameState, payload: { key: string; x: number; y: number; playerId: number }): GameState {
     const { key, x, y, playerId } = payload;
     const player = state.players[playerId];
     if (!player || player.readyToPlace !== key) return state;
+    const buildingData = RULES.buildings[key];
+    if (!buildingData) return state;
 
     // === BUILD RANGE VALIDATION ===
     // Building must be within BUILD_RADIUS of an existing building (excluding defenses)
@@ -35,6 +76,11 @@ export function placeBuilding(state: GameState, payload: { key: string; x: numbe
     // Reject placement if not within build range (unless this is first building)
     if (allyBuildings.length > 0 && !withinBuildRange) {
         console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) is outside build range`);
+        return state;
+    }
+
+    if (overlapsPlacementBlocker(x, y, buildingData.w, buildingData.h, state.entities)) {
+        console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) overlaps a blocking entity`);
         return state;
     }
 

@@ -68,6 +68,7 @@ let onTogglePause: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
+let hasPointerPosition = false;
 
 export function initInput(
     gameCanvas: HTMLCanvasElement,
@@ -89,6 +90,7 @@ export function initInput(
     }
 ) {
     canvas = gameCanvas;
+    hasPointerPosition = false;
     onLeftClick = callbacks.onLeftClick;
     onRightClick = callbacks.onRightClick;
     onDeployMCV = callbacks.onDeployMCV;
@@ -207,6 +209,7 @@ function setupEventListeners() {
 
     // Mouse move
     window.addEventListener('mousemove', e => {
+        hasPointerPosition = true;
         inputState.rawMouse.x = e.clientX;
         inputState.rawMouse.y = e.clientY;
         const rect = canvas.getBoundingClientRect();
@@ -223,6 +226,7 @@ function setupEventListeners() {
 
     // Mouse down
     window.addEventListener('mousedown', e => {
+        hasPointerPosition = true;
         // Ignore clicks inside the debug overlay
         const debugOverlay = document.getElementById('debug-overlay');
         if (debugOverlay && debugOverlay.style.display !== 'none' && debugOverlay.contains(e.target as Node)) {
@@ -423,11 +427,13 @@ export function handleCameraInput(
     if (keys.ArrowLeft) dx -= speed;
     if (keys.ArrowRight) dx += speed;
 
-    // Edge scrolling
-    if (inputState.rawMouse.x < 10) dx -= speed;
-    if (inputState.rawMouse.x > window.innerWidth - 10) dx += speed;
-    if (inputState.rawMouse.y < 10) dy -= speed;
-    if (inputState.rawMouse.y > window.innerHeight - 10) dy += speed;
+    // Edge scrolling (only after we've seen a real pointer position)
+    if (hasPointerPosition) {
+        if (inputState.rawMouse.x < 10) dx -= speed;
+        if (inputState.rawMouse.x > window.innerWidth - 10) dx += speed;
+        if (inputState.rawMouse.y < 10) dy -= speed;
+        if (inputState.rawMouse.y > window.innerHeight - 10) dy += speed;
+    }
 
     // Wheel/Touchpad scrolling
     dx += inputState.wheelDeltaX / zoom;

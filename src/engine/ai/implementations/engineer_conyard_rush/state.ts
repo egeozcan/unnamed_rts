@@ -3,7 +3,10 @@ import { EntityId } from '../../../types.js';
 export interface EngineerConyardRushRuntimeState {
     initialized: boolean;
     initialOwnedConyardIds: Set<EntityId>;
+    initialOwnedRefineryIds: Set<EntityId>;
     trackedEnemyConyardIds: Set<EntityId>;
+    trackedEnemyRefineryIds: Set<EntityId>;
+    successfulCapturedConyardIds: Set<EntityId>;
     enemyOwnerRotationCursor: number;
 }
 
@@ -18,7 +21,10 @@ export function getEngineerConyardRushRuntimeState(playerId: number): EngineerCo
     const created: EngineerConyardRushRuntimeState = {
         initialized: false,
         initialOwnedConyardIds: new Set<EntityId>(),
+        initialOwnedRefineryIds: new Set<EntityId>(),
         trackedEnemyConyardIds: new Set<EntityId>(),
+        trackedEnemyRefineryIds: new Set<EntityId>(),
+        successfulCapturedConyardIds: new Set<EntityId>(),
         enemyOwnerRotationCursor: 0
     };
     runtimeStateByPlayer.set(playerId, created);

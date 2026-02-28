@@ -694,6 +694,26 @@ function startGameWithConfig(config: SkirmishConfig) {
     setObserverMode(isObserverMode);
     renderer.resize();
 
+    if (isObserverMode) {
+        const observerZoom = 0.25; // Max zoom-out level (matches input clamp)
+        const size = renderer.getSize();
+        const panBuffer = 300;
+        const mapWidth = currentState.config.width;
+        const mapHeight = currentState.config.height;
+
+        const centeredX = mapWidth / 2 - size.width / (2 * observerZoom);
+        const centeredY = mapHeight / 2 - size.height / (2 * observerZoom);
+
+        currentState = {
+            ...currentState,
+            zoom: observerZoom,
+            camera: {
+                x: Math.max(-panBuffer / observerZoom, Math.min(mapWidth - size.width / observerZoom + panBuffer / observerZoom, centeredX)),
+                y: Math.max(-panBuffer / observerZoom, Math.min(mapHeight - size.height / observerZoom + panBuffer / observerZoom, centeredY))
+            }
+        };
+    }
+
     // Initialize input
     initInput(canvas, {
         onLeftClick: handleLeftClick,

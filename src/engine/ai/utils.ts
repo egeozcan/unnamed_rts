@@ -463,7 +463,7 @@ export function isValidPlacement(
     const entities = Object.values(state.entities);
     for (const e of entities) {
         if (e.dead) continue;
-        if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK') {
+        if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK' || e.type === 'WELL') {
             const eRect = {
                 l: e.pos.x - e.w / 2,
                 r: e.pos.x + e.w / 2,
@@ -494,7 +494,7 @@ export function isValidPlacement(
 
         for (const e of entities) {
             if (e.dead) continue;
-            if (e.type === 'BUILDING' || e.type === 'RESOURCE') {
+            if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK' || e.type === 'WELL') {
                 const eRect = {
                     l: e.pos.x - e.w / 2,
                     r: e.pos.x + e.w / 2,
