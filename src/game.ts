@@ -1425,14 +1425,20 @@ function checkWinCondition() {
                 // Draw
                 endTitle.textContent = 'DRAW';
                 endTitle.style.color = '#ffffff';
-            } else if (humanPlayerId !== null && currentState.winner === humanPlayerId) {
-                // Human player won
-                endTitle.textContent = 'MISSION ACCOMPLISHED';
-                endTitle.style.color = '#44ff88';
             } else if (humanPlayerId !== null) {
-                // Human player lost (another player won)
-                endTitle.textContent = 'MISSION FAILED';
-                endTitle.style.color = '#ff4444';
+                const humanTeam = currentState.players[humanPlayerId]?.team;
+                const winnerTeam = currentState.players[currentState.winner]?.team;
+                const humanTeamWon = humanTeam != null && winnerTeam != null && humanTeam === winnerTeam;
+
+                if (currentState.winner === humanPlayerId || humanTeamWon) {
+                    // Human player or human's team won
+                    endTitle.textContent = 'MISSION ACCOMPLISHED';
+                    endTitle.style.color = '#44ff88';
+                } else {
+                    // Human player lost (another player/team won)
+                    endTitle.textContent = 'MISSION FAILED';
+                    endTitle.style.color = '#ff4444';
+                }
             } else {
                 // Observer mode - show which player won
                 const winnerColor = PLAYER_COLORS[currentState.winner] || '#ffffff';
