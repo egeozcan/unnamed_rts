@@ -334,7 +334,8 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
         if (nextEntity.combat!.targetId) {
             const target = allEntities[nextEntity.combat!.targetId];
             const targetIsTransported = target && target.type === 'UNIT' && isTransportedUnit(target);
-            if (target && !target.dead && !targetIsTransported && entity.pos.dist(target.pos) <= (data.range || 200)) {
+            const targetIsEnemy = target ? (!state || isEnemy(state, entity.owner, target.owner)) : false;
+            if (target && !target.dead && !targetIsTransported && targetIsEnemy && entity.pos.dist(target.pos) <= (data.range || 200)) {
                 if (nextEntity.combat!.cooldown <= 0) {
                     projectile = createProjectile(nextEntity, target);
                     nextEntity = {

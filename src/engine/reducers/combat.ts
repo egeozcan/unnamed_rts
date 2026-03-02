@@ -95,7 +95,8 @@ export function updateCombatUnitBehavior(
         const shouldClearTarget = !target ||
             target.dead ||
             (target.type === 'UNIT' && isTransportedUnit(target)) ||
-            (isHealer && target.hp >= target.maxHp);
+            (isHealer && target.hp >= target.maxHp) ||
+            (target ? !isTargetStillValidForUnit(nextEntity, target, data, isEngineer, isHijacker, state) : false);
         if (target && !shouldClearTarget) {
             // Check if we should give up pursuit (defensive/attack-move distance limit)
             if (shouldGiveUpPursuit(nextEntity, target, stance, isAttackMove)) {
@@ -343,6 +344,51 @@ function checkAndScatterForAlly(
     return null;
 }
 
+function isTargetStillValidForUnit(
+    unit: CombatUnit,
+    target: Entity,
+    data: ReturnType<typeof getRuleData>,
+    isEngineer: boolean,
+    isHijacker: boolean,
+    state?: GameState
+): boolean {
+    if (!data || !isUnitData(data)) return false;
+
+    const targetData = getRuleData(target.key);
+    const targetType = targetData && isUnitData(targetData) ? targetData.type : null;
+    const isHealer = data.damage < 0;
+    const targetIsEnemy = state ? isEnemy(state, unit.owner, target.owner) : unit.owner !== target.owner;
+    const targetIsAlly = state ? isAlly(state, unit.owner, target.owner) : unit.owner === target.owner;
+
+    // Infantry can keep a friendly transport target to enter/garrison.
+    if (target.type === 'UNIT' && isGarrisonableTransport(target) && isInfantryUnit(unit) && targetIsAlly) {
+        return true;
+    }
+
+    if (isHealer) {
+        return target.type === 'UNIT' &&
+            target.id !== unit.id &&
+            targetType === 'infantry' &&
+            targetIsAlly &&
+            target.hp < target.maxHp;
+    }
+
+    if (isEngineer) {
+        if (target.type !== 'BUILDING') return false;
+        const targetBuildingData = RULES.buildings[target.key];
+        const isCapturable = targetBuildingData?.capturable === true;
+        if (targetIsEnemy && data.canCaptureEnemyBuildings && isCapturable) return true;
+        if (targetIsAlly && data.canRepairFriendlyBuildings && target.hp < target.maxHp) return true;
+        return false;
+    }
+
+    if (isHijacker) {
+        return target.type === 'UNIT' && targetIsEnemy && targetType === 'vehicle';
+    }
+
+    return targetIsEnemy;
+}
+
 /**
  * Find a combat target using spatial grid search
  * @param maxRange - Optional max range override (used for hold_ground to limit to weapon range)
@@ -375,22 +421,27 @@ function findCombatTarget(
         if (isTargetAir && !targeting.canTargetAir) return false;
         if (!isTargetAir && !targeting.canTargetGround) return false;
 
+        const targetIsEnemy = state ? isEnemy(state, unit.owner, other.owner) : unit.owner !== other.owner;
+        const targetIsAlly = state ? isAlly(state, unit.owner, other.owner) : unit.owner === other.owner;
+
         if (isHealer) {
             // Medics can only heal infantry units
             const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
-            return isAlly(state!, unit.owner, other.owner) && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id && targetType === 'infantry';
+            return targetIsAlly && other.hp < other.maxHp && other.type === 'UNIT' && other.id !== unit.id && targetType === 'infantry';
         } else if (isEngineer) {
             if (other.type !== 'BUILDING') return false;
-            if (isEnemy(state!, unit.owner, other.owner) && data.canCaptureEnemyBuildings) return true;
-            if (isAlly(state!, unit.owner, other.owner) && other.hp < other.maxHp && data.canRepairFriendlyBuildings) return true;
+            const targetBuildingData = RULES.buildings[other.key];
+            const isCapturable = targetBuildingData?.capturable === true;
+            if (targetIsEnemy && data.canCaptureEnemyBuildings && isCapturable) return true;
+            if (targetIsAlly && other.hp < other.maxHp && data.canRepairFriendlyBuildings) return true;
             return false;
         } else if (isHijacker) {
             // Hijackers can only target enemy vehicles
-            if (other.type !== 'UNIT' || isAlly(state!, unit.owner, other.owner)) return false;
+            if (other.type !== 'UNIT' || targetIsAlly) return false;
             const targetType = otherData && isUnitData(otherData) ? otherData.type : null;
             return targetType === 'vehicle';
         } else {
-            return isEnemy(state!, unit.owner, other.owner);
+            return targetIsEnemy;
         }
     };
 
@@ -549,14 +600,16 @@ function handleCombatTarget(
 
             const targetBuildingData = RULES.buildings[target.key];
             const isCapturable = targetBuildingData?.capturable === true;
-            if (isEnemy(state!, unit.owner, target.owner) && data.canCaptureEnemyBuildings && isCapturable) {
+            const targetIsEnemy = state ? isEnemy(state, unit.owner, target.owner) : unit.owner !== target.owner;
+            const targetIsAlly = state ? isAlly(state, unit.owner, target.owner) : unit.owner === target.owner;
+            if (targetIsEnemy && data.canCaptureEnemyBuildings && isCapturable) {
                 // Capture enemy building - engineer is consumed
                 nextUnit = {
                     ...nextUnit,
                     dead: true,
                     engineer: { ...nextUnit.engineer, captureTargetId: target.id }
                 };
-            } else if (isAlly(state!, unit.owner, target.owner) && data.canRepairFriendlyBuildings && target.hp < target.maxHp) {
+            } else if (targetIsAlly && data.canRepairFriendlyBuildings && target.hp < target.maxHp) {
                 // Repair friendly building - engineer enters and is consumed, building fully healed
                 nextUnit = {
                     ...nextUnit,
@@ -576,7 +629,8 @@ function handleCombatTarget(
         const targetUnitData = getRuleData(target.key);
         const isVehicle = targetUnitData && isUnitData(targetUnitData) && targetUnitData.type === 'vehicle';
 
-        if (isVehicle && isEnemy(state!, unit.owner, target.owner)) {
+        const targetIsEnemy = state ? isEnemy(state, unit.owner, target.owner) : unit.owner !== target.owner;
+        if (isVehicle && targetIsEnemy) {
             // Entry distance - need to be very close to vehicle
             const entryRange = 30;
             if (dist <= entryRange + target.radius) {

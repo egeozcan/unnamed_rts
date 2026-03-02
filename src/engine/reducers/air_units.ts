@@ -10,12 +10,13 @@
  */
 
 import {
-    Entity, EntityId, BuildingEntity, AirUnit, Vector, Projectile
+    Entity, EntityId, BuildingEntity, AirUnit, Vector, Projectile, GameState
 } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
 import { isAirUnit, updateAirUnit } from '../entity-helpers';
 import { moveToward } from './units';
+import { isEnemy } from '../teams';
 
 /**
  * Update an air unit's state machine.
@@ -24,7 +25,8 @@ import { moveToward } from './units';
 export function updateAirUnitState(
     entity: AirUnit,
     allEntities: Record<EntityId, Entity>,
-    entityList: Entity[]
+    entityList: Entity[],
+    state?: GameState
 ): { entity: AirUnit, projectile?: Projectile | null, modifiedEntities?: Record<EntityId, Entity> } {
     const data = getRuleData(entity.key);
     let nextEntity = entity;
@@ -42,7 +44,8 @@ export function updateAirUnitState(
             // Flying toward target
             if (entity.combat.targetId) {
                 const target = allEntities[entity.combat.targetId];
-                if (target && !target.dead) {
+                const targetIsEnemy = target ? (state ? isEnemy(state, entity.owner, target.owner) : target.owner !== entity.owner) : false;
+                if (target && !target.dead && targetIsEnemy) {
                     const dist = entity.pos.dist(target.pos);
                     const range = data?.range || 200;
 
@@ -71,7 +74,8 @@ export function updateAirUnitState(
             // In attack position, fire when ready
             if (entity.airUnit.ammo > 0 && entity.combat.cooldown <= 0) {
                 const target = allEntities[entity.combat.targetId!];
-                if (target && !target.dead) {
+                const targetIsEnemy = target ? (state ? isEnemy(state, entity.owner, target.owner) : target.owner !== entity.owner) : false;
+                if (target && !target.dead && targetIsEnemy) {
                     // Fire missile
                     projectile = createProjectile(entity, target);
                     nextEntity = {

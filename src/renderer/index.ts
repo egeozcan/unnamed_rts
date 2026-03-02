@@ -4,6 +4,7 @@ import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
+import { getTransportCapacity } from '../engine/transport.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -149,24 +150,34 @@ export class Renderer {
             }
         }
 
+        // Count current passengers per transport once per frame (transported units are hidden in carriers).
+        const passengerCountByTransport = new Map<string, number>();
+        for (const id in entities) {
+            const candidate = entities[id];
+            if (!isUnit(candidate) || candidate.dead) continue;
+            const transportId = candidate.movement.transportId;
+            if (!transportId) continue;
+            passengerCountByTransport.set(transportId, (passengerCountByTransport.get(transportId) ?? 0) + 1);
+        }
+
         // Draw resources (no owner-specific colors)
         for (const entity of resourceEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
         }
 
         // Draw rocks (no owner-specific colors)
         for (const entity of rockEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
         }
 
         // Draw wells (no owner-specific colors)
         for (const entity of wellEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
         }
 
         // Draw units and buildings (batched by owner for color caching)
         for (const entity of unitBuildingEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities);
+            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
         }
 
         // Draw rally points for selected production buildings (barracks/factory only)
@@ -348,7 +359,7 @@ export class Renderer {
         };
     }
 
-    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null, allEntities: Record<string, Entity>) {
+    private drawEntity(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null, allEntities: Record<string, Entity>, passengerCountByTransport: Map<string, number>) {
         // Skip docked harriers - they are invisible while docked at base
         if (isAirUnit(entity) && entity.airUnit.state === 'docked') {
             return;
@@ -532,6 +543,34 @@ export class Renderer {
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20, 3);
                 ctx.fillStyle = '#0ff';
                 ctx.fillRect(-10, -entity.h / 2 - 6, 20 * ratio, 3);
+            }
+
+            // Transport occupancy indicator (e.g. APC with passengers).
+            if (entity.type === 'UNIT') {
+                const capacity = getTransportCapacity(entity);
+                const passengerCount = capacity > 0 ? (passengerCountByTransport.get(entity.id) ?? 0) : 0;
+                if (passengerCount > 0) {
+                    const badgeX = entity.w / 2 - 4;
+                    const badgeY = -entity.h / 2 + 4;
+                    const badgeText = passengerCount > 9 ? '9+' : String(passengerCount);
+
+                    ctx.save();
+                    ctx.rotate(-rotation); // Keep badge upright while unit body rotates.
+                    ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(badgeX, badgeY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#4cffd2';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(badgeText, badgeX, badgeY + 0.5);
+                    ctx.restore();
+                }
             }
 
             // Air-Force Command: draw docked harrier indicators

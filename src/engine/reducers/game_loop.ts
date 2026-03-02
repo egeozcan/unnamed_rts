@@ -666,7 +666,7 @@ export function updateEntities(
         if (entity.type === 'UNIT') {
             // Check if this is an air unit (harrier) - use different state machine
             if (isAirUnit(entity)) {
-                const airRes = updateAirUnitState(entity, state.entities, entityList);
+                const airRes = updateAirUnitState(entity, state.entities, entityList, state);
                 nextEntities[id] = airRes.entity;
                 if (airRes.projectile) newProjectiles.push(airRes.projectile);
                 // Apply modified entities (e.g., air base slots updated when harrier docks)

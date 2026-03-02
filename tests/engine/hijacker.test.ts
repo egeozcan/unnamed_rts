@@ -311,6 +311,66 @@ describe('Hijacker Unit', () => {
             // Target should be cleared after hijack
             expect(updatedTank.combat.targetId).toBeNull();
         });
+
+        it('should clear friendly attack targets after a hijack changes ownership', () => {
+            const enemyTank = createTestCombatUnit({
+                id: 'tank1',
+                owner: 1,
+                key: 'heavy',
+                x: 500,
+                y: 500,
+                hp: 600,
+                maxHp: 600,
+                targetId: null,
+                cooldown: 999
+            });
+
+            const alliedAttacker = createTestCombatUnit({
+                id: 'ally_tank',
+                owner: 0,
+                key: 'light',
+                x: 620,
+                y: 500,
+                hp: 400,
+                maxHp: 400,
+                targetId: 'tank1',
+                cooldown: 999
+            });
+
+            const hijacker = createTestHijacker({
+                id: 'hijacker1',
+                owner: 0,
+                x: 510,
+                y: 500,
+                targetId: 'tank1'
+            });
+
+            const p0Conyard = createTestBuilding({
+                id: 'cy0',
+                owner: 0,
+                key: 'conyard',
+                x: 150,
+                y: 150
+            });
+
+            const p1Conyard = createTestBuilding({
+                id: 'cy1',
+                owner: 1,
+                key: 'conyard',
+                x: 850,
+                y: 850
+            });
+
+            state = addEntitiesToState(state, [p0Conyard, p1Conyard, enemyTank, alliedAttacker, hijacker]);
+
+            // Tick 1: hijacker captures tank in post-loop processing.
+            state = update(state, { type: 'TICK' });
+            expect((state.entities['tank1'] as CombatUnit).owner).toBe(0);
+
+            // Tick 2: stale target should be cleared now that target is allied.
+            state = update(state, { type: 'TICK' });
+            expect((state.entities['ally_tank'] as CombatUnit).combat.targetId).toBeNull();
+        });
     });
 
     describe('Damage Resistance', () => {
