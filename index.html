@@ -314,15 +314,24 @@
       <!-- Command bar for unit stances and attack-move -->
       <div id="command-bar" class="command-bar hidden">
         <div class="stance-section">
-          <span class="command-label">Stance</span>
+          <span class="command-label">Combat Stance</span>
           <div class="stance-buttons">
-            <button id="stance-aggressive" class="stance-btn active" title="Aggressive (F) - Pursue enemies indefinitely">F</button>
-            <button id="stance-defensive" class="stance-btn" title="Defensive (G) - Return after kill or if too far">G</button>
-            <button id="stance-hold" class="stance-btn" title="Hold Ground (H) - Don't move, attack in range">H</button>
+            <button id="stance-aggressive" class="stance-btn stance-attack active" title="Attack (F) - Pursue enemies indefinitely" aria-keyshortcuts="F">
+              <span class="stance-name">Attack</span>
+              <span class="stance-hotkey">F</span>
+            </button>
+            <button id="stance-defensive" class="stance-btn stance-guard" title="Guard (G) - Return after kill or if too far" aria-keyshortcuts="G">
+              <span class="stance-name">Guard</span>
+              <span class="stance-hotkey">G</span>
+            </button>
+            <button id="stance-hold" class="stance-btn stance-stand" title="Stand Ground (H) - Don't move, attack in range" aria-keyshortcuts="H">
+              <span class="stance-name">Stand Ground</span>
+              <span class="stance-hotkey">H</span>
+            </button>
           </div>
         </div>
         <div class="attack-move-section">
-          <button id="attack-move-btn" class="attack-move-btn" title="Attack-Move (A) - Move and engage enemies">A-Move</button>
+          <button id="attack-move-btn" class="attack-move-btn" title="Attack-Move (A) - Move and engage enemies" aria-keyshortcuts="A">Attack-Move (A)</button>
         </div>
         <div class="ungarrison-section">
           <button id="ungarrison-btn" class="ungarrison-btn hidden" title="Ungarrison (U) - Unload all passengers">Unload (U)</button>
