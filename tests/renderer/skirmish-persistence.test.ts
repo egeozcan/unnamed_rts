@@ -68,6 +68,10 @@ function setupDom() {
             <option value="medium">Medium</option>
             <option value="high">High</option>
         </select>
+        <select id="fog-of-war">
+            <option value="on">On</option>
+            <option value="off">Off</option>
+        </select>
     `;
 }
 
@@ -87,7 +91,8 @@ describe('Skirmish menu persistence', () => {
                     ],
                     mapSize: 'huge',
                     resourceDensity: 'high',
-                    rockDensity: 'low'
+                    rockDensity: 'low',
+                    fogOfWarEnabled: false
                 })
             )
         };
@@ -107,6 +112,7 @@ describe('Skirmish menu persistence', () => {
         expect((document.getElementById('map-size') as HTMLSelectElement).value).toBe('huge');
         expect((document.getElementById('resource-density') as HTMLSelectElement).value).toBe('high');
         expect((document.getElementById('rock-density') as HTMLSelectElement).value).toBe('low');
+        expect((document.getElementById('fog-of-war') as HTMLSelectElement).value).toBe('off');
     });
 
     it('falls back to default AI implementation for unknown saved implementation ids', () => {
@@ -129,6 +135,7 @@ describe('Skirmish menu persistence', () => {
         const slotAis = Array.from(document.querySelectorAll('.ai-implementation')) as HTMLSelectElement[];
         expect(slotAis[0].value).toBe(DEFAULT_AI_IMPLEMENTATION_ID);
         expect(slotAis[1].value).toBe('eco_tank_all_in');
+        expect((document.getElementById('fog-of-war') as HTMLSelectElement).value).toBe('on');
     });
 
     it('collects and saves current UI settings', () => {
@@ -142,6 +149,7 @@ describe('Skirmish menu persistence', () => {
         (document.getElementById('map-size') as HTMLSelectElement).value = 'large';
         (document.getElementById('resource-density') as HTMLSelectElement).value = 'low';
         (document.getElementById('rock-density') as HTMLSelectElement).value = 'high';
+        (document.getElementById('fog-of-war') as HTMLSelectElement).value = 'off';
 
         const storage = {
             setItem: vi.fn()
@@ -162,5 +170,6 @@ describe('Skirmish menu persistence', () => {
         expect(saved.mapSize).toBe('large');
         expect(saved.resourceDensity).toBe('low');
         expect(saved.rockDensity).toBe('high');
+        expect(saved.fogOfWarEnabled).toBe(false);
     });
 });

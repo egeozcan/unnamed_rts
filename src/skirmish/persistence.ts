@@ -16,6 +16,7 @@ export interface PersistedSkirmishSettings {
     mapSize: MapSize;
     resourceDensity: Density;
     rockDensity: Density;
+    fogOfWarEnabled: boolean;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -45,6 +46,15 @@ function asDensity(value: unknown): Density | null {
     return DENSITY_OPTIONS.includes(value as Density) ? (value as Density) : null;
 }
 
+function asFogOfWarEnabled(value: unknown): boolean | null {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+        if (value === 'on') return true;
+        if (value === 'off') return false;
+    }
+    return null;
+}
+
 function defaultPlayerTypeForSlot(index: number): PlayerType {
     if (index === 0) return 'human';
     if (index === 1) return 'medium';
@@ -72,13 +82,15 @@ export function collectSkirmishSettingsFromUI(root: ParentNode = document): Pers
     const mapSizeSelect = root.querySelector('#map-size') as HTMLSelectElement | null;
     const resourceDensitySelect = root.querySelector('#resource-density') as HTMLSelectElement | null;
     const rockDensitySelect = root.querySelector('#rock-density') as HTMLSelectElement | null;
+    const fogOfWarSelect = root.querySelector('#fog-of-war') as HTMLSelectElement | null;
 
     return {
         version: 1,
         players,
         mapSize: asMapSize(mapSizeSelect?.value) ?? 'medium',
         resourceDensity: asDensity(resourceDensitySelect?.value) ?? 'medium',
-        rockDensity: asDensity(rockDensitySelect?.value) ?? 'medium'
+        rockDensity: asDensity(rockDensitySelect?.value) ?? 'medium',
+        fogOfWarEnabled: asFogOfWarEnabled(fogOfWarSelect?.value) ?? true
     };
 }
 
@@ -88,7 +100,7 @@ export function normalizePersistedSkirmishSettings(
 ): PersistedSkirmishSettings | null {
     if (!isRecord(value)) return null;
 
-    const hasRelevantField = 'players' in value || 'mapSize' in value || 'resourceDensity' in value || 'rockDensity' in value;
+    const hasRelevantField = 'players' in value || 'mapSize' in value || 'resourceDensity' in value || 'rockDensity' in value || 'fogOfWarEnabled' in value;
     if (!hasRelevantField) return null;
 
     const rawPlayers = Array.isArray(value.players) ? value.players : [];
@@ -119,7 +131,8 @@ export function normalizePersistedSkirmishSettings(
         players,
         mapSize: asMapSize(value.mapSize) ?? 'medium',
         resourceDensity: asDensity(value.resourceDensity) ?? 'medium',
-        rockDensity: asDensity(value.rockDensity) ?? 'medium'
+        rockDensity: asDensity(value.rockDensity) ?? 'medium',
+        fogOfWarEnabled: asFogOfWarEnabled(value.fogOfWarEnabled) ?? true
     };
 }
 
@@ -170,6 +183,11 @@ export function applySkirmishSettingsToUI(
     const rockDensitySelect = root.querySelector('#rock-density') as HTMLSelectElement | null;
     if (rockDensitySelect && hasOption(rockDensitySelect, settings.rockDensity)) {
         rockDensitySelect.value = settings.rockDensity;
+    }
+
+    const fogOfWarSelect = root.querySelector('#fog-of-war') as HTMLSelectElement | null;
+    if (fogOfWarSelect) {
+        fogOfWarSelect.value = settings.fogOfWarEnabled ? 'on' : 'off';
     }
 }
 

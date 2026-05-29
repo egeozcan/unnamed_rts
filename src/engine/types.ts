@@ -257,6 +257,7 @@ export interface SkirmishConfig {
     readonly mapSize: 'small' | 'medium' | 'large' | 'huge';
     readonly resourceDensity: 'low' | 'medium' | 'high';
     readonly rockDensity: 'low' | 'medium' | 'high';
+    readonly fogOfWarEnabled?: boolean;
 }
 
 export interface PlayerState {
