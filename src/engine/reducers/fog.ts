@@ -1,6 +1,7 @@
 import { GameState, TILE_SIZE } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { isAlly } from '../teams';
+import { isTransportedUnit } from '../transport';
 
 /**
  * Create a new fog grid for a given map size.
@@ -59,7 +60,7 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
         for (const id in entities) {
             const entity = entities[id];
             if (entity.dead) continue;
-            if (entity.type === 'UNIT' && entity.movement.transportId) continue;
+            if (isTransportedUnit(entity)) continue;
             if (!isAlly(state, entity.owner, playerId)) continue;
 
             const sightRange = getSightRange(entity.key);

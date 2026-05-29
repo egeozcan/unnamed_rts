@@ -1,4 +1,5 @@
 import { Entity, EntityId, PLAYER_COLORS } from '../engine/types.js';
+import { isTransportedUnit } from '../engine/transport.js';
 
 let minimapCtx: CanvasRenderingContext2D | null = null;
 let minimapCanvas: HTMLCanvasElement | null = null;
@@ -118,7 +119,7 @@ function renderToContext(
     for (const id in entities) {
         const e = entities[id];
         if (e.dead) continue;
-        if (e.type === 'UNIT' && e.movement.transportId) continue;
+        if (isTransportedUnit(e)) continue;
 
         // Fog of war check — skip entities on unrevealed tiles
         if (fogGrid && fogGridW) {

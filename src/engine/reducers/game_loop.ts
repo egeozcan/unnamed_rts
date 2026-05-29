@@ -941,7 +941,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         const e: MutableEntity = { ...entities[id] };
         workingEntities[id] = e;
         if (e.type === 'UNIT' && !e.dead) {
-            if ((e as unknown as UnitEntity).movement.transportId) continue;
+            if (isTransportedUnit(e)) continue;
             // Skip flying units from ground collision - they fly above everything
             const unitData = getRuleData(e.key);
             const canFly = unitData && isUnitData(unitData) && unitData.fly === true;

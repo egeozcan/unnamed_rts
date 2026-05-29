@@ -7,6 +7,7 @@
 
 import { Entity, EntityId, GameState } from './types.js';
 import { isEnemy } from './teams.js';
+import { isTransportedUnit } from './transport.js';
 
 /**
  * Cached entity views for a single tick.
@@ -77,8 +78,7 @@ export function createEntityCache(entities: Record<EntityId, Entity>): EntityCac
         const e = entities[id];
         all.push(e);
 
-        const isTransported = e.type === 'UNIT' && e.movement.transportId != null;
-        if (e.dead || isTransported) continue;
+        if (e.dead || isTransportedUnit(e)) continue;
 
         alive.push(e);
 

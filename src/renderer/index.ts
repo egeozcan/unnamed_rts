@@ -4,7 +4,7 @@ import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
-import { getTransportCapacity } from '../engine/transport.js';
+import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
 
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
@@ -155,7 +155,8 @@ export class Renderer {
         for (const id in entities) {
             const candidate = entities[id];
             if (!isUnit(candidate) || candidate.dead) continue;
-            const transportId = candidate.movement.transportId;
+            if (!isTransportedUnit(candidate)) continue;
+            const transportId = candidate.movement?.transportId;
             if (!transportId) continue;
             passengerCountByTransport.set(transportId, (passengerCountByTransport.get(transportId) ?? 0) + 1);
         }

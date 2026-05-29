@@ -1,6 +1,7 @@
 import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle, BuildingKey, UnitKey } from './types.js';
 import { RULES, isUnitData } from '../data/schemas/index.js';
 import { pathfindingWorker } from './pathfinding-worker-manager.js';
+import { isTransportedUnit } from './transport.js';
 
 // Default grid dimensions based on default map size
 const DEFAULT_GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
@@ -250,7 +251,7 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
                     }
                 }
             }
-        } else if (e.type === 'UNIT' && !e.dead && e.owner !== -1 && !e.movement.transportId) {
+        } else if (e.type === 'UNIT' && !e.dead && e.owner !== -1 && !isTransportedUnit(e)) {
             // Mark enemy combat units as danger for pathfinding
             // This helps units route around enemy clusters instead of through them
             const unitData = RULES.units[e.key];

@@ -6,6 +6,7 @@
  */
 
 import { Entity, EntityId } from './types.js';
+import { isTransportedUnit } from './transport.js';
 
 // Cell size should be roughly the size of the largest query radius we commonly use
 // Most queries are for ranges 100-400 units, so 200 is a good balance
@@ -62,7 +63,7 @@ export class SpatialGrid {
      */
     insert(entity: Entity): void {
         if (entity.dead) return;
-        if (entity.type === 'UNIT' && entity.movement.transportId) return;
+        if (isTransportedUnit(entity)) return;
 
         const cellKeys = this.getEntityCellKeys(entity);
         this.entityCells.set(entity.id, cellKeys);

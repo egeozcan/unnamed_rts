@@ -1,8 +1,15 @@
 import { Entity, EntityId, UnitEntity } from './types.js';
 import { RULES, isUnitData } from '../data/schemas/index.js';
 
-export function isTransportedUnit(entity: Entity): boolean {
-    return entity.type === 'UNIT' && entity.movement.transportId != null;
+type TransportStatusEntity = {
+    readonly type: Entity['type'];
+    readonly movement?: {
+        readonly transportId?: EntityId | null;
+    };
+};
+
+export function isTransportedUnit(entity: TransportStatusEntity): boolean {
+    return entity.type === 'UNIT' && entity.movement?.transportId != null;
 }
 
 export function isInfantryUnit(entity: Entity): entity is UnitEntity {
@@ -32,7 +39,7 @@ export function getTransportPassengers(
     for (const id in entities) {
         const entity = entities[id];
         if (entity.type !== 'UNIT' || entity.dead) continue;
-        if (entity.movement.transportId !== transportId) continue;
+        if (entity.movement?.transportId !== transportId) continue;
         passengers.push(entity);
     }
     return passengers;
