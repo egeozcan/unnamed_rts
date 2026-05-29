@@ -333,7 +333,7 @@ function restoreSkirmishMenuSettings() {
 }
 
 function setupSkirmishPersistence() {
-    const selectors = '.player-type, .ai-implementation, .player-team, #map-size, #resource-density, #rock-density';
+    const selectors = '.player-type, .ai-implementation, .player-team, #map-size, #resource-density, #rock-density, #fog-of-war';
     const elements = document.querySelectorAll(selectors);
     for (const element of elements) {
         element.addEventListener('change', persistSkirmishMenuSettings);
@@ -367,8 +367,9 @@ function getSkirmishConfig(): SkirmishConfig {
     const mapSize = (document.getElementById('map-size') as HTMLSelectElement).value as 'small' | 'medium' | 'large' | 'huge';
     const resourceDensity = (document.getElementById('resource-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
     const rockDensity = (document.getElementById('rock-density') as HTMLSelectElement).value as 'low' | 'medium' | 'high';
+    const fogOfWarEnabled = (document.getElementById('fog-of-war') as HTMLSelectElement | null)?.value !== 'off';
 
-    return { players, mapSize, resourceDensity, rockDensity };
+    return { players, mapSize, resourceDensity, rockDensity, fogOfWarEnabled };
 }
 
 // Get starting positions for players based on map size
@@ -588,7 +589,7 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     // Initialize fog of war for human player only
     const fogOfWar: Record<number, Uint8Array> = {};
-    if (humanPlayerId !== null) {
+    if (humanPlayerId !== null && config.fogOfWarEnabled !== false) {
         fogOfWar[humanPlayerId] = createFogGrid(mapWidth, mapHeight);
     }
 
