@@ -119,9 +119,18 @@ function countQueuedRefineries(player: PlayerState): number {
     return count;
 }
 
-function hasBuildingQueueCommitted(player: PlayerState): boolean {
-    if (player.readyToPlace) return true;
+function hasBuildingLaneResolutionAction(actions: Action[], playerId: number): boolean {
+    return actions.some(action =>
+        ((isActionType(action, 'PLACE_BUILDING') && action.payload.playerId === playerId) ||
+            (isActionType(action, 'CANCEL_BUILD') && action.payload.playerId === playerId))
+    );
+}
+
+function isBuildingLaneBlocked(player: PlayerState, actions: Action[]): boolean {
     if (player.queues.building.current) return true;
+    if (player.readyToPlace && !hasBuildingLaneResolutionAction(actions, player.id)) {
+        return true;
+    }
     if ((player.queues.building.queued ?? []).length > 0) return true;
     return false;
 }
@@ -546,6 +555,23 @@ function removeLowPriorityPostCaptureBuildingBuilds(actions: Action[], playerId:
     });
 }
 
+function removeHealthyMarginPostCapturePowerBuilds(
+    actions: Action[],
+    playerId: number,
+    powerMargin: number
+): Action[] {
+    if (powerMargin <= CRITICAL_POST_CAPTURE_POWER_MARGIN) {
+        return actions;
+    }
+
+    return actions.filter(action => {
+        if (!isStartBuildAction(action)) return true;
+        if (action.payload.playerId !== playerId) return true;
+        if (action.payload.category !== 'building') return true;
+        return action.payload.key !== 'power';
+    });
+}
+
 function queuePostCaptureBuildingPriority(
     actions: Action[],
     player: PlayerState,
@@ -556,7 +582,7 @@ function queuePostCaptureBuildingPriority(
     if (!hasConyard) {
         return;
     }
-    if (hasBuildingQueueCommitted(player)) {
+    if (isBuildingLaneBlocked(player, actions)) {
         return;
     }
 
@@ -755,6 +781,11 @@ export function computeEngineerConyardRushAiActions(
     const hasSuccessfulCapture = runtimeState.successfulCapturedConyardIds.size > 0;
     if (hasSuccessfulCapture) {
         actions = removeLowPriorityPostCaptureBuildingBuilds(actions, playerId);
+        actions = removeHealthyMarginPostCapturePowerBuilds(
+            actions,
+            playerId,
+            player.maxPower - player.usedPower
+        );
         queuePostCaptureBuildingPriority(actions, player, myBuildings, runtimeState);
         actions = enforcePostCaptureHarvesterBias(
             actions,

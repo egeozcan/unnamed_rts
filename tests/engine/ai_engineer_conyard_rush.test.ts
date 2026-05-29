@@ -259,6 +259,139 @@ describe('Engineer Conyard Rush AI', () => {
         )).toBe(false);
     });
 
+    it('places a carried power plant once and queues defense behind it after capture', () => {
+        const baseEntities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_engineer: createEntity('ai_engineer', 1, 'UNIT', 'engineer', 460, 430),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 900, 620)
+        };
+
+        const scoutingBase = createState(baseEntities, 31, 6000);
+        const scoutingState = {
+            ...scoutingBase,
+            players: {
+                ...scoutingBase.players,
+                1: { ...scoutingBase.players[1], maxPower: 1200, usedPower: 100 }
+            }
+        } as GameState;
+        computeAiActionsForPlayer(scoutingState, 1);
+
+        const capturedEntities: Record<EntityId, Entity> = {
+            ...baseEntities,
+            enemy_conyard: createEntity('enemy_conyard', 1, 'BUILDING', 'conyard', 900, 620)
+        };
+        const capturedBase = createState(capturedEntities, 34, 6000);
+        const capturedState = {
+            ...capturedBase,
+            players: {
+                ...capturedBase.players,
+                1: {
+                    ...capturedBase.players[1],
+                    maxPower: 1200,
+                    usedPower: 100,
+                    readyToPlace: 'power'
+                }
+            }
+        } as GameState;
+
+        const actions = computeAiActionsForPlayer(capturedState, 1);
+        const placePowerIndex = actions.findIndex(action =>
+            isActionType(action, 'PLACE_BUILDING') &&
+            action.payload.playerId === 1 &&
+            action.payload.key === 'power'
+        );
+        const defenseBuildIndex = actions.findIndex(action =>
+            isActionType(action, 'START_BUILD') &&
+            action.payload.playerId === 1 &&
+            action.payload.category === 'building' &&
+            DEFENSE_KEYS.has(action.payload.key)
+        );
+
+        expect(placePowerIndex).toBeGreaterThanOrEqual(0);
+        expect(defenseBuildIndex).toBeGreaterThan(placePowerIndex);
+        expect(actions.some(action =>
+            isActionType(action, 'START_BUILD') &&
+            action.payload.playerId === 1 &&
+            action.payload.category === 'building' &&
+            action.payload.key === 'power'
+        )).toBe(false);
+    });
+
+    it('finishes one in-progress power plant without queuing more power after capture', () => {
+        const baseEntities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_engineer: createEntity('ai_engineer', 1, 'UNIT', 'engineer', 460, 430),
+            enemy0_conyard: createEntity('enemy0_conyard', 0, 'BUILDING', 'conyard', 900, 620),
+            enemy2_conyard: createEntity('enemy2_conyard', 2, 'BUILDING', 'conyard', 1120, 700)
+        };
+
+        const baseAiPlayer = createPlayerState(1, true, 'hard', '#ff4444', ENGINEER_CONYARD_RUSH_ID);
+        const scoutingState = {
+            ...createState(baseEntities, 31, 6000),
+            players: {
+                0: createPlayerState(0, false, 'medium', '#4488ff'),
+                1: { ...baseAiPlayer, credits: 6000, maxPower: 1200, usedPower: 100 },
+                2: createPlayerState(2, false, 'medium', '#44ff88')
+            }
+        } as GameState;
+        computeAiActionsForPlayer(scoutingState, 1);
+
+        const capturedState = {
+            ...createState(
+                {
+                    ...baseEntities,
+                    enemy0_conyard: createEntity('enemy0_conyard', 1, 'BUILDING', 'conyard', 900, 620)
+                },
+                34,
+                6000
+            ),
+            players: {
+                0: createPlayerState(0, false, 'medium', '#4488ff'),
+                1: {
+                    ...baseAiPlayer,
+                    credits: 6000,
+                    maxPower: 1200,
+                    usedPower: 100,
+                    queues: {
+                        ...baseAiPlayer.queues,
+                        building: { current: 'power', progress: 50, invested: 150, queued: [] }
+                    }
+                },
+                2: createPlayerState(2, false, 'medium', '#44ff88')
+            }
+        } as GameState;
+
+        const actions = computeAiActionsForPlayer(capturedState, 1);
+
+        expect(actions.some(action =>
+            isActionType(action, 'CANCEL_BUILD') &&
+            action.payload.playerId === 1 &&
+            action.payload.category === 'building'
+        )).toBe(false);
+
+        expect(actions.some(action =>
+            isActionType(action, 'START_BUILD') &&
+            action.payload.playerId === 1 &&
+            action.payload.category === 'building' &&
+            action.payload.key === 'power'
+        )).toBe(false);
+
+        expect(actions.some(action =>
+            isActionType(action, 'START_BUILD') &&
+            action.payload.playerId === 1 &&
+            action.payload.category === 'vehicle' &&
+            action.payload.key === 'harvester'
+        )).toBe(true);
+
+        expect(getLatestSingleUnitAttackTarget(actions, 'ai_engineer')).toBe('enemy2_conyard');
+    });
+
     it('continues conyard capture pressure after first capture if other enemies still have conyards', () => {
         const baseEntities: Record<EntityId, Entity> = {
             ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
