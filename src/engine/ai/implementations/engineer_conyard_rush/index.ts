@@ -58,6 +58,33 @@ function isDefenseBuildingKey(key: string): boolean {
     return Boolean(RULES.buildings[key]?.isDefense);
 }
 
+function getBuildingPowerMargin(key: string): number {
+    const data = RULES.buildings[key];
+    if (!data) return 0;
+    return (data.power ?? 0) - (data.drain ?? 0);
+}
+
+function calculatePowerMarginFromBuildings(myBuildings: Entity[]): number {
+    let margin = 0;
+    for (const building of myBuildings) {
+        if (building.type !== 'BUILDING' || building.dead) continue;
+        margin += getBuildingPowerMargin(building.key);
+    }
+    return margin;
+}
+
+function calculateProjectedPowerMargin(player: PlayerState, myBuildings: Entity[], actions: Action[]): number {
+    let margin = calculatePowerMarginFromBuildings(myBuildings);
+    if (player.readyToPlace && actions.some(action =>
+        isActionType(action, 'PLACE_BUILDING') &&
+        action.payload.playerId === player.id &&
+        action.payload.key === player.readyToPlace
+    )) {
+        margin += getBuildingPowerMargin(player.readyToPlace);
+    }
+    return margin;
+}
+
 function countStartBuildActions(
     actions: Action[],
     playerId: number,
@@ -586,7 +613,7 @@ function queuePostCaptureBuildingPriority(
         return;
     }
 
-    const powerMargin = player.maxPower - player.usedPower;
+    const powerMargin = calculateProjectedPowerMargin(player, myBuildings, actions);
     if (powerMargin <= CRITICAL_POST_CAPTURE_POWER_MARGIN &&
         upsertBuildingStartAction(actions, player, 'power', myBuildings)) {
         return;
@@ -780,11 +807,12 @@ export function computeEngineerConyardRushAiActions(
 
     const hasSuccessfulCapture = runtimeState.successfulCapturedConyardIds.size > 0;
     if (hasSuccessfulCapture) {
+        const projectedPowerMargin = calculateProjectedPowerMargin(player, myBuildings, actions);
         actions = removeLowPriorityPostCaptureBuildingBuilds(actions, playerId);
         actions = removeHealthyMarginPostCapturePowerBuilds(
             actions,
             playerId,
-            player.maxPower - player.usedPower
+            projectedPowerMargin
         );
         queuePostCaptureBuildingPriority(actions, player, myBuildings, runtimeState);
         actions = enforcePostCaptureHarvesterBias(
