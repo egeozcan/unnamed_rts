@@ -139,6 +139,45 @@ describe('Unit Control', () => {
             const rifle = state.entities['rifle1'] as UnitEntity;
             expect(rifle.movement.transportId).toBe('apc1');
         });
+
+        it('should allow engineer to enter a damaged friendly building via COMMAND_ATTACK', () => {
+            let state = createTestState();
+
+            state = {
+                ...state,
+                entities: {
+                    ...state.entities,
+                    'cy0': createBuilding('cy0', 0, new Vector(100, 500)),
+                    'cy1': createBuilding('cy1', 1, new Vector(900, 500)),
+                    'factory1': createTestBuilding({
+                        id: 'factory1',
+                        owner: 0,
+                        key: 'factory',
+                        x: 500,
+                        y: 500,
+                        hp: 1000,
+                        maxHp: 2000
+                    }),
+                    'eng1': createUnit('eng1', 0, new Vector(430, 500), 'engineer')
+                }
+            };
+
+            state = update(state, {
+                type: 'COMMAND_ATTACK',
+                payload: { unitIds: ['eng1'], targetId: 'factory1' }
+            });
+
+            const engineerAfterCommand = state.entities['eng1'] as UnitEntity;
+            expect(engineerAfterCommand.combat.targetId).toBe('factory1');
+            expect(engineerAfterCommand.movement.moveTarget).not.toBeNull();
+
+            for (let i = 0; i < 20; i++) {
+                state = update(state, { type: 'TICK' });
+            }
+
+            expect(state.entities['factory1'].hp).toBe(2000);
+            expect(state.entities['eng1']).toBeUndefined();
+        });
     });
 
     describe('Harvester manual control', () => {

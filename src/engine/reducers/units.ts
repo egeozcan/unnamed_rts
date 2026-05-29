@@ -368,8 +368,18 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                     continue;
                 }
 
+                const unitData = getRuleData(entity.key);
+                const isEngineer = unitData && isUnitData(unitData) && unitData.canRepairFriendlyBuildings === true;
+
                 // Normal combat unit attack behavior - only target enemies
-                if (target && target.owner !== entity.owner) {
+                if (target && target.owner === entity.owner && target.type === 'BUILDING' && target.hp < target.maxHp && isEngineer) {
+                    // Engineers can be ordered to enter damaged friendly buildings.
+                    nextEntities[id] = {
+                        ...entity,
+                        movement: { ...entity.movement, moveTarget: target.pos, path: null },
+                        combat: { ...entity.combat, targetId: targetId }
+                    };
+                } else if (target && target.owner !== entity.owner) {
                     // Use spread position if assigned, otherwise approach directly
                     const spreadPos = assignedSpread.get(id);
                     nextEntities[id] = {
@@ -379,7 +389,6 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                     };
                 } else if (target && target.owner === entity.owner && target.key === 'service_depot') {
                     // Right click friendly service depot - go dock instead of attack
-                    const unitData = getRuleData(entity.key);
                     const isVehicle = unitData && isUnitData(unitData) && unitData.type === 'vehicle';
                     if (isVehicle && ('combat' in entity)) {
                         nextEntities[id] = {
