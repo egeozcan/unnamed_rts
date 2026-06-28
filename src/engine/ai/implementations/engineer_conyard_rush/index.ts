@@ -3,15 +3,15 @@ import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, get
 import { getTransportCapacity, getTransportPassengers, isTransportedUnit } from '../../../transport.js';
 import { AIImplementation } from '../../contracts.js';
 import { checkPrerequisites } from '../../utils.js';
-import { computeClassicAiActions } from '../classic/index.js';
+import { AuroraSovereignAIImplementation, computeAuroraSovereignAiActions } from '../aurora_sovereign/index.js';
 import { getEngineerConyardRushRuntimeState, resetEngineerConyardRushRuntimeState } from './state.js';
 import { RULES } from '../../../../data/schemas/index.js';
 
 const ENGINEERS_PER_ENEMY_CONYARD = 2;
-const MIN_ENGINEER_FORCE = 3;
+const MIN_ENGINEER_FORCE = 2;
 const MIN_APC_FORCE = 1;
 const DEFAULT_APC_CAPACITY = 5;
-const APC_UNLOAD_RANGE = 120;
+const APC_UNLOAD_RANGE = 95;
 const APC_KEY = 'apc';
 const MIN_DEFENSES_AFTER_CAPTURE = 5;
 const DEFENSES_PER_CONYARD = 2;
@@ -23,6 +23,15 @@ const CRITICAL_POST_CAPTURE_POWER_MARGIN = 0;
 const LOW_POST_CAPTURE_POWER_MARGIN = 20;
 const POST_CAPTURE_LOW_PRIORITY_BUILDINGS = new Set(['tech', 'airforce_command']);
 const DEFENSE_BUILD_ORDER = ['turret', 'sam_site', 'pillbox', 'obelisk'] as const;
+const CONYARD_CAPTURE_VALUE = 10000;
+const DEFENSE_THREAT_RADIUS = 340;
+const MOBILE_THREAT_RADIUS = 220;
+const ENGINEER_THREAT_PENALTY = 900;
+const APC_THREAT_PENALTY = 500;
+const CLAIMED_TARGET_PENALTY = 1200;
+const OWNER_ROTATION_BONUS = 450;
+const ENABLE_RUSH_PRODUCTION = false;
+const ENABLE_POST_CAPTURE_MACRO_BIAS = false;
 
 type StartBuildAction = Extract<Action, { type: 'START_BUILD' }>;
 
@@ -50,8 +59,72 @@ function countQueuedApcs(player: PlayerState): number {
     return countQueuedByKey(player.queues.vehicle, APC_KEY);
 }
 
+function getProjectedEngineerCount(actions: Action[], player: PlayerState, currentEngineerCount: number): number {
+    return currentEngineerCount +
+        countQueuedEngineers(player) +
+        countStartBuildActions(actions, player.id, 'infantry', 'engineer');
+}
+
 function isStartBuildAction(action: Action): action is StartBuildAction {
     return isActionType(action, 'START_BUILD');
+}
+
+function allOwnedUnits(state: GameState, unitIds: EntityId[], playerId: number): boolean {
+    return unitIds.every(unitId => {
+        const unit = state.entities[unitId];
+        return Boolean(unit && unit.type === 'UNIT' && unit.owner === playerId && !unit.dead);
+    });
+}
+
+function isOwnedBuilding(state: GameState, buildingId: EntityId, playerId: number): boolean {
+    const building = state.entities[buildingId];
+    return Boolean(building && building.type === 'BUILDING' && building.owner === playerId && !building.dead);
+}
+
+export function sanitizeEngineerConyardRushActions(actions: Action[], state: GameState, playerId: number): Action[] {
+    return actions.filter(action => {
+        switch (action.type) {
+            case 'START_BUILD':
+            case 'PLACE_BUILDING':
+            case 'CANCEL_BUILD':
+                return action.payload.playerId === playerId;
+            case 'COMMAND_MOVE':
+            case 'COMMAND_ATTACK_MOVE':
+            case 'COMMAND_UNGARRISON':
+            case 'SET_STANCE':
+                return allOwnedUnits(state, action.payload.unitIds, playerId);
+            case 'COMMAND_ATTACK':
+                return allOwnedUnits(state, action.payload.unitIds, playerId);
+            case 'SELL_BUILDING':
+            case 'START_REPAIR':
+            case 'STOP_REPAIR':
+                return action.payload.playerId === playerId &&
+                    isOwnedBuilding(state, action.payload.buildingId, playerId);
+            case 'SET_RALLY_POINT':
+                return isOwnedBuilding(state, action.payload.buildingId, playerId);
+            case 'SET_PRIMARY_BUILDING':
+                return action.payload.playerId === playerId &&
+                    isOwnedBuilding(state, action.payload.buildingId, playerId);
+            case 'DEPLOY_MCV':
+            case 'DEPLOY_INDUCTION_RIG': {
+                const unit = state.entities[action.payload.unitId];
+                return Boolean(unit && unit.type === 'UNIT' && unit.owner === playerId && !unit.dead);
+            }
+            case 'QUEUE_UNIT':
+            case 'DEQUEUE_UNIT':
+                return action.payload.playerId === playerId;
+            case 'TICK':
+            case 'CANCEL_PLACEMENT':
+            case 'SELECT_UNITS':
+            case 'TOGGLE_SELL_MODE':
+            case 'TOGGLE_REPAIR_MODE':
+            case 'TOGGLE_DEBUG':
+            case 'TOGGLE_MINIMAP':
+            case 'TOGGLE_BIRDS_EYE':
+            case 'TOGGLE_ATTACK_MOVE_MODE':
+                return false;
+        }
+    });
 }
 
 function isDefenseBuildingKey(key: string): boolean {
@@ -172,6 +245,20 @@ function hasVehicleQueuePlanned(player: PlayerState, actions: Action[]): boolean
     );
 }
 
+function hasProductionQueuePlanned(
+    player: PlayerState,
+    actions: Action[],
+    category: 'infantry' | 'vehicle' | 'air'
+): boolean {
+    if (player.queues[category].current) return true;
+    if ((player.queues[category].queued ?? []).length > 0) return true;
+    return actions.some(action =>
+        isStartBuildAction(action) &&
+        action.payload.playerId === player.id &&
+        action.payload.category === category
+    );
+}
+
 function upsertBuildingStartAction(
     actions: Action[],
     player: PlayerState,
@@ -206,7 +293,7 @@ function upsertBuildingStartAction(
     return true;
 }
 
-function hasBuildingBuildPlanned(player: PlayerState, actions: Action[], key: 'barracks' | 'factory'): boolean {
+function hasBuildingBuildPlanned(player: PlayerState, actions: Action[], key: string): boolean {
     if (player.readyToPlace === key) return true;
     if (player.queues.building.current === key) return true;
     if ((player.queues.building.queued ?? []).includes(key)) return true;
@@ -235,17 +322,24 @@ function enqueueEngineerProduction(
     enemyConyardCount: number
 ): void {
     const hasBarracks = myBuildings.some(b => b.key === 'barracks' && !b.dead);
-    if (!hasBarracks && !hasBarracksBuildPlanned(player, actions)) {
-        actions.push({
-            type: 'START_BUILD',
-            payload: { category: 'building', key: 'barracks', playerId: player.id }
-        });
+    if (!hasBarracks) {
         return;
     }
 
     const desiredEngineerCount = Math.max(MIN_ENGINEER_FORCE, enemyConyardCount * ENGINEERS_PER_ENEMY_CONYARD);
-    const projectedEngineers = currentEngineerCount + countQueuedEngineers(player);
+    const projectedEngineers = getProjectedEngineerCount(actions, player, currentEngineerCount);
     if (projectedEngineers >= desiredEngineerCount) {
+        return;
+    }
+
+    if (hasProductionQueuePlanned(player, actions, 'infantry')) {
+        return;
+    }
+    if (!checkPrerequisites('engineer', myBuildings)) {
+        return;
+    }
+    const engineerCost = RULES.units.engineer?.cost ?? Infinity;
+    if (player.credits < engineerCost) {
         return;
     }
 
@@ -268,20 +362,32 @@ function enqueueApcProduction(
     }
 
     const hasFactory = myBuildings.some(b => b.key === 'factory' && !b.dead);
-    if (!hasFactory && !hasFactoryBuildPlanned(player, actions)) {
-        actions.push({
-            type: 'START_BUILD',
-            payload: { category: 'building', key: 'factory', playerId: player.id }
-        });
+    if (!hasFactory) {
         return;
     }
 
     const desiredEngineerCount = Math.max(MIN_ENGINEER_FORCE, enemyConyardCount * ENGINEERS_PER_ENEMY_CONYARD);
-    const projectedEngineerCount = Math.max(currentEngineerCount, desiredEngineerCount);
+    const projectedEngineerCount = Math.max(
+        getProjectedEngineerCount(actions, player, currentEngineerCount),
+        desiredEngineerCount
+    );
     const desiredApcCount = Math.max(MIN_APC_FORCE, Math.ceil(projectedEngineerCount / DEFAULT_APC_CAPACITY));
-    const projectedApcs = currentApcCount + countQueuedApcs(player);
+    const projectedApcs = currentApcCount +
+        countQueuedApcs(player) +
+        countStartBuildActions(actions, player.id, 'vehicle', APC_KEY);
 
     if (projectedApcs >= desiredApcCount) {
+        return;
+    }
+
+    if (hasProductionQueuePlanned(player, actions, 'vehicle')) {
+        return;
+    }
+    if (!checkPrerequisites(APC_KEY, myBuildings)) {
+        return;
+    }
+    const apcCost = RULES.units[APC_KEY]?.cost ?? Infinity;
+    if (player.credits < apcCost) {
         return;
     }
 
@@ -291,34 +397,78 @@ function enqueueApcProduction(
     });
 }
 
-function selectEngineerTarget(engineer: UnitEntity, enemyConyards: Entity[], claimedTargets: Set<EntityId>): Entity | null {
-    let bestUnclaimed: Entity | null = null;
-    let bestUnclaimedDistance = Infinity;
-    let bestAny: Entity | null = null;
-    let bestAnyDistance = Infinity;
+function isEnemyThreat(entity: Entity, target: Entity, actingPlayerId: number): boolean {
+    if (entity.dead || entity.owner === actingPlayerId || entity.owner === -1) return false;
+    if (entity.type === 'BUILDING') {
+        const buildingData = RULES.buildings[entity.key];
+        return Boolean(buildingData?.isDefense && entity.pos.dist(target.pos) <= DEFENSE_THREAT_RADIUS);
+    }
+    if (entity.type === 'UNIT') {
+        const unitData = RULES.units[entity.key];
+        const range = unitData?.range ?? 0;
+        const damage = unitData?.damage ?? 0;
+        return damage > 0 && entity.pos.dist(target.pos) <= Math.max(MOBILE_THREAT_RADIUS, range + 80);
+    }
+    return false;
+}
+
+function scoreConyardTarget(
+    unit: UnitEntity,
+    target: Entity,
+    state: GameState,
+    claimedTargets: Set<EntityId>,
+    preferredOwnerId: number | null,
+    isLoadedApc: boolean
+): number {
+    const distance = unit.pos.dist(target.pos);
+    const threatCount = Object.values(state.entities).filter(entity =>
+        isEnemyThreat(entity, target, unit.owner)
+    ).length;
+    const claimPenalty = claimedTargets.has(target.id) ? CLAIMED_TARGET_PENALTY : 0;
+    const hpPenalty = target.hp / Math.max(1, target.maxHp) * 250;
+    const threatPenalty = threatCount * (isLoadedApc ? APC_THREAT_PENALTY : ENGINEER_THREAT_PENALTY);
+    const rotationBonus = preferredOwnerId !== null && target.owner === preferredOwnerId
+        ? OWNER_ROTATION_BONUS
+        : 0;
+
+    return CONYARD_CAPTURE_VALUE + rotationBonus - distance - threatPenalty - claimPenalty - hpPenalty;
+}
+
+function selectEngineerTarget(
+    unit: UnitEntity,
+    enemyConyards: Entity[],
+    state: GameState,
+    claimedTargets: Set<EntityId>,
+    preferredOwnerId: number | null,
+    isLoadedApc: boolean
+): Entity | null {
+    let bestTarget: Entity | null = null;
+    let bestScore = -Infinity;
 
     for (const conyard of enemyConyards) {
-        const distance = engineer.pos.dist(conyard.pos);
-        if (distance < bestAnyDistance) {
-            bestAnyDistance = distance;
-            bestAny = conyard;
+        const score = scoreConyardTarget(unit, conyard, state, claimedTargets, preferredOwnerId, isLoadedApc);
+        if (score > bestScore) {
+            bestScore = score;
+            bestTarget = conyard;
+            continue;
         }
-        if (!claimedTargets.has(conyard.id) && distance < bestUnclaimedDistance) {
-            bestUnclaimedDistance = distance;
-            bestUnclaimed = conyard;
+        if (score === bestScore && bestTarget && conyard.id.localeCompare(bestTarget.id) < 0) {
+            bestTarget = conyard;
         }
     }
 
-    return bestUnclaimed ?? bestAny;
+    return bestTarget;
 }
 
 function selectRotatingConyardTarget(
     unit: UnitEntity,
+    state: GameState,
     enemyConyardsById: Map<EntityId, Entity>,
     conyardsByOwner: Map<number, Entity[]>,
     enemyOwners: number[],
     claimedTargets: Set<EntityId>,
-    ownerCursor: number
+    ownerCursor: number,
+    isLoadedApc: boolean
 ): { target: Entity | null; ownerCursor: number } {
     const currentTargetId = unit.combat.targetId ?? null;
     if (currentTargetId) {
@@ -329,24 +479,31 @@ function selectRotatingConyardTarget(
         }
     }
 
-    let assignedTarget: Entity | null = null;
-    let selectedOwnerOffset = 0;
-    for (let offset = 0; offset < enemyOwners.length; offset++) {
-        const ownerId = enemyOwners[(ownerCursor + offset) % enemyOwners.length];
-        const ownerConyards = conyardsByOwner.get(ownerId) ?? [];
-        const target = selectEngineerTarget(unit, ownerConyards, claimedTargets);
-        if (!target) continue;
-
-        assignedTarget = target;
-        selectedOwnerOffset = offset;
-        break;
+    const allConyards: Entity[] = [];
+    for (const ownerId of enemyOwners) {
+        allConyards.push(...(conyardsByOwner.get(ownerId) ?? []));
     }
+
+    const preferredOwnerId = enemyOwners.length > 0
+        ? enemyOwners[ownerCursor % enemyOwners.length]
+        : null;
+    const assignedTarget = selectEngineerTarget(
+        unit,
+        allConyards,
+        state,
+        claimedTargets,
+        preferredOwnerId,
+        isLoadedApc
+    );
 
     if (!assignedTarget) {
         return { target: null, ownerCursor };
     }
 
-    const nextCursor = (ownerCursor + selectedOwnerOffset + 1) % enemyOwners.length;
+    const selectedOwnerIndex = enemyOwners.indexOf(assignedTarget.owner);
+    const nextCursor = selectedOwnerIndex >= 0
+        ? (selectedOwnerIndex + 1) % enemyOwners.length
+        : ownerCursor;
     claimedTargets.add(assignedTarget.id);
     return { target: assignedTarget, ownerCursor: nextCursor };
 }
@@ -433,11 +590,13 @@ function getEngineerRushActions(
 
         const selectedTarget = selectRotatingConyardTarget(
             apc,
+            state,
             enemyConyardsById,
             conyardsByOwner,
             enemyOwners,
             claimedTargets,
-            ownerCursor
+            ownerCursor,
+            true
         );
         ownerCursor = selectedTarget.ownerCursor;
 
@@ -486,11 +645,13 @@ function getEngineerRushActions(
 
         const selectedTarget = selectRotatingConyardTarget(
             engineer,
+            state,
             enemyConyardsById,
             conyardsByOwner,
             enemyOwners,
             claimedTargets,
-            ownerCursor
+            ownerCursor,
+            false
         );
         ownerCursor = selectedTarget.ownerCursor;
         if (!selectedTarget.target) continue;
@@ -511,12 +672,6 @@ function trackEnemyConyards(runtimeState: ReturnType<typeof getEngineerConyardRu
     }
 }
 
-function trackEnemyRefineries(runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>, enemyRefineries: Entity[]): void {
-    for (const refinery of enemyRefineries) {
-        runtimeState.trackedEnemyRefineryIds.add(refinery.id);
-    }
-}
-
 function updateCaptureTracking(
     state: GameState,
     playerId: number,
@@ -533,30 +688,6 @@ function updateCaptureTracking(
             runtimeState.successfulCapturedConyardIds.add(conyardId);
         }
     }
-}
-
-function getCapturedRefinerySellActions(
-    state: GameState,
-    playerId: number,
-    runtimeState: ReturnType<typeof getEngineerConyardRushRuntimeState>
-): Action[] {
-    const actions: Action[] = [];
-    for (const refineryId of Array.from(runtimeState.trackedEnemyRefineryIds)) {
-        const refinery = state.entities[refineryId];
-        if (!refinery || !isAliveRefinery(refinery) || runtimeState.initialOwnedRefineryIds.has(refineryId)) {
-            runtimeState.trackedEnemyRefineryIds.delete(refineryId);
-            continue;
-        }
-
-        if (refinery.owner === playerId) {
-            actions.push({
-                type: 'SELL_BUILDING',
-                payload: { buildingId: refineryId, playerId }
-            });
-            runtimeState.trackedEnemyRefineryIds.delete(refineryId);
-        }
-    }
-    return actions;
 }
 
 function removePostCaptureRushBuilds(actions: Action[], playerId: number): Action[] {
@@ -655,6 +786,11 @@ function queuePostCaptureBuildingPriority(
     const projectedRefineryCount = currentRefineryCount +
         countQueuedRefineries(player) +
         countStartBuildActions(actions, player.id, 'building', 'refinery');
+
+    if (projectedRefineryCount < MIN_REFINERIES_AFTER_CAPTURE &&
+        upsertBuildingStartAction(actions, player, 'refinery', myBuildings)) {
+        return;
+    }
 
     if (projectedDefenseCount < defenseFloor) {
         for (const defenseKey of DEFENSE_BUILD_ORDER) {
@@ -782,7 +918,7 @@ export function computeEngineerConyardRushAiActions(
         return [];
     }
 
-    let actions = computeClassicAiActions(state, playerId, sharedCache);
+    let actions = computeAuroraSovereignAiActions(state, playerId, player.difficulty, sharedCache);
 
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
@@ -796,17 +932,12 @@ export function computeEngineerConyardRushAiActions(
         isAliveConyard(entity) &&
         !runtimeState.initialOwnedConyardIds.has(entity.id)
     );
-    const enemyRefineries = enemies.filter(entity =>
-        isAliveRefinery(entity) &&
-        !runtimeState.initialOwnedRefineryIds.has(entity.id)
-    );
 
     trackEnemyConyards(runtimeState, enemyConyards);
-    trackEnemyRefineries(runtimeState, enemyRefineries);
     updateCaptureTracking(state, playerId, runtimeState);
 
     const hasSuccessfulCapture = runtimeState.successfulCapturedConyardIds.size > 0;
-    if (hasSuccessfulCapture) {
+    if (ENABLE_POST_CAPTURE_MACRO_BIAS && hasSuccessfulCapture) {
         const projectedPowerMargin = calculateProjectedPowerMargin(player, myBuildings, actions);
         actions = removeLowPriorityPostCaptureBuildingBuilds(actions, playerId);
         actions = removeHealthyMarginPostCapturePowerBuilds(
@@ -843,13 +974,14 @@ export function computeEngineerConyardRushAiActions(
         .map(unit => unit as UnitEntity);
 
     if (enemyConyards.length > 0) {
-        enqueueEngineerProduction(actions, player, myBuildings, allEngineerCount, enemyConyards.length);
-        enqueueApcProduction(actions, player, myBuildings, apcs.length, allEngineerCount, enemyConyards.length);
+        if (ENABLE_RUSH_PRODUCTION) {
+            enqueueEngineerProduction(actions, player, myBuildings, allEngineerCount, enemyConyards.length);
+            enqueueApcProduction(actions, player, myBuildings, apcs.length, allEngineerCount, enemyConyards.length);
+        }
         actions.push(...getEngineerRushActions(state, engineers, apcs, enemyConyards, runtimeState));
     }
-    actions.push(...getCapturedRefinerySellActions(state, playerId, runtimeState));
 
-    return actions;
+    return sanitizeEngineerConyardRushActions(actions, state, playerId);
 }
 
 export const EngineerConyardRushAIImplementation: AIImplementation = {
@@ -857,5 +989,8 @@ export const EngineerConyardRushAIImplementation: AIImplementation = {
     name: 'Engineer Conyard Rush',
     description: 'Prioritizes enemy conyard captures, then fortifies captured ground and pivots into economic scaling.',
     computeActions: ({ state, playerId, entityCache }) => computeEngineerConyardRushAiActions(state, playerId, entityCache),
-    reset: resetEngineerConyardRushRuntimeState
+    reset: (playerId?: number) => {
+        resetEngineerConyardRushRuntimeState(playerId);
+        AuroraSovereignAIImplementation.reset?.(playerId);
+    }
 };
