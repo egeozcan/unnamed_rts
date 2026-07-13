@@ -1,6 +1,7 @@
 
 import { GameState } from '../engine/types.js';
 import { calculatePlayerScores, PlayerScore } from '../engine/scores.js';
+import { DEFAULT_AI_IMPLEMENTATION_ID, getAIImplementation } from '../engine/ai/index.js';
 import { shouldRunCadencedUpdate } from './cadence.js';
 
 let scoreboardContainer: HTMLElement | null = null;
@@ -51,28 +52,56 @@ export function updateScoreboard(state: GameState, nowMs?: number) {
 
     // Build HTML for the scoreboard
     // We rebuild the innerHTML for simplicity, but could optimize to update individual elements if needed
-    scoreboardContainer.innerHTML = activeScores.map(score => createPlayerRow(score, maxScore)).join('');
+    scoreboardContainer.innerHTML = activeScores.map(score => createPlayerRow(score, maxScore, state)).join('');
 }
 
-function createPlayerRow(score: PlayerScore, maxScore: number): string {
+function createPlayerRow(score: PlayerScore, maxScore: number, state: GameState): string {
     const militaryWidth = (score.military / maxScore) * 100;
     const economyWidth = (score.economy / maxScore) * 100;
     const totalScoreK = (score.total / 1000).toFixed(1) + 'k';
+    const player = state.players?.[score.playerId];
+    const playerLabel = `P${score.playerId + 1}`;
+    const teamLabel = player?.team ? `(${player.team})` : '(FFA)';
+    const aiNameLabel = getAINameLabel(player);
+    const rowTitleParts = [playerLabel, teamLabel, aiNameLabel].filter(Boolean);
 
     return `
-        <div class="score-row">
+        <div class="score-row" title="${escapeHtml(rowTitleParts.join(' · '))}">
             <div class="player-indicator" style="background-color: ${score.color}; box-shadow: 0 0 8px ${score.color}"></div>
-            <div class="score-bars">
-                <div class="score-bar-container">
-                    <div class="score-bar military" style="width: ${militaryWidth}%"></div>
+            <div class="score-details">
+                <div class="score-meta">
+                    <span class="score-player">${escapeHtml(playerLabel)}</span>
+                    <span class="score-team">${escapeHtml(teamLabel)}</span>
+                    ${aiNameLabel ? `<span class="score-ai-name">${escapeHtml(aiNameLabel)}</span>` : ''}
                 </div>
-                <div class="score-bar-container">
-                    <div class="score-bar economy" style="width: ${economyWidth}%"></div>
+                <div class="score-bars">
+                    <div class="score-bar-container">
+                        <div class="score-bar military" style="width: ${militaryWidth}%"></div>
+                    </div>
+                    <div class="score-bar-container">
+                        <div class="score-bar economy" style="width: ${economyWidth}%"></div>
+                    </div>
                 </div>
             </div>
             <div class="total-score">${totalScoreK}</div>
         </div>
     `;
+}
+
+function getAINameLabel(player: GameState['players'][number] | undefined): string {
+    if (!player?.isAi) return '';
+
+    const implementationId = player.aiImplementationId || DEFAULT_AI_IMPLEMENTATION_ID;
+    return getAIImplementation(implementationId)?.name || implementationId;
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 export function showScoreboard(show: boolean) {

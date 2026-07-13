@@ -1197,7 +1197,7 @@ canvas#gameCanvas.attack-move-mode {
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 32px;
+    min-height: 40px;
 }
 
 .player-indicator {
@@ -1213,6 +1213,43 @@ canvas#gameCanvas.attack-move-mode {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    width: 100%;
+}
+
+.score-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.score-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 10px;
+    line-height: 1;
+    color: rgba(224, 224, 224, 0.68);
+    font-weight: 600;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.score-player {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.score-team,
+.score-ai-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.score-ai-name {
+    color: rgba(255, 255, 255, 0.52);
+    font-style: italic;
 }
 
 .score-bar-container {
