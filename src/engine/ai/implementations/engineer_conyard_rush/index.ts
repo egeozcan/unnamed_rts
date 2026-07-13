@@ -25,12 +25,12 @@ const POST_CAPTURE_LOW_PRIORITY_BUILDINGS = new Set(['tech', 'airforce_command']
 const DEFENSE_BUILD_ORDER = ['turret', 'sam_site', 'pillbox', 'obelisk'] as const;
 const BASE_CAPTURE_VALUES: Readonly<Record<string, number>> = {
     conyard: 10000,
-    factory: 7000,
-    barracks: 6500,
+    barracks: 8500,
+    power: 7500,
+    factory: 6500,
     refinery: 6000,
     tech: 5500,
-    airforce_command: 5000,
-    power: 3500
+    airforce_command: 5000
 };
 const DEFAULT_BASE_CAPTURE_VALUE = 2500;
 const DEFENSE_THREAT_RADIUS = 340;
@@ -1289,7 +1289,7 @@ export function computeEngineerConyardRushAiActions(
 export const EngineerConyardRushAIImplementation: AIImplementation = {
     id: 'engineer_conyard_rush',
     name: 'Engineer Conyard Rush',
-    description: 'Launches escorted two-engineer APC raids, bootstraps from captured barracks, then sells the captured base.',
+    description: 'Launches escorted APC raids that seize conyards and barracks, then strip power before selling the base.',
     computeActions: ({ state, playerId, entityCache }) => computeEngineerConyardRushAiActions(state, playerId, entityCache),
     reset: (playerId?: number) => {
         resetEngineerConyardRushRuntimeState(playerId);
