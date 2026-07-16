@@ -2,6 +2,7 @@ import { EntityId } from '../../../types.js';
 
 export interface EngineerConyardRushRuntimeState {
     initialized: boolean;
+    lastObservedTick: number;
     initialOwnedBuildingIds: Set<EntityId>;
     initialOwnedConyardIds: Set<EntityId>;
     trackedEnemyBuildingIds: Set<EntityId>;
@@ -12,11 +13,16 @@ export interface EngineerConyardRushRuntimeState {
     stagingReinforcementEngineerIds: Set<EntityId>;
     activeRaidApcId: EntityId | null;
     activeRaidEngineerIds: Set<EntityId>;
+    strandedRaidEngineerIds: Set<EntityId>;
+    activeRaidEscortIds: Set<EntityId>;
+    raidRouteTargetId: EntityId | null;
+    raidRouteWaypoints: { x: number; y: number }[];
+    raidRouteWaypointIndex: number;
+    raidRoutePlannedTick: number;
+    raidCompromised: boolean;
     raidWaveStartTick: number | null;
     raidWaveCaptureCountAtStart: number;
     raidRecoveryUntilTick: number;
-    requiredEscortCount: number;
-    escortRequiredBeforeProduction: boolean;
     captureRefundReserveActive: boolean;
     enemyOwnerRotationCursor: number;
 }
@@ -31,6 +37,7 @@ export function getEngineerConyardRushRuntimeState(playerId: number): EngineerCo
 
     const created: EngineerConyardRushRuntimeState = {
         initialized: false,
+        lastObservedTick: -1,
         initialOwnedBuildingIds: new Set<EntityId>(),
         initialOwnedConyardIds: new Set<EntityId>(),
         trackedEnemyBuildingIds: new Set<EntityId>(),
@@ -41,11 +48,16 @@ export function getEngineerConyardRushRuntimeState(playerId: number): EngineerCo
         stagingReinforcementEngineerIds: new Set<EntityId>(),
         activeRaidApcId: null,
         activeRaidEngineerIds: new Set<EntityId>(),
+        strandedRaidEngineerIds: new Set<EntityId>(),
+        activeRaidEscortIds: new Set<EntityId>(),
+        raidRouteTargetId: null,
+        raidRouteWaypoints: [],
+        raidRouteWaypointIndex: 0,
+        raidRoutePlannedTick: 0,
+        raidCompromised: false,
         raidWaveStartTick: null,
         raidWaveCaptureCountAtStart: 0,
         raidRecoveryUntilTick: 0,
-        requiredEscortCount: 0,
-        escortRequiredBeforeProduction: false,
         captureRefundReserveActive: false,
         enemyOwnerRotationCursor: 0
     };

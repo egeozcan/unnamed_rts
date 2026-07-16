@@ -333,6 +333,20 @@ describe('Engineer Conyard Rush AI', () => {
         expect(barracksStart).toBeUndefined();
     });
 
+    it('prioritizes missing raid infrastructure while the building lane is idle', () => {
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_power: createEntity('ai_power', 1, 'BUILDING', 'power', 250, 300),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1200, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 1200, 5000), 1);
+        expect(actions).toContainEqual({
+            type: 'START_BUILD',
+            payload: { category: 'building', key: 'barracks', playerId: 1 }
+        });
+    });
+
     it('does not force cleanup production when enemy conyards are gone', () => {
         const entities: Record<EntityId, Entity> = {
             ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 500, 500),
@@ -436,6 +450,8 @@ describe('Engineer Conyard Rush AI', () => {
                 ...engineer2,
                 movement: { ...engineer2.movement, transportId: 'ai_apc' }
             },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 520, 410),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 525, 415),
             enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 940, 620)
         };
 
@@ -458,6 +474,8 @@ describe('Engineer Conyard Rush AI', () => {
             ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
             ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
             ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 520, 410),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 525, 415),
             enemy_factory: createEntity('enemy_factory', 0, 'BUILDING', 'factory', 820, 560),
             enemy_refinery: createEntity('enemy_refinery', 0, 'BUILDING', 'refinery', 850, 590),
             enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 940, 620)
@@ -497,7 +515,7 @@ describe('Engineer Conyard Rush AI', () => {
         )).toBe(false);
     });
 
-    it('sends a bounded two-unit escort screen with a complete raid package', () => {
+    it('uses only speed-compatible units for the optional escort screen', () => {
         const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
         const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
         if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
@@ -509,9 +527,9 @@ describe('Engineer Conyard Rush AI', () => {
             ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
             ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
             ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
-            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 520, 410),
-            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 525, 415),
-            escort_3: createEntity('escort_3', 1, 'UNIT', 'rifle', 300, 300),
+            slow_escort: createEntity('slow_escort', 1, 'UNIT', 'rocket', 515, 405),
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'jeep', 520, 410),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'stealth', 525, 415),
             enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 940, 620)
         };
 
@@ -522,12 +540,221 @@ describe('Engineer Conyard Rush AI', () => {
             action.payload.y === 620 &&
             action.payload.unitIds.length === 2 &&
             action.payload.unitIds.includes('escort_1') &&
-            action.payload.unitIds.includes('escort_2')
+            action.payload.unitIds.includes('escort_2') &&
+            !action.payload.unitIds.includes('slow_escort')
         );
         expect(escortAction).toBeDefined();
         if (escortAction && isActionType(escortAction, 'COMMAND_ATTACK_MOVE')) {
             expect(new Set(escortAction.payload.unitIds)).toEqual(new Set(['escort_1', 'escort_2']));
         }
+    });
+
+    it('does not wait for slow escorts before launching the loaded APC', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 850, 500),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 900, 540),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        expect(actions.some(action =>
+            isActionType(action, 'COMMAND_MOVE') &&
+            action.payload.unitIds.length === 1 &&
+            action.payload.unitIds[0] === 'ai_apc' &&
+            action.payload.x === 1400 &&
+            action.payload.y === 900
+        )).toBe(true);
+    });
+
+    it('routes the assembled raid around enemy concentrations', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 400, 1500);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 400, 1500);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 260, 1400),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 300, 1480),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 360, 1400),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 250, 1580),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 400, 1500),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 380, 1480),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 420, 1520),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2600, 1500),
+            enemy_light_1: createEntity('enemy_light_1', 0, 'UNIT', 'light', 1050, 1450),
+            enemy_light_2: createEntity('enemy_light_2', 0, 'UNIT', 'light', 1120, 1510),
+            enemy_light_3: createEntity('enemy_light_3', 0, 'UNIT', 'light', 1180, 1560)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        const apcMoves = actions.filter(action =>
+            isActionType(action, 'COMMAND_MOVE') && action.payload.unitIds.length === 1 && action.payload.unitIds[0] === 'ai_apc'
+        );
+        const raidMove = apcMoves.at(-1);
+        expect(raidMove).toBeDefined();
+        if (raidMove && isActionType(raidMove, 'COMMAND_MOVE')) {
+            expect(raidMove.payload.x).toBeGreaterThan(900);
+            expect(raidMove.payload.x).toBeLessThan(1250);
+            expect(Math.abs(raidMove.payload.y - 1500)).toBeGreaterThan(250);
+        }
+    });
+
+    it('takes the direct route when it is the lowest-threat path', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 400, 1500);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 400, 1500);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 260, 1400),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 300, 1480),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 360, 1400),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 250, 1580),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 400, 1500),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 2600, 1500)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        expect(actions).toContainEqual({
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['ai_apc'], x: 2600, y: 1500 }
+        });
+    });
+
+    it('abandons stealth and dashes to the nearest building when nearby enemy units are firing', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        const attacker = createEntity('enemy_rifle', 0, 'UNIT', 'rifle', 620, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT' || attacker.type !== 'UNIT') {
+            throw new Error('expected unit entities');
+        }
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 1000, 800),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 1050, 850),
+            enemy_rifle: { ...attacker, combat: { ...attacker.combat, cooldown: 5, flash: 2 } },
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 1000, 430),
+            enemy_barracks: createEntity('enemy_barracks', 0, 'BUILDING', 'barracks', 1100, 500),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        const apcMoves = actions.filter(action =>
+            isActionType(action, 'COMMAND_MOVE') &&
+            action.payload.unitIds.length === 1 &&
+            action.payload.unitIds[0] === 'ai_apc'
+        );
+        expect(apcMoves.at(-1)).toEqual({
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['ai_apc'], x: 1000, y: 430 }
+        });
+    });
+
+    it('does not expose the raid merely because an idle enemy unit is nearby', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 1000, 800),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 1050, 850),
+            enemy_rifle: createEntity('enemy_rifle', 0, 'UNIT', 'rifle', 620, 430),
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 820, 430),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        const apcMoves = actions.filter(action =>
+            isActionType(action, 'COMMAND_MOVE') &&
+            action.payload.unitIds.length === 1 &&
+            action.payload.unitIds[0] === 'ai_apc'
+        );
+        expect(apcMoves.at(-1)).toEqual({
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['ai_apc'], x: 1400, y: 900 }
+        });
+    });
+
+    it('does not treat enemy damage flash as evidence that the enemy is attacking', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        const enemy = createEntity('enemy_rifle', 0, 'UNIT', 'rifle', 620, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT' || enemy.type !== 'UNIT') {
+            throw new Error('expected unit entities');
+        }
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            enemy_rifle: { ...enemy, combat: { ...enemy.combat, cooldown: 0, flash: 5 } },
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 900, 430),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        expect(actions).toContainEqual({
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['ai_apc'], x: 1400, y: 900 }
+        });
+    });
+
+    it('resets private raid state when a new match starts at an earlier tick', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        const attacker = createEntity('enemy_rifle', 0, 'UNIT', 'rifle', 620, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT' || attacker.type !== 'UNIT') {
+            throw new Error('expected unit entities');
+        }
+        const baseEntities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 1000, 430),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+        computeAiActionsForPlayer(createState({
+            ...baseEntities,
+            enemy_rifle: { ...attacker, combat: { ...attacker.combat, cooldown: 5 } }
+        }, 6000, 6000), 1);
+
+        const newMatchActions = computeAiActionsForPlayer(createState({
+            ...baseEntities,
+            enemy_rifle: { ...attacker, combat: { ...attacker.combat, cooldown: 0 } }
+        }, 0, 6000), 1);
+        expect(newMatchActions).toContainEqual({
+            type: 'COMMAND_MOVE',
+            payload: { unitIds: ['ai_apc'], x: 1400, y: 900 }
+        });
     });
 
     it('does not queue redundant APCs when current APC capacity already covers projected engineers', () => {
@@ -592,7 +819,7 @@ describe('Engineer Conyard Rush AI', () => {
         expect(apcStart).toBeUndefined();
     });
 
-    it('unloads loaded APCs only when close enough for immediate engineer entry pressure', () => {
+    it('uses building edges when deciding whether engineers can unload safely', () => {
         const engineer = createEntity('ai_engineer', 1, 'UNIT', 'engineer', 790, 620);
         const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 790, 620);
         if (engineer.type !== 'UNIT') {
@@ -616,6 +843,8 @@ describe('Engineer Conyard Rush AI', () => {
                 ...engineer2,
                 movement: { ...engineer2.movement, transportId: 'ai_apc' }
             },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 770, 600),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 775, 605),
             enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 900, 620)
         };
 
@@ -624,11 +853,7 @@ describe('Engineer Conyard Rush AI', () => {
         expect(actions.some(action =>
             isActionType(action, 'COMMAND_UNGARRISON') &&
             action.payload.unitIds.includes('ai_apc')
-        )).toBe(false);
-        expect(actions).toContainEqual({
-            type: 'COMMAND_MOVE',
-            payload: { unitIds: ['ai_apc'], x: 900, y: 620 }
-        });
+        )).toBe(true);
     });
 
     it('unloads APC passengers near enemy conyards and reissues capture command', () => {
@@ -665,6 +890,32 @@ describe('Engineer Conyard Rush AI', () => {
         )).toBe(true);
         expect(getLatestSingleUnitAttackTarget(actions, 'ai_engineer')).toBe('enemy_conyard');
         expect(getLatestSingleUnitAttackTarget(actions, 'ai_engineer_2')).toBe('enemy_conyard');
+    });
+
+    it('emergency-unloads a damaged APC while the nearest building is still farther away', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        const apc = createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT' || apc.type !== 'UNIT') {
+            throw new Error('expected unit entities');
+        }
+        const entities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: { ...apc, hp: Math.floor(apc.maxHp * 0.6) },
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 790, 430),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1400, 900)
+        };
+
+        const actions = computeAiActionsForPlayer(createState(entities, 31, 6000), 1);
+        expect(actions).toContainEqual({
+            type: 'COMMAND_UNGARRISON',
+            payload: { unitIds: ['ai_apc'] }
+        });
     });
 
     it('sells captured enemy conyards after ownership transfer', () => {
@@ -764,7 +1015,7 @@ describe('Engineer Conyard Rush AI', () => {
         });
     });
 
-    it('pauses failed raid replacement until recovery and two escorts are ready', () => {
+    it('briefly pauses failed raid replacement and then retries without an escort gate', () => {
         const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
         const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
         if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
@@ -779,6 +1030,8 @@ describe('Engineer Conyard Rush AI', () => {
             ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 540, 430),
             ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
             ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 520, 410),
+            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 525, 415),
             enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 940, 620)
         };
         computeAiActionsForPlayer(createState(baseEntities, 31, 8000), 1);
@@ -787,7 +1040,9 @@ describe('Engineer Conyard Rush AI', () => {
             ...baseEntities,
             ai_apc: { ...baseEntities.ai_apc, dead: true },
             ai_engineer_1: { ...baseEntities.ai_engineer_1, dead: true },
-            ai_engineer_2: { ...baseEntities.ai_engineer_2, dead: true }
+            ai_engineer_2: { ...baseEntities.ai_engineer_2, dead: true },
+            escort_1: { ...baseEntities.escort_1, dead: true },
+            escort_2: { ...baseEntities.escort_2, dead: true }
         };
         const recoveryActions = computeAiActionsForPlayer(createState(failedEntities, 200, 8000), 1);
         expect(recoveryActions.some(action =>
@@ -795,24 +1050,51 @@ describe('Engineer Conyard Rush AI', () => {
             (action.payload.key === 'engineer' || action.payload.key === 'apc')
         )).toBe(false);
 
-        const noEscortActions = computeAiActionsForPlayer(createState(failedEntities, 2200, 8000), 1);
-        expect(noEscortActions.some(action =>
+        const stillRecoveringActions = computeAiActionsForPlayer(createState(failedEntities, 499, 8000), 1);
+        expect(stillRecoveringActions.some(action =>
             isActionType(action, 'START_BUILD') &&
             (action.payload.key === 'engineer' || action.payload.key === 'apc')
         )).toBe(false);
 
-        const escortedEntities = {
-            ...failedEntities,
-            escort_1: createEntity('escort_1', 1, 'UNIT', 'rifle', 500, 400),
-            escort_2: createEntity('escort_2', 1, 'UNIT', 'grenadier', 510, 410)
-        };
-        const retryActions = computeAiActionsForPlayer(createState(escortedEntities, 2203, 8000), 1);
+        const retryActions = computeAiActionsForPlayer(createState(failedEntities, 503, 8000), 1);
         expect(retryActions.some(action =>
             isActionType(action, 'START_BUILD') && action.payload.key === 'engineer'
         )).toBe(true);
         expect(retryActions.some(action =>
             isActionType(action, 'START_BUILD') && action.payload.key === 'apc'
         )).toBe(true);
+    });
+
+    it('sends engineers ejected from a destroyed raid APC to nearby buildings', () => {
+        const engineer1 = createEntity('ai_engineer_1', 1, 'UNIT', 'engineer', 540, 430);
+        const engineer2 = createEntity('ai_engineer_2', 1, 'UNIT', 'engineer', 540, 430);
+        if (engineer1.type !== 'UNIT' || engineer2.type !== 'UNIT') throw new Error('expected engineer units');
+        const initialEntities: Record<EntityId, Entity> = {
+            ai_conyard: createEntity('ai_conyard', 1, 'BUILDING', 'conyard', 320, 320),
+            ai_power: createEntity('ai_power', 1, 'BUILDING', 'power', 250, 300),
+            ai_barracks: createEntity('ai_barracks', 1, 'BUILDING', 'barracks', 420, 350),
+            ai_factory: createEntity('ai_factory', 1, 'BUILDING', 'factory', 500, 360),
+            ai_refinery: createEntity('ai_refinery', 1, 'BUILDING', 'refinery', 300, 420),
+            ai_apc: createEntity('ai_apc', 1, 'UNIT', 'apc', 700, 500),
+            ai_engineer_1: { ...engineer1, movement: { ...engineer1.movement, transportId: 'ai_apc' } },
+            ai_engineer_2: { ...engineer2, movement: { ...engineer2.movement, transportId: 'ai_apc' } },
+            enemy_power: createEntity('enemy_power', 0, 'BUILDING', 'power', 900, 500),
+            enemy_conyard: createEntity('enemy_conyard', 0, 'BUILDING', 'conyard', 1300, 800)
+        };
+        computeAiActionsForPlayer(createState(initialEntities, 31, 8000), 1);
+
+        const ejectedEntities: Record<EntityId, Entity> = {
+            ...initialEntities,
+            ai_apc: { ...initialEntities.ai_apc, dead: true },
+            ai_engineer_1: { ...engineer1, pos: initialEntities.ai_apc.pos, prevPos: initialEntities.ai_apc.pos, hp: 24 },
+            ai_engineer_2: { ...engineer2, pos: initialEntities.ai_apc.pos, prevPos: initialEntities.ai_apc.pos, hp: 24 }
+        };
+        const actions = computeAiActionsForPlayer(createState(ejectedEntities, 34, 8000), 1);
+        const targets = new Set([
+            getLatestSingleUnitAttackTarget(actions, 'ai_engineer_1'),
+            getLatestSingleUnitAttackTarget(actions, 'ai_engineer_2')
+        ]);
+        expect(targets).toEqual(new Set(['enemy_power', 'enemy_conyard']));
     });
 
     it('reserves capture-sale proceeds from discretionary building starts until the next package is funded', () => {
