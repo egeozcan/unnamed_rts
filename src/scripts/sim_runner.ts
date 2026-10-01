@@ -1,6 +1,6 @@
 import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit, Action } from '../engine/types.js';
 import { INITIAL_STATE, update, createPlayerState, tick } from '../engine/reducer.js';
-import { computeAiActions, resetAIState } from '../engine/ai/index.js';
+import { computeAiActions, resetAIState, resetAIImplementations } from '../engine/ai/index.js';
 import { createEntityCache } from '../engine/perf.js';
 import { generateMap, getStartingPositions } from '../game-utils.js';
 import { calculatePlayerScores, clearScoreCache } from '../engine/scores.js';
@@ -122,9 +122,12 @@ export function runGame(
     const actionListsByPlayer: (Action[] | null)[] = new Array(playerIds.length).fill(null);
     const activeIndices: number[] = new Array(playerIds.length).fill(-1);
 
-    for (const pid of aiPlayerIds) {
-        resetAIState(pid);
-    }
+    // Start every game from a clean slate. resetAIState only clears the shared
+    // core AI state; several implementations (aurora_sovereign, engineer_conyard_rush,
+    // saboteur_circus, sentinel_opportunist) keep extra module-level runtime state
+    // that would otherwise leak from one game into the next within the same process.
+    resetAIState();
+    resetAIImplementations();
     clearScoreCache();
 
     for (let t = 0; t < maxTicks; t++) {

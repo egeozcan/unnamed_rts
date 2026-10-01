@@ -1,9 +1,17 @@
 import { getAIImplementations } from '../engine/ai/registry.js';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import util from 'util';
 import os from 'os';
+import {
+    DIFFICULTY_CHOICES,
+    MAP_SIZE_CHOICES,
+    parseChoiceArg,
+    parseIntegerArg,
+    CliArgError,
+    runCli
+} from './cli_args.js';
 
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
 interface TournamentConfig {
     gamesPerMatchup: number;
@@ -24,9 +32,12 @@ function parseArgs(): TournamentConfig {
     };
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
-        if (arg === '--games-per-matchup') config.gamesPerMatchup = parseInt(args[++i], 10);
-        else if (arg === '--max-ticks') config.maxTicks = parseInt(args[++i], 10);
-        else if (arg === '--seed') config.seed = parseInt(args[++i], 10);
+        if (arg === '--games-per-matchup') config.gamesPerMatchup = parseIntegerArg(arg, args[++i], 1);
+        else if (arg === '--max-ticks') config.maxTicks = parseIntegerArg(arg, args[++i], 1);
+        else if (arg === '--seed') config.seed = parseIntegerArg(arg, args[++i], 0);
+        else if (arg === '--difficulty') config.difficulty = parseChoiceArg(arg, args[++i], DIFFICULTY_CHOICES);
+        else if (arg === '--map-size') config.mapSize = parseChoiceArg(arg, args[++i], MAP_SIZE_CHOICES);
+        else throw new CliArgError(`Unknown argument "${arg}". Supported: --games-per-matchup, --max-ticks, --seed, --difficulty, --map-size`);
     }
     return config;
 }
@@ -59,6 +70,7 @@ async function main() {
     console.log(`Participants: ${implementations.map(a => a.id).join(', ')}`);
     console.log(`Games per Matchup (each side): ${config.gamesPerMatchup}`);
     console.log(`Max ticks: ${config.maxTicks}`);
+    console.log(`Difficulty: ${config.difficulty}, map: ${config.mapSize}`);
     console.log(`==========================================`);
 
     const pairs: [string, string][] = [];
@@ -73,6 +85,7 @@ async function main() {
 
     const tasks: (() => Promise<void>)[] = [];
     const results: any[] = [];
+    const failures: string[] = [];
 
     for (const [ai1, ai2] of pairs) {
         for (let side = 0; side < 2; side++) {
@@ -84,14 +97,20 @@ async function main() {
                 const gc = gameCounter;
 
                 tasks.push(async () => {
-                    const cmd = `npx tsx src/scripts/run_match.ts ${p0_ai} ${p1_ai} ${config.difficulty} ${config.mapSize} ${config.maxTicks} ${gc} ${effectiveSeed}`;
+                    const cmdArgs = [
+                        'tsx', 'src/scripts/run_match.ts',
+                        p0_ai, p1_ai, config.difficulty, config.mapSize,
+                        String(config.maxTicks), String(gc), String(effectiveSeed)
+                    ];
                     try {
-                        const { stdout } = await execPromise(cmd);
+                        // execFile (no shell) so AI ids can never be interpreted as shell syntax.
+                        const { stdout } = await execFilePromise('npx', cmdArgs, { maxBuffer: 16 * 1024 * 1024 });
                         const lines = stdout.trim().split('\n');
                         const result = JSON.parse(lines[lines.length - 1]);
                         results.push({ p0_ai, p1_ai, gameCounter: gc, result });
                     } catch (e) {
-                        console.error(`Failed game ${gc} (${p0_ai} vs ${p1_ai}):`, e);
+                        failures.push(`game ${gc} (${p0_ai} vs ${p1_ai})`);
+                        console.error(`\nFailed game ${gc} (${p0_ai} vs ${p1_ai}):`, e);
                     }
                 });
             }
@@ -116,6 +135,9 @@ async function main() {
     for (let i = 0; i < concurrency; i++) workers.push(worker());
     await Promise.all(workers);
     console.log(`\n\nCalculating Elo Ratings...`);
+    if (failures.length > 0) {
+        console.warn(`WARNING: ${failures.length}/${totalGames} game(s) failed and are excluded from the ratings: ${failures.join(', ')}`);
+    }
 
     // Sort to ensure deterministic Elo assignments based on original match ordering
     results.sort((a, b) => a.gameCounter - b.gameCounter);
@@ -178,6 +200,10 @@ async function main() {
         const recStr = `${entry.wins}-${entry.losses}-${entry.draws}`;
         console.log(`${padStr(rankStr, 6)} ${padStr(eloStr, 6)} ${padStr(recStr, 10)} ${entry.id}`);
     });
+
+    if (failures.length > 0) {
+        process.exitCode = 1;
+    }
 }
 
-main();
+runCli(main);

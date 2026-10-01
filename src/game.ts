@@ -17,7 +17,7 @@ import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu } from './ui/pause-menu.js';
 import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
-import { computeAiActions, getAIImplementationOptions, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
+import { computeAiActions, getAIImplementationOptions, resetAIState, resetAIImplementations, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
@@ -514,6 +514,11 @@ function reconstructVectors(state: GameState): GameState {
 
 function startGameWithConfig(config: SkirmishConfig) {
     hideMenu();
+
+    // AI state is module-level and keyed by player slot; drop anything left over
+    // from a previous skirmish so stale strategies, groups and ticks don't carry over.
+    resetAIState();
+    resetAIImplementations();
     lastButtonsTick = -1;
     lastButtonsTimeMs = -Infinity;
 
