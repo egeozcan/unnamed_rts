@@ -70,9 +70,7 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
             memo = new Map();
             revealMemo.set(grid, memo);
         }
-        // Dead / removed entities never get cleaned out of the memo individually; start over when it
-        // has grown well past the live entity count (costs one full reveal pass).
-        if (memo.size > 2048) memo.clear();
+        let considered = 0;
 
         for (const id in entities) {
             const entity = entities[id];
@@ -86,9 +84,13 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
             const sightTiles = Math.ceil(sightRange / TILE_SIZE);
             const centerTileX = Math.floor(entity.pos.x / TILE_SIZE);
             const centerTileY = Math.floor(entity.pos.y / TILE_SIZE);
+            considered++;
 
-            // Skip entities that haven't moved to a new tile since they last revealed
-            const memoKey = (centerTileY * gridW + centerTileX) * 1024 + sightTiles;
+            // Skip entities that haven't moved to a new tile since they last revealed.
+            // Tile coordinates are clamped so off-map positions can't alias another tile's key.
+            const keyX = Math.max(-1, Math.min(gridW, centerTileX));
+            const keyY = Math.max(-1, Math.min(gridH, centerTileY));
+            const memoKey = ((keyY + 1) * (gridW + 2) + (keyX + 1)) * 1024 + sightTiles;
             if (memo.get(id) === memoKey) continue;
             memo.set(id, memoKey);
 
@@ -114,6 +116,10 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
                 }
             }
         }
+
+        // Dead / removed entities never get cleaned out of the memo individually; start over when it
+        // has grown well past the live entity count (costs one full reveal pass next tick).
+        if (memo.size > considered * 2 + 256) memo.clear();
 
         if (changed) {
             anyChanged = true;

@@ -1,6 +1,7 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, PLAYER_COLORS, Action, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
 import { initPathfindingWorker } from './engine/utils.js';
+import { rebuildSpatialGrid } from './engine/spatial.js';
 
 declare global {
     interface Window {
@@ -639,6 +640,8 @@ function startGameWithConfig(config: SkirmishConfig) {
     setLoadGameStateCallback((loadedState) => {
         // Reconstruct Vector objects from plain {x, y} objects
         currentState = reconstructVectors(loadedState);
+        // Hover/render queries read the global spatial grid, which is otherwise only rebuilt on tick
+        rebuildSpatialGrid(currentState.entities);
         updateButtonsUI();
     });
 
