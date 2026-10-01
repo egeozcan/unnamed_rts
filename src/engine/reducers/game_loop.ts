@@ -552,7 +552,7 @@ function processTransportLifecycle(
     let hasPassengers = false;
     for (const id in entities) {
         const entity = entities[id];
-        if (entity.type === 'UNIT' && entity.movement.transportId != null) {
+        if (entity.type === 'UNIT' && entity.movement?.transportId != null) {
             hasPassengers = true;
             break;
         }
@@ -1054,12 +1054,21 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 if (nearbyEntity.id <= a.id) continue;
 
                 // Get the working copy (with potentially updated position)
-                const b = workingEntities[nearbyEntity.id];
+                let b = workingEntities[nearbyEntity.id];
                 if (!b || b.dead) continue;
 
                 const isUnitB = b.type === 'UNIT';
-                // Units without a working copy (e.g. flying, or transported this tick) never take part
-                if (isUnitB && !workingUnits.has(b)) continue;
+                // Units that have no working copy yet (e.g. infantry that boarded a transport this tick, after
+                // the grid was built) still collide like before, so clone them lazily. Flyers are skipped below.
+                if (isUnitB && !workingUnits.has(b)) {
+                    const bData = getRuleData(b.key);
+                    if (!(bData && isUnitData(bData) && bData.fly === true)) {
+                        const copy: MutableEntity = { ...b };
+                        workingEntities[nearbyEntity.id] = copy;
+                        workingUnits.add(copy);
+                        b = copy;
+                    }
+                }
                 // a is always a unit, skip if b is not a unit and not a building/resource that matters
                 if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') continue;
 
