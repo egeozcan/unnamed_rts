@@ -67,7 +67,9 @@ Severity = expected impact on frame/tick time in realistic games.
 
 ### Caveats
 
-* `tests/engine/performance.test.ts > Pathfinding Cache Performance` compares cache-hit and cache-miss timings on random
-  data and is flaky on its own (it failed 1/15 runs on the base commit and 2/15 on this branch; `findPath` is untouched).
+* The wall-clock ratio tests in `tests/engine/performance.test.ts > Pathfinding Cache Performance` (cache hit vs miss
+  timings on randomly generated maps) are flaky on their own: the "multiple different paths" test failed 1/15 runs on the
+  base commit and 2/15 on this branch, and "invalidate cache after TTL" failed once in a full-suite run. `findPath` and
+  its cache are untouched by this PR. Everything else passed in repeated full runs.
 * Browser numbers come from software-rendered headless Chromium and unseeded games, so use them for relative
   comparison only; the seeded engine numbers are the precise ones.
