@@ -26,6 +26,14 @@ function getSightRange(key: string): number {
 }
 
 /**
+ * Per fog grid: the last (tile, sight) each entity revealed from. Fog is additive-only, so an entity
+ * that is still on the same tile with the same sight range cannot reveal anything new and can be
+ * skipped without walking its (2r+1)^2 tile neighbourhood again. Keyed on the grid so a fresh game
+ * (new Uint8Array) starts with an empty memo.
+ */
+const revealMemo = new WeakMap<Uint8Array, Map<string, number>>();
+
+/**
  * Update fog of war grids for all human players.
  * Reveals tiles within each owned entity's sight range.
  * Tiles are permanently revealed (additive only, never reset to 0).
@@ -57,6 +65,15 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
 
         let changed = false;
 
+        let memo = revealMemo.get(grid);
+        if (!memo) {
+            memo = new Map();
+            revealMemo.set(grid, memo);
+        }
+        // Dead / removed entities never get cleaned out of the memo individually; start over when it
+        // has grown well past the live entity count (costs one full reveal pass).
+        if (memo.size > 2048) memo.clear();
+
         for (const id in entities) {
             const entity = entities[id];
             if (entity.dead) continue;
@@ -67,9 +84,15 @@ export function updateFogOfWar(state: GameState): Record<number, Uint8Array> {
             if (sightRange <= 0) continue;
 
             const sightTiles = Math.ceil(sightRange / TILE_SIZE);
-            const sightTilesSq = (sightRange / TILE_SIZE) * (sightRange / TILE_SIZE);
             const centerTileX = Math.floor(entity.pos.x / TILE_SIZE);
             const centerTileY = Math.floor(entity.pos.y / TILE_SIZE);
+
+            // Skip entities that haven't moved to a new tile since they last revealed
+            const memoKey = (centerTileY * gridW + centerTileX) * 1024 + sightTiles;
+            if (memo.get(id) === memoKey) continue;
+            memo.set(id, memoKey);
+
+            const sightTilesSq = (sightRange / TILE_SIZE) * (sightRange / TILE_SIZE);
 
             const minTX = Math.max(0, centerTileX - sightTiles);
             const maxTX = Math.min(gridW - 1, centerTileX + sightTiles);

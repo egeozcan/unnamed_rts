@@ -22,6 +22,17 @@ interface Cell {
     items: Entity[];
     minCx: number[];
     minCy: number[];
+    /** Bitmask of the (non-neutral) owners present in this cell, see ownerBit(). */
+    ownerMask: number;
+}
+
+/**
+ * Bit for an owner id in a Cell.ownerMask. Neutral owners (-1) contribute no bit; owners
+ * that don't fit in the mask all share the top bit so they are never wrongly skipped.
+ */
+export function ownerBit(owner: number): number {
+    if (owner < 0) return 0;
+    return owner < 31 ? (1 << owner) : (1 << 31);
 }
 
 // Cell coordinates are packed into a single numeric Map key. The offset keeps
@@ -58,6 +69,7 @@ export class SpatialGrid {
             cell.items.length = 0;
             cell.minCx.length = 0;
             cell.minCy.length = 0;
+            cell.ownerMask = 0;
         }
     }
 
@@ -79,10 +91,11 @@ export class SpatialGrid {
                 const key = cellKey(cx, cy);
                 let cell = this.cells.get(key);
                 if (!cell) {
-                    cell = { items: [], minCx: [], minCy: [] };
+                    cell = { items: [], minCx: [], minCy: [], ownerMask: 0 };
                     this.cells.set(key, cell);
                 }
                 cell.items.push(entity);
+                cell.ownerMask |= ownerBit(entity.owner);
                 cell.minCx.push(minCx);
                 cell.minCy.push(minCy);
             }
@@ -107,7 +120,13 @@ export class SpatialGrid {
      * circle, exactly once, in deterministic (cx-major, cy-minor, insertion) order.
      * The visitor may return `false` to stop early.
      */
-    private forEachCandidate(x: number, y: number, radius: number, visit: (e: Entity) => void | false): void {
+    private forEachCandidate(
+        x: number,
+        y: number,
+        radius: number,
+        visit: (e: Entity) => void | false,
+        ignoredOwnersMask: number = -1
+    ): void {
         const cs = this.cellSize;
         const qMinCx = Math.floor((x - radius) / cs);
         const qMaxCx = Math.floor((x + radius) / cs);
@@ -119,6 +138,8 @@ export class SpatialGrid {
             for (let cy = qMinCy; cy <= qMaxCy; cy++) {
                 const cell = this.cells.get(cellKey(cx, cy));
                 if (!cell) continue;
+                // Optional pruning: a cell holding only ignored (and neutral) owners can't contain a match.
+                if (ignoredOwnersMask !== -1 && (cell.ownerMask & ~ignoredOwnersMask) === 0) continue;
                 const { items, minCx, minCy } = cell;
                 for (let i = 0; i < items.length; i++) {
                     // De-duplicate: only report an entity from the first cell of the
@@ -128,6 +149,15 @@ export class SpatialGrid {
                 }
             }
         }
+    }
+
+    /**
+     * Allocation-free variant of queryRadius(): calls `visit` for each candidate entity (each exactly
+     * once). Return `false` from the visitor to stop early. Like queryRadius, candidates are not
+     * filtered by exact distance.
+     */
+    forEachInRadius(x: number, y: number, radius: number, visit: (e: Entity) => void | false): void {
+        this.forEachCandidate(x, y, radius, visit);
     }
 
     /**
@@ -193,8 +223,19 @@ export class SpatialGrid {
     /**
      * Find the nearest entity matching a predicate (single pass, no intermediate arrays).
      * Ties resolve to the first candidate in query order.
+     *
+     * `ignoredOwnersMask` (bits from ownerBit()) is a pruning hint: cells that only contain
+     * entities of those owners (plus neutrals) are skipped without looking at their entities.
+     * Only pass it when the predicate is guaranteed to reject those owners (and neutrals).
+     * The default (-1) disables pruning.
      */
-    findNearest(x: number, y: number, maxRadius: number, predicate: (e: Entity) => boolean): Entity | null {
+    findNearest(
+        x: number,
+        y: number,
+        maxRadius: number,
+        predicate: (e: Entity) => boolean,
+        ignoredOwnersMask: number = -1
+    ): Entity | null {
         let nearest: Entity | null = null;
         let nearestDistSq = Infinity;
 
@@ -209,7 +250,7 @@ export class SpatialGrid {
             if (!predicate(e)) return;
             nearestDistSq = distSq;
             nearest = e;
-        });
+        }, ignoredOwnersMask);
 
         return nearest;
     }
