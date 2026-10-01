@@ -97,6 +97,10 @@ function main(): void {
     if (!registrySource.includes(IMPORT_MARKER) || !registrySource.includes(LIST_MARKER)) {
         fail(`Registry markers were not found in ${registryPath}`);
     }
+    // Distinct slugs can map to the same PascalCase symbol (e.g. "a1" and "a_1").
+    if (registrySource.includes(`import { ${symbolName} }`) || registrySource.includes(`    ${symbolName},`)) {
+        fail(`Symbol "${symbolName}" is already registered in ${registryPath}; choose a different name`);
+    }
 
     fs.mkdirSync(implementationDir, { recursive: true });
 
