@@ -356,22 +356,6 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
 }
 
 /**
- * Find the induction rig deployed on a specific well.
- */
-function findInductionRigOnWell(entities: Record<EntityId, Entity>, wellId: EntityId): BuildingEntity | null {
-    for (const id in entities) {
-        const entity = entities[id];
-        if (entity.type === 'BUILDING' &&
-            entity.key === 'induction_rig_deployed' &&
-            !entity.dead &&
-            entity.inductionRig?.wellId === wellId) {
-            return entity;
-        }
-    }
-    return null;
-}
-
-/**
  * Update ore wells - spawn new ore around wells and grow existing ore.
  * Also handles induction rig income generation.
  */
@@ -401,17 +385,38 @@ export function updateWells(
     // Use Spatial Grid to find nearby ores optimistically
     const spatialGrid = getSpatialGrid();
 
-    let nextEntities = { ...entities };
+    // Copy-on-write: most ticks nothing about the wells changes, so avoid cloning the whole
+    // entity map (thousands of entries on big maps) until the first real write.
+    let nextEntities = entities;
+    let owned = false;
+    const own = () => {
+        if (!owned) {
+            nextEntities = { ...entities };
+            owned = true;
+        }
+    };
+
+    // Index deployed induction rigs by well in a single pass instead of rescanning every
+    // entity for every well. The first rig found per well wins (matches the old scan order).
+    const rigIdByWell = new Map<EntityId, EntityId>();
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.type === 'BUILDING' && entity.key === 'induction_rig_deployed' && !entity.dead) {
+            const wellId = entity.inductionRig?.wellId;
+            if (wellId !== undefined && !rigIdByWell.has(wellId)) rigIdByWell.set(wellId, id);
+        }
+    }
 
     // Process each well
-    for (const id in nextEntities) {
+    for (const id in entities) {
         const entity = nextEntities[id];
         if (entity.type !== 'WELL' || entity.dead) continue;
 
         const well = entity as WellEntity;
 
         // Check if there's an induction rig deployed on this well
-        const inductionRig = findInductionRigOnWell(nextEntities, id);
+        const rigId = rigIdByWell.get(id);
+        const inductionRig = rigId !== undefined ? nextEntities[rigId] as BuildingEntity : null;
         if (inductionRig) {
             // Induction rig is active - generate credits instead of ore
             const creditsPerTick = baseValuePerTick * inductionEfficiency;
@@ -426,6 +431,7 @@ export function updateWells(
             }
 
             // Update the rig with remaining fractional credits
+            own();
             nextEntities[inductionRig.id] = {
                 ...inductionRig,
                 inductionRig: {
@@ -435,13 +441,16 @@ export function updateWells(
             };
 
             // Mark well as blocked (by induction rig) but don't spawn ore
-            nextEntities[id] = {
-                ...well,
-                well: {
-                    ...well.well,
-                    isBlocked: true  // Blocked by induction rig
-                }
-            };
+            if (!well.well.isBlocked) {
+                own();
+                nextEntities[id] = {
+                    ...well,
+                    well: {
+                        ...well.well,
+                        isBlocked: true  // Blocked by induction rig
+                    }
+                };
+            }
 
             continue; // Skip normal ore spawning for this well
         }
@@ -469,12 +478,15 @@ export function updateWells(
             // Pick one to grow (first one found)
             const targetOre = fillableOres[0];
 
+            own();
+
             nextEntities[targetOre.id] = {
                 ...targetOre,
                 hp: Math.min(targetOre.maxHp, targetOre.hp + wellConfig.oreGrowthRate)
             };
 
             // Update well tracking - well is actively growing, so not blocked
+            own();
             nextEntities[id] = {
                 ...well,
                 well: {
@@ -550,6 +562,7 @@ export function updateWells(
                         radius: oreRadius,
                         dead: false
                     };
+                    own();
                     nextEntities[oreId] = newOre;
 
                     // Calculate next spawn tick (random interval)
@@ -557,6 +570,7 @@ export function updateWells(
                         Math.random() * (wellConfig.spawnRateTicksMax - wellConfig.spawnRateTicksMin);
 
                     // Update well state - successfully spawned, not blocked
+                    own();
                     nextEntities[id] = {
                         ...well,
                         well: {
@@ -569,6 +583,7 @@ export function updateWells(
                     };
                 } else {
                     // No valid spawn position found - mark well as blocked
+                    own();
                     nextEntities[id] = {
                         ...well,
                         well: {
@@ -582,14 +597,19 @@ export function updateWells(
                 // Not time to spawn yet or at max ore - check if still blocked
                 // If we're at max ore, not blocked. If not time yet, preserve previous blocked state.
                 const isAtMaxOre = nearbyOres.length >= wellConfig.maxOrePerWell;
-                nextEntities[id] = {
-                    ...well,
-                    well: {
-                        ...well.well,
-                        currentOreCount: nearbyOres.length,
-                        isBlocked: isAtMaxOre ? false : well.well.isBlocked
-                    }
-                };
+                const nextBlocked = isAtMaxOre ? false : well.well.isBlocked;
+                // Only allocate a new well when something actually changed
+                if (well.well.currentOreCount !== nearbyOres.length || well.well.isBlocked !== nextBlocked) {
+                    own();
+                    nextEntities[id] = {
+                        ...well,
+                        well: {
+                            ...well.well,
+                            currentOreCount: nearbyOres.length,
+                            isBlocked: nextBlocked
+                        }
+                    };
+                }
             }
         }
     }

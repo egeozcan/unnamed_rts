@@ -411,8 +411,16 @@ function findCombatTarget(
     const weaponType = data.weaponType || 'bullet';
     const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
 
+    const generic = !isHealer && !isEngineer && !isHijacker;
+
     const predicate = (other: Entity) => {
         if (other.dead || other.owner === -1) return false;
+
+        // Cheap relationship check first. For ordinary attackers (the vast majority of
+        // candidates are friendly units) this rejects before any rules lookup happens.
+        const targetIsEnemy = state ? isEnemy(state, unit.owner, other.owner) : unit.owner !== other.owner;
+        if (generic && !targetIsEnemy) return false;
+
         if (other.type === 'UNIT' && isTransportedUnit(other)) return false;
 
         // Check weapon targeting capabilities (air vs ground)
@@ -421,7 +429,6 @@ function findCombatTarget(
         if (isTargetAir && !targeting.canTargetAir) return false;
         if (!isTargetAir && !targeting.canTargetGround) return false;
 
-        const targetIsEnemy = state ? isEnemy(state, unit.owner, other.owner) : unit.owner !== other.owner;
         const targetIsAlly = state ? isAlly(state, unit.owner, other.owner) : unit.owner === other.owner;
 
         if (isHealer) {
