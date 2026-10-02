@@ -42,11 +42,11 @@ function updateRegistry(registryPath: string, symbolName: string, slug: string):
     }
 
     if (!source.includes(importLine)) {
-        source = source.replace(IMPORT_MARKER, `${IMPORT_MARKER}\n${importLine}`);
+        source = source.replace(IMPORT_MARKER, () => `${IMPORT_MARKER}\n${importLine}`);
     }
 
     if (!source.includes(`    ${symbolName},`)) {
-        source = source.replace(LIST_MARKER, `    ${symbolName},\n${LIST_MARKER}`);
+        source = source.replace(LIST_MARKER, () => `    ${symbolName},\n${LIST_MARKER}`);
     }
 
     fs.writeFileSync(registryPath, source, 'utf8');
@@ -61,6 +61,10 @@ function main(): void {
     const slug = toSlug(rawName);
     if (!slug) {
         fail(`Could not derive a valid slug from "${rawName}"`);
+    }
+
+    if (!/^[a-z]/.test(slug)) {
+        fail(`Implementation name must start with a letter (derived slug: "${slug}")`);
     }
 
     if (slug === 'classic') {
@@ -83,6 +87,19 @@ function main(): void {
 
     if (fs.existsSync(implementationDir)) {
         fail(`Implementation directory already exists: ${implementationDir}`);
+    }
+
+    // Check every target up front so a failure can't leave a half-created scaffold behind.
+    if (fs.existsSync(testPath)) {
+        fail(`File already exists: ${testPath}`);
+    }
+    const registrySource = fs.readFileSync(registryPath, 'utf8');
+    if (!registrySource.includes(IMPORT_MARKER) || !registrySource.includes(LIST_MARKER)) {
+        fail(`Registry markers were not found in ${registryPath}`);
+    }
+    // Distinct slugs can map to the same PascalCase symbol (e.g. "a1" and "a_1").
+    if (registrySource.includes(`import { ${symbolName} }`) || registrySource.includes(`    ${symbolName},`)) {
+        fail(`Symbol "${symbolName}" is already registered in ${registryPath}; choose a different name`);
     }
 
     fs.mkdirSync(implementationDir, { recursive: true });

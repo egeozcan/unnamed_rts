@@ -12,7 +12,17 @@
 import { deriveGameSeed, withSeededRandom, createGameState, runGame } from './sim_runner.js';
 
 // Ensure AI implementations are registered
-import '../engine/ai/registry.js';
+import { getAIImplementations } from '../engine/ai/registry.js';
+import {
+    CliArgError,
+    DENSITY_CHOICES,
+    DIFFICULTY_CHOICES,
+    MAP_SIZE_CHOICES,
+    parseAIIdArg,
+    parseChoiceArg,
+    parseIntegerArg,
+    runCli
+} from './cli_args.js';
 
 interface SimConfig {
     games: number;
@@ -52,22 +62,24 @@ function parseArgs() {
         benchmarkWarmup: 2,
     };
 
+    const knownAIs = getAIImplementations().map(ai => ai.id);
+
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
-        if (arg === '--games') config.games = parseInt(args[++i], 10);
-        else if (arg === '--ai1') config.ai1 = args[++i];
-        else if (arg === '--ai2') config.ai2 = args[++i];
-        else if (arg === '--difficulty') config.difficulty = args[++i] as typeof config.difficulty;
-        else if (arg === '--max-ticks') config.maxTicks = parseInt(args[++i], 10);
-        else if (arg === '--map-size') config.mapSize = args[++i] as typeof config.mapSize;
-        else if (arg === '--resource-density') config.resourceDensity = args[++i] as typeof config.resourceDensity;
-        else if (arg === '--rock-density') config.rockDensity = args[++i] as typeof config.rockDensity;
+        if (arg === '--games') config.games = parseIntegerArg(arg, args[++i], 1);
+        else if (arg === '--ai1') config.ai1 = parseAIIdArg(arg, args[++i], knownAIs);
+        else if (arg === '--ai2') config.ai2 = parseAIIdArg(arg, args[++i], knownAIs);
+        else if (arg === '--difficulty') config.difficulty = parseChoiceArg(arg, args[++i], DIFFICULTY_CHOICES);
+        else if (arg === '--max-ticks') config.maxTicks = parseIntegerArg(arg, args[++i], 1);
+        else if (arg === '--map-size') config.mapSize = parseChoiceArg(arg, args[++i], MAP_SIZE_CHOICES);
+        else if (arg === '--resource-density') config.resourceDensity = parseChoiceArg(arg, args[++i], DENSITY_CHOICES);
+        else if (arg === '--rock-density') config.rockDensity = parseChoiceArg(arg, args[++i], DENSITY_CHOICES);
         else if (arg === '--verbose' || arg === '-v') config.verbose = true;
         else if (arg === '--legacy-turn-order') config.fairTurnOrder = false;
-        else if (arg === '--seed') config.seed = parseInt(args[++i], 10);
+        else if (arg === '--seed') config.seed = parseIntegerArg(arg, args[++i], 0);
         else if (arg === '--benchmark') config.benchmark = true;
-        else if (arg === '--benchmark-runs') config.benchmarkRuns = parseInt(args[++i], 10);
-        else if (arg === '--benchmark-warmup') config.benchmarkWarmup = parseInt(args[++i], 10);
+        else if (arg === '--benchmark-runs') config.benchmarkRuns = parseIntegerArg(arg, args[++i], 1);
+        else if (arg === '--benchmark-warmup') config.benchmarkWarmup = parseIntegerArg(arg, args[++i], 0);
         else if (arg === '--help') {
             console.log(`
 AI vs AI Simulation
@@ -89,6 +101,8 @@ Usage:
   --verbose, -v             Print per-tick progress
 `);
             process.exit(0);
+        } else {
+            throw new CliArgError(`Unknown argument "${arg}" (see --help)`);
         }
     }
     return config;
@@ -248,4 +262,4 @@ function main() {
     console.log();
 }
 
-main();
+runCli(main);

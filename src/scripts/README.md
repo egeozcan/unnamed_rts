@@ -38,6 +38,20 @@ Key options:
 - `--benchmark-warmup <N>` warmup repetitions before measured runs
 - `--legacy-turn-order` use sequential action ordering
 
+Round-robin tournament with Elo ratings (each game runs in its own process via `run_match.ts`):
+
+```bash
+npm run ai:tournament -- --games-per-matchup 2 --max-ticks 30000 --difficulty hard --map-size medium --seed 42
+```
+
+Options: `--games-per-matchup`, `--max-ticks`, `--seed`, `--difficulty`, `--map-size`.
+
+The AI harness scripts (`simulate_ai`, `tournament`, `run_match`) validate their arguments: unknown flags, non-numeric values and
+unregistered AI ids are rejected (exit code 2) instead of silently falling back to `classic`.
+Games that crash in a tournament are reported and make the script exit non-zero.
+Every simulated game starts with all AI state reset (via each implementation's `reset` hook, so new implementations that keep module-level state must define one),
+so seeded replays are reproducible within a single process.
+
 ## Game State Manipulation Tool
 
 A command-line tool to manipulate saved game states (JSON files). It allows for removing players, units, and buildings based on various criteria, as well as advancing the game simulation.
