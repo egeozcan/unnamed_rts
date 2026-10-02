@@ -270,7 +270,11 @@ export function refreshCollisionGrid(entities: Record<string, Entity> | Entity[]
         }
     }
 
-    gridManager.refreshRevisions(allPlayerIds);
+    // Revision tracking (full-grid compares + snapshots) only exists to drive the worker
+    // sync, so skip it until something actually asks the worker for a path.
+    if (workerSyncActive) {
+        gridManager.refreshRevisions(allPlayerIds);
+    }
 }
 
 /**
@@ -332,11 +336,27 @@ let lastSyncedCollisionRevision = -1;
 const lastSyncedDangerRevisions = new Map<number, number>();
 
 /**
+ * Grid syncing to the pathfinding worker is lazy: it costs several full-grid copies per
+ * player per tick, so it is only switched on once the first async path request is made.
+ */
+let workerSyncActive = false;
+
+function activateWorkerSync(): void {
+    if (workerSyncActive) return;
+    workerSyncActive = true;
+    const playerIds = Object.keys(gridManager.dangerGrids).map(Number);
+    gridManager.refreshRevisions(playerIds);
+    lastSyncedCollisionRevision = -1;
+    lastSyncedDangerRevisions.clear();
+    syncGridsToWorker(playerIds);
+}
+
+/**
  * Sync collision and danger grids to the pathfinding worker.
  * Should be called after refreshCollisionGrid.
  */
 export function syncGridsToWorker(playerIds: number[]): void {
-    if (!pathfindingWorker.isEnabled()) return;
+    if (!workerSyncActive || !pathfindingWorker.isEnabled()) return;
 
     const collisionRevision = gridManager.collisionRevision;
     if (collisionRevision !== lastSyncedCollisionRevision) {
@@ -384,6 +404,7 @@ export async function findPathAsync(
     ownerId?: number
 ): Promise<Vector[] | null> {
     if (pathfindingWorker.isEnabled()) {
+        activateWorkerSync();
         try {
             return await pathfindingWorker.requestPath(start, goal, entityRadius, ownerId);
         } catch {

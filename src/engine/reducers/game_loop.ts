@@ -37,7 +37,16 @@ export function tick(state: GameState): GameState {
         nextNotification = null;
     }
 
-    let nextEntities = { ...state.entities };
+    // Copy-on-write: the entity map is only cloned if production actually adds/changes
+    // something this tick (updateEntities makes its own working copy for the heavy lifting).
+    let nextEntities = state.entities;
+    let entitiesOwned = false;
+    const ownEntities = () => {
+        if (!entitiesOwned) {
+            nextEntities = { ...state.entities };
+            entitiesOwned = true;
+        }
+    };
     let nextPlayers = { ...state.players };
 
     // PERFORMANCE: Create entity cache once per tick for optimized lookups
@@ -47,11 +56,13 @@ export function tick(state: GameState): GameState {
     for (const pid in nextPlayers) {
         const res = updateProduction(nextPlayers[pid], state.entities, state, entityCache);
         nextPlayers[pid] = res.player;
+        if (res.createdEntities.length > 0) ownEntities();
         res.createdEntities.forEach(e => {
             nextEntities[e.id] = e;
         });
         // Apply modified entities (e.g., air base slots updated when harrier spawns docked)
         for (const entityId in res.modifiedEntities) {
+            ownEntities();
             nextEntities[entityId] = res.modifiedEntities[entityId];
         }
     }
@@ -369,7 +380,6 @@ export function tick(state: GameState): GameState {
     processTransportLifecycle(updatedEntities, state.config);
 
     // Filter dead entities
-    let finalEntities: Record<EntityId, Entity> = {};
     const buildingCounts: Record<number, number> = {};
     const mcvCounts: Record<number, number> = {};
 
@@ -379,15 +389,28 @@ export function tick(state: GameState): GameState {
         mcvCounts[pid] = 0;
     }
 
+    let anyDead = false;
     for (const id in updatedEntities) {
         const ent = updatedEntities[id];
-        if (!ent.dead) {
-            finalEntities[id] = ent;
-            if (ent.type === 'BUILDING') {
-                buildingCounts[ent.owner] = (buildingCounts[ent.owner] || 0) + 1;
-            } else if (ent.type === 'UNIT' && ent.key === 'mcv') {
-                mcvCounts[ent.owner] = (mcvCounts[ent.owner] || 0) + 1;
-            }
+        if (ent.dead) {
+            anyDead = true;
+            continue;
+        }
+        if (ent.type === 'BUILDING') {
+            buildingCounts[ent.owner] = (buildingCounts[ent.owner] || 0) + 1;
+        } else if (ent.type === 'UNIT' && ent.key === 'mcv') {
+            mcvCounts[ent.owner] = (mcvCounts[ent.owner] || 0) + 1;
+        }
+    }
+
+    // updatedEntities is a fresh, tick-local map, so when nothing died it can be used as is
+    // instead of being copied entry by entry.
+    let finalEntities: Record<EntityId, Entity> = updatedEntities;
+    if (anyDead) {
+        finalEntities = {};
+        for (const id in updatedEntities) {
+            const ent = updatedEntities[id];
+            if (!ent.dead) finalEntities[id] = ent;
         }
     }
 
@@ -523,6 +546,22 @@ function processTransportLifecycle(
     entities: Record<EntityId, Entity>,
     mapConfig: { width: number; height: number }
 ): void {
+    // Fast path: most ticks have no transport carrying passengers, so avoid the
+    // Object.values/filter/sort allocation entirely. Passengers are the only units
+    // with a transportId set, so one cheap scan tells us whether there is any work.
+    let hasPassengers = false;
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.type === 'UNIT' && entity.movement?.transportId != null) {
+            hasPassengers = true;
+            break;
+        }
+    }
+    if (!hasPassengers) {
+        // A dead transport can only have passengers if some unit references it.
+        return;
+    }
+
     const transports = Object.values(entities)
         .filter((entity): entity is UnitEntity =>
             entity.type === 'UNIT' && isGarrisonableTransport(entity)
@@ -931,22 +970,33 @@ export function updateEntities(
 // Mutable version of Entity for collision resolution (allows position updates)
 type MutableEntity = { -readonly [K in keyof Entity]: Entity[K] };
 
+/**
+ * Resolve overlaps between ground units and static obstacles.
+ * NOTE: mutates (and returns) the passed map - callers must own it.
+ */
 function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId, Entity> {
-    // Create a mutable lookup for working copies
-    const workingEntities: Record<EntityId, MutableEntity> = {};
+    // Only ground units are ever repositioned by collision resolution, so only those need
+    // mutable working copies. Buildings, rocks and resources (usually the bulk of the
+    // entities) are shared by reference instead of being cloned every tick.
+    // `entities` is owned by the caller (updateEntities' per-tick working map), so unit copies
+    // are swapped in place rather than cloning the whole map again.
+    const workingEntities = entities as Record<EntityId, MutableEntity>;
+    const workingUnits = new Set<MutableEntity>();
     const groundUnits: MutableEntity[] = [];  // Ground units only (not flying)
     const movingUnits: MutableEntity[] = []; // OPTIMIZATION: Track only units that moved
 
     for (const id in entities) {
-        const e: MutableEntity = { ...entities[id] };
-        workingEntities[id] = e;
-        if (e.type === 'UNIT' && !e.dead) {
-            if (isTransportedUnit(e)) continue;
+        const original = entities[id];
+        if (original.type === 'UNIT' && !original.dead) {
+            if (isTransportedUnit(original)) continue;
             // Skip flying units from ground collision - they fly above everything
-            const unitData = getRuleData(e.key);
+            const unitData = getRuleData(original.key);
             const canFly = unitData && isUnitData(unitData) && unitData.fly === true;
             if (canFly) continue; // Air units don't participate in ground collision
 
+            const e: MutableEntity = { ...original };
+            workingEntities[id] = e;
+            workingUnits.add(e);
             groundUnits.push(e);
 
             // OPTIMIZATION: Only process units that actually moved or have movement intent
@@ -1004,10 +1054,21 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
                 if (nearbyEntity.id <= a.id) continue;
 
                 // Get the working copy (with potentially updated position)
-                const b = workingEntities[nearbyEntity.id];
+                let b = workingEntities[nearbyEntity.id];
                 if (!b || b.dead) continue;
 
                 const isUnitB = b.type === 'UNIT';
+                // Units that have no working copy yet (e.g. infantry that boarded a transport this tick, after
+                // the grid was built) still collide like before, so clone them lazily. Flyers are skipped below.
+                if (isUnitB && !workingUnits.has(b)) {
+                    const bData = getRuleData(b.key);
+                    if (!(bData && isUnitData(bData) && bData.fly === true)) {
+                        const copy: MutableEntity = { ...b };
+                        workingEntities[nearbyEntity.id] = copy;
+                        workingUnits.add(copy);
+                        b = copy;
+                    }
+                }
                 // a is always a unit, skip if b is not a unit and not a building/resource that matters
                 if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') continue;
 

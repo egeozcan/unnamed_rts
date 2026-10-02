@@ -7,6 +7,7 @@ import { shouldRunCadencedUpdate } from './cadence.js';
 let scoreboardContainer: HTMLElement | null = null;
 let lastScoreboardTick = -1;
 let lastScoreboardTimeMs = -Infinity;
+let lastScoreboardHtml = '';
 
 const SCOREBOARD_MIN_TICK_DELTA = 10;
 const SCOREBOARD_MIN_TIME_DELTA_MS = 120;
@@ -15,6 +16,7 @@ export function initScoreboard() {
     // Reset cadence state for new games/HMR remounts.
     lastScoreboardTick = -1;
     lastScoreboardTimeMs = -Infinity;
+    lastScoreboardHtml = '';
 
     // Create container if it doesn't exist
     if (!scoreboardContainer) {
@@ -50,9 +52,12 @@ export function updateScoreboard(state: GameState, nowMs?: number) {
     const activeScores = scores.filter(s => !s.isEliminated);
     const maxScore = Math.max(...activeScores.map(s => Math.max(s.military, s.economy)), 1);
 
-    // Build HTML for the scoreboard
-    // We rebuild the innerHTML for simplicity, but could optimize to update individual elements if needed
-    scoreboardContainer.innerHTML = activeScores.map(score => createPlayerRow(score, maxScore, state)).join('');
+    // Build HTML for the scoreboard. Replacing innerHTML tears down and re-creates every row (and
+    // re-blurs the translucent backdrop), so only do it when the markup actually changed.
+    const html = activeScores.map(score => createPlayerRow(score, maxScore, state)).join('');
+    if (html === lastScoreboardHtml && scoreboardContainer.childElementCount > 0) return;
+    lastScoreboardHtml = html;
+    scoreboardContainer.innerHTML = html;
 }
 
 function createPlayerRow(score: PlayerScore, maxScore: number, state: GameState): string {

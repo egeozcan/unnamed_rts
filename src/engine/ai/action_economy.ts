@@ -1735,42 +1735,55 @@ export function handleMCVOperations(
     const MAX_BASES = 2;
     const baseCenter = findBaseCenter(myBuildings);
 
-    // Find expansion location - distant ore that needs a new base
-    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-    let bestExpansionTarget: Vector | null = null;
-    let bestScore = -Infinity;
+    // Find expansion location - distant ore that needs a new base.
+    // PERFORMANCE: this is O(ore x entities) so it is computed lazily (only when an idle MCV
+    // actually needs a destination) and with the enemy / building lists hoisted out of the loop.
+    let expansionComputed = false;
+    let expansionTarget: Vector | null = null;
+    const getBestExpansionTarget = (): Vector | null => {
+        if (expansionComputed) return expansionTarget;
+        expansionComputed = true;
 
-    for (const ore of allOre) {
-        // Check if ore is covered by existing buildings
-        let inBuildRange = false;
-        for (const b of myBuildings) {
-            const bData = RULES.buildings[b.key];
-            if (bData?.isDefense) continue;
-            if (ore.pos.dist(b.pos) < BUILD_RADIUS + 200) {
-                inBuildRange = true;
-                break;
+        const nonDefenseBuildings = myBuildings.filter(b => !RULES.buildings[b.key]?.isDefense);
+        const enemies: Entity[] = [];
+        const allOre: Entity[] = [];
+        for (const id in state.entities) {
+            const e = state.entities[id];
+            if (e.dead) continue;
+            if (e.type === 'RESOURCE') allOre.push(e);
+            if (e.owner !== playerId && e.owner !== -1) enemies.push(e);
+        }
+
+        let bestScore = -Infinity;
+        for (const ore of allOre) {
+            // Check if ore is covered by existing buildings
+            let inBuildRange = false;
+            for (const b of nonDefenseBuildings) {
+                if (ore.pos.dist(b.pos) < BUILD_RADIUS + 200) {
+                    inBuildRange = true;
+                    break;
+                }
+            }
+            if (inBuildRange) continue;
+
+            // Check if ore has nearby enemy presence (dangerous)
+            let nearbyEnemyThreats = 0;
+            for (const e of enemies) {
+                if (e.pos.dist(ore.pos) < 500 && ++nearbyEnemyThreats > 2) break;
+            }
+            if (nearbyEnemyThreats > 2) continue;
+
+            const distFromBase = ore.pos.dist(baseCenter);
+            if (distFromBase > 600 && distFromBase < 1500) {
+                const score = 1000 - distFromBase - nearbyEnemyThreats * 100;
+                if (score > bestScore) {
+                    bestScore = score;
+                    expansionTarget = ore.pos;
+                }
             }
         }
-        if (inBuildRange) continue;
-
-        // Check if ore has nearby enemy presence (dangerous)
-        let nearbyEnemyThreats = 0;
-        for (const e of Object.values(state.entities)) {
-            if (e.owner !== playerId && e.owner !== -1 && !e.dead) {
-                if (e.pos.dist(ore.pos) < 500) nearbyEnemyThreats++;
-            }
-        }
-        if (nearbyEnemyThreats > 2) continue;
-
-        const distFromBase = ore.pos.dist(baseCenter);
-        if (distFromBase > 600 && distFromBase < 1500) {
-            const score = 1000 - distFromBase - nearbyEnemyThreats * 100;
-            if (score > bestScore) {
-                bestScore = score;
-                bestExpansionTarget = ore.pos;
-            }
-        }
-    }
+        return expansionTarget;
+    };
 
     const hasConyard = myBuildings.some(b => b.key === 'conyard');
     const currentConyards = myBuildings.filter(b => b.key === 'conyard').length;
@@ -1835,7 +1848,9 @@ export function handleMCVOperations(
         const atMaxBases = (currentConyards + (deploymentQueuedThisTick ? 1 : 0)) >= MAX_BASES;
 
         // PRIORITY 2: If MCV has no destination, assign expansion target
-        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && bestExpansionTarget && !atMaxBases) {
+        const mcvIdle = !mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest;
+        const bestExpansionTarget = mcvIdle ? getBestExpansionTarget() : null;
+        if (mcvIdle && bestExpansionTarget && !atMaxBases) {
             const deployPos = findDeployPosition(bestExpansionTarget.add(new Vector(100, 0)), 250);
             if (deployPos) {
                 actions.push({
@@ -1864,7 +1879,7 @@ export function handleMCVOperations(
         }
 
         // PRIORITY 4: Emergency deployment - only deploy idle MCV if we have NO conyard at all
-        if (!mcvUnit.movement.moveTarget && !mcvUnit.movement.finalDest && !bestExpansionTarget) {
+        if (mcvIdle && !bestExpansionTarget) {
             if (!hasConyard) {
                 const deployPos = findDeployPosition(mcv.pos, 200);
                 if (deployPos) {

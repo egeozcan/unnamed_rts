@@ -13,49 +13,64 @@ import { isTransportedUnit } from './transport.js';
 const DEFAULT_CELL_SIZE = 200;
 
 /**
+ * A single grid cell. Entities are stored alongside the min cell coordinates of the
+ * entity's footprint so multi-cell entities can be de-duplicated during a query
+ * without allocating a Set (an entity is only reported from the first cell of the
+ * query range that it occupies).
+ */
+interface Cell {
+    items: Entity[];
+    minCx: number[];
+    minCy: number[];
+    /** Bitmask of the (non-neutral) owners present in this cell, see ownerBit(). */
+    ownerMask: number;
+}
+
+/**
+ * Bit for an owner id in a Cell.ownerMask. Neutral owners (-1) contribute no bit; owners
+ * that don't fit in the mask all share the top bit so they are never wrongly skipped.
+ */
+export function ownerBit(owner: number): number {
+    if (owner < 0) return 0;
+    return owner < 31 ? (1 << owner) : (1 << 31);
+}
+
+// Cell coordinates are packed into a single numeric Map key. The offset keeps
+// moderately negative coordinates (e.g. off-map explosions) from colliding.
+const KEY_OFFSET = 32768;
+const KEY_STRIDE = 65536;
+
+function cellKey(cx: number, cy: number): number {
+    return (cx + KEY_OFFSET) * KEY_STRIDE + (cy + KEY_OFFSET);
+}
+
+/**
  * Spatial hash grid for fast spatial queries.
+ *
+ * PERFORMANCE NOTES: the grid is rebuilt every tick and queried hundreds of times per
+ * tick (target acquisition, collisions, ...), so it avoids string keys, per-query Sets
+ * and chained filter() arrays. Cell storage is pooled across rebuilds.
  */
 export class SpatialGrid {
     private cellSize: number;
-    private cells: Map<string, Entity[]>;
-    private entityCells: Map<EntityId, string[]>; // Track which cells each entity is in
+    private cells: Map<number, Cell>;
 
     constructor(cellSize: number = DEFAULT_CELL_SIZE) {
         this.cellSize = cellSize;
         this.cells = new Map();
-        this.entityCells = new Map();
     }
 
     /**
-     * Clear all entities from the grid.
+     * Clear all entities from the grid. Cell storage is kept (emptied) so a per-tick
+     * rebuild does not have to reallocate every cell.
      */
     clear(): void {
-        this.cells.clear();
-        this.entityCells.clear();
-    }
-
-    /**
-     * Get all cell keys that an entity occupies (based on its radius).
-     */
-    private getEntityCellKeys(entity: Entity): string[] {
-        const keys: string[] = [];
-        const minX = entity.pos.x - entity.radius;
-        const maxX = entity.pos.x + entity.radius;
-        const minY = entity.pos.y - entity.radius;
-        const maxY = entity.pos.y + entity.radius;
-
-        const minCx = Math.floor(minX / this.cellSize);
-        const maxCx = Math.floor(maxX / this.cellSize);
-        const minCy = Math.floor(minY / this.cellSize);
-        const maxCy = Math.floor(maxY / this.cellSize);
-
-        for (let cx = minCx; cx <= maxCx; cx++) {
-            for (let cy = minCy; cy <= maxCy; cy++) {
-                keys.push(`${cx},${cy}`);
-            }
+        for (const cell of this.cells.values()) {
+            cell.items.length = 0;
+            cell.minCx.length = 0;
+            cell.minCy.length = 0;
+            cell.ownerMask = 0;
         }
-
-        return keys;
     }
 
     /**
@@ -65,16 +80,25 @@ export class SpatialGrid {
         if (entity.dead) return;
         if (isTransportedUnit(entity)) return;
 
-        const cellKeys = this.getEntityCellKeys(entity);
-        this.entityCells.set(entity.id, cellKeys);
+        const cs = this.cellSize;
+        const minCx = Math.floor((entity.pos.x - entity.radius) / cs);
+        const maxCx = Math.floor((entity.pos.x + entity.radius) / cs);
+        const minCy = Math.floor((entity.pos.y - entity.radius) / cs);
+        const maxCy = Math.floor((entity.pos.y + entity.radius) / cs);
 
-        for (const key of cellKeys) {
-            let cell = this.cells.get(key);
-            if (!cell) {
-                cell = [];
-                this.cells.set(key, cell);
+        for (let cx = minCx; cx <= maxCx; cx++) {
+            for (let cy = minCy; cy <= maxCy; cy++) {
+                const key = cellKey(cx, cy);
+                let cell = this.cells.get(key);
+                if (!cell) {
+                    cell = { items: [], minCx: [], minCy: [], ownerMask: 0 };
+                    this.cells.set(key, cell);
+                }
+                cell.items.push(entity);
+                cell.ownerMask |= ownerBit(entity.owner);
+                cell.minCx.push(minCx);
+                cell.minCy.push(minCy);
             }
-            cell.push(entity);
         }
     }
 
@@ -84,10 +108,56 @@ export class SpatialGrid {
     rebuild(entities: Record<EntityId, Entity> | Entity[]): void {
         this.clear();
 
-        const list = Array.isArray(entities) ? entities : Object.values(entities);
-        for (const entity of list) {
-            this.insert(entity);
+        if (Array.isArray(entities)) {
+            for (const entity of entities) this.insert(entity);
+        } else {
+            for (const id in entities) this.insert(entities[id]);
         }
+    }
+
+    /**
+     * Visit every entity whose footprint touches the cells overlapped by the query
+     * circle, exactly once, in deterministic (cx-major, cy-minor, insertion) order.
+     * The visitor may return `false` to stop early.
+     */
+    private forEachCandidate(
+        x: number,
+        y: number,
+        radius: number,
+        visit: (e: Entity) => void | false,
+        ignoredOwnersMask: number = -1
+    ): void {
+        const cs = this.cellSize;
+        const qMinCx = Math.floor((x - radius) / cs);
+        const qMaxCx = Math.floor((x + radius) / cs);
+        const qMinCy = Math.floor((y - radius) / cs);
+        const qMaxCy = Math.floor((y + radius) / cs);
+        const single = qMinCx === qMaxCx && qMinCy === qMaxCy;
+
+        for (let cx = qMinCx; cx <= qMaxCx; cx++) {
+            for (let cy = qMinCy; cy <= qMaxCy; cy++) {
+                const cell = this.cells.get(cellKey(cx, cy));
+                if (!cell) continue;
+                // Optional pruning: a cell holding only ignored (and neutral) owners can't contain a match.
+                if (ignoredOwnersMask !== -1 && (cell.ownerMask & ~ignoredOwnersMask) === 0) continue;
+                const { items, minCx, minCy } = cell;
+                for (let i = 0; i < items.length; i++) {
+                    // De-duplicate: only report an entity from the first cell of the
+                    // query range that it occupies.
+                    if (!single && (cx !== Math.max(minCx[i], qMinCx) || cy !== Math.max(minCy[i], qMinCy))) continue;
+                    if (visit(items[i]) === false) return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Allocation-free variant of queryRadius(): calls `visit` for each candidate entity (each exactly
+     * once). Return `false` from the visitor to stop early. Like queryRadius, candidates are not
+     * filtered by exact distance.
+     */
+    forEachInRadius(x: number, y: number, radius: number, visit: (e: Entity) => void | false): void {
+        this.forEachCandidate(x, y, radius, visit);
     }
 
     /**
@@ -95,36 +165,8 @@ export class SpatialGrid {
      * Returns entities whose bounding boxes may overlap - caller should do precise distance check.
      */
     queryRadius(x: number, y: number, radius: number): Entity[] {
-        // Calculate which cells to check
-        const minCx = Math.floor((x - radius) / this.cellSize);
-        const maxCx = Math.floor((x + radius) / this.cellSize);
-        const minCy = Math.floor((y - radius) / this.cellSize);
-        const maxCy = Math.floor((y + radius) / this.cellSize);
-
-        // OPTIMIZATION: For single-cell queries (common case), skip Set overhead
-        if (minCx === maxCx && minCy === maxCy) {
-            const cell = this.cells.get(`${minCx},${minCy}`);
-            return cell ? [...cell] : [];
-        }
-
-        // Multi-cell query: use Set to deduplicate entities spanning multiple cells
         const result: Entity[] = [];
-        const seen = new Set<EntityId>();
-
-        for (let cx = minCx; cx <= maxCx; cx++) {
-            for (let cy = minCy; cy <= maxCy; cy++) {
-                const cell = this.cells.get(`${cx},${cy}`);
-                if (cell) {
-                    for (const entity of cell) {
-                        if (!seen.has(entity.id)) {
-                            seen.add(entity.id);
-                            result.push(entity);
-                        }
-                    }
-                }
-            }
-        }
-
+        this.forEachCandidate(x, y, radius, e => { result.push(e); });
         return result;
     }
 
@@ -133,58 +175,82 @@ export class SpatialGrid {
      * This does the precise distance check.
      */
     queryRadiusExact(x: number, y: number, radius: number): Entity[] {
-        const candidates = this.queryRadius(x, y, radius);
-        return candidates.filter(e => {
+        const result: Entity[] = [];
+        this.forEachCandidate(x, y, radius, e => {
             const dx = e.pos.x - x;
             const dy = e.pos.y - y;
-            return dx * dx + dy * dy <= (radius + e.radius) * (radius + e.radius);
+            const r = radius + e.radius;
+            if (dx * dx + dy * dy <= r * r) result.push(e);
         });
+        return result;
     }
 
     /**
      * Query entities within radius, filtered by owner.
      */
     queryRadiusByOwner(x: number, y: number, radius: number, owner: number): Entity[] {
-        return this.queryRadiusExact(x, y, radius).filter(e => e.owner === owner);
+        return this.queryRadiusMatching(x, y, radius, e => e.owner === owner);
     }
 
     /**
      * Query enemies (entities not owned by the given player and not neutral).
      */
     queryEnemiesInRadius(x: number, y: number, radius: number, playerId: number): Entity[] {
-        return this.queryRadiusExact(x, y, radius).filter(e =>
-            e.owner !== playerId && e.owner !== -1
-        );
+        return this.queryRadiusMatching(x, y, radius, e => e.owner !== playerId && e.owner !== -1);
     }
 
     /**
      * Query entities within radius by type.
      */
     queryRadiusByType(x: number, y: number, radius: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE'): Entity[] {
-        return this.queryRadiusExact(x, y, radius).filter(e => e.type === type);
+        return this.queryRadiusMatching(x, y, radius, e => e.type === type);
     }
 
     /**
-     * Find the nearest entity matching a predicate.
-     * Searches outward from the position.
+     * Exact-distance query that also applies a predicate in the same pass.
      */
-    findNearest(x: number, y: number, maxRadius: number, predicate: (e: Entity) => boolean): Entity | null {
-        const candidates = this.queryRadiusExact(x, y, maxRadius).filter(predicate);
+    private queryRadiusMatching(x: number, y: number, radius: number, predicate: (e: Entity) => boolean): Entity[] {
+        const result: Entity[] = [];
+        this.forEachCandidate(x, y, radius, e => {
+            const dx = e.pos.x - x;
+            const dy = e.pos.y - y;
+            const r = radius + e.radius;
+            if (dx * dx + dy * dy <= r * r && predicate(e)) result.push(e);
+        });
+        return result;
+    }
 
-        if (candidates.length === 0) return null;
-
+    /**
+     * Find the nearest entity matching a predicate (single pass, no intermediate arrays).
+     * Ties resolve to the first candidate in query order.
+     *
+     * `ignoredOwnersMask` (bits from ownerBit()) is a pruning hint: cells that only contain
+     * entities of those owners (plus neutrals) are skipped without looking at their entities.
+     * Only pass it when the predicate is guaranteed to reject those owners (and neutrals).
+     * The default (-1) disables pruning.
+     */
+    findNearest(
+        x: number,
+        y: number,
+        maxRadius: number,
+        predicate: (e: Entity) => boolean,
+        ignoredOwnersMask: number = -1
+    ): Entity | null {
         let nearest: Entity | null = null;
         let nearestDistSq = Infinity;
 
-        for (const entity of candidates) {
-            const dx = entity.pos.x - x;
-            const dy = entity.pos.y - y;
+        this.forEachCandidate(x, y, maxRadius, e => {
+            const dx = e.pos.x - x;
+            const dy = e.pos.y - y;
             const distSq = dx * dx + dy * dy;
-            if (distSq < nearestDistSq) {
-                nearestDistSq = distSq;
-                nearest = entity;
-            }
-        }
+            // Cheap rejects first: not closer than the best so far, or outside exact range.
+            if (distSq >= nearestDistSq) return;
+            const r = maxRadius + e.radius;
+            if (distSq > r * r) return;
+            if (!predicate(e)) return;
+            nearestDistSq = distSq;
+            nearest = e;
+        }, ignoredOwnersMask);
 
         return nearest;
     }
@@ -209,7 +275,14 @@ export class SpatialGrid {
      * Count entities in radius matching a predicate.
      */
     countInRadius(x: number, y: number, radius: number, predicate: (e: Entity) => boolean): number {
-        return this.queryRadiusExact(x, y, radius).filter(predicate).length;
+        let count = 0;
+        this.forEachCandidate(x, y, radius, e => {
+            const dx = e.pos.x - x;
+            const dy = e.pos.y - y;
+            const r = radius + e.radius;
+            if (dx * dx + dy * dy <= r * r && predicate(e)) count++;
+        });
+        return count;
     }
 }
 

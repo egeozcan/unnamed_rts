@@ -6,11 +6,34 @@ import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
 
+const TRAIL_BANDS = 6;
+const trailStyleCache = new Map<number, string>();
+
+/** rgba() white at `opacity`, quantised to 1% steps so the strings can be cached. */
+function trailStrokeStyle(opacity: number): string {
+    const key = Math.round(opacity * 100);
+    let style = trailStyleCache.get(key);
+    if (!style) {
+        style = `rgba(255, 255, 255, ${key / 100})`;
+        trailStyleCache.set(key, style);
+    }
+    return style;
+}
+
 export class Renderer {
     private ctx: CanvasRenderingContext2D;
     private canvas: HTMLCanvasElement;
     private readonly selectionSet = new Set<string>();
     private readonly screenCulledEntities: Entity[] = [];
+    private readonly passengerCountByTransport = new Map<string, number>();
+    private fogEdgeGradients: {
+        ctx: CanvasRenderingContext2D;
+        tileSize: number;
+        top: CanvasGradient;
+        bottom: CanvasGradient;
+        left: CanvasGradient;
+        right: CanvasGradient;
+    } | null = null;
     private readonly resourceEntities: Entity[] = [];
     private readonly rockEntities: Entity[] = [];
     private readonly wellEntities: Entity[] = [];
@@ -150,15 +173,27 @@ export class Renderer {
             }
         }
 
-        // Count current passengers per transport once per frame (transported units are hidden in carriers).
-        const passengerCountByTransport = new Map<string, number>();
-        for (const id in entities) {
-            const candidate = entities[id];
-            if (!isUnit(candidate) || candidate.dead) continue;
-            if (!isTransportedUnit(candidate)) continue;
-            const transportId = candidate.movement?.transportId;
-            if (!transportId) continue;
-            passengerCountByTransport.set(transportId, (passengerCountByTransport.get(transportId) ?? 0) + 1);
+        // Count current passengers per transport (transported units are hidden in carriers).
+        // PERFORMANCE: this is a whole-world scan, so only do it on frames where a transport is
+        // actually on screen (the map is reused between frames).
+        const passengerCountByTransport = this.passengerCountByTransport;
+        passengerCountByTransport.clear();
+        let transportVisible = false;
+        for (const entity of unitBuildingEntities) {
+            if (entity.type === 'UNIT' && getTransportCapacity(entity) > 0) {
+                transportVisible = true;
+                break;
+            }
+        }
+        if (transportVisible) {
+            for (const id in entities) {
+                const candidate = entities[id];
+                if (!isUnit(candidate) || candidate.dead) continue;
+                if (!isTransportedUnit(candidate)) continue;
+                const transportId = candidate.movement?.transportId;
+                if (!transportId) continue;
+                passengerCountByTransport.set(transportId, (passengerCountByTransport.get(transportId) ?? 0) + 1);
+            }
         }
 
         // Draw resources (no owner-specific colors)
@@ -779,22 +814,34 @@ export class Renderer {
 
     private drawProjectileTrail(proj: Projectile, camera: { x: number; y: number }, zoom: number) {
         const { trailPoints } = proj;
-        if (trailPoints.length < 2) return;
+        const n = trailPoints.length;
+        if (n < 2) return;
 
         const ctx = this.ctx;
+        ctx.lineWidth = 1 * zoom;
 
-        for (let i = 1; i < trailPoints.length; i++) {
-            const prev = this.worldToScreen(trailPoints[i - 1], camera, zoom);
-            const curr = this.worldToScreen(trailPoints[i], camera, zoom);
+        // PERFORMANCE: a trail used to be up to 29 separate strokes, each with its own freshly
+        // formatted rgba() string and two temporary screen-position objects. The fade is now
+        // quantised into a few opacity bands that are each stroked once as a connected path.
+        const bands = Math.min(TRAIL_BANDS, n - 1);
+        const segments = n - 1;
+        let i = 1;
+        for (let band = 0; band < bands; band++) {
+            // Segments [i, end) belong to this band
+            const end = band === bands - 1 ? n : 1 + Math.round(((band + 1) * segments) / bands);
+            if (end <= i) continue;
 
-            const opacity = (i / trailPoints.length) * 0.3;
-            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
-            ctx.lineWidth = 1 * zoom;
-
+            const mid = (i + end - 1) / 2;
+            ctx.strokeStyle = trailStrokeStyle((mid / n) * 0.3);
             ctx.beginPath();
-            ctx.moveTo(prev.x, prev.y);
-            ctx.lineTo(curr.x, curr.y);
+            const first = trailPoints[i - 1];
+            ctx.moveTo((first.x - camera.x) * zoom, (first.y - camera.y) * zoom);
+            for (let k = i; k < end; k++) {
+                const p = trailPoints[k];
+                ctx.lineTo((p.x - camera.x) * zoom, (p.y - camera.y) * zoom);
+            }
             ctx.stroke();
+            i = end;
         }
     }
 
@@ -1023,62 +1070,87 @@ export class Renderer {
         const endTileX = Math.min(gridW - 1, Math.floor((camera.x + canvasWidth / zoom) / TILE_SIZE));
         const endTileY = Math.min(gridH - 1, Math.floor((camera.y + canvasHeight / zoom) / TILE_SIZE));
 
-        // Draw solid black for unrevealed tiles
+        // Draw solid black for unrevealed tiles.
+        // PERFORMANCE: merge horizontal runs of unrevealed tiles into a single fillRect. At low zoom
+        // thousands of tiles are visible and one call per tile dominates the frame.
         ctx.fillStyle = '#000';
         for (let ty = startTileY; ty <= endTileY; ty++) {
-            for (let tx = startTileX; tx <= endTileX; tx++) {
-                if (fogGrid[ty * gridW + tx] === 0) {
-                    const screenX = (tx * TILE_SIZE - camera.x) * zoom;
-                    const screenY = (ty * TILE_SIZE - camera.y) * zoom;
-                    ctx.fillRect(screenX, screenY, tileScreenSize + 1, tileScreenSize + 1);
+            const rowOffset = ty * gridW;
+            const screenY = (ty * TILE_SIZE - camera.y) * zoom;
+            let tx = startTileX;
+            while (tx <= endTileX) {
+                if (fogGrid[rowOffset + tx] !== 0) {
+                    tx++;
+                    continue;
                 }
+                const runStart = tx;
+                while (tx <= endTileX && fogGrid[rowOffset + tx] === 0) tx++;
+                const screenX = (runStart * TILE_SIZE - camera.x) * zoom;
+                const runWidth = (tx - runStart) * tileScreenSize;
+                ctx.fillRect(screenX, screenY, runWidth + 1, tileScreenSize + 1);
             }
         }
 
-        // Edge smoothing — draw gradients at fog boundaries
+        // Edge smoothing — draw gradients at fog boundaries.
+        // PERFORMANCE: the four edge gradients are defined once in tile-local coordinates (and rebuilt
+        // only when the zoom changes) and each edge just translates to its tile, instead of
+        // allocating a gradient + colour stops per edge per frame.
         const halfTile = tileScreenSize / 2;
+        let gradients = this.fogEdgeGradients;
+        if (!gradients || gradients.tileSize !== tileScreenSize || gradients.ctx !== ctx) {
+            const make = (x0: number, y0: number, x1: number, y1: number) => {
+                const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+                grad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                return grad;
+            };
+            gradients = {
+                ctx,
+                tileSize: tileScreenSize,
+                top: make(0, 0, 0, halfTile),
+                bottom: make(0, tileScreenSize, 0, halfTile),
+                left: make(0, 0, halfTile, 0),
+                right: make(tileScreenSize, 0, halfTile, 0)
+            };
+            this.fogEdgeGradients = gradients;
+        }
+
+        ctx.save();
         for (let ty = startTileY; ty <= endTileY; ty++) {
             for (let tx = startTileX; tx <= endTileX; tx++) {
                 if (fogGrid[ty * gridW + tx] !== 1) continue; // Only process revealed tiles
 
+                const hasTop = ty > 0 && fogGrid[(ty - 1) * gridW + tx] === 0;
+                const hasBottom = ty < gridH - 1 && fogGrid[(ty + 1) * gridW + tx] === 0;
+                const hasLeft = tx > 0 && fogGrid[ty * gridW + (tx - 1)] === 0;
+                const hasRight = tx < gridW - 1 && fogGrid[ty * gridW + (tx + 1)] === 0;
+                if (!hasTop && !hasBottom && !hasLeft && !hasRight) continue;
+
                 const screenX = (tx * TILE_SIZE - camera.x) * zoom;
                 const screenY = (ty * TILE_SIZE - camera.y) * zoom;
+                ctx.translate(screenX, screenY);
 
-                // Check cardinal neighbors for unrevealed tiles
-                // Top
-                if (ty > 0 && fogGrid[(ty - 1) * gridW + tx] === 0) {
-                    const grad = ctx.createLinearGradient(screenX, screenY, screenX, screenY + halfTile);
-                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
-                    grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(screenX, screenY, tileScreenSize, halfTile);
+                if (hasTop) {
+                    ctx.fillStyle = gradients.top;
+                    ctx.fillRect(0, 0, tileScreenSize, halfTile);
                 }
-                // Bottom
-                if (ty < gridH - 1 && fogGrid[(ty + 1) * gridW + tx] === 0) {
-                    const grad = ctx.createLinearGradient(screenX, screenY + tileScreenSize, screenX, screenY + halfTile);
-                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
-                    grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(screenX, screenY + halfTile, tileScreenSize, halfTile);
+                if (hasBottom) {
+                    ctx.fillStyle = gradients.bottom;
+                    ctx.fillRect(0, halfTile, tileScreenSize, halfTile);
                 }
-                // Left
-                if (tx > 0 && fogGrid[ty * gridW + (tx - 1)] === 0) {
-                    const grad = ctx.createLinearGradient(screenX, screenY, screenX + halfTile, screenY);
-                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
-                    grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(screenX, screenY, halfTile, tileScreenSize);
+                if (hasLeft) {
+                    ctx.fillStyle = gradients.left;
+                    ctx.fillRect(0, 0, halfTile, tileScreenSize);
                 }
-                // Right
-                if (tx < gridW - 1 && fogGrid[ty * gridW + (tx + 1)] === 0) {
-                    const grad = ctx.createLinearGradient(screenX + tileScreenSize, screenY, screenX + halfTile, screenY);
-                    grad.addColorStop(0, 'rgba(0,0,0,0.7)');
-                    grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(screenX + halfTile, screenY, halfTile, tileScreenSize);
+                if (hasRight) {
+                    ctx.fillStyle = gradients.right;
+                    ctx.fillRect(halfTile, 0, halfTile, tileScreenSize);
                 }
+
+                ctx.translate(-screenX, -screenY);
             }
         }
+        ctx.restore();
     }
 
     private drawTooltip(

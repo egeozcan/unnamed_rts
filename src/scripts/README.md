@@ -100,3 +100,18 @@ npm run manipulate-state -- --input saves/game.json --remove-unit-further base_s
 ```bash
 npm run manipulate-state -- --input saves/game.json --list-units-near unit_555,100
 ```
+
+## Simulation Profiling Harness
+
+Per-subsystem timing of a seeded AI-vs-AI match (AI decision time, action application time, tick time, worst tick),
+plus a state fingerprint so an optimization can be checked for bit-identical simulation results:
+
+```bash
+npm run perf:profile -- --ticks 20000 --map-size large --headless 0
+# Stress test: add 100 extra combat units (+ harvesters) per player
+npm run perf:profile -- --ticks 2500 --map-size large --extra-units 100
+```
+
+For a V8 CPU profile, run with `NODE_OPTIONS="--cpu-prof --cpu-prof-dir=/some/dir"` and open the resulting
+`.cpuprofile` in Chrome DevTools. If two builds print the same `fingerprint` for the same arguments, the simulation
+outcome is identical, so any timing difference is pure performance. See `docs/performance-review.md`.

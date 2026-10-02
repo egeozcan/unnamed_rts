@@ -2,6 +2,8 @@ import { RULES } from '../data/schemas/index.js';
 import { GameState, Entity, EntityId, Vector, AttackStance, UnitEntity } from '../engine/types.js';
 import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
+import { createEntityCache } from '../engine/perf.js';
+import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
 import { getTransportPassengers, isGarrisonableTransport, isTransportedUnit } from '../engine/transport.js';
 
@@ -338,13 +340,17 @@ export function updateButtons(
 ) {
     const owner = playerId;
 
+    // Index the entities once: canBuild() on the raw record rescans every entity for each of
+    // the ~50 buttons (and a second time for maxCount items).
+    const entityCache = createEntityCache(entities);
+
     // Update prerequisites using canBuild from reducer
     // Buildings
     for (const k of Object.keys(RULES.buildings)) {
         const el = document.getElementById('btn-' + k);
         if (!el) continue;
 
-        const shouldBeDisabled = !canBuild(k, 'building', owner, entities);
+        const shouldBeDisabled = !canBuild(k, 'building', owner, entityCache);
         const isDisabled = el.classList.contains('disabled');
         if (shouldBeDisabled !== isDisabled) {
             el.classList.toggle('disabled', shouldBeDisabled);
@@ -360,7 +366,7 @@ export function updateButtons(
         const category = unitData.type === 'infantry' ? 'infantry' :
             unitData.type === 'air' ? 'air' : 'vehicle';
 
-        const shouldBeDisabled = !canBuild(k, category, owner, entities);
+        const shouldBeDisabled = !canBuild(k, category, owner, entityCache);
         const isDisabled = el.classList.contains('disabled');
         if (shouldBeDisabled !== isDisabled) {
             el.classList.toggle('disabled', shouldBeDisabled);
@@ -566,15 +572,33 @@ export function updateRepairModeUI(state: GameState) {
     }
 }
 
+// These HUD readouts are refreshed every frame, but their values rarely change. Writing
+// innerText replaces the element's text node (and can trigger layout), so remember the
+// last value written per element and skip redundant DOM writes.
+const lastWrittenText = new WeakMap<HTMLElement, string>();
+
+function hasChanged(el: HTMLElement, key: string): boolean {
+    if (lastWrittenText.get(el) === key) return false;
+    lastWrittenText.set(el, key);
+    return true;
+}
+
+function setTextIfChanged(el: HTMLElement, text: string): boolean {
+    if (!hasChanged(el, text)) return false;
+    el.innerText = text;
+    return true;
+}
+
 export function updateMoney(amount: number) {
     const el = document.getElementById('money-display');
-    if (el) el.innerText = `$ ${Math.floor(amount)}`;
+    if (el) setTextIfChanged(el, `$ ${Math.floor(amount)}`);
 }
 
 export function updatePower(out: number, inPower: number) {
     const el = document.getElementById('power-display');
     if (el) {
-        el.innerText = `Power: ${out} / ${inPower}`;
+        // Only touch classes / the warning banner when the text (and so the state) changed
+        if (!setTextIfChanged(el, `Power: ${out} / ${inPower}`)) return;
         if (out < inPower) {
             el.classList.add('low-power');
             document.getElementById('low-power-warning')?.classList.add('visible');
@@ -588,6 +612,8 @@ export function updatePower(out: number, inPower: number) {
 export function setStatusMessage(msg: string, type: 'info' | 'error' = 'info') {
     const el = document.getElementById('status-msg');
     if (el) {
+        // Called every frame from the game loop with the same message: skip no-op writes
+        if (!hasChanged(el, type + ':' + msg)) return;
         el.innerText = msg;
         el.style.color = type === 'error' ? '#f44' : '#fff';
     }
@@ -1417,27 +1443,39 @@ function getSelectionInfo(state: GameState, playerId: number): {
  * Find entity under mouse cursor
  */
 function getEntityAtPosition(entities: Record<EntityId, Entity>, wx: number, wy: number): Entity | null {
-    for (const id in entities) {
-        const entity = entities[id];
-        if (entity.dead) continue;
-        if (entity.type === 'UNIT' && isTransportedUnit(entity)) continue;
+    // This runs every frame while units are selected. Look only at entities near the cursor (via the
+    // spatial grid) instead of scanning every entity. The grid is rebuilt each tick, so the generous
+    // margin covers movement since then and the live entity record is used for the actual hit test.
+    let match: Entity | null = null;
+    let matches = 0;
+    for (const candidate of getSpatialGrid().queryRadius(wx, wy, 60)) {
+        const entity = entities[candidate.id];
+        if (!entity || !isHoverHit(entity, wx, wy)) continue;
+        match = entity;
+        if (++matches > 1) break;
+    }
+    if (matches <= 1) return match;
 
-        // For buildings, use rectangular bounds
-        if (entity.type === 'BUILDING') {
-            const dx = Math.abs(wx - entity.pos.x);
-            const dy = Math.abs(wy - entity.pos.y);
-            if (dx <= entity.w / 2 && dy <= entity.h / 2) {
-                return entity;
-            }
-        } else {
-            // For other entities, use radius
-            const dist = Math.sqrt((wx - entity.pos.x) ** 2 + (wy - entity.pos.y) ** 2);
-            if (dist <= entity.radius + 5) {
-                return entity;
-            }
-        }
+    // Overlapping entities: keep the original "first in entity order wins" tie-break.
+    for (const id in entities) {
+        if (isHoverHit(entities[id], wx, wy)) return entities[id];
     }
     return null;
+}
+
+function isHoverHit(entity: Entity, wx: number, wy: number): boolean {
+    if (entity.dead) return false;
+    if (entity.type === 'UNIT' && isTransportedUnit(entity)) return false;
+
+    if (entity.type === 'BUILDING') {
+        // For buildings, use rectangular bounds
+        const dx = Math.abs(wx - entity.pos.x);
+        const dy = Math.abs(wy - entity.pos.y);
+        return dx <= entity.w / 2 && dy <= entity.h / 2;
+    }
+    // For other entities, use radius
+    const dist = Math.sqrt((wx - entity.pos.x) ** 2 + (wy - entity.pos.y) ** 2);
+    return dist <= entity.radius + 5;
 }
 
 /**
@@ -1481,19 +1519,25 @@ export function updateActionCursor(
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
 
-    // Helper to clear all action cursors
-    const clearCursors = () => {
+    // Helper to set the active cursor class. This runs every frame, so only touch classList when the
+    // class actually needs to change (each add/remove is a style invalidation on the canvas).
+    const applyCursorClass = (active: string | null) => {
         for (const cls of ACTION_CURSOR_CLASSES) {
-            canvas.classList.remove(cls);
+            if (cls !== active && canvas.classList.contains(cls)) {
+                canvas.classList.remove(cls);
+            }
+        }
+        if (active && !canvas.classList.contains(active)) {
+            canvas.classList.add(active);
         }
     };
 
+    // Helper to clear all action cursors
+    const clearCursors = () => applyCursorClass(null);
+
     // Helper to set a specific cursor
     const setCursor = (cursor: ActionCursor) => {
-        clearCursors();
-        if (cursor) {
-            canvas.classList.add(`cursor-${cursor}`);
-        }
+        applyCursorClass(cursor ? `cursor-${cursor}` : null);
     };
 
     // Don't show action cursor if in special modes

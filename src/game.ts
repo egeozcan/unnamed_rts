@@ -1,6 +1,7 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
 import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, PLAYER_COLORS, Action, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
 import { initPathfindingWorker } from './engine/utils.js';
+import { rebuildSpatialGrid } from './engine/spatial.js';
 
 declare global {
     interface Window {
@@ -49,10 +50,16 @@ if (import.meta.hot?.data?.gameState) {
 // OPTIMIZATION: Cache power calculations to avoid recalculating every frame
 let cachedPower: { out: number; in: number } = { out: 0, in: 0 };
 let cachedPowerTick: number = -1;
+let cachedPowerPlayer: number | null = null;
+const POWER_RECALC_TICKS = 5;
 
 // Frame rate limiting
 const TARGET_FPS = 60;
 const FRAME_TIME = 1000 / TARGET_FPS;
+const FRAME_TIME_TOLERANCE = 1;
+// Fast-forward speeds run several sim ticks per frame; cap the time spent so a heavy late-game
+// match slows the sim down instead of freezing rendering and input (the first tick always runs).
+const SIM_FRAME_BUDGET_MS = 30;
 const TICKS_PER_GAME_SPEED: Record<GameSpeed, number> = {
     1: 1,
     2: 2,
@@ -633,6 +640,8 @@ function startGameWithConfig(config: SkirmishConfig) {
     setLoadGameStateCallback((loadedState) => {
         // Reconstruct Vector objects from plain {x, y} objects
         currentState = reconstructVectors(loadedState);
+        // Hover/render queries read the global spatial grid, which is otherwise only rebuilt on tick
+        rebuildSpatialGrid(currentState.entities);
         updateButtonsUI();
     });
 
@@ -1232,12 +1241,14 @@ function updateButtonsUI() {
 
 function gameLoop(timestamp: number = 0) {
     // Frame rate limiting - skip if not enough time has passed
+    // rAF timestamps on a 60Hz display jitter around 16.67ms; without a tolerance roughly half of
+    // the frames land just under FRAME_TIME and get skipped, producing 33ms hitches.
     const elapsed = timestamp - lastFrameTime;
-    if (elapsed < FRAME_TIME) {
+    if (elapsed < FRAME_TIME - FRAME_TIME_TOLERANCE) {
         animationFrameId = requestAnimationFrame(gameLoop);
         return;
     }
-    lastFrameTime = timestamp - (elapsed % FRAME_TIME);
+    lastFrameTime = timestamp - (elapsed >= FRAME_TIME ? elapsed % FRAME_TIME : 0);
 
     let skipSim = !currentState.running;
     if (skipSim) {
@@ -1263,6 +1274,7 @@ function gameLoop(timestamp: number = 0) {
         const ticksToRun = TICKS_PER_GAME_SPEED[gameSpeed];
 
         for (let t = 0; t < ticksToRun; t++) {
+            if (t > 0 && performance.now() - simStartMs > SIM_FRAME_BUDGET_MS) break;
             currentState = applyAiActionsForTick(currentState, currentState.tick + t);
 
             currentState = update(currentState, { type: 'TICK' });
@@ -1279,9 +1291,11 @@ function gameLoop(timestamp: number = 0) {
 
     // OPTIMIZATION: Cache power calculation - only recalculate every 5 ticks or when tick changes
     // Power only changes when buildings are built/destroyed, so no need to calculate every frame
-    if (cachedPowerTick !== currentState.tick) {
+    if (cachedPowerTick < 0 || cachedPowerPlayer !== displayPlayerId ||
+        currentState.tick < cachedPowerTick || currentState.tick - cachedPowerTick >= POWER_RECALC_TICKS) {
         cachedPower = calculatePower(displayPlayerId, currentState.entities);
         cachedPowerTick = currentState.tick;
+        cachedPowerPlayer = displayPlayerId;
     }
 
     if (displayPlayer) {
@@ -1426,6 +1440,8 @@ function gameLoop(timestamp: number = 0) {
         minTickDelta: DEBUG_UI_MIN_TICK_DELTA,
         minTimeDeltaMs: DEBUG_UI_MIN_TIME_DELTA_MS
     }))) {
+        // The summary sorts four 300-sample windows, so only build it when the debug UI refreshes
+        latestFrameTimingSummary = buildFrameTimingSummary();
         updateDebugUI(currentState, latestFrameTimingSummary);
         lastDebugUiTick = currentState.tick;
         lastDebugUiTimeMs = timestamp;
@@ -1441,7 +1457,6 @@ function gameLoop(timestamp: number = 0) {
     recordRollingTiming(renderTimingWindow, renderMs);
     recordRollingTiming(uiTimingWindow, uiMs);
     recordRollingTiming(frameTimingWindow, frameMs);
-    latestFrameTimingSummary = buildFrameTimingSummary();
 
     animationFrameId = requestAnimationFrame(gameLoop);
 }

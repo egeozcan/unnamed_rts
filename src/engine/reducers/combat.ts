@@ -3,7 +3,7 @@ import {
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
-import { getSpatialGrid } from '../spatial';
+import { getSpatialGrid, ownerBit } from '../spatial';
 import { moveToward } from './movement';
 import { isAlly, isEnemy } from '../teams';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
@@ -285,12 +285,11 @@ function checkAndScatterForAlly(
         return null;
     }
 
-    // Find nearby moving allies
-    const nearbyEntities = spatialGrid.queryRadius(unit.pos.x, unit.pos.y, 50);
-
-    for (const other of nearbyEntities) {
-        if (other.id === unit.id || other.dead || other.type !== 'UNIT') continue;
-        if (other.owner !== unit.owner) continue; // Only scatter for allies
+    // Find nearby moving allies (visitor form avoids allocating a candidate array per idle unit per tick)
+    let scatter: CombatUnit | null = null;
+    spatialGrid.forEachInRadius(unit.pos.x, unit.pos.y, 50, (other) => {
+        if (other.id === unit.id || other.dead || other.type !== 'UNIT') return;
+        if (other.owner !== unit.owner) return; // Only scatter for allies
 
         // Check if other unit is trying to move and we're in their path
         const otherUnit = other as CombatUnit;
@@ -298,19 +297,19 @@ function checkAndScatterForAlly(
 
         // Only consider units that have an explicit move target (not combat targets)
         // This prevents scattering for units that are just attacking nearby targets
-        if (!otherMoveTarget) continue;
+        if (!otherMoveTarget) return;
 
         // CRITICAL: Only scatter if the moving unit is actually STUCK
         // This prevents unnecessary scattering when there's room to go around
         const stuckTimer = otherUnit.movement.stuckTimer || 0;
-        if (stuckTimer < 15) continue; // Not stuck enough to warrant scatter
+        if (stuckTimer < 15) return; // Not stuck enough to warrant scatter
 
         // Check if we're blocking their path
         const dirToTarget = otherMoveTarget.sub(otherUnit.pos).norm();
         const toUs = unit.pos.sub(otherUnit.pos);
         const distToUs = toUs.mag();
 
-        if (distToUs > 45) continue; // Too far to be blocking
+        if (distToUs > 45) return; // Too far to be blocking
 
         // Project our position onto their movement line
         const projDist = toUs.x * dirToTarget.x + toUs.y * dirToTarget.y;
@@ -328,7 +327,7 @@ function checkAndScatterForAlly(
                 const scatterDist = 35 + Math.random() * 15; // Random scatter distance
                 const scatterTarget = unit.pos.add(scatterDir.scale(scatterDist));
 
-                return {
+                scatter = {
                     ...unit,
                     movement: {
                         ...unit.movement,
@@ -337,11 +336,12 @@ function checkAndScatterForAlly(
                         pathIdx: 0
                     }
                 };
+                return false; // first blocking ally wins
             }
         }
-    }
+    });
 
-    return null;
+    return scatter;
 }
 
 function isTargetStillValidForUnit(
@@ -411,8 +411,16 @@ function findCombatTarget(
     const weaponType = data.weaponType || 'bullet';
     const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
 
+    const generic = !isHealer && !isEngineer && !isHijacker;
+
     const predicate = (other: Entity) => {
         if (other.dead || other.owner === -1) return false;
+
+        // Cheap relationship check first. For ordinary attackers (the vast majority of
+        // candidates are friendly units) this rejects before any rules lookup happens.
+        const targetIsEnemy = state ? isEnemy(state, unit.owner, other.owner) : unit.owner !== other.owner;
+        if (generic && !targetIsEnemy) return false;
+
         if (other.type === 'UNIT' && isTransportedUnit(other)) return false;
 
         // Check weapon targeting capabilities (air vs ground)
@@ -421,7 +429,6 @@ function findCombatTarget(
         if (isTargetAir && !targeting.canTargetAir) return false;
         if (!isTargetAir && !targeting.canTargetGround) return false;
 
-        const targetIsEnemy = state ? isEnemy(state, unit.owner, other.owner) : unit.owner !== other.owner;
         const targetIsAlly = state ? isAlly(state, unit.owner, other.owner) : unit.owner === other.owner;
 
         if (isHealer) {
@@ -446,7 +453,23 @@ function findCombatTarget(
     };
 
     const searchRadius = Math.max(range, 200);
-    const found = spatialGrid.findNearest(unit.pos.x, unit.pos.y, searchRadius, predicate);
+
+    // Ordinary attackers can only ever pick enemies, so grid cells that hold nothing but
+    // allied (or neutral) entities are skipped outright instead of testing every unit in them.
+    // (Owner ids >= 31 share a mask bit, so pruning is disabled for them to stay exact.)
+    let alliedMask = -1;
+    if (generic && unit.owner < 31) {
+        alliedMask = ownerBit(unit.owner);
+        if (state) {
+            for (const pidStr in state.players) {
+                const pid = Number(pidStr);
+                if (!isAlly(state, unit.owner, pid)) continue;
+                if (pid >= 31) { alliedMask = -1; break; }
+                alliedMask |= ownerBit(pid);
+            }
+        }
+    }
+    const found = spatialGrid.findNearest(unit.pos.x, unit.pos.y, searchRadius, predicate, alliedMask);
 
     if (found && found.pos.dist(unit.pos) <= range) {
         return found.id;
