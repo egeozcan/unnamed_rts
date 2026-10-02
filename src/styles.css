@@ -12,6 +12,7 @@ body {
     display: flex;
     height: 100vh;
     width: 100vw;
+    position: relative;
 }
 
 canvas#gameCanvas {
@@ -20,6 +21,21 @@ canvas#gameCanvas {
     touch-action: none;
     display: block;
     flex: 1;
+}
+
+/* 3D view: the WebGL canvas sits behind the 2D canvas, which becomes a transparent overlay
+   (HP bars, selection, tooltips) and keeps receiving all input. */
+canvas#gameCanvas3d {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: -1;
+    pointer-events: none;
+    display: block;
+}
+
+canvas#gameCanvas.overlay-3d {
+    background: transparent;
 }
 
 /* Sidebar */

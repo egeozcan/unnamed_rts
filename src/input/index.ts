@@ -65,6 +65,7 @@ let onToggleAttackMove: (() => void) | null = null;
 let onUngarrison: (() => void) | null = null;
 let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
 let onTogglePause: (() => void) | null = null;
+let onToggleGraphics: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
@@ -85,6 +86,7 @@ export function initInput(
         onUngarrison?: () => void;
         onDoubleClick?: (wx: number, wy: number) => void;
         onTogglePause?: () => void;
+        onToggleGraphics?: () => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -103,6 +105,7 @@ export function initInput(
     onUngarrison = callbacks.onUngarrison || null;
     onDoubleClick = callbacks.onDoubleClick || null;
     onTogglePause = callbacks.onTogglePause || null;
+    onToggleGraphics = callbacks.onToggleGraphics || null;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -195,6 +198,10 @@ function setupEventListeners() {
         // Ungarrison selected transports
         if (e.key === 'u' || e.key === 'U') {
             onUngarrison?.();
+        }
+        // Switch between the 3D and classic 2D view
+        if (e.key === 'v' || e.key === 'V') {
+            onToggleGraphics?.();
         }
         // Pause game
         if (e.key === ' ' || e.key === 'p' || e.key === 'P') {

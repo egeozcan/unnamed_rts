@@ -217,6 +217,30 @@ function setGameSpeed(speed: GameSpeed) {
     updateSpeedIndicator();
 }
 
+/** Switch between the 3D and classic 2D view (purely visual - the simulation is unaffected). */
+function toggleGraphicsMode() {
+    const mode = renderer.toggleGraphicsMode();
+    syncGraphicsModeSelect();
+    currentState = {
+        ...currentState,
+        notification: { text: mode === '3d' ? '3D view (V to switch)' : 'Classic 2D view (V to switch)', type: 'info', tick: currentState.tick }
+    };
+}
+
+function syncGraphicsModeSelect() {
+    const select = document.getElementById('graphics-mode') as HTMLSelectElement | null;
+    if (select) select.value = renderer.getGraphicsMode();
+}
+
+function setupGraphicsModeSelect() {
+    const select = document.getElementById('graphics-mode') as HTMLSelectElement | null;
+    if (!select) return;
+    syncGraphicsModeSelect();
+    select.addEventListener('change', () => {
+        renderer.setGraphicsMode(select.value === '2d' ? '2d' : '3d');
+    });
+}
+
 function updateSpeedIndicator() {
     const indicator = document.getElementById('speed-indicator');
 
@@ -410,6 +434,7 @@ populateAiImplementationSelects();
 restoreSkirmishMenuSettings();
 setupSkirmishUI();
 setupSkirmishPersistence();
+setupGraphicsModeSelect();
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
 function reconstructVectors(state: GameState): GameState {
@@ -767,6 +792,7 @@ function startGameWithConfig(config: SkirmishConfig) {
             });
             updateButtonsUI();
         },
+        onToggleGraphics: toggleGraphicsMode,
         onTogglePause: () => {
             if (currentState.mode === 'paused') {
                 // Resume
@@ -1575,6 +1601,7 @@ if (import.meta.hot) {
                     });
                     updateButtonsUI();
                 },
+                onToggleGraphics: toggleGraphicsMode,
                 onTogglePause: () => {
                     if (currentState.mode === 'paused') {
                         // Resume
@@ -1635,6 +1662,9 @@ if (import.meta.hot) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
+
+        // The next module instance creates its own renderer (and WebGL context)
+        renderer.dispose();
 
         // Only save if game is running (not in menu)
         if (currentState.mode !== 'menu') {

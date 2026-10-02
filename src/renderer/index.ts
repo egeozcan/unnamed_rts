@@ -5,6 +5,9 @@ import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
+import type { Scene3D, PlacementGhost } from './three/scene.js';
+import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
+import { GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
 
 const TRAIL_BANDS = 6;
 const trailStyleCache = new Map<number, string>();
@@ -40,12 +43,85 @@ export class Renderer {
     private readonly unitBuildingEntities: Entity[] = [];
     private readonly primaryBuildingIds = new Set<string>();
 
+    // 3D view: a WebGL scene drawn behind this canvas, which then only draws the overlay
+    // (HP bars, selection, tooltips...). three.js is loaded lazily so 2D mode never pays for it.
+    private graphicsMode: GraphicsMode;
+    private scene3d: Scene3D | null = null;
+    private scene3dLoading = false;
+    private scene3dFailed = false;
+    private disposed = false;
+    private readonly onWindowResize = () => this.resize();
+
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d')!;
         this.resize();
-        window.addEventListener('resize', () => this.resize());
+        window.addEventListener('resize', this.onWindowResize);
         initGraphics();
+        this.graphicsMode = loadGraphicsMode();
+        if (this.graphicsMode === '3d') this.ensureScene3D();
+    }
+
+    getGraphicsMode(): GraphicsMode {
+        return this.graphicsMode;
+    }
+
+    setGraphicsMode(mode: GraphicsMode): void {
+        this.graphicsMode = mode;
+        saveGraphicsMode(mode);
+        if (mode === '3d') this.ensureScene3D();
+        this.applyGraphicsModeToDom();
+    }
+
+    toggleGraphicsMode(): GraphicsMode {
+        this.setGraphicsMode(this.graphicsMode === '3d' ? '2d' : '3d');
+        return this.graphicsMode;
+    }
+
+    dispose(): void {
+        this.disposed = true;
+        window.removeEventListener('resize', this.onWindowResize);
+        this.scene3d?.dispose();
+        this.scene3d = null;
+        this.canvas.classList.remove('overlay-3d');
+    }
+
+    private is3DActive(): boolean {
+        return this.graphicsMode === '3d' && this.scene3d !== null;
+    }
+
+    private ensureScene3D(): void {
+        if (this.scene3d || this.scene3dLoading || this.scene3dFailed) return;
+        const container = this.canvas.parentElement;
+        if (!container || !isWebGLAvailable()) {
+            console.warn('[Renderer] WebGL unavailable - using the 2D view');
+            this.scene3dFailed = true;
+            return;
+        }
+        this.scene3dLoading = true;
+        import('./three/scene.js')
+            .then(({ Scene3D }) => {
+                // The renderer can be disposed (hot reload) while three.js is still loading
+                if (this.disposed) return;
+                // A stale canvas can survive a hot reload
+                document.getElementById('gameCanvas3d')?.remove();
+                this.scene3d = new Scene3D(container, this.canvas);
+                this.scene3d.setSize(this.canvas.width, this.canvas.height);
+                this.applyGraphicsModeToDom();
+            })
+            .catch(error => {
+                console.error('[Renderer] Failed to start the 3D view - using 2D', error);
+                this.scene3dFailed = true;
+            })
+            .finally(() => {
+                this.scene3dLoading = false;
+            });
+    }
+
+    private applyGraphicsModeToDom(): void {
+        const active = this.is3DActive();
+        this.canvas.classList.toggle('overlay-3d', active);
+        if (this.scene3d) this.scene3d.canvas.style.display = active ? '' : 'none';
     }
 
     resize() {
@@ -61,6 +137,7 @@ export class Renderer {
             this.canvas.width = window.innerWidth - 300;
         }
         this.canvas.height = window.innerHeight;
+        this.scene3d?.setSize(this.canvas.width, this.canvas.height);
     }
 
     getSize(): { width: number; height: number } {
@@ -76,9 +153,16 @@ export class Renderer {
             this.selectionSet.add(selectedId);
         }
 
+        // In 3D mode the world is drawn by the WebGL canvas underneath; this canvas only carries the overlay
+        const use3D = this.is3DActive();
+
         // Clear
-        ctx.fillStyle = '#2d3322';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (use3D) {
+            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            ctx.fillStyle = '#2d3322';
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
 
         // Apply screen shake offset to camera
         let effectiveCameraX = camera.x;
@@ -196,24 +280,51 @@ export class Renderer {
             }
         }
 
-        // Draw resources (no owner-specific colors)
-        for (const entity of resourceEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
-        }
+        if (use3D) {
+            let placement: PlacementGhost | null = null;
+            if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
+                const x = mousePos.x / zoom + effectiveCamera.x;
+                const y = mousePos.y / zoom + effectiveCamera.y;
+                placement = { key: placingBuilding, x, y, valid: this.isValidBuildLocation(x, y, localPlayerId ?? 0, entities) };
+            }
+            this.scene3d!.render({
+                state,
+                entities: sortedEntities,
+                camera: effectiveCamera,
+                zoom,
+                width: canvasWidth,
+                height: canvasHeight,
+                fogGrid,
+                localPlayerId,
+                placement
+            });
 
-        // Draw rocks (no owner-specific colors)
-        for (const entity of rockEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
-        }
+            for (const entity of resourceEntities) {
+                this.drawEntityOverlay3D(entity, effectiveCamera, zoom, false, state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
+            for (const entity of unitBuildingEntities) {
+                this.drawEntityOverlay3D(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
+        } else {
+            // Draw resources (no owner-specific colors)
+            for (const entity of resourceEntities) {
+                this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
 
-        // Draw wells (no owner-specific colors)
-        for (const entity of wellEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
-        }
+            // Draw rocks (no owner-specific colors)
+            for (const entity of rockEntities) {
+                this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
 
-        // Draw units and buildings (batched by owner for color caching)
-        for (const entity of unitBuildingEntities) {
-            this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            // Draw wells (no owner-specific colors)
+            for (const entity of wellEntities) {
+                this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
+
+            // Draw units and buildings (batched by owner for color caching)
+            for (const entity of unitBuildingEntities) {
+                this.drawEntity(entity, effectiveCamera, zoom, this.selectionSet.has(entity.id), state.mode, tick, localPlayerId, entities, passengerCountByTransport);
+            }
         }
 
         // Draw rally points for selected production buildings (barracks/factory only)
@@ -240,24 +351,34 @@ export class Renderer {
         for (const buildingId of primaryBuildingIds) {
             const entity = entities[buildingId];
             if (entity && entity.type === 'BUILDING' && !entity.dead) {
-                this.drawPrimaryIndicator(entity, effectiveCamera, zoom);
+                const lift = use3D ? heightToScreenLift(getModelHeight(entity), zoom) : 0;
+                this.drawPrimaryIndicator(entity, effectiveCamera, zoom, lift);
             }
         }
 
-        // Draw projectiles
-        for (const proj of projectiles) {
-            if (proj.dead) continue;
-            this.drawProjectile(proj, effectiveCamera, zoom, entities);
-        }
+        if (use3D) {
+            // Projectiles, explosions and fog live in the 3D scene; only floating text stays 2D
+            for (const particle of particles) {
+                if (!particle.text) continue;
+                if (fogGrid && fogGrid[Math.floor(particle.pos.y / TILE_SIZE) * fogGridW + Math.floor(particle.pos.x / TILE_SIZE)] === 0) continue;
+                this.drawParticle(particle, effectiveCamera, zoom);
+            }
+        } else {
+            // Draw projectiles
+            for (const proj of projectiles) {
+                if (proj.dead) continue;
+                this.drawProjectile(proj, effectiveCamera, zoom, entities);
+            }
 
-        // Draw particles
-        for (const particle of particles) {
-            this.drawParticle(particle, effectiveCamera, zoom);
-        }
+            // Draw particles
+            for (const particle of particles) {
+                this.drawParticle(particle, effectiveCamera, zoom);
+            }
 
-        // Draw fog of war overlay
-        if (fogGrid) {
-            this.drawFogOverlay(ctx, fogGrid, fogGridW, effectiveCamera, zoom, canvasWidth, canvasHeight, state.config.height);
+            // Draw fog of war overlay
+            if (fogGrid) {
+                this.drawFogOverlay(ctx, fogGrid, fogGridW, effectiveCamera, zoom, canvasWidth, canvasHeight, state.config.height);
+            }
         }
 
         // Draw command indicator (move/attack target)
@@ -267,7 +388,7 @@ export class Renderer {
 
         // Building placement preview
         if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
-            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, entities, localPlayerId);
+            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, entities, localPlayerId, use3D);
         }
 
 
@@ -432,37 +553,12 @@ export class Renderer {
 
             // HP bar (Skipped for resources)
             if (entity.type !== 'RESOURCE' && (entity.hp < entity.maxHp || isSelected)) {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(-15, -entity.radius - 12, 30, 4);
-                ctx.fillStyle = '#0f0';
-                ctx.fillRect(-15, -entity.radius - 12, 30 * Math.max(0, entity.hp / entity.maxHp), 4);
+                this.drawHpBar(entity);
             }
         }
 
         // Draw repair icon for buildings being repaired (flashing)
-        if (isBuilding(entity) && entity.building.isRepairing) {
-            const showIcon = (tick % 30) < 20; // Flash on for 20 ticks, off for 10
-            if (showIcon) {
-                ctx.save();
-                // Draw wrench icon above the building
-                ctx.fillStyle = '#00ff00';
-                ctx.strokeStyle = '#004400';
-                ctx.lineWidth = 2;
-
-                // Simple wrench shape
-                const iconY = -entity.radius - 25;
-                ctx.beginPath();
-                ctx.arc(0, iconY, 8, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-
-                // Wrench handle
-                ctx.fillRect(-2, iconY + 6, 4, 12);
-                ctx.strokeRect(-2, iconY + 6, 4, 12);
-
-                ctx.restore();
-            }
-        }
+        this.drawRepairIcon(entity, tick);
 
         // Draw entity
         if (entity.type === 'RESOURCE') {
@@ -477,13 +573,7 @@ export class Renderer {
             }
 
             // Resource amount bar
-            if (entity.hp < entity.maxHp) {
-                const ratio = entity.hp / entity.maxHp;
-                ctx.fillStyle = '#333';
-                ctx.fillRect(-12, -15, 24, 4);
-                ctx.fillStyle = '#ffdf00';
-                ctx.fillRect(-12, -15, 24 * ratio, 4);
-            }
+            this.drawResourceBar(entity);
         } else if (entity.type === 'ROCK') {
             // Rocks are impassable obstacles - draw as brown/gray shapes
             ctx.fillStyle = '#665544';
@@ -586,38 +676,18 @@ export class Renderer {
                 const capacity = getTransportCapacity(entity);
                 const passengerCount = capacity > 0 ? (passengerCountByTransport.get(entity.id) ?? 0) : 0;
                 if (passengerCount > 0) {
-                    const badgeX = entity.w / 2 - 4;
-                    const badgeY = -entity.h / 2 + 4;
-                    const badgeText = passengerCount > 9 ? '9+' : String(passengerCount);
-
                     ctx.save();
                     ctx.rotate(-rotation); // Keep badge upright while unit body rotates.
-                    ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 1.5;
-                    ctx.beginPath();
-                    ctx.arc(badgeX, badgeY, 8, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    ctx.fillStyle = '#4cffd2';
-                    ctx.font = 'bold 10px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(badgeText, badgeX, badgeY + 0.5);
+                    this.drawPassengerBadge(entity, passengerCount);
                     ctx.restore();
                 }
             }
 
             // Air-Force Command: draw docked harrier indicators
             if (entity.type === 'BUILDING' && entity.key === 'airforce_command' && isBuilding(entity) && entity.airBase) {
-                const slotPositions = [
-                    { x: -30, y: -20 }, { x: 0, y: -20 }, { x: 30, y: -20 },
-                    { x: -30, y: 10 }, { x: 0, y: 10 }, { x: 30, y: 10 }
-                ];
                 for (let i = 0; i < entity.airBase.slots.length; i++) {
                     const slotId = entity.airBase.slots[i];
-                    const pos = slotPositions[i] || { x: 0, y: 0 };
+                    const pos = AIRBASE_SLOT_OFFSETS[i] || { x: 0, y: 0 };
                     if (slotId) {
                         const harrier = allEntities[slotId];
                         const isReloading = harrier && isAirUnit(harrier) && harrier.airUnit.ammo < harrier.airUnit.maxAmmo;
@@ -708,6 +778,154 @@ export class Renderer {
             }
         }
 
+        ctx.restore();
+    }
+
+    /**
+     * 3D mode counterpart of drawEntity: the model itself is in the WebGL scene, so this only draws the
+     * 2D decorations. Ground markers (selection ring, aura radius) stay on the ground; bars and badges
+     * are lifted by the model's on-screen height so they sit above it.
+     */
+    private drawEntityOverlay3D(entity: Entity, camera: { x: number; y: number }, zoom: number, isSelected: boolean, mode: string, tick: number, localPlayerId: number | null, allEntities: Record<string, Entity>, passengerCountByTransport: Map<string, number>) {
+        if (isAirUnit(entity) && entity.airUnit.state === 'docked') return;
+
+        const ctx = this.ctx;
+        const sc = this.worldToScreen(entity.pos, camera, zoom);
+        ctx.save();
+        ctx.translate(sc.x, sc.y);
+        ctx.scale(zoom, zoom);
+
+        if (isSelected) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Deploy (Enter)', 0, entity.radius + 20);
+            }
+
+            if (entity.type === 'BUILDING' && entity.key === 'service_depot') {
+                const repairRadius = RULES.buildings['service_depot']?.repairRadius;
+                if (repairRadius) {
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+                    ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, repairRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Damaged harriers parked on an Air-Force Command get a mini HP bar over their slot
+        if (isBuilding(entity) && entity.key === 'airforce_command' && entity.airBase) {
+            const padLift = heightToScreenLift(AIRBASE_PAD_HEIGHT + 5, 1);
+            for (let i = 0; i < entity.airBase.slots.length; i++) {
+                const harrier = allEntities[entity.airBase.slots[i] ?? ''];
+                if (!harrier || !isAirUnit(harrier) || harrier.airUnit.state !== 'docked' || harrier.hp >= harrier.maxHp) continue;
+                const pos = AIRBASE_SLOT_OFFSETS[i] || { x: 0, y: 0 };
+                ctx.fillStyle = 'red';
+                ctx.fillRect(pos.x - 8, pos.y - padLift - 10, 16, 3);
+                ctx.fillStyle = '#0f0';
+                ctx.fillRect(pos.x - 8, pos.y - padLift - 10, 16 * (harrier.hp / harrier.maxHp), 3);
+            }
+        }
+
+        // Everything below floats above the model
+        ctx.translate(0, -heightToScreenLift(getModelHeight(entity) + getAltitude(entity), 1));
+
+        if (entity.type === 'RESOURCE') {
+            this.drawResourceBar(entity);
+        } else if (entity.hp < entity.maxHp || isSelected) {
+            this.drawHpBar(entity);
+        }
+        this.drawRepairIcon(entity, tick);
+
+        if (isHarvester(entity) && entity.harvester.cargo > 0) {
+            const ratio = Math.min(1, entity.harvester.cargo / 500); // 500 is capacity
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-10, -entity.radius - 7, 20, 3);
+            ctx.fillStyle = '#0ff';
+            ctx.fillRect(-10, -entity.radius - 7, 20 * ratio, 3);
+        }
+
+        if (entity.type === 'UNIT' && getTransportCapacity(entity) > 0) {
+            const passengerCount = passengerCountByTransport.get(entity.id) ?? 0;
+            if (passengerCount > 0) this.drawPassengerBadge(entity, passengerCount);
+        }
+
+        ctx.restore();
+    }
+
+    /** HP bar above an entity, in the entity's zoomed local frame. */
+    private drawHpBar(entity: Entity) {
+        const ctx = this.ctx;
+        ctx.fillStyle = 'red';
+        ctx.fillRect(-15, -entity.radius - 12, 30, 4);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(-15, -entity.radius - 12, 30 * Math.max(0, entity.hp / entity.maxHp), 4);
+    }
+
+    /** Remaining-ore bar for a partially mined resource. */
+    private drawResourceBar(entity: Entity) {
+        if (entity.hp >= entity.maxHp) return;
+        const ctx = this.ctx;
+        const ratio = entity.hp / entity.maxHp;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-12, -15, 24, 4);
+        ctx.fillStyle = '#ffdf00';
+        ctx.fillRect(-12, -15, 24 * ratio, 4);
+    }
+
+    /** Flashing wrench over buildings that are being repaired. */
+    private drawRepairIcon(entity: Entity, tick: number) {
+        if (!isBuilding(entity) || !entity.building.isRepairing) return;
+        if ((tick % 30) >= 20) return; // Flash on for 20 ticks, off for 10
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.fillStyle = '#00ff00';
+        ctx.strokeStyle = '#004400';
+        ctx.lineWidth = 2;
+
+        // Simple wrench shape
+        const iconY = -entity.radius - 25;
+        ctx.beginPath();
+        ctx.arc(0, iconY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Wrench handle
+        ctx.fillRect(-2, iconY + 6, 4, 12);
+        ctx.strokeRect(-2, iconY + 6, 4, 12);
+        ctx.restore();
+    }
+
+    /** Passenger count badge at the top-right of a transport (caller keeps the frame upright). */
+    private drawPassengerBadge(entity: Entity, passengerCount: number) {
+        const ctx = this.ctx;
+        const badgeX = entity.w / 2 - 4;
+        const badgeY = -entity.h / 2 + 4;
+        const badgeText = passengerCount > 9 ? '9+' : String(passengerCount);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(badgeX, badgeY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#4cffd2';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badgeText, badgeX, badgeY + 0.5);
         ctx.restore();
     }
 
@@ -947,16 +1165,16 @@ export class Renderer {
         ctx.restore();
     }
 
-    private drawPrimaryIndicator(building: Entity, camera: { x: number; y: number }, zoom: number) {
+    private drawPrimaryIndicator(building: Entity, camera: { x: number; y: number }, zoom: number, liftPx = 0) {
         const ctx = this.ctx;
         const screen = this.worldToScreen(building.pos, camera, zoom);
 
         ctx.save();
 
-        // Draw a yellow star at the top-right corner of the building
+        // Draw a yellow star at the top-right corner of the building (on its roof in 3D)
         const starSize = 8 * zoom;
         const offsetX = (building.w / 2) * zoom - 5 * zoom;
-        const offsetY = -(building.h / 2) * zoom + 5 * zoom;
+        const offsetY = -(building.h / 2) * zoom + 5 * zoom - liftPx;
 
         const cx = screen.x + offsetX;
         const cy = screen.y + offsetY;
@@ -986,7 +1204,8 @@ export class Renderer {
         camera: { x: number; y: number },
         zoom: number,
         entities: Record<string, Entity>,
-        localPlayerId: number | null
+        localPlayerId: number | null,
+        footprintOnly = false
     ) {
         const ctx = this.ctx;
         const mx = (mousePos.x / zoom) + camera.x;
@@ -1015,8 +1234,18 @@ export class Renderer {
             x: (mx - camera.x) * zoom,
             y: (my - camera.y) * zoom
         };
-        ctx.fillStyle = valid ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.5)';
-        ctx.fillRect(sc.x - (b.w / 2) * zoom, sc.y - (b.h / 2) * zoom, b.w * zoom, b.h * zoom);
+        const rx = sc.x - (b.w / 2) * zoom, ry = sc.y - (b.h / 2) * zoom;
+        if (footprintOnly) {
+            // The 3D scene draws a hologram of the building; just mark its footprint
+            ctx.fillStyle = valid ? 'rgba(0,255,0,0.15)' : 'rgba(255,0,0,0.15)';
+            ctx.strokeStyle = valid ? 'rgba(0,255,0,0.8)' : 'rgba(255,0,0,0.8)';
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(rx, ry, b.w * zoom, b.h * zoom);
+            ctx.strokeRect(rx, ry, b.w * zoom, b.h * zoom);
+        } else {
+            ctx.fillStyle = valid ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.5)';
+            ctx.fillRect(rx, ry, b.w * zoom, b.h * zoom);
+        }
         ctx.restore();
     }
 

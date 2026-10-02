@@ -20,6 +20,7 @@ const HELP_CONTENT = {
       <tr><td>A</td><td>Attack-move mode</td></tr>
       <tr><td>F / G / H</td><td>Stance: Aggressive / Defensive / Hold</td></tr>
       <tr><td>B</td><td>Bird's eye view</td></tr>
+      <tr><td>V</td><td>Switch 3D / classic 2D view</td></tr>
       <tr><td>Enter</td><td>Deploy MCV</td></tr>
       <tr><td>Escape</td><td>Cancel / Deselect</td></tr>
       <tr><td>Space / P</td><td>Pause game</td></tr>

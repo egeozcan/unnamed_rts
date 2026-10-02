@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Browser-based real-time strategy (RTS) game inspired by Command & Conquer. Pure TypeScript with Canvas 2D rendering - no game frameworks. Supports up to 8 players (human + AI).
+Browser-based real-time strategy (RTS) game inspired by Command & Conquer. Pure TypeScript - no game frameworks. Rendered by a three.js 3D view (default) or the classic Canvas 2D view (toggle with V or the menu's Graphics option). Supports up to 8 players (human + AI).
 
 ## Commands
 
@@ -41,7 +41,8 @@ All game state updates go through the reducer. State objects are immutable - upd
 - **src/engine/perf.ts** - EntityCache for per-tick entity lookups
 - **src/engine/utils.ts** - A* pathfinding, collision grids, spatial queries
 - **src/engine/pathfinding.worker.ts** - Web Worker for offloaded pathfinding calculations
-- **src/renderer/index.ts** - Canvas 2D rendering engine
+- **src/renderer/index.ts** - Renderer: classic Canvas 2D view, plus the 2D overlay (HP bars, selection, tooltips) drawn on top of the 3D view
+- **src/renderer/three/** - 3D view (lazy-loaded three.js): `scene.ts` (instanced scene, fog, shadows, projectiles), `models.ts` (procedural low-poly models), `projection.ts` (tilt, model heights, altitudes - no three.js import)
 - **src/data/rules.json** - Game balance data (unit/building stats, costs, prerequisites, damage modifiers)
 
 ### Key Concepts
@@ -68,6 +69,8 @@ All game state updates go through the reducer. State objects are immutable - upd
 - `SpatialGrid` (spatial.ts) - Cell-based partitioning for efficient neighbor queries
 
 **Game Modes**: `'menu'` (setup screen), `'game'` (human playing), `'demo'` (observer/all-AI)
+
+**3D View**: Purely visual - the simulation stays 2D. The camera is a tilted orthographic camera whose ground plane maps to exactly the same pixels as the 2D view (`(world - camera) * zoom`), so input, picking, camera bounds and the minimap are shared by both views. Height only lifts things up the screen by `height * tan(tilt) * zoom`. Model heights in `projection.ts` must match `models.ts` (enforced by `tests/renderer/three-view.test.ts`), and aircraft altitude must keep the drawn aircraft inside the click radius.
 
 **AI Difficulties**: `'dummy'` (builds but never attacks), `'easy'`, `'medium'`, `'hard'`
 
@@ -108,7 +111,9 @@ src/
 │   └── utils.ts            # Pathfinding, collision grids
 ├── renderer/
 │   ├── assets_data/        # Modular asset definitions (buildings, vehicles, infantry, etc.)
-│   ├── index.ts            # Canvas rendering
+│   ├── three/              # 3D view: scene, models, camera, projection
+│   ├── graphics-mode.ts    # 3D/2D preference
+│   ├── index.ts            # Canvas rendering + 3D overlay
 │   └── assets.ts           # Asset loading
 ├── ui/
 │   ├── index.ts            # Building/unit buttons
