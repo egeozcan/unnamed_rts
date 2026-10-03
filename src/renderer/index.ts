@@ -2,14 +2,17 @@ import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_C
 import { getAssetBitmap, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
-import { pickEntityAt } from '../engine/picking.js';
+import { pickEntityAt, setPickLift } from '../engine/picking.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
 import { getPlacementError } from '../engine/reducers/buildings.js';
 import { isAlly } from '../engine/teams.js';
 import type { Scene3D, PlacementGhost } from './three/scene.js';
-import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
+import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, HEIGHT_TO_SCREEN, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
+
+/** World units a 3D model's top is drawn above its ground position (for picking). */
+const pickLift3D = (entity: Entity): number => (getAltitude(entity) + getModelHeight(entity)) * HEIGHT_TO_SCREEN;
 import { GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
 
 const TRAIL_BANDS = 6;
@@ -223,6 +226,8 @@ export class Renderer {
         // Browser zoom or a move to another monitor changes the DPR without a resize event
         if (overlayPixelRatio() !== this.pixelRatio) this.resize();
         ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+        // Clicks, right-clicks, the cursor and the tooltip all pick against what is drawn
+        setPickLift(this.is3DActive() ? pickLift3D : null);
 
         this.selectionSet.clear();
         let harvesterSelected = false;
@@ -231,6 +236,7 @@ export class Renderer {
             const selected = entities[selectedId];
             if (selected && isHarvester(selected)) harvesterSelected = true;
         }
+        if (state.inspectedId) this.selectionSet.add(state.inspectedId);
         // Ore-remaining bars only matter while managing harvesters (or when hovering a crystal)
         this.oreBarsVisible = harvesterSelected;
 

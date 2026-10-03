@@ -156,7 +156,8 @@ export function commandStop(state: GameState, payload: { unitIds: EntityId[] }):
             lastDistToMoveTarget: undefined,
             bestDistToMoveTarget: undefined,
             moveTargetNoProgressTicks: undefined,
-            repairTargetId: null
+            repairTargetId: null,
+            deployWellId: null
         };
         let stopped: UnitEntity;
         if (unit.key === 'harvester') {
@@ -648,6 +649,72 @@ export function deployMCV(state: GameState, payload: { unitId: EntityId }): Game
     };
 }
 
+/** Distance from a well at which an Induction Rig can deploy on it. */
+export const RIG_DEPLOY_RANGE = 80;
+
+/**
+ * Deploy an Induction Rig on a well, or drive it there first and deploy on arrival.
+ * The pending deploy lives on the rig (movement.deployWellId) so it survives saves/reloads.
+ */
+export function commandDeployRig(state: GameState, payload: { unitId: EntityId; wellId: EntityId }): GameState {
+    const { unitId, wellId } = payload;
+    const rig = state.entities[unitId];
+    const well = state.entities[wellId];
+    if (!rig || rig.type !== 'UNIT' || rig.key !== 'induction_rig' || rig.dead || !well || well.dead) {
+        return state;
+    }
+    if (rig.pos.dist(well.pos) <= RIG_DEPLOY_RANGE) {
+        return deployInductionRig(state, payload);
+    }
+    const moved = commandMove(state, { unitIds: [unitId], x: well.pos.x, y: well.pos.y });
+    const movedRig = moved.entities[unitId];
+    if (!movedRig || movedRig.type !== 'UNIT') return moved;
+    return {
+        ...moved,
+        entities: {
+            ...moved.entities,
+            [unitId]: { ...movedRig, movement: { ...movedRig.movement, deployWellId: wellId } } as UnitEntity
+        }
+    };
+}
+
+/**
+ * Deploy rigs whose pending well is now in range. A rig that was given another order
+ * (its destination is no longer the well) or lost its well forgets the deploy.
+ */
+export function deployArrivedRigs(state: GameState): GameState {
+    let next = state;
+    for (const id in state.entities) {
+        const rig = state.entities[id];
+        if (rig.type !== 'UNIT' || rig.key !== 'induction_rig' || !rig.movement.deployWellId) continue;
+        const wellId = rig.movement.deployWellId;
+        const well = next.entities[wellId];
+        if (!rig.dead && well && !well.dead && rig.pos.dist(well.pos) <= RIG_DEPLOY_RANGE) {
+            next = deployInductionRig(next, { unitId: id, wellId });
+            if (next.entities[id]) {
+                // Deploy refused (e.g. the well was taken) - forget it
+                next = clearDeployWell(next, id);
+            }
+            continue;
+        }
+        const target = rig.movement.moveTarget ? (rig.movement.finalDest ?? rig.movement.moveTarget) : null;
+        if (rig.dead || !well || well.dead || !target ||
+            Math.hypot(target.x - well.pos.x, target.y - well.pos.y) > RIG_DEPLOY_RANGE) {
+            next = clearDeployWell(next, id);
+        }
+    }
+    return next;
+}
+
+function clearDeployWell(state: GameState, id: EntityId): GameState {
+    const rig = state.entities[id];
+    if (!rig || rig.type !== 'UNIT') return state;
+    return {
+        ...state,
+        entities: { ...state.entities, [id]: { ...rig, movement: { ...rig.movement, deployWellId: null } } as UnitEntity }
+    };
+}
+
 export function deployInductionRig(state: GameState, payload: { unitId: EntityId; wellId: EntityId }): GameState {
     const { unitId, wellId } = payload;
     const rig = state.entities[unitId];
@@ -682,8 +749,7 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
     }
 
     // Check distance to well (must be close enough to deploy)
-    const deployRange = 80; // Distance required to deploy on a well
-    if (rig.pos.dist(well.pos) > deployRange) {
+    if (rig.pos.dist(well.pos) > RIG_DEPLOY_RANGE) {
         return {
             ...state,
             notification: notifyOwner(state, rig.owner, { text: 'Cannot deploy: Move closer to well', type: 'error', tick: state.tick })

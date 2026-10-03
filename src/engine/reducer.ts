@@ -7,7 +7,7 @@ import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
 import { placeBuilding, sellBuilding, startRepair, stopRepair, setRallyPoint, setPrimaryBuilding } from './reducers/buildings';
-import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, commandUngarrison, commandStop, setStance } from './reducers/units';
+import { deployMCV, deployInductionRig, commandDeployRig, deployArrivedRigs, commandMove, commandAttack, commandAttackMove, commandUngarrison, commandStop, setStance } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
 export { createPlayerState, canBuild, calculatePower, createEntity, getRuleData, createProjectile } from './reducers/helpers';
@@ -46,7 +46,7 @@ export const INITIAL_STATE: GameState = {
 export function update(state: GameState, action: Action): GameState {
     switch (action.type) {
         case 'TICK':
-            return tick(state);
+            return deployArrivedRigs(tick(state));
         case 'START_BUILD':
             return startBuild(state, action.payload);
         case 'PLACE_BUILDING':
@@ -92,7 +92,10 @@ export function update(state: GameState, action: Action): GameState {
         }
         case 'SELECT_UNITS':
             // A new selection drops attack-move mode: it was armed for the old one
-            return { ...state, selection: action.payload, attackMoveMode: false };
+            return { ...state, selection: action.payload, attackMoveMode: false, inspectedId: null };
+        case 'INSPECT_ENTITY':
+            // Inspecting an enemy/neutral replaces the selection, so orders can never reach it
+            return { ...state, selection: [], attackMoveMode: false, inspectedId: action.payload };
         case 'SELL_BUILDING':
             return sellBuilding(state, action.payload);
         case 'TOGGLE_SELL_MODE':
@@ -113,6 +116,14 @@ export function update(state: GameState, action: Action): GameState {
             return deployMCV(state, action.payload);
         case 'DEPLOY_INDUCTION_RIG':
             return deployInductionRig(state, action.payload);
+        case 'COMMAND_DEPLOY_RIG': {
+            const newState = commandDeployRig(state, action.payload);
+            const rig = newState.entities[action.payload.unitId];
+            const well = state.entities[action.payload.wellId];
+            // Show a move marker on the well while the rig drives there
+            if (state.headless || !rig || !well || !state.selection.includes(action.payload.unitId)) return newState;
+            return { ...newState, commandIndicator: { pos: well.pos, type: 'move', startTick: state.tick } };
+        }
         case 'QUEUE_UNIT':
             return queueUnit(state, action.payload);
         case 'DEQUEUE_UNIT':

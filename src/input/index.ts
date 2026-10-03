@@ -300,7 +300,8 @@ function setupEventListeners() {
             return;
         }
 
-        // Control groups: Ctrl/Cmd+digit assigns, Shift+digit adds, digit recalls (twice quickly = jump to it).
+        // Control groups: Ctrl/Cmd+digit assigns (Ctrl+Shift+digit too, for browsers that keep
+        // Ctrl+digit for tab switching), Shift+digit adds, digit recalls (twice quickly = jump to it).
         // With Alt held the digit key types something else (AltGr/Option layouts): not a group key
         if (/^Digit[0-9]$/.test(e.code) && !e.altKey) {
             const group = Number(e.code.slice(5));

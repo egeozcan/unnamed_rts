@@ -79,6 +79,7 @@ export function pushAlert(text: string, type: AlertType = 'info', throttleKey?: 
     const el = document.createElement('div');
     el.className = `alert alert-${type}`;
     el.textContent = text;
+    if (throttleKey) el.dataset.alertKey = throttleKey;
     root.appendChild(el);
 
     while (root.children.length > MAX_VISIBLE_ALERTS) {
@@ -89,6 +90,17 @@ export function pushAlert(text: string, type: AlertType = 'info', throttleKey?: 
         el.classList.add('leaving');
         window.setTimeout(() => el.remove(), 400);
     }, ALERT_LIFETIME_MS);
+}
+
+/** Fade out visible alerts pushed with this throttle key (e.g. a hint that no longer applies). */
+export function dismissAlert(key: string): void {
+    if (!container) return;
+    for (const el of Array.from(container.children) as HTMLElement[]) {
+        if (el.dataset.alertKey === key && !el.classList.contains('leaving')) {
+            el.classList.add('leaving');
+            window.setTimeout(() => el.remove(), 400);
+        }
+    }
 }
 
 /** Forget throttling state and remove visible alerts (new game). */

@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer';
 import { GameState, Entity, EntityId, Vector } from '../../src/engine/types';
 import {
-    createTestBuilding, createTestCombatUnit, createTestDemoTruck, createTestHarvester, createTestResource, createTestRock, resetTestEntityCounter
+    createTestBuilding, createTestCombatUnit, createTestDemoTruck, createTestHarvester, createTestResource, createTestRock, createTestWell, resetTestEntityCounter
 } from '../../src/engine/test-utils';
-import { pickEntityAt, isHiddenByFog } from '../../src/engine/picking';
+import { pickEntityAt, isHiddenByFog, setPickLift } from '../../src/engine/picking';
 import { getPlacementError } from '../../src/engine/reducers/buildings';
 import { validateSkirmishConfig } from '../../src/game-utils';
 import { isMoveHopeless } from '../../src/engine/reducers/movement';
@@ -43,6 +43,20 @@ describe('pickEntityAt', () => {
         const bld = createTestBuilding({ id: 'bld', key: 'conyard', x: 300, y: 300 });
         expect(pickEntityAt({ bld }, 343, 343)?.id).toBe('bld');
         expect(pickEntityAt({ bld }, 400, 400)).toBeNull();
+    });
+
+    it('in the 3D view, hits the raised top of a tall model but not empty ground below it', () => {
+        const tank = createTestCombatUnit({ id: 't', x: 100, y: 100 });
+        const bld = createTestBuilding({ id: 'bld', key: 'conyard', x: 300, y: 300 });
+        expect(pickEntityAt({ t: tank }, 100, 70)).toBeNull();
+        setPickLift(() => 30);
+        try {
+            expect(pickEntityAt({ t: tank }, 100, 70)?.id).toBe('t');
+            expect(pickEntityAt({ bld }, 300, 300 - bld.h / 2 - 25)?.id).toBe('bld');
+            expect(pickEntityAt({ t: tank }, 100, 100 + tank.radius + 10)).toBeNull();
+        } finally {
+            setPickLift(null);
+        }
     });
 
     it('applies the filter after scoring, so a closer enemy does not hide an own unit', () => {
@@ -392,3 +406,44 @@ describe('produced units without a rally point', () => {
 
 // Keep Vector imported for builders that rely on it at runtime
 void Vector;
+
+describe('induction rig deploy on arrival', () => {
+    beforeEach(() => resetTestEntityCounter());
+
+    it('drives to a far well and deploys there, with the pending deploy kept in game state', () => {
+        const rig = createTestCombatUnit({ id: 'rig', key: 'induction_rig', owner: 0, x: 200, y: 200 });
+        const well = createTestWell({ id: 'well', x: 600, y: 200 });
+        let state = update(stateWith([...bases(), rig, well]), { type: 'COMMAND_DEPLOY_RIG', payload: { unitId: 'rig', wellId: 'well' } });
+        expect(state.entities['rig']).toBeDefined();
+        // The pending deploy survives a JSON round trip (save/load) because it lives on the unit
+        expect(JSON.parse(JSON.stringify(state.entities['rig'])).movement.deployWellId).toBe('well');
+        for (let i = 0; i < 1500 && state.entities['rig']; i++) state = update(state, { type: 'TICK' });
+        expect(state.entities['rig']).toBeUndefined();
+        expect(Object.values(state.entities).some(e => e.key === 'induction_rig_deployed' && e.owner === 0)).toBe(true);
+    });
+
+    it('forgets the deploy when given another order', () => {
+        const rig = createTestCombatUnit({ id: 'rig', key: 'induction_rig', owner: 0, x: 200, y: 200 });
+        const well = createTestWell({ id: 'well', x: 600, y: 200 });
+        let state = update(stateWith([...bases(), rig, well]), { type: 'COMMAND_DEPLOY_RIG', payload: { unitId: 'rig', wellId: 'well' } });
+        state = update(state, { type: 'COMMAND_MOVE', payload: { unitIds: ['rig'], x: 200, y: 600 } });
+        state = update(state, { type: 'TICK' });
+        const r = state.entities['rig'];
+        expect(r.type === 'UNIT' && r.movement.deployWellId).toBeFalsy();
+    });
+});
+
+describe('inspecting non-own entities', () => {
+    beforeEach(() => resetTestEntityCounter());
+
+    it('keeps the inspected enemy out of the commandable selection', () => {
+        const own = createTestCombatUnit({ id: 'own', owner: 0, x: 100, y: 100 });
+        const enemy = createTestCombatUnit({ id: 'enemy', owner: 1, x: 400, y: 100 });
+        let state = update(stateWith([own, enemy]), { type: 'SELECT_UNITS', payload: ['own'] });
+        state = update(state, { type: 'INSPECT_ENTITY', payload: 'enemy' });
+        expect(state.selection).toEqual([]);
+        expect(state.inspectedId).toBe('enemy');
+        state = update(state, { type: 'SELECT_UNITS', payload: ['own'] });
+        expect(state.inspectedId).toBeNull();
+    });
+});

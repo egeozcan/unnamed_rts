@@ -32,7 +32,7 @@ const HELP_CONTENT = {
     <table>
       <tr><td>Arrow keys</td><td>Pan camera</td></tr>
       <tr><td>+ / -</td><td>Zoom in / out</td></tr>
-      <tr><td>Ctrl + 0-9</td><td>Assign control group</td></tr>
+      <tr><td>Ctrl + 0-9</td><td>Assign control group (Ctrl + Shift + 0-9 if your browser switches tabs instead)</td></tr>
       <tr><td>Shift + 0-9</td><td>Add selection to control group</td></tr>
       <tr><td>0-9</td><td>Select control group (press twice: jump to it)</td></tr>
       <tr><td>A, then click</td><td>Attack-move to the clicked spot</td></tr>

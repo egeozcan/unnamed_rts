@@ -13,7 +13,7 @@ import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateActionCursor } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler, setMinimapCommandHandler, pingMinimap } from './ui/minimap.js';
-import { pushAlert, resetAlerts } from './ui/alerts.js';
+import { pushAlert, resetAlerts, dismissAlert } from './ui/alerts.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
@@ -46,11 +46,12 @@ let prePauseMode: 'game' | 'demo' | null = null;
 let humanDefeatShown = false;
 let lastAlertedNotification: GameState['notification'] = null;
 // Induction Rigs ordered onto a far well, deployed when they arrive (rig id -> well id)
-const RIG_DEPLOY_RANGE = 80;
-const pendingRigDeploys = new Map<EntityId, EntityId>();
 // Touch-first device: alerts say "tap" instead of "click"
 const IS_TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 // Sell mode asks for a second click on the same building within this time
+// Page-level listeners added by this module; aborted on hot reload so they don't pile up
+const moduleListeners = new AbortController();
+let lastViewSize: { width: number; height: number } | null = null;
 const SELL_CONFIRM_MS = 3000;
 let pendingSell: { id: EntityId; until: number } | null = null;
 let wasLowPower = false;
@@ -251,7 +252,7 @@ function setupWheelModeSelect() {
     const select = document.getElementById('wheel-mode') as HTMLSelectElement | null;
     if (!select) return;
     select.value = getWheelMode();
-    select.addEventListener('change', () => setWheelMode(select.value as WheelMode));
+    select.addEventListener('change', () => setWheelMode(select.value as WheelMode), { signal: moduleListeners.signal });
 }
 
 function setupGraphicsModeSelect() {
@@ -260,7 +261,7 @@ function setupGraphicsModeSelect() {
     syncGraphicsModeSelect();
     select.addEventListener('change', () => {
         renderer.setGraphicsMode(select.value === '2d' ? '2d' : '3d');
-    });
+    }, { signal: moduleListeners.signal });
 }
 
 function updateSpeedIndicator() {
@@ -335,7 +336,7 @@ function setupSkirmishUI() {
 
             updateSlotAiControls(slot);
             updateObserverMode();
-        });
+        }, { signal: moduleListeners.signal });
 
         updateSlotAiControls(slot);
     });
@@ -402,7 +403,7 @@ function setupSkirmishPersistence() {
     const selectors = '.player-type, .ai-implementation, .player-team, #map-size, #resource-density, #rock-density, #fog-of-war';
     const elements = document.querySelectorAll(selectors);
     for (const element of elements) {
-        element.addEventListener('change', persistSkirmishMenuSettings);
+        element.addEventListener('change', persistSkirmishMenuSettings, { signal: moduleListeners.signal });
     }
 }
 
@@ -464,56 +465,56 @@ document.getElementById('start-skirmish-btn')?.addEventListener('click', () => {
     if (setupError) return;
     lastSkirmishConfig = config;
     startGameWithConfig(config);
-});
+}, { signal: moduleListeners.signal });
 
 // Clear a stale setup error as soon as the setup changes
-document.getElementById('menu')?.addEventListener('change', () => showSetupError(''));
+document.getElementById('menu')?.addEventListener('change', () => showSetupError(''), { signal: moduleListeners.signal });
 
 document.getElementById('menu-help-btn')?.addEventListener('click', () => {
     showHelp(() => { /* back to the main menu underneath */ });
-});
+}, { signal: moduleListeners.signal });
 
 // Before a game starts the in-game input layer isn't listening yet: let Escape close the menu's help
 window.addEventListener('keydown', e => {
     if (e.key === 'Escape' && currentState.mode === 'menu' && isHelpVisible()) closeHelp();
-});
+}, { signal: moduleListeners.signal });
 
 // In-game buttons (Sell, Repair, stances...) must not keep keyboard focus: Enter/Space would
 // re-press them (Enter is also Deploy MCV), e.g. silently re-arming sell mode
 document.getElementById('game-container')?.addEventListener('click', e => {
     const button = (e.target as HTMLElement | null)?.closest('button');
     if (button) button.blur();
-});
+}, { signal: moduleListeners.signal });
 
 // The speed badge doubles as a control (touch / keyboards without [ ]): click = faster, wrapping round;
 // right-click or Shift+click = slower
 const speedIndicator = document.getElementById('speed-indicator');
 speedIndicator?.addEventListener('click', (e) => {
     setGameSpeed((e.shiftKey ? (gameSpeed + 3) % 5 + 1 : gameSpeed % 5 + 1) as GameSpeed);
-});
+}, { signal: moduleListeners.signal });
 speedIndicator?.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     setGameSpeed(Math.max(1, gameSpeed - 1) as GameSpeed);
-});
+}, { signal: moduleListeners.signal });
 
 document.getElementById('hud-menu-btn')?.addEventListener('click', (e) => {
     // Drop focus so Space/Enter don't re-activate the button behind the overlay
     (e.currentTarget as HTMLElement).blur();
     togglePause();
-});
+}, { signal: moduleListeners.signal });
 
 // Restart button
 document.getElementById('restart-btn')?.addEventListener('click', () => {
     location.reload();
-});
+}, { signal: moduleListeners.signal });
 
 // Play Again: reload for a clean slate (renderer, worker, input) and start the same setup at once
 document.getElementById('play-again-btn')?.addEventListener('click', () => {
     if (lastSkirmishConfig) saveRematchConfig(getSafeSessionStorage(), lastSkirmishConfig);
     location.reload();
-});
+}, { signal: moduleListeners.signal });
 
-document.getElementById('spectate-btn')?.addEventListener('click', spectateAfterDefeat);
+document.getElementById('spectate-btn')?.addEventListener('click', spectateAfterDefeat, { signal: moduleListeners.signal });
 
 // Initialize skirmish UI
 populateAiImplementationSelects();
@@ -1016,7 +1017,6 @@ function createInputCallbacks(): Parameters<typeof initInput>[1] {
             const unitIds = getCommandableSelection();
             if (unitIds.length === 0) return;
             currentState = update(currentState, { type: 'COMMAND_STOP', payload: { unitIds } });
-            for (const id of unitIds) pendingRigDeploys.delete(id);
             updateButtonsUI();
         },
         onSelectArmy: () => {
@@ -1254,6 +1254,16 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
                 // Regular click: replace selection
                 newSelection = [clicked.id];
             }
+        } else if (!shiftHeld && humanPlayerId !== null) {
+            // Nothing of ours here: an enemy, allied or neutral unit/building can be inspected
+            const other = pickEntityAt(currentState.entities, wx, wy, e =>
+                (e.type === 'UNIT' || e.type === 'BUILDING') && e.owner !== humanPlayerId &&
+                !isHiddenByFog(currentState, e, humanPlayerId));
+            if (other) {
+                currentState = update(currentState, { type: 'INSPECT_ENTITY', payload: other.id });
+                updateButtonsUI();
+                return;
+            }
         }
     }
 
@@ -1286,7 +1296,7 @@ function handleCancel() {
         currentState = update(currentState, { type: 'CANCEL_PLACEMENT' });
     } else if (currentState.attackMoveMode) {
         currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
-    } else if (currentState.selection.length > 0) {
+    } else if (currentState.selection.length > 0 || currentState.inspectedId) {
         currentState = update(currentState, { type: 'SELECT_UNITS', payload: [] });
     } else {
         pauseGame();
@@ -1406,21 +1416,11 @@ function handleRightClick(wx: number, wy: number, groundOnly = false) {
             });
 
             if (selectedRigId) {
-                const rig = currentState.entities[selectedRigId];
-                if (rig && rig.pos.dist(targetEntity.pos) <= RIG_DEPLOY_RANGE) {
-                    // Close enough - deploy the rig
-                    currentState = update(currentState, {
-                        type: 'DEPLOY_INDUCTION_RIG',
-                        payload: { unitId: selectedRigId, wellId: targetId }
-                    });
-                } else {
-                    // Too far - move toward the well first, then deploy on arrival
-                    currentState = update(currentState, {
-                        type: 'COMMAND_MOVE',
-                        payload: { unitIds: [selectedRigId], x: targetEntity.pos.x, y: targetEntity.pos.y }
-                    });
-                    pendingRigDeploys.set(selectedRigId, targetId);
-                }
+                // Deploys now if close enough, otherwise drives there and deploys on arrival
+                currentState = update(currentState, {
+                    type: 'COMMAND_DEPLOY_RIG',
+                    payload: { unitId: selectedRigId, wellId: targetId }
+                });
                 return;
             }
         }
@@ -1463,33 +1463,6 @@ function handleRightClick(wx: number, wy: number, groundOnly = false) {
             type: 'COMMAND_MOVE',
             payload: { unitIds: selectedIds, x: wx, y: wy }
         });
-    }
-}
-
-/**
- * Deploy Induction Rigs that were sent to a far well once they get there. A rig that is
- * given another order (or gives up on the trip) forgets the deploy.
- */
-function deployArrivedRigs() {
-    for (const [rigId, wellId] of pendingRigDeploys) {
-        const rig = currentState.entities[rigId];
-        const well = currentState.entities[wellId];
-        if (!rig || rig.dead || rig.type !== 'UNIT' || !well || well.dead) {
-            pendingRigDeploys.delete(rigId);
-            continue;
-        }
-        if (rig.pos.dist(well.pos) <= RIG_DEPLOY_RANGE) {
-            pendingRigDeploys.delete(rigId);
-            currentState = update(currentState, {
-                type: 'DEPLOY_INDUCTION_RIG',
-                payload: { unitId: rigId, wellId }
-            });
-            continue;
-        }
-        const target = rig.movement.moveTarget ? (rig.movement.finalDest ?? rig.movement.moveTarget) : null;
-        if (!target || Math.hypot(target.x - well.pos.x, target.y - well.pos.y) > RIG_DEPLOY_RANGE) {
-            pendingRigDeploys.delete(rigId);
-        }
     }
 }
 
@@ -1645,7 +1618,6 @@ function gameLoop(timestamp: number = 0) {
         }
     }
     const simMs = performance.now() - simStartMs;
-    deployArrivedRigs();
     announceGameEvents(preSimState, currentState);
     checkHumanDefeat();
 
@@ -1725,6 +1697,22 @@ function gameLoop(timestamp: number = 0) {
             camera: clampCamera(newCameraX, newCameraY, size.width, size.height, newZoom, currentState.config.width, currentState.config.height)
         };
     }
+
+    // Window resized: keep the world point at the centre of the view where it was (the camera is
+    // top-left anchored, so otherwise the view grows and shrinks from the bottom-right corner)
+    const viewSize = renderer.getSize();
+    if (lastViewSize && (lastViewSize.width !== viewSize.width || lastViewSize.height !== viewSize.height)) {
+        const zoom = currentState.zoom;
+        currentState = {
+            ...currentState,
+            camera: {
+                ...currentState.camera,
+                x: currentState.camera.x + (lastViewSize.width - viewSize.width) / (2 * zoom),
+                y: currentState.camera.y + (lastViewSize.height - viewSize.height) / (2 * zoom)
+            }
+        };
+    }
+    lastViewSize = viewSize;
 
     const newCamera = handleCameraInput(
         currentState.camera,
@@ -1854,14 +1842,17 @@ function calculatePower(pid: number, entities: Record<EntityId, any>) {
  * new units, stalled production, attacks. `prev` is the state before this frame's ticks.
  */
 function announceGameEvents(prev: GameState, next: GameState) {
-    if (humanPlayerId === null || next.mode !== 'game' || prev === next) return;
+    if (humanPlayerId === null || next.mode !== 'game') return;
+    // The "click it in the sidebar" hint is stale once the player picks it up or places it
+    if (!next.players[humanPlayerId]?.readyToPlace || next.placingBuilding) dismissAlert('ready-to-place');
+    if (prev === next) return;
     const prevPlayer = prev.players[humanPlayerId];
     const player = next.players[humanPlayerId];
     if (!prevPlayer || !player) return;
 
     if (player.readyToPlace && player.readyToPlace !== prevPlayer.readyToPlace) {
         const name = RULES.buildings[player.readyToPlace]?.name ?? player.readyToPlace;
-        pushAlert(`Construction complete: ${name} - ${IS_TOUCH ? 'tap' : 'click'} it in the sidebar to place`, 'success');
+        pushAlert(`Construction complete: ${name} - ${IS_TOUCH ? 'tap' : 'click'} it in the sidebar to place`, 'success', 'ready-to-place');
     }
 
     const producing = Object.values(player.queues).some(q => q.current);
@@ -2016,12 +2007,15 @@ if (import.meta.hot) {
         currentState = reconstructVectors(savedState);
         humanPlayerId = import.meta.hot.data.humanPlayerId;
         gameSpeed = import.meta.hot.data.gameSpeed || 2;
+        prePauseMode = import.meta.hot.data.prePauseMode ?? (currentState.mode === 'paused' ? 'game' : null);
         console.log('[HMR] Restored game state from hot reload');
 
         // Reinitialize input with fresh callbacks after state restoration
         const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
         if (canvas) {
             initInput(canvas, createInputCallbacks());
+            // The pause menu buttons still call the old module's resume/quit
+            initPauseMenu(resumeGame, () => location.reload());
 
             // Reinitialize UI modules with fresh callbacks (they use listener guard pattern for HMR)
             initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);
@@ -2064,14 +2058,16 @@ if (import.meta.hot) {
             animationFrameId = null;
         }
 
-        // The next module instance creates its own renderer (and WebGL context)
+        // The next module instance creates its own renderer (and WebGL context) and listeners
         renderer.dispose();
+        moduleListeners.abort();
 
         // Only save if game is running (not in menu)
         if (currentState.mode !== 'menu') {
             data.gameState = currentState;
             data.humanPlayerId = humanPlayerId;
             data.gameSpeed = gameSpeed;
+            data.prePauseMode = prePauseMode;
             console.log('[HMR] Saved game state for hot reload');
         }
     });

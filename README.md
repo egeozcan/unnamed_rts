@@ -83,7 +83,7 @@ npx vitest run tests/engine/harvester.test.ts
 | **Middle Mouse Button / screen edge** | Pan camera |
 | **Arrow Keys** | Pan camera |
 | **Mouse Wheel / + -** | Zoom in/out (trackpad: two-finger pan, pinch zoom; wheel mode is set in the menus) |
-| **Ctrl + 0-9 / Shift + 0-9 / 0-9** | Assign / add to / select control group (press twice to jump to it) |
+| **Ctrl + 0-9 / Shift + 0-9 / 0-9** | Assign / add to / select control group (press twice to jump to it). Ctrl + Shift + 0-9 also assigns, for browsers that keep Ctrl + digit for tab switching |
 | **[ / ]** | Game speed slower / faster (or click / right-click the speed badge) |
 | **F / G / H** | Stance: Attack / Guard / Stand Ground |
 | **U** | Unload selected transports |

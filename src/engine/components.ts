@@ -27,6 +27,8 @@ export interface MovementComponent {
     readonly bestDistToMoveTarget?: number;
     readonly moveTargetNoProgressTicks?: number;
     readonly repairTargetId?: EntityId | null;
+    // Induction Rig: well to deploy on once the rig reaches it
+    readonly deployWellId?: EntityId | null;
 }
 
 // ============ COMBAT COMPONENT ============

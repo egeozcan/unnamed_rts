@@ -316,6 +316,8 @@ export interface GameState {
     readonly projectiles: Projectile[];
     readonly particles: Particle[];
     readonly selection: EntityId[]; // Store IDs
+    // A non-own entity clicked for inspection (shown in the selection panel, never commanded)
+    readonly inspectedId?: EntityId | null;
 
     readonly placingBuilding: string | null;
 
@@ -354,6 +356,8 @@ export type Action =
     | { type: 'TOGGLE_BIRDS_EYE' }
     | { type: 'DEPLOY_MCV'; payload: { unitId: EntityId } }
     | { type: 'DEPLOY_INDUCTION_RIG'; payload: { unitId: EntityId; wellId: EntityId } }
+    | { type: 'COMMAND_DEPLOY_RIG'; payload: { unitId: EntityId; wellId: EntityId } }
+    | { type: 'INSPECT_ENTITY'; payload: EntityId | null }
     | { type: 'QUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'DEQUEUE_UNIT'; payload: { category: string; key: string; playerId: number; count: number } }
     | { type: 'COMMAND_ATTACK_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }

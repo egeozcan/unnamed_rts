@@ -1681,7 +1681,8 @@ const STANCE_LABELS: Record<string, string> = { aggressive: 'Attack', defensive:
  */
 export function buildSelectionSummaryHtml(state: GameState): string {
     const humanId = getHumanPlayerId(state);
-    const selected = state.selection
+    const ids = state.selection.length === 0 && state.inspectedId ? [state.inspectedId] : state.selection;
+    const selected = ids
         .map(id => state.entities[id])
         .filter((e): e is Entity => Boolean(e && !e.dead && !(isUnit(e) && isTransportedUnit(e))));
     if (selected.length === 0) return '';

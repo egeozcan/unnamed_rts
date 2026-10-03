@@ -7,6 +7,16 @@ const UNIT_PICK_PADDING = 8;
 const BUILDING_PICK_PADDING = 4;
 
 /**
+ * How far (world units, up the screen) an entity's model is drawn above its ground position.
+ * Set by the 3D view so clicks on the top of a tall model hit it; null in the flat 2D view.
+ */
+let pickLift: ((entity: Entity) => number) | null = null;
+
+export function setPickLift(lift: ((entity: Entity) => number) | null): void {
+    pickLift = lift;
+}
+
+/**
  * Distance-like score for picking `entity` at (wx, wy), or null when the point misses it.
  * Buildings are hit anywhere inside their footprint; everything else by radius.
  */
@@ -15,7 +25,11 @@ function pickScore(entity: Entity, wx: number, wy: number): number | null {
     if (entity.type === 'UNIT' && isTransportedUnit(entity)) return null;
 
     const dx = wx - entity.pos.x;
-    const dy = wy - entity.pos.y;
+    const rawDy = wy - entity.pos.y;
+    // A raised model covers the screen from its ground position up to `lift` above it: measure the
+    // vertical distance to that span instead of to the ground point
+    const lift = pickLift ? pickLift(entity) : 0;
+    const dy = rawDy >= 0 ? rawDy : Math.min(0, rawDy + lift);
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (entity.type === 'BUILDING') {
