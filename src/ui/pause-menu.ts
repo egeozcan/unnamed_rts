@@ -21,6 +21,7 @@ const HELP_CONTENT = {
       <tr><td>F / G / H</td><td>Stance: Aggressive / Defensive / Hold</td></tr>
       <tr><td>B</td><td>Bird's eye view</td></tr>
       <tr><td>V</td><td>Switch 3D / classic 2D view</td></tr>
+      <tr><td>U</td><td>Unload transport</td></tr>
       <tr><td>Enter</td><td>Deploy MCV</td></tr>
       <tr><td>Escape</td><td>Cancel / Deselect</td></tr>
       <tr><td>Space / P</td><td>Pause game</td></tr>
@@ -32,7 +33,7 @@ const HELP_CONTENT = {
       <li>Build Power Plants to keep production running</li>
       <li>Harvesters are high-value targets-protect them!</li>
       <li>Double-click a Barracks/Factory to set it as primary</li>
-      <li>Right-click a production building to set rally point</li>
+      <li>Select a Barracks/Factory and right-click the ground to set its rally point</li>
       <li>Engineers can capture enemy buildings</li>
       <li>SAM Sites intercept incoming missiles and artillery</li>
       <li>Deploy Induction Rigs on ore wells for infinite income</li>

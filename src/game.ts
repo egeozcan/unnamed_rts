@@ -249,7 +249,7 @@ function updateSpeedIndicator() {
     }
 
     const labels = { 1: 'SLOW', 2: 'NORMAL', 3: 'FAST', 4: 'VERY FAST', 5: 'LIGHTSPEED' };
-    indicator.textContent = labels[gameSpeed];
+    indicator.textContent = `SPEED: ${labels[gameSpeed]}`;
     indicator.className = `speed-${gameSpeed}`;
 }
 
@@ -793,6 +793,7 @@ function startGameWithConfig(config: SkirmishConfig) {
             updateButtonsUI();
         },
         onToggleGraphics: toggleGraphicsMode,
+        onCancel: handleCancel,
         onTogglePause: () => {
             if (currentState.mode === 'paused') {
                 // Resume
@@ -1043,6 +1044,26 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     }
 
     currentState = update(currentState, { type: 'SELECT_UNITS', payload: newSelection });
+    updateButtonsUI();
+}
+
+// Escape: back out of the active mode (sell, repair, placement, attack-move), else clear the selection
+function handleCancel() {
+    if (currentState.mode !== 'game') return;
+
+    if (currentState.sellMode) {
+        currentState = update(currentState, { type: 'TOGGLE_SELL_MODE' });
+    } else if (currentState.repairMode) {
+        currentState = update(currentState, { type: 'TOGGLE_REPAIR_MODE' });
+    } else if (currentState.placingBuilding) {
+        currentState = update(currentState, { type: 'CANCEL_PLACEMENT' });
+    } else if (currentState.attackMoveMode) {
+        currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+    } else if (currentState.selection.length > 0) {
+        currentState = update(currentState, { type: 'SELECT_UNITS', payload: [] });
+    } else {
+        return;
+    }
     updateButtonsUI();
 }
 
@@ -1602,6 +1623,7 @@ if (import.meta.hot) {
                     updateButtonsUI();
                 },
                 onToggleGraphics: toggleGraphicsMode,
+                onCancel: handleCancel,
                 onTogglePause: () => {
                     if (currentState.mode === 'paused') {
                         // Resume

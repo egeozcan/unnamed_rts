@@ -105,4 +105,12 @@ describe('Scoreboard cadence', () => {
         expect(row?.textContent).not.toContain('rusher');
         expect(getAIImplementationMock).toHaveBeenCalledWith('engineer_conyard_rush');
     });
+
+    it('labels the human player as You', () => {
+        scoreboard.updateScoreboard(createState(7, { 0: { isAi: false, team: null } }), 0);
+
+        const row = document.querySelector('.score-row');
+        expect(row?.querySelector('.score-player')?.textContent).toBe('You');
+        expect(row?.textContent).not.toContain('P1');
+    });
 });

@@ -66,6 +66,7 @@ let onUngarrison: (() => void) | null = null;
 let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
 let onTogglePause: (() => void) | null = null;
 let onToggleGraphics: (() => void) | null = null;
+let onCancel: (() => void) | null = null;
 let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
@@ -87,6 +88,7 @@ export function initInput(
         onDoubleClick?: (wx: number, wy: number) => void;
         onTogglePause?: () => void;
         onToggleGraphics?: () => void;
+        onCancel?: () => void;
         getZoom: () => number;
         getCamera: () => { x: number; y: number };
     }
@@ -106,6 +108,7 @@ export function initInput(
     onDoubleClick = callbacks.onDoubleClick || null;
     onTogglePause = callbacks.onTogglePause || null;
     onToggleGraphics = callbacks.onToggleGraphics || null;
+    onCancel = callbacks.onCancel || null;
     getZoom = callbacks.getZoom;
     getCamera = callbacks.getCamera;
 
@@ -202,6 +205,10 @@ function setupEventListeners() {
         // Switch between the 3D and classic 2D view
         if (e.key === 'v' || e.key === 'V') {
             onToggleGraphics?.();
+        }
+        // Cancel the current mode or clear the selection (skipped when an overlay already consumed it)
+        if (e.key === 'Escape' && !e.defaultPrevented) {
+            onCancel?.();
         }
         // Pause game
         if (e.key === ' ' || e.key === 'p' || e.key === 'P') {

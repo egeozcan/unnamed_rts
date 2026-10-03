@@ -65,7 +65,8 @@ function createPlayerRow(score: PlayerScore, maxScore: number, state: GameState)
     const economyWidth = (score.economy / maxScore) * 100;
     const totalScoreK = (score.total / 1000).toFixed(1) + 'k';
     const player = state.players?.[score.playerId];
-    const playerLabel = `P${score.playerId + 1}`;
+    // The local player is the only human in a skirmish; call them out so they can find themselves
+    const playerLabel = player && !player.isAi ? 'You' : `P${score.playerId + 1}`;
     const teamLabel = player?.team ? `(${player.team})` : '(FFA)';
     const aiNameLabel = getAINameLabel(player);
     const rowTitleParts = [playerLabel, teamLabel, aiNameLabel].filter(Boolean);
@@ -80,15 +81,15 @@ function createPlayerRow(score: PlayerScore, maxScore: number, state: GameState)
                     ${aiNameLabel ? `<span class="score-ai-name">${escapeHtml(aiNameLabel)}</span>` : ''}
                 </div>
                 <div class="score-bars">
-                    <div class="score-bar-container">
+                    <div class="score-bar-container" title="Military">
                         <div class="score-bar military" style="width: ${militaryWidth}%"></div>
                     </div>
-                    <div class="score-bar-container">
+                    <div class="score-bar-container" title="Economy">
                         <div class="score-bar economy" style="width: ${economyWidth}%"></div>
                     </div>
                 </div>
             </div>
-            <div class="total-score">${totalScoreK}</div>
+            <div class="total-score" title="Total score">${totalScoreK}</div>
         </div>
     `;
 }

@@ -50,6 +50,8 @@ canvas#gameCanvas.overlay-3d {
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
     z-index: 10;
     height: 100vh;
+    /* Border inside the 300px the canvas leaves free, so the page never scrolls sideways */
+    box-sizing: border-box;
 }
 
 .sidebar-header {
@@ -559,12 +561,14 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 #status-msg {
+    flex-shrink: 0;
     padding: 5px;
     background: #222;
     color: #fff;
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
     border-top: 1px solid #444;
 }
 
@@ -825,7 +829,7 @@ canvas#gameCanvas.attack-move-mode {
 
 .player-slots {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
 }
 
@@ -1856,7 +1860,7 @@ canvas#gameCanvas.attack-move-mode {
     }
 
     .player-slots {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .start-btn {

@@ -316,6 +316,8 @@ function setupClickHandler() {
     // Close on Escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && birdsEyeOverlay?.style.display !== 'none') {
+            // Consume the key so the game doesn't also cancel/deselect
+            e.preventDefault();
             if (onClose) onClose();
         }
     });
