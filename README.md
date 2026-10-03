@@ -69,18 +69,25 @@ npx vitest run tests/engine/harvester.test.ts
 
 | Input | Action |
 |-------|--------|
-| **Left Click** | Select unit/building |
+| **Left Click** | Select unit/building (Shift: add/remove) |
 | **Left Click + Drag** | Box select multiple units |
 | **Right Click** | Move selected units / Attack target |
 | **Right Click on Well** | Deploy Induction Rig (with rig unit selected) |
 | **Double Click / Enter** | Deploy MCV (with MCV selected) |
-| **Middle Mouse Button** | Pan camera (drag to scroll) |
-| **Arrow Keys / WASD** | Pan camera |
-| **Mouse Wheel** | Zoom in/out |
-| **1-5** | Set game speed |
+| **A, then click** | Attack-move |
+| **Middle Mouse Button / screen edge** | Pan camera |
+| **Arrow Keys** | Pan camera |
+| **Mouse Wheel / + -** | Zoom in/out (trackpad: two-finger pan, pinch zoom; wheel mode is set in the menus) |
+| **Ctrl + 0-9 / 0-9** | Assign / select control group (press twice to jump to it) |
+| **[ / ]** | Game speed slower / faster (or click the speed badge) |
+| **F / G / H** | Stance: Attack / Guard / Stand Ground |
+| **Escape** | Cancel mode / deselect / pause menu |
+| **Space / P** | Pause |
+| **V** | Switch 3D / classic 2D view |
 | **F3** | Toggle debug mode |
 | **M** | Toggle minimap |
 | **B** | Toggle bird's eye view |
+| **Touch** | Tap: select / command · hold + drag: box select · hold: deselect · drag/pinch: pan/zoom |
 
 ### Gameplay Basics
 

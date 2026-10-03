@@ -338,7 +338,7 @@ export interface GameState {
 export type Action =
     | { type: 'TICK' }
     | { type: 'COMMAND_MOVE'; payload: { unitIds: EntityId[]; x: number; y: number } }
-    | { type: 'COMMAND_ATTACK'; payload: { unitIds: EntityId[]; targetId: EntityId } }
+    | { type: 'COMMAND_ATTACK'; payload: { unitIds: EntityId[]; targetId: EntityId; x?: number; y?: number } }
     | { type: 'START_BUILD'; payload: { category: string; key: string; playerId: number } }
     | { type: 'PLACE_BUILDING'; payload: { key: string; x: number; y: number; playerId: number } }
     | { type: 'CANCEL_BUILD'; payload: { category: string; playerId: number } }
@@ -380,7 +380,7 @@ export const MAP_HEIGHT = 3000;
 export const TILE_SIZE = 40;
 export const GRID_W = Math.ceil(MAP_WIDTH / TILE_SIZE);
 export const GRID_H = Math.ceil(MAP_HEIGHT / TILE_SIZE);
-export const BUILD_RADIUS = 350;
+export const BUILD_RADIUS = 400;
 
 // Maximum players supported
 export const MAX_PLAYERS = 8;

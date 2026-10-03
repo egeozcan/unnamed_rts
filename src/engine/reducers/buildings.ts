@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, BuildingEntity, HarvesterUnit, ResourceEntity, WellEntity, Vector, Projectile, MapConfig
+    GameState, EntityId, Entity, BuildingEntity, HarvesterUnit, ResourceEntity, WellEntity, Vector, Projectile, MapConfig, BUILD_RADIUS
 } from '../types';
 import { RULES, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createEntity, getRuleData, createProjectile, killPlayerEntities } from './helpers';
@@ -46,6 +46,41 @@ function overlapsPlacementBlocker(
     return false;
 }
 
+/**
+ * Why a building can't be placed at (x, y), or null when the spot is valid.
+ * Shared by the reducer and the placement ghost so the preview never disagrees with the result.
+ */
+export function getPlacementError(
+    state: Pick<GameState, 'entities' | 'players'>,
+    key: string,
+    x: number,
+    y: number,
+    playerId: number
+): string | null {
+    const buildingData = RULES.buildings[key];
+    if (!buildingData) return 'Unknown building';
+
+    // Building must be within BUILD_RADIUS of an existing allied building (defenses don't extend range)
+    let hasAllyBuilding = false;
+    let withinBuildRange = false;
+    for (const id in state.entities) {
+        const b = state.entities[id];
+        if (b.type !== 'BUILDING' || b.dead || !isAlly(state as GameState, b.owner, playerId)) continue;
+        hasAllyBuilding = true;
+        if (RULES.buildings[b.key]?.isDefense) continue;
+        if ((x - b.pos.x) ** 2 + (y - b.pos.y) ** 2 < BUILD_RADIUS * BUILD_RADIUS) {
+            withinBuildRange = true;
+            break;
+        }
+    }
+    if (hasAllyBuilding && !withinBuildRange) return 'Cannot place: too far from your base';
+
+    if (overlapsPlacementBlocker(x, y, buildingData.w, buildingData.h, state.entities)) {
+        return 'Cannot place: location blocked';
+    }
+    return null;
+}
+
 export function placeBuilding(state: GameState, payload: { key: string; x: number; y: number; playerId: number }): GameState {
     const { key, x, y, playerId } = payload;
     const player = state.players[playerId];
@@ -53,35 +88,13 @@ export function placeBuilding(state: GameState, payload: { key: string; x: numbe
     const buildingData = RULES.buildings[key];
     if (!buildingData) return state;
 
-    // === BUILD RANGE VALIDATION ===
-    // Building must be within BUILD_RADIUS of an existing building (excluding defenses)
-    const BUILD_RADIUS = 400;
-    const allyBuildings = Object.values(state.entities).filter(e =>
-        e.type === 'BUILDING' && !e.dead && isAlly(state, e.owner, playerId)
-    );
-
-    let withinBuildRange = false;
-    for (const b of allyBuildings) {
-        const bData = RULES.buildings[b.key];
-        // Defense buildings don't extend build range
-        if (bData?.isDefense) continue;
-
-        const dist = Math.sqrt((x - b.pos.x) ** 2 + (y - b.pos.y) ** 2);
-        if (dist < BUILD_RADIUS) {
-            withinBuildRange = true;
-            break;
-        }
-    }
-
-    // Reject placement if not within build range (unless this is first building)
-    if (allyBuildings.length > 0 && !withinBuildRange) {
-        console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) is outside build range`);
-        return state;
-    }
-
-    if (overlapsPlacementBlocker(x, y, buildingData.w, buildingData.h, state.entities)) {
-        console.warn(`[Reducer] Rejected PLACE_BUILDING: position (${x}, ${y}) overlaps a blocking entity`);
-        return state;
+    const placementError = getPlacementError(state, key, x, y, playerId);
+    if (placementError) {
+        // Only the human player uses placement mode; AI placements fail silently
+        return player.isAi ? state : {
+            ...state,
+            notification: { text: placementError, type: 'error', tick: state.tick }
+        };
     }
 
     const building = createEntity(x, y, playerId, 'BUILDING', key, state);

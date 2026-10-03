@@ -4,6 +4,8 @@ import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../en
 import { canBuild } from '../engine/reducer.js';
 import { createEntityCache } from '../engine/perf.js';
 import { getSpatialGrid } from '../engine/spatial.js';
+import { pickEntityAt, isHiddenByFog } from '../engine/picking.js';
+import { isEnemy } from '../engine/teams.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
 import { getTransportPassengers, isGarrisonableTransport, isTransportedUnit } from '../engine/transport.js';
 
@@ -329,6 +331,9 @@ const prevButtonStates: Map<string, {
     queued: boolean;
     progress: number;
     queueCount: number;
+    statusText: string;
+    busy: boolean;
+    onHold: boolean;
 }> = new Map();
 
 export function updateButtons(
@@ -336,9 +341,12 @@ export function updateButtons(
     queues: Record<string, { current: string | null; progress: number; queued?: readonly string[] }>,
     readyToPlace: string | null,
     placingBuilding: string | null,
-    playerId: number = 0
+    playerId: number = 0,
+    credits: number = Infinity
 ) {
     const owner = playerId;
+    // Production pays as it goes: with an empty wallet every queue stalls
+    const outOfFunds = credits < 1;
 
     // Index the entities once: canBuild() on the raw record rescans every entity for each of
     // the ~50 buttons (and a second time for maxCount items).
@@ -382,7 +390,15 @@ export function updateButtons(
         progress: number;
         queueCount: number;
         statusText: string;
+        busy: boolean;
+        onHold: boolean;
     }> = new Map();
+    // Tabs with something in production / waiting for placement
+    const busyTabs = new Set<string>();
+    const readyTabs = new Set<string>();
+    const tabForKey = (cat: string, key: string): string =>
+        cat === 'building' ? (RULES.buildings[key]?.isDefense ? 'defense' : 'buildings') :
+            cat === 'infantry' ? 'infantry' : cat === 'air' ? 'air' : 'vehicles';
 
     // Update production states
     const categories = ['building', 'infantry', 'vehicle', 'air'] as const;
@@ -418,7 +434,9 @@ export function updateButtons(
                     queued: false,
                     progress: 0,
                     queueCount: 0,
-                    statusText: ''
+                    statusText: '',
+                    busy: false,
+                    onHold: false
                 });
             });
         }
@@ -429,9 +447,11 @@ export function updateButtons(
             if (state) {
                 state.building = true;
                 state.progress = q.progress;
-                state.statusText = 'BUILDING';
+                state.statusText = outOfFunds ? 'NO FUNDS' : 'BUILDING';
+                state.onHold = outOfFunds;
                 state.queueCount = 1 + (queuedCounts[q.current] || 0);
             }
+            busyTabs.add(tabForKey(cat, q.current));
         }
 
         // Set state for queued items (not currently building)
@@ -441,11 +461,20 @@ export function updateButtons(
             if (state) {
                 state.queued = true;
                 state.queueCount = count;
+                state.statusText = 'QUEUED';
+            }
+        }
+
+        // Only one structure is built at a time: lock the other structure buttons meanwhile
+        if (cat === 'building' && (q?.current || readyToPlace)) {
+            for (const [key, state] of desiredStates) {
+                if (key !== q?.current && key !== readyToPlace && RULES.buildings[key]) state.busy = true;
             }
         }
 
         // Set state for ready to place (buildings only)
         if (cat === 'building' && readyToPlace) {
+            readyTabs.add(tabForKey(cat, readyToPlace));
             const state = desiredStates.get(readyToPlace);
             if (state) {
                 state.building = false;
@@ -489,8 +518,15 @@ export function updateButtons(
             if (overlay) overlay.style.width = desired.progress + '%';
         }
 
+        if (!prev || prev.busy !== desired.busy) {
+            btn.classList.toggle('busy', desired.busy);
+        }
+        if (!prev || prev.onHold !== desired.onHold) {
+            btn.classList.toggle('on-hold', desired.onHold);
+        }
+
         // Update status text only if changed
-        if (!prev || prev.queueCount !== desired.queueCount || desired.statusText !== (prev.building || prev.ready || prev.placing ? (prev.placing ? 'PLACING' : prev.ready ? 'READY' : 'BUILDING') : '')) {
+        if (!prev || prev.statusText !== desired.statusText) {
             const status = btn.querySelector('.btn-status') as HTMLElement;
             if (status) status.innerText = desired.statusText;
         }
@@ -517,9 +553,21 @@ export function updateButtons(
             placing: desired.placing,
             queued: desired.queued,
             progress: desired.progress,
-            queueCount: desired.queueCount
+            queueCount: desired.queueCount,
+            statusText: desired.statusText,
+            busy: desired.busy,
+            onHold: desired.onHold
         });
     }
+
+    // Tab badges: show where production is running or a structure is waiting to be placed
+    document.querySelectorAll<HTMLElement>('.tab').forEach(tab => {
+        const name = tab.dataset.tab || '';
+        const ready = readyTabs.has(name);
+        const busy = !ready && busyTabs.has(name);
+        if (tab.classList.contains('tab-ready') !== ready) tab.classList.toggle('tab-ready', ready);
+        if (tab.classList.contains('tab-busy') !== busy) tab.classList.toggle('tab-busy', busy);
+    });
 }
 
 export function updateGameState(state: GameState) {
@@ -1442,40 +1490,19 @@ function getSelectionInfo(state: GameState, playerId: number): {
 /**
  * Find entity under mouse cursor
  */
-function getEntityAtPosition(entities: Record<EntityId, Entity>, wx: number, wy: number): Entity | null {
+function getEntityAtPosition(state: GameState, wx: number, wy: number, playerId: number): Entity | null {
+    const entities = state.entities;
     // This runs every frame while units are selected. Look only at entities near the cursor (via the
     // spatial grid) instead of scanning every entity. The grid is rebuilt each tick, so the generous
     // margin covers movement since then and the live entity record is used for the actual hit test.
-    let match: Entity | null = null;
-    let matches = 0;
-    for (const candidate of getSpatialGrid().queryRadius(wx, wy, 60)) {
+    // The same picker as left/right-click, so the cursor always previews what a click will do.
+    const nearby: Entity[] = [];
+    for (const candidate of getSpatialGrid().queryRadius(wx, wy, 100)) {
         const entity = entities[candidate.id];
-        if (!entity || !isHoverHit(entity, wx, wy)) continue;
-        match = entity;
-        if (++matches > 1) break;
+        if (entity) nearby.push(entity);
     }
-    if (matches <= 1) return match;
-
-    // Overlapping entities: keep the original "first in entity order wins" tie-break.
-    for (const id in entities) {
-        if (isHoverHit(entities[id], wx, wy)) return entities[id];
-    }
-    return null;
-}
-
-function isHoverHit(entity: Entity, wx: number, wy: number): boolean {
-    if (entity.dead) return false;
-    if (entity.type === 'UNIT' && isTransportedUnit(entity)) return false;
-
-    if (entity.type === 'BUILDING') {
-        // For buildings, use rectangular bounds
-        const dx = Math.abs(wx - entity.pos.x);
-        const dy = Math.abs(wy - entity.pos.y);
-        return dx <= entity.w / 2 && dy <= entity.h / 2;
-    }
-    // For other entities, use radius
-    const dist = Math.sqrt((wx - entity.pos.x) ** 2 + (wy - entity.pos.y) ** 2);
-    return dist <= entity.radius + 5;
+    // Entities in unexplored fog can't be pointed at (no "capture"/"attack" cursor giving them away)
+    return pickEntityAt(nearby, wx, wy, e => !isHiddenByFog(state, e, playerId));
 }
 
 /**
@@ -1556,7 +1583,7 @@ export function updateActionCursor(
     }
 
     // Find entity under mouse
-    const hoveredEntity = getEntityAtPosition(state.entities, mouseWorldX, mouseWorldY);
+    const hoveredEntity = getEntityAtPosition(state, mouseWorldX, mouseWorldY, playerId);
 
     // === DETERMINE CURSOR BASED ON HOVERED ENTITY ===
 
@@ -1586,10 +1613,9 @@ export function updateActionCursor(
         return;
     }
 
-    // --- ROCK ---
+    // --- ROCK --- (right-click walks up to it)
     if (hoveredEntity.type === 'ROCK') {
-        // Can't interact with rocks
-        setCursor('no-entry');
+        setCursor('move');
         return;
     }
 
@@ -1600,15 +1626,20 @@ export function updateActionCursor(
             setCursor('engineer-repair');
             return;
         }
-        // Can't do anything else to friendly entities (attacking own units not allowed)
-        // Show no cursor change (default crosshair)
-        clearCursors();
+        // Otherwise a right-click on your own stuff moves the selection next to it
+        setCursor('move');
         return;
     }
 
     // --- NEUTRAL ENTITY ---
     if (hoveredEntity.owner === -1) {
         // Can't attack neutral entities
+        setCursor('move');
+        return;
+    }
+
+    // --- ALLIED ENTITY --- (right-click just moves there)
+    if (!isEnemy(state, hoveredEntity.owner, playerId)) {
         setCursor('move');
         return;
     }

@@ -1,6 +1,7 @@
 import {
     Action, GameState, PLAYER_COLORS, Vector
 } from './types';
+import { isEnemy } from './teams';
 import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
@@ -79,11 +80,15 @@ export function update(state: GameState, action: Action): GameState {
             const newState = commandAttack(state, action.payload);
             // Only show indicator for human commands (units in selection)
             const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
+            // A right-click on anything but an enemy is a move to the clicked spot: show it as one
+            const commander = state.entities[action.payload.unitIds[0]];
+            const isAttack = !!target && !!commander && target.owner !== -1 && isEnemy(state, target.owner, commander.owner);
+            const { x, y } = action.payload;
             return {
                 ...newState,
                 commandIndicator: isHumanCommand && target ? {
-                    pos: target.pos,
-                    type: 'attack',
+                    pos: isAttack || x === undefined || y === undefined ? target.pos : new Vector(x, y),
+                    type: isAttack ? 'attack' : 'move',
                     startTick: state.tick
                 } : state.commandIndicator
             };

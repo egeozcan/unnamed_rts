@@ -5,6 +5,7 @@ import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
 import { isAirUnit } from '../entity-helpers';
 import { isDemoTruck } from '../type-guards';
+import { isEnemy } from '../teams';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
 import { updateHarvesterBehavior } from './harvester';
 import { updateCombatUnitBehavior } from './combat';
@@ -96,6 +97,14 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
                 movement: { ...unit.movement, moveTarget: formationTarget, path: null },
                 combat: { ...unit.combat, targetId: null },
                 harvester: { ...unit.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
+            };
+        } else if (isDemoTruck(unit)) {
+            // A move order disarms the truck; otherwise it turns straight back to its old target
+            nextEntities[unit.id] = {
+                ...unit,
+                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                combat: { ...unit.combat, targetId: null },
+                demoTruck: { ...unit.demoTruck, detonationTargetId: null, detonationTargetPos: null }
             };
         } else {
             // Combat unit
@@ -213,7 +222,34 @@ function calculateAttackSpreadPositions(targetPos: Vector, attackerPositions: Ve
     return positions;
 }
 
-export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetId: EntityId }): GameState {
+/**
+ * `point` moved to just outside `target`'s footprint (grown by `margin`) via the nearest edge;
+ * returned unchanged (same object) when it is already outside. A point at the exact centre leaves
+ * towards `fallbackFrom` (e.g. where the units are coming from).
+ */
+function pushOutsideFootprint(point: Vector, target: Entity, margin: number, fallbackFrom?: Vector): Vector {
+    const halfW = target.w / 2 + margin;
+    const halfH = target.h / 2 + margin;
+    let dx = point.x - target.pos.x;
+    let dy = point.y - target.pos.y;
+    if (Math.abs(dx) >= halfW || Math.abs(dy) >= halfH) return point;
+
+    if (dx === 0 && dy === 0 && fallbackFrom) {
+        dx = fallbackFrom.x - target.pos.x;
+        dy = fallbackFrom.y - target.pos.y;
+    }
+    // Leave through the edge the point is relatively closest to
+    if (Math.abs(dx) / halfW >= Math.abs(dy) / halfH) {
+        return new Vector(target.pos.x + (dx >= 0 ? halfW : -halfW), point.y);
+    }
+    return new Vector(point.x, target.pos.y + (dy >= 0 ? halfH : -halfH));
+}
+
+/**
+ * Right-click on an entity. `x`/`y` is the clicked point: units with nothing to do with the target
+ * (neutral rock, own building, ally...) move there in formation instead.
+ */
+export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; targetId: EntityId; x?: number; y?: number }): GameState {
     const { unitIds, targetId } = payload;
     const target = state.entities[targetId];
 
@@ -276,6 +312,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     }
 
     let nextEntities = { ...state.entities };
+    const fallbackMoveIds: EntityId[] = [];
     for (const id of expandedUnitIds) {
         const entity = nextEntities[id];
         if (entity && entity.owner !== -1 && entity.type === 'UNIT' && !isTransportedUnit(entity)) {
@@ -307,16 +344,12 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                     };
                 } else {
                     // Harvesters can't attack other things, treat as move
-                    nextEntities[id] = {
-                        ...entity,
-                        movement: { ...entity.movement, moveTarget: target.pos, path: null },
-                        combat: { ...entity.combat, targetId: null }
-                    };
+                    fallbackMoveIds.push(id);
                 }
             } else if (isAirUnit(entity)) {
                 // Special handling for air units (harriers)
                 // Only launch if docked and has ammo, and target is enemy
-                if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== entity.owner) {
+                if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== -1 && isEnemy(state, target.owner, entity.owner)) {
                     // Start launch sequence: just set targetId.
                     // The AirBase update loop will detect this target and launch the harrier in a staggered way.
                     nextEntities[id] = {
@@ -324,7 +357,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                         combat: { ...entity.combat, targetId: targetId }
                     };
                 }
-                else if (entity.airUnit.state !== 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== entity.owner) {
+                else if (entity.airUnit.state !== 'docked' && entity.airUnit.ammo > 0 && target && target.owner !== -1 && isEnemy(state, target.owner, entity.owner)) {
                     // Redirect flying/returning/attacking harriers
                     nextEntities[id] = {
                         ...entity,
@@ -334,7 +367,9 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                 }
             } else if (isDemoTruck(entity)) {
                 // Special handling for demo trucks - set detonation target
-                if (target && target.owner !== entity.owner) {
+                if (!(target && target.owner !== -1 && isEnemy(state, target.owner, entity.owner))) {
+                    fallbackMoveIds.push(id);
+                } else {
                     nextEntities[id] = setDetonationTarget(entity, targetId, null);
                 }
             } else {
@@ -379,7 +414,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                         movement: { ...entity.movement, moveTarget: target.pos, path: null },
                         combat: { ...entity.combat, targetId: targetId }
                     };
-                } else if (target && target.owner !== entity.owner) {
+                } else if (target && target.owner !== -1 && isEnemy(state, target.owner, entity.owner)) {
                     // Use spread position if assigned, otherwise approach directly
                     const spreadPos = assignedSpread.get(id);
                     nextEntities[id] = {
@@ -397,11 +432,61 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                             combat: { ...entity.combat, targetId: null }
                         } as any;
                     }
+                } else if (target) {
+                    // Neutral (ore, rocks, wells), allied, or own target with no special interaction:
+                    // a right-click there means "go there", never "shoot it" or "do nothing"
+                    fallbackMoveIds.push(id);
                 }
             }
         }
     }
-    return { ...state, entities: nextEntities };
+    const nextState = { ...state, entities: nextEntities };
+    if (fallbackMoveIds.length === 0) return nextState;
+
+    // The clicked point is usually on the target itself (a building, a rock): gather just outside it
+    // instead, or units would chase spots inside an impassable footprint forever
+    const clickPoint = new Vector(payload.x ?? target.pos.x, payload.y ?? target.pos.y);
+    const anchor = pushOutsideFootprint(clickPoint, target, 25, state.entities[fallbackMoveIds[0]]?.pos);
+    const moved = commandMove(nextState, { unitIds: fallbackMoveIds, x: anchor.x, y: anchor.y });
+
+    // Formation slots spread around the anchor can still fall on the footprint: push those out too
+    // (pushed slots slide along the edge until they are clear of every other unit's slot)
+    const movedEntities = { ...moved.entities };
+    const takenSlots: { pos: Vector; radius: number }[] = [];
+    const pushedIds: EntityId[] = [];
+    for (const id of fallbackMoveIds) {
+        const unit = movedEntities[id];
+        if (!unit || unit.type !== 'UNIT' || !unit.movement.moveTarget) continue;
+        const slot = unit.movement.moveTarget;
+        if (pushOutsideFootprint(slot, target, unit.radius + 5, unit.pos) === slot) {
+            takenSlots.push({ pos: slot, radius: unit.radius });
+        } else {
+            pushedIds.push(id);
+        }
+    }
+    for (const id of pushedIds) {
+        const unit = movedEntities[id];
+        if (!unit || unit.type !== 'UNIT' || !unit.movement.moveTarget) continue;
+        const edgeSlot = pushOutsideFootprint(unit.movement.moveTarget, target, unit.radius + 5, unit.pos);
+        // Tangent of the edge the slot sits on
+        const onVerticalEdge = Math.abs(edgeSlot.x - target.pos.x) >= target.w / 2 + unit.radius + 5 - 0.01;
+        const step = unit.radius * 2 + 4;
+        let slot = edgeSlot;
+        for (let i = 1; i <= 24 && takenSlots.some(t => t.pos.dist(slot) < t.radius + unit.radius + 2); i++) {
+            const offset = Math.ceil(i / 2) * step * (i % 2 === 1 ? 1 : -1);
+            slot = onVerticalEdge
+                ? new Vector(edgeSlot.x, edgeSlot.y + offset)
+                : new Vector(edgeSlot.x + offset, edgeSlot.y);
+        }
+        takenSlots.push({ pos: slot, radius: unit.radius });
+        movedEntities[id] = { ...unit, movement: { ...unit.movement, moveTarget: slot } } as typeof unit;
+    }
+    return { ...moved, entities: movedEntities };
+}
+
+/** Deploy feedback is for the commanding human only: AI deploys stay silent. */
+function notifyOwner(state: GameState, owner: number, notification: NonNullable<GameState['notification']>): GameState['notification'] {
+    return state.players[owner]?.isAi ? state.notification : notification;
 }
 
 export function deployMCV(state: GameState, payload: { unitId: EntityId }): GameState {
@@ -424,7 +509,7 @@ export function deployMCV(state: GameState, payload: { unitId: EntityId }): Game
         y < size / 2 || y > state.config.height - size / 2) {
         return {
             ...state,
-            notification: { text: 'Cannot deploy: Out of bounds', type: 'error', tick: state.tick }
+            notification: notifyOwner(state, mcv.owner, { text: 'Cannot deploy: Out of bounds', type: 'error', tick: state.tick })
         };
     }
 
@@ -443,7 +528,7 @@ export function deployMCV(state: GameState, payload: { unitId: EntityId }): Game
         if (mcv.pos.dist(blocker.pos) < combinedRadius * 0.9) { // 0.9 grace factor
             return {
                 ...state,
-                notification: { text: "Cannot deploy: Blocked", type: 'error', tick: state.tick }
+                notification: notifyOwner(state, mcv.owner, { text: "Cannot deploy: Blocked", type: 'error', tick: state.tick })
             };
         }
     }
@@ -467,7 +552,7 @@ export function deployMCV(state: GameState, payload: { unitId: EntityId }): Game
         ...state,
         entities: nextEntities,
         selection: nextSelection,
-        notification: { text: "Base Established", type: 'info', tick: state.tick }
+        notification: notifyOwner(state, mcv.owner, { text: "Base Established", type: 'info', tick: state.tick })
     };
 }
 
@@ -485,7 +570,7 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
     if (!well || well.type !== 'WELL' || well.dead) {
         return {
             ...state,
-            notification: { text: 'Cannot deploy: Invalid well', type: 'error', tick: state.tick }
+            notification: notifyOwner(state, rig.owner, { text: 'Cannot deploy: Invalid well', type: 'error', tick: state.tick })
         };
     }
 
@@ -500,7 +585,7 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
     if (existingRig) {
         return {
             ...state,
-            notification: { text: 'Cannot deploy: Well already has a rig', type: 'error', tick: state.tick }
+            notification: notifyOwner(state, rig.owner, { text: 'Cannot deploy: Well already has a rig', type: 'error', tick: state.tick })
         };
     }
 
@@ -509,7 +594,7 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
     if (rig.pos.dist(well.pos) > deployRange) {
         return {
             ...state,
-            notification: { text: 'Cannot deploy: Move closer to well', type: 'error', tick: state.tick }
+            notification: notifyOwner(state, rig.owner, { text: 'Cannot deploy: Move closer to well', type: 'error', tick: state.tick })
         };
     }
 
@@ -552,7 +637,7 @@ export function deployInductionRig(state: GameState, payload: { unitId: EntityId
         ...state,
         entities: nextEntities,
         selection: nextSelection,
-        notification: { text: "Induction Rig Deployed", type: 'info', tick: state.tick }
+        notification: notifyOwner(state, rig.owner, { text: "Induction Rig Deployed", type: 'info', tick: state.tick })
     };
 }
 

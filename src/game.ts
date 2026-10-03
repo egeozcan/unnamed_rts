@@ -13,20 +13,22 @@ import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateActionCursor } from './ui/index.js';
 import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
+import { pushAlert, resetAlerts } from './ui/alerts.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
-import { initPauseMenu, showPauseMenu, hidePauseMenu } from './ui/pause-menu.js';
-import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput } from './input/index.js';
+import { initPauseMenu, showPauseMenu, hidePauseMenu, isHelpVisible, showHelp, closeHelp } from './ui/pause-menu.js';
+import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
 import { computeAiActions, getAIImplementationOptions, resetAIState, resetAIImplementations, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
 import { RULES } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
 import { isTransportedUnit } from './engine/transport.js';
+import { pickEntityAt, isHiddenByFog } from './engine/picking.js';
 import { createFogGrid } from './engine/reducers/fog.js';
 import { createEntityCache } from './engine/perf.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
-import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap } from './game-utils.js';
+import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap, validateSkirmishConfig } from './game-utils.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
 type GameSpeed = 1 | 2 | 3 | 4 | 5;
@@ -39,6 +41,9 @@ const renderer = new Renderer(canvas);
 let currentState: GameState = INITIAL_STATE;
 let humanPlayerId: number | null = 0; // Track which player is human (null = observer mode)
 let prePauseMode: 'game' | 'demo' | null = null;
+let humanDefeatShown = false;
+let lastAlertedNotification: GameState['notification'] = null;
+let wasLowPower = false;
 
 // HMR: Restore state from previous hot reload if available
 if (import.meta.hot?.data?.gameState) {
@@ -232,6 +237,13 @@ function syncGraphicsModeSelect() {
     if (select) select.value = renderer.getGraphicsMode();
 }
 
+function setupWheelModeSelect() {
+    const select = document.getElementById('wheel-mode') as HTMLSelectElement | null;
+    if (!select) return;
+    select.value = getWheelMode();
+    select.addEventListener('change', () => setWheelMode(select.value as WheelMode));
+}
+
 function setupGraphicsModeSelect() {
     const select = document.getElementById('graphics-mode') as HTMLSelectElement | null;
     if (!select) return;
@@ -413,15 +425,51 @@ function generateMap(config: SkirmishConfig): { entities: Record<EntityId, Entit
     return generateSkirmishMap(config);
 }
 
+function showSetupError(message: string) {
+    const el = document.getElementById('setup-error');
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle('visible', message !== '');
+}
+
 // Start button handler
 document.getElementById('start-skirmish-btn')?.addEventListener('click', () => {
     persistSkirmishMenuSettings();
     const config = getSkirmishConfig();
-    if (config.players.length < 2) {
-        alert('You need at least 2 players to start a game!');
-        return;
-    }
+    const setupError = validateSkirmishConfig(config);
+    showSetupError(setupError ?? '');
+    if (setupError) return;
     startGameWithConfig(config);
+});
+
+// Clear a stale setup error as soon as the setup changes
+document.getElementById('menu')?.addEventListener('change', () => showSetupError(''));
+
+document.getElementById('menu-help-btn')?.addEventListener('click', () => {
+    showHelp(() => { /* back to the main menu underneath */ });
+});
+
+// Before a game starts the in-game input layer isn't listening yet: let Escape close the menu's help
+window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && currentState.mode === 'menu' && isHelpVisible()) closeHelp();
+});
+
+// In-game buttons (Sell, Repair, stances...) must not keep keyboard focus: Enter/Space would
+// re-press them (Enter is also Deploy MCV), e.g. silently re-arming sell mode
+document.getElementById('game-container')?.addEventListener('click', e => {
+    const button = (e.target as HTMLElement | null)?.closest('button');
+    if (button) button.blur();
+});
+
+// The speed badge doubles as a control (touch / keyboards without [ ]): click = faster, wrapping round
+document.getElementById('speed-indicator')?.addEventListener('click', () => {
+    setGameSpeed((gameSpeed % 5 + 1) as GameSpeed);
+});
+
+document.getElementById('hud-menu-btn')?.addEventListener('click', (e) => {
+    // Drop focus so Space/Enter don't re-activate the button behind the overlay
+    (e.currentTarget as HTMLElement).blur();
+    togglePause();
 });
 
 // Restart button
@@ -429,12 +477,15 @@ document.getElementById('restart-btn')?.addEventListener('click', () => {
     location.reload();
 });
 
+document.getElementById('spectate-btn')?.addEventListener('click', spectateAfterDefeat);
+
 // Initialize skirmish UI
 populateAiImplementationSelects();
 restoreSkirmishMenuSettings();
 setupSkirmishUI();
 setupSkirmishPersistence();
 setupGraphicsModeSelect();
+setupWheelModeSelect();
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
 function reconstructVectors(state: GameState): GameState {
@@ -551,6 +602,12 @@ function startGameWithConfig(config: SkirmishConfig) {
     // from a previous skirmish so stale strategies, groups and ticks don't carry over.
     resetAIState();
     resetAIImplementations();
+    controlGroups = new Map();
+    lastGroupRecall = null;
+    resetAlerts();
+    lastAlertedNotification = null;
+    wasLowPower = false;
+    humanDefeatShown = false;
     lastButtonsTick = -1;
     lastButtonsTimeMs = -Infinity;
 
@@ -716,14 +773,7 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     // Initialize pause menu
     initPauseMenu(
-        () => {
-            // Resume
-            if (prePauseMode) {
-                currentState = { ...currentState, mode: prePauseMode };
-                prePauseMode = null;
-            }
-            hidePauseMenu();
-        },
+        resumeGame,
         () => {
             // Quit - reload page
             location.reload();
@@ -755,64 +805,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     }
 
     // Initialize input
-    initInput(canvas, {
-        onLeftClick: handleLeftClick,
-        onRightClick: handleRightClick,
-        onDeployMCV: attemptMCVDeploy,
-        onToggleDebug: () => {
-            currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
-            updateButtonsUI();
-        },
-        onToggleMinimap: () => {
-            if (currentState.mode === 'demo') {
-                currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
-            }
-        },
-        onToggleBirdsEye: () => {
-            currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
-        },
-        onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
-            setGameSpeed(speed);
-        },
-        onSetStance: (stance) => {
-            if (currentState.selection.length > 0) {
-                currentState = update(currentState, {
-                    type: 'SET_STANCE',
-                    payload: { unitIds: currentState.selection, stance }
-                });
-            }
-        },
-        onToggleAttackMove: () => {
-            currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
-        },
-        onUngarrison: () => {
-            currentState = update(currentState, {
-                type: 'COMMAND_UNGARRISON',
-                payload: { unitIds: currentState.selection }
-            });
-            updateButtonsUI();
-        },
-        onToggleGraphics: toggleGraphicsMode,
-        onCancel: handleCancel,
-        onTogglePause: () => {
-            if (currentState.mode === 'paused') {
-                // Resume
-                if (prePauseMode) {
-                    currentState = { ...currentState, mode: prePauseMode };
-                    prePauseMode = null;
-                }
-                hidePauseMenu();
-            } else if (currentState.mode === 'game' || currentState.mode === 'demo') {
-                // Pause
-                prePauseMode = currentState.mode;
-                currentState = { ...currentState, mode: 'paused' };
-                showPauseMenu();
-            }
-        },
-        onDoubleClick: handleDoubleClick,
-        getZoom: () => currentState.zoom,
-        getCamera: () => currentState.camera
-    });
+    initInput(canvas, createInputCallbacks());
 
     // Set up minimap click handler to pan camera
     setMinimapClickHandler((worldX, worldY) => {
@@ -857,12 +850,171 @@ function startGameWithConfig(config: SkirmishConfig) {
     gameLoop();
 }
 
+function pauseGame() {
+    if (currentState.mode !== 'game' && currentState.mode !== 'demo') return;
+    if (!currentState.running) return; // Nothing to pause once the game is over
+    prePauseMode = currentState.mode;
+    currentState = { ...currentState, mode: 'paused' };
+    showPauseMenu();
+}
+
+function resumeGame() {
+    if (currentState.mode === 'paused' && prePauseMode) {
+        currentState = { ...currentState, mode: prePauseMode };
+        prePauseMode = null;
+    }
+    hidePauseMenu();
+}
+
+function togglePause() {
+    if (currentState.mode === 'paused') {
+        resumeGame();
+    } else {
+        pauseGame();
+    }
+}
+
+// Control groups: Ctrl/Cmd+digit assigns, Shift+digit adds, digit recalls (twice quickly = jump camera)
+const CONTROL_GROUP_DOUBLE_TAP_MS = 400;
+let controlGroups = new Map<number, EntityId[]>();
+let lastGroupRecall: { group: number; timeMs: number } | null = null;
+
+function handleControlGroup(group: number, action: 'recall' | 'assign' | 'add') {
+    if (currentState.mode !== 'game' || humanPlayerId === null) return;
+
+    const isOwnedAlive = (id: EntityId) => {
+        const e = currentState.entities[id];
+        return !!e && !e.dead && e.owner === humanPlayerId;
+    };
+
+    if (action === 'assign' || action === 'add') {
+        const base = action === 'add' ? (controlGroups.get(group) ?? []).filter(isOwnedAlive) : [];
+        const members = [...new Set([...base, ...currentState.selection.filter(isOwnedAlive)])];
+        if (members.length === 0) return;
+        controlGroups.set(group, members);
+        currentState = {
+            ...currentState,
+            notification: {
+                text: action === 'add' ? `Group ${group}: added (${members.length} total)` : `Group ${group}: ${members.length} assigned`,
+                type: 'info',
+                tick: currentState.tick
+            }
+        };
+        updateButtonsUI();
+        return;
+    }
+
+    const members = (controlGroups.get(group) ?? []).filter(isOwnedAlive);
+    controlGroups.set(group, members);
+    if (members.length === 0) return;
+
+    const now = performance.now();
+    const isDoubleTap = lastGroupRecall?.group === group && now - lastGroupRecall.timeMs < CONTROL_GROUP_DOUBLE_TAP_MS;
+    lastGroupRecall = { group, timeMs: now };
+
+    currentState = update(currentState, { type: 'SELECT_UNITS', payload: members });
+    if (isDoubleTap) {
+        let cx = 0, cy = 0;
+        for (const id of members) {
+            cx += currentState.entities[id].pos.x;
+            cy += currentState.entities[id].pos.y;
+        }
+        centerCameraOn(cx / members.length, cy / members.length);
+    }
+    updateButtonsUI();
+}
+
+function centerCameraOn(worldX: number, worldY: number) {
+    const size = renderer.getSize();
+    const zoom = currentState.zoom;
+    const panBuffer = 300;
+    const mapWidth = currentState.config.width;
+    const mapHeight = currentState.config.height;
+    currentState = {
+        ...currentState,
+        camera: {
+            x: Math.max(-panBuffer / zoom, Math.min(mapWidth - size.width / zoom + panBuffer / zoom, worldX - size.width / zoom / 2)),
+            y: Math.max(-panBuffer / zoom, Math.min(mapHeight - size.height / zoom + panBuffer / zoom, worldY - size.height / zoom / 2))
+        }
+    };
+}
+
+function createInputCallbacks(): Parameters<typeof initInput>[1] {
+    return {
+        onLeftClick: handleLeftClick,
+        onRightClick: handleRightClick,
+        onDeployMCV: attemptMCVDeploy,
+        onToggleDebug: () => {
+            currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
+            updateButtonsUI();
+        },
+        onToggleMinimap: () => {
+            if (currentState.mode === 'demo') {
+                currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
+            }
+        },
+        onToggleBirdsEye: () => {
+            currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
+        },
+        onAdjustSpeed: (delta) => {
+            setGameSpeed(Math.max(1, Math.min(5, gameSpeed + delta)) as GameSpeed);
+        },
+        onControlGroup: handleControlGroup,
+        onSetStance: (stance) => {
+            if (currentState.selection.length > 0) {
+                currentState = update(currentState, {
+                    type: 'SET_STANCE',
+                    payload: { unitIds: currentState.selection, stance }
+                });
+                updateButtonsUI();
+            }
+        },
+        onToggleAttackMove: () => {
+            if (currentState.mode !== 'game') return;
+            // Nothing to order: don't arm a mode that would swallow the next click
+            const hasUnits = getCommandableSelection().some(id => currentState.entities[id]?.type === 'UNIT');
+            if (!currentState.attackMoveMode && !hasUnits) return;
+            currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+            updateButtonsUI();
+        },
+        onUngarrison: () => {
+            currentState = update(currentState, {
+                type: 'COMMAND_UNGARRISON',
+                payload: { unitIds: currentState.selection }
+            });
+            updateButtonsUI();
+        },
+        onToggleGraphics: toggleGraphicsMode,
+        onCancel: handleCancel,
+        onTogglePause: togglePause,
+        isPaused: () => currentState.mode === 'paused',
+        onTap: handleTap,
+        onClearSelection: () => {
+            if (currentState.mode !== 'game') return;
+            currentState = update(currentState, { type: 'SELECT_UNITS', payload: [] });
+            updateButtonsUI();
+        },
+        onDoubleClick: handleDoubleClick,
+        getZoom: () => currentState.zoom,
+        getCamera: () => currentState.camera
+    };
+}
+
 function handleBuildClick(category: string, key: string, count: number = 1) {
     if (currentState.mode === 'demo') return;
     if (humanPlayerId === null) return;
 
     if (category === 'building') {
-        if (currentState.players[humanPlayerId].readyToPlace === key) {
+        const player = currentState.players[humanPlayerId];
+        const inProgress = player.queues.building.current ?? player.readyToPlace;
+        if (inProgress && inProgress !== key) {
+            const name = RULES.buildings[inProgress]?.name ?? inProgress;
+            pushAlert(player.readyToPlace
+                ? `Place your ${name} first (or right-click its button to cancel)`
+                : `Already building ${name} - one structure at a time`, 'warning', 'build-busy', 1000);
+            return;
+        }
+        if (player.readyToPlace === key) {
             // Exit sell/repair mode when entering placement mode
             currentState = {
                 ...currentState,
@@ -931,20 +1083,25 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         return;
     }
 
-    if (currentState.mode === 'demo') return;
+    if (currentState.mode !== 'game') return;
 
-    // Cancel attack-move mode on any left click
-    if (currentState.attackMoveMode) {
+    // Attack-move mode: a left-click issues the order (A, then click - as in most RTS games);
+    // a drag still box-selects (and leaves the mode)
+    if (currentState.attackMoveMode && isDrag) {
         currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+    } else if (currentState.attackMoveMode) {
+        currentState = update(currentState, {
+            type: 'COMMAND_ATTACK_MOVE',
+            payload: { unitIds: getCommandableSelection(), x: wx, y: wy }
+        });
+        updateButtonsUI();
+        return;
     }
 
     // Sell Mode
     if (currentState.sellMode) {
         if (humanPlayerId === null) return;
-        const entityList = Object.values(currentState.entities);
-        const clicked = entityList.find(e =>
-            !e.dead && e.owner === humanPlayerId && isBuilding(e) && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
-        );
+        const clicked = pickEntityAt(currentState.entities, wx, wy, e => e.owner === humanPlayerId && isBuilding(e));
         if (clicked) {
             currentState = update(currentState, {
                 type: 'SELL_BUILDING',
@@ -958,10 +1115,7 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     // Repair Mode
     if (currentState.repairMode) {
         if (humanPlayerId === null) return;
-        const entityList = Object.values(currentState.entities);
-        const clicked = entityList.find(e =>
-            !e.dead && e.owner === humanPlayerId && isBuilding(e) && e.pos.dist(new Vector(wx, wy)) < e.radius + 15
-        );
+        const clicked = pickEntityAt(currentState.entities, wx, wy, e => e.owner === humanPlayerId && isBuilding(e));
         if (clicked && isBuilding(clicked)) {
             // Toggle repair on/off for this building
             if (clicked.building.isRepairing) {
@@ -1012,14 +1166,9 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
             }
         }
     } else {
-        const entityList = Object.values(currentState.entities);
-        const clicked = entityList.find(e =>
-            !e.dead &&
-            humanPlayerId !== null &&
-            e.owner === humanPlayerId &&
-            !(e.type === 'UNIT' && isTransportedUnit(e)) &&
-            e.pos.dist(new Vector(wx, wy)) < e.radius + 15
-        );
+        const clicked = humanPlayerId === null
+            ? null
+            : pickEntityAt(currentState.entities, wx, wy, e => e.owner === humanPlayerId);
         if (clicked) {
             // Check if clicking on already selected MCV -> Deploy
             if (clicked.type === 'UNIT' && clicked.key === 'mcv' && currentState.selection.includes(clicked.id)) {
@@ -1047,8 +1196,21 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
     updateButtonsUI();
 }
 
-// Escape: back out of the active mode (sell, repair, placement, attack-move), else clear the selection
+// Escape: close the pause menu, else back out of the active mode (sell, repair, placement,
+// attack-move), else clear the selection, else open the pause menu
 function handleCancel() {
+    if (isHelpVisible()) {
+        closeHelp();
+        return;
+    }
+    if (currentState.mode === 'paused') {
+        resumeGame();
+        return;
+    }
+    if (currentState.mode === 'demo') {
+        pauseGame();
+        return;
+    }
     if (currentState.mode !== 'game') return;
 
     if (currentState.sellMode) {
@@ -1062,13 +1224,47 @@ function handleCancel() {
     } else if (currentState.selection.length > 0) {
         currentState = update(currentState, { type: 'SELECT_UNITS', payload: [] });
     } else {
+        pauseGame();
         return;
     }
     updateButtonsUI();
 }
 
+/**
+ * Touch has no right button: a tap selects your own unit (or a building when nothing is selected),
+ * and anywhere else it commands the current selection, like a right-click.
+ */
+function handleTap(wx: number, wy: number) {
+    if (currentState.mode !== 'game' || humanPlayerId === null) return;
+    if (currentState.sellMode || currentState.repairMode || currentState.placingBuilding || currentState.attackMoveMode) {
+        handleLeftClick(wx, wy, false);
+        return;
+    }
+    const own = pickEntityAt(currentState.entities, wx, wy, e => e.owner === humanPlayerId);
+    // Only selected units take tap-orders; a selected building is just "what you're looking at",
+    // except a Barracks/Factory, where a tap on the ground sets its rally point
+    const selection = getCommandableSelection();
+    const hasUnits = selection.some(id => currentState.entities[id]?.type === 'UNIT');
+    const isRallyBuilding = selection.length === 1 && ['barracks', 'factory'].includes(currentState.entities[selection[0]]?.key ?? '');
+    const commands = hasUnits || (isRallyBuilding && !own);
+    if (!commands || (own && own.type === 'UNIT')) {
+        handleLeftClick(wx, wy, false);
+    } else {
+        handleRightClick(wx, wy);
+    }
+}
+
+/** Selected entities that can take orders (alive, not riding inside a transport). */
+function getCommandableSelection(): EntityId[] {
+    return currentState.selection.filter(id => {
+        const entity = currentState.entities[id];
+        if (!entity || entity.dead) return false;
+        return entity.type !== 'UNIT' || !isTransportedUnit(entity);
+    });
+}
+
 function handleRightClick(wx: number, wy: number) {
-    if (currentState.mode === 'demo') return;
+    if (currentState.mode !== 'game') return;
 
     // Cancel sell mode
     if (currentState.sellMode) {
@@ -1091,11 +1287,7 @@ function handleRightClick(wx: number, wy: number) {
         return;
     }
 
-    const selectedCommandIds = currentState.selection.filter(id => {
-        const entity = currentState.entities[id];
-        if (!entity || entity.dead) return false;
-        return entity.type !== 'UNIT' || !isTransportedUnit(entity);
-    });
+    const selectedCommandIds = getCommandableSelection();
 
     // Cancel attack-move mode if active (but still process the command)
     if (currentState.attackMoveMode) {
@@ -1127,15 +1319,9 @@ function handleRightClick(wx: number, wy: number) {
     }
 
     // Find target
-    let targetId: EntityId | null = null;
-    const entityList = Object.values(currentState.entities);
-    for (const ent of entityList) {
-        if (ent.type === 'UNIT' && isTransportedUnit(ent)) continue;
-        if (!ent.dead && ent.pos.dist(new Vector(wx, wy)) < ent.radius + 5) {
-            targetId = ent.id;
-            break;
-        }
-    }
+    // Unexplored fog hides its entities from clicks too (right-clicking there just moves)
+    const targetId: EntityId | null = pickEntityAt(currentState.entities, wx, wy,
+        e => !isHiddenByFog(currentState, e, humanPlayerId))?.id ?? null;
 
     // Issue commands
     if (selectedIds.length === 0) return;
@@ -1201,7 +1387,7 @@ function handleRightClick(wx: number, wy: number) {
             // Normal attack command for other units
             currentState = update(currentState, {
                 type: 'COMMAND_ATTACK',
-                payload: { unitIds: selectedIds, targetId }
+                payload: { unitIds: selectedIds, targetId, x: wx, y: wy }
             });
         }
     } else {
@@ -1237,7 +1423,7 @@ const PRIMARY_BUILDING_MAP: Record<string, 'infantry' | 'vehicle'> = {
 };
 
 function handleDoubleClick(wx: number, wy: number) {
-    if (humanPlayerId === null) return;
+    if (humanPlayerId === null || currentState.mode !== 'game') return;
 
     // Check if double-clicked on a production building owned by human player
     for (const id in currentState.entities) {
@@ -1276,7 +1462,8 @@ function updateButtonsUI() {
         player.queues,
         player.readyToPlace,
         currentState.placingBuilding,
-        pid
+        pid,
+        player.credits
     );
     updateSellModeUI(currentState);
     updateRepairModeUI(currentState);
@@ -1318,6 +1505,7 @@ function gameLoop(timestamp: number = 0) {
 
     const frameStartMs = performance.now();
     const simStartMs = frameStartMs;
+    const preSimState = currentState;
 
     if (currentState.debugMode || skipSim) {
         // Just render, don't update
@@ -1333,6 +1521,14 @@ function gameLoop(timestamp: number = 0) {
         }
     }
     const simMs = performance.now() - simStartMs;
+    announceGameEvents(preSimState, currentState);
+    checkHumanDefeat();
+
+    // Reducer notifications (placement errors, deploy results...) also appear over the battlefield
+    if (currentState.notification && currentState.notification !== lastAlertedNotification) {
+        pushAlert(currentState.notification.text, currentState.notification.type);
+    }
+    lastAlertedNotification = currentState.notification ?? null;
 
     let uiMs = 0;
     const preRenderUiStartMs = performance.now();
@@ -1354,6 +1550,12 @@ function gameLoop(timestamp: number = 0) {
         updateMoney(displayPlayer.credits);
         updatePower(cachedPower.out, cachedPower.in);
     }
+
+    const isLowPower = cachedPower.out < cachedPower.in;
+    if (isLowPower && !wasLowPower && humanPlayerId !== null && currentState.mode === 'game') {
+        pushAlert('Low power - production slowed. Build a Power Plant', 'warning', 'low-power', 30000);
+    }
+    wasLowPower = isLowPower;
 
     if (skipSim || shouldRunCadencedUpdate({
         currentTick: currentState.tick,
@@ -1528,12 +1730,105 @@ function calculatePower(pid: number, entities: Record<EntityId, any>) {
     return p;
 }
 
+/**
+ * Surface what just happened to the human player as battlefield alerts: completed structures,
+ * new units, stalled production, attacks. `prev` is the state before this frame's ticks.
+ */
+function announceGameEvents(prev: GameState, next: GameState) {
+    if (humanPlayerId === null || next.mode !== 'game' || prev === next) return;
+    const prevPlayer = prev.players[humanPlayerId];
+    const player = next.players[humanPlayerId];
+    if (!prevPlayer || !player) return;
+
+    if (player.readyToPlace && player.readyToPlace !== prevPlayer.readyToPlace) {
+        const name = RULES.buildings[player.readyToPlace]?.name ?? player.readyToPlace;
+        pushAlert(`Construction complete: ${name} - click it in the sidebar to place`, 'success');
+    }
+
+    const producing = Object.values(player.queues).some(q => q.current);
+    if (producing && player.credits < 1) {
+        pushAlert('Insufficient funds - production on hold', 'warning', 'no-funds', 20000);
+    }
+
+    for (const id in next.entities) {
+        const e = next.entities[id];
+        if (e.owner !== humanPlayerId || e.dead) continue;
+        const before = prev.entities[id];
+        if (!before) {
+            if (e.type === 'UNIT') {
+                const name = RULES.units[e.key]?.name ?? e.key;
+                pushAlert(`Unit ready: ${name}`, 'info', `unit-ready:${e.key}`, 1500);
+            }
+            continue;
+        }
+        if (e.hp < before.hp) {
+            if (e.type === 'BUILDING') {
+                pushAlert('Our base is under attack!', 'error', 'base-attack', 20000);
+            } else if (e.type === 'UNIT' && e.key === 'harvester') {
+                pushAlert('Harvester under attack!', 'error', 'harvester-attack', 20000);
+            }
+        }
+    }
+}
+
+function hasHumanBeenEliminated(): boolean {
+    if (humanPlayerId === null) return false;
+    for (const id in currentState.entities) {
+        const e = currentState.entities[id];
+        if (e.owner !== humanPlayerId || e.dead) continue;
+        if (e.type === 'BUILDING' || (e.type === 'UNIT' && e.key === 'mcv')) return false;
+    }
+    return true;
+}
+
+/** The human lost while other players fight on: offer to keep watching or leave. */
+function checkHumanDefeat() {
+    if (humanDefeatShown || currentState.winner !== null || !currentState.running) return;
+    if (currentState.mode !== 'game' || !hasHumanBeenEliminated()) return;
+
+    humanDefeatShown = true;
+    const endScreen = document.getElementById('end-screen');
+    const endTitle = document.getElementById('end-title');
+    const endSubtitle = document.getElementById('end-subtitle');
+    const spectateBtn = document.getElementById('spectate-btn');
+    if (!endScreen || !endTitle) return;
+    endTitle.textContent = 'MISSION FAILED';
+    endTitle.style.color = '#ff4444';
+    if (endSubtitle) endSubtitle.textContent = 'Your base was destroyed. The battle continues without you.';
+    if (spectateBtn) spectateBtn.hidden = false;
+    endScreen.classList.add('visible');
+}
+
+/** Switch a defeated player to observing the rest of the match. */
+function spectateAfterDefeat() {
+    const endScreen = document.getElementById('end-screen');
+    const spectateBtn = document.getElementById('spectate-btn');
+    endScreen?.classList.remove('visible');
+    if (spectateBtn) spectateBtn.hidden = true;
+
+    if (humanPlayerId !== null) {
+        const { [humanPlayerId]: _ownFog, ...otherFog } = currentState.fogOfWar ?? {};
+        currentState = { ...currentState, fogOfWar: otherFog, selection: [], placingBuilding: null, sellMode: false, repairMode: false, attackMoveMode: false };
+    }
+    humanPlayerId = null;
+    currentState = { ...currentState, mode: 'demo' };
+    setObserverMode(true);
+    renderer.resize();
+    updateButtonsUI();
+}
+
 function checkWinCondition() {
     if (currentState.winner !== null) {
         const endScreen = document.getElementById('end-screen');
         const endTitle = document.getElementById('end-title');
         if (endScreen && endTitle) {
-            if (endScreen.classList.contains('visible')) return;
+            if (endTitle.dataset.final === 'true') return;
+            endTitle.dataset.final = 'true';
+            humanDefeatShown = false;
+            const endSubtitle = document.getElementById('end-subtitle');
+            if (endSubtitle) endSubtitle.textContent = '';
+            const spectateBtn = document.getElementById('spectate-btn');
+            if (spectateBtn) spectateBtn.hidden = true;
 
             endScreen.classList.add('visible');
             if (currentState.winner === -1) {
@@ -1585,64 +1880,7 @@ if (import.meta.hot) {
         // Reinitialize input with fresh callbacks after state restoration
         const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
         if (canvas) {
-            initInput(canvas, {
-                onLeftClick: handleLeftClick,
-                onRightClick: handleRightClick,
-                onDeployMCV: attemptMCVDeploy,
-                onToggleDebug: () => {
-                    currentState = update(currentState, { type: 'TOGGLE_DEBUG' });
-                    updateButtonsUI();
-                },
-                onToggleMinimap: () => {
-                    if (currentState.mode === 'demo') {
-                        currentState = update(currentState, { type: 'TOGGLE_MINIMAP' });
-                    }
-                },
-                onToggleBirdsEye: () => {
-                    currentState = update(currentState, { type: 'TOGGLE_BIRDS_EYE' });
-                },
-                onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => {
-                    setGameSpeed(speed);
-                },
-                onSetStance: (stance) => {
-                    if (currentState.selection.length > 0) {
-                        currentState = update(currentState, {
-                            type: 'SET_STANCE',
-                            payload: { unitIds: currentState.selection, stance }
-                        });
-                    }
-                },
-                onToggleAttackMove: () => {
-                    currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
-                },
-                onUngarrison: () => {
-                    currentState = update(currentState, {
-                        type: 'COMMAND_UNGARRISON',
-                        payload: { unitIds: currentState.selection }
-                    });
-                    updateButtonsUI();
-                },
-                onToggleGraphics: toggleGraphicsMode,
-                onCancel: handleCancel,
-                onTogglePause: () => {
-                    if (currentState.mode === 'paused') {
-                        // Resume
-                        if (prePauseMode) {
-                            currentState = { ...currentState, mode: prePauseMode };
-                            prePauseMode = null;
-                        }
-                        hidePauseMenu();
-                    } else if (currentState.mode === 'game' || currentState.mode === 'demo') {
-                        // Pause
-                        prePauseMode = currentState.mode;
-                        currentState = { ...currentState, mode: 'paused' };
-                        showPauseMenu();
-                    }
-                },
-                onDoubleClick: handleDoubleClick,
-                getZoom: () => currentState.zoom,
-                getCamera: () => currentState.camera
-            });
+            initInput(canvas, createInputCallbacks());
 
             // Reinitialize UI modules with fresh callbacks (they use listener guard pattern for HMR)
             initUI(currentState, handleBuildClick, handleToggleSellMode, handleToggleRepairMode, handleCancelBuild, handleDequeueUnit);

@@ -539,3 +539,19 @@ export function generateMap(config: SkirmishConfig): { entities: Record<EntityId
 
     return { entities, mapWidth, mapHeight };
 }
+
+/**
+ * Why a skirmish setup can't start, or null when it can. A game needs at least two players and
+ * at least two opposing sides (players without a team are each their own side) - otherwise it
+ * would be "won" on the first tick.
+ */
+export function validateSkirmishConfig(config: Pick<SkirmishConfig, 'players'>): string | null {
+    if (config.players.length < 2) {
+        return 'Add at least 2 players to start a battle.';
+    }
+    const sides = new Set(config.players.map(p => p.team ? `team:${p.team}` : `slot:${p.slot}`));
+    if (sides.size < 2) {
+        return 'Everyone is on the same team - put at least one player on another team (or "—" for free-for-all).';
+    }
+    return null;
+}

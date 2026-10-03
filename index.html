@@ -244,6 +244,14 @@
             </select>
           </div>
           <div class="param-row">
+            <label for="wheel-mode">Mouse wheel</label>
+            <select id="wheel-mode" title="Auto: wheel zooms, trackpad scrolling pans">
+              <option value="auto" selected>Auto</option>
+              <option value="zoom">Zoom</option>
+              <option value="pan">Pan</option>
+            </select>
+          </div>
+          <div class="param-row">
             <label>Graphics</label>
             <select id="graphics-mode" title="Switch in-game with V">
               <option value="3d" selected>3D</option>
@@ -254,19 +262,30 @@
       </div>
     </div>
 
-    <button id="start-skirmish-btn" class="start-btn">Start Battle</button>
+    <div id="setup-error" class="setup-error" role="alert"></div>
+    <div class="menu-actions">
+      <button id="start-skirmish-btn" class="start-btn">Start Battle</button>
+      <button id="menu-help-btn" class="menu-btn">How to Play</button>
+    </div>
   </div>
 
-  <div id="end-screen">
+  <div id="end-screen" role="dialog" aria-labelledby="end-title">
     <div id="end-title" class="end-title">GAME OVER</div>
-    <button class="menu-btn" id="restart-btn">Main Menu</button>
+    <div id="end-subtitle" class="end-subtitle"></div>
+    <div class="end-actions">
+      <button class="menu-btn" id="spectate-btn" hidden>Keep Watching</button>
+      <button class="menu-btn" id="restart-btn">Main Menu</button>
+    </div>
   </div>
 
   <div id="game-container">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Speed indicator -->
-    <div id="speed-indicator" class="speed-2">SPEED: NORMAL</div>
+    <!-- Top-left HUD: menu button + speed indicator -->
+    <div id="hud-topleft">
+      <button id="hud-menu-btn" title="Pause menu, controls and quit (Esc)">&#9776; Menu <span class="hud-key">Esc</span></button>
+      <div id="speed-indicator" class="speed-2" title="Game speed - click to change ([ slower, ] faster)">SPEED: NORMAL</div>
+    </div>
 
     <!-- Floating minimap for observer mode -->
     <div id="observer-minimap" class="observer-minimap-container">

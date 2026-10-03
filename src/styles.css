@@ -4,6 +4,7 @@ body {
     margin: 0;
     overflow: hidden;
     background: #000;
+    color: #ddd;
     font-family: 'Courier New', Courier, monospace;
     user-select: none;
 }
@@ -201,6 +202,86 @@ canvas#gameCanvas.overlay-3d {
 .build-btn.queued {
     background: #333;
     border-color: #fa0;
+}
+
+/* Another structure is being built / waiting for placement: one at a time */
+.build-btn.busy {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Production stalled: no credits */
+.build-btn.on-hold .btn-status {
+    color: #ff6b6b;
+}
+
+.build-btn.on-hold .progress-overlay {
+    border-top-color: #f44;
+}
+
+/* Tab badges: production running (amber dot) / structure ready to place (pulsing green) */
+.tab {
+    position: relative;
+}
+
+.tab.tab-busy::after,
+.tab.tab-ready::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fa0;
+}
+
+.tab.tab-ready::after {
+    background: #3f3;
+    box-shadow: 0 0 6px #3f3;
+    animation: pulse 1s infinite;
+}
+
+/* Battlefield alerts (top-centre over the map) */
+#alerts {
+    position: fixed;
+    top: 60px;
+    left: calc((100vw - 300px) / 2);
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 60;
+    pointer-events: none;
+    max-width: calc(100vw - 340px);
+}
+
+#game-container.observer-mode #alerts {
+    left: 50vw;
+}
+
+.alert {
+    padding: 7px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(15, 22, 30, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-left: 4px solid #6cf;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    transition: opacity 0.4s ease;
+}
+
+.alert-success { border-left-color: #3f3; }
+.alert-warning { border-left-color: #fa0; color: #ffe2a8; }
+.alert-error { border-left-color: #f44; color: #ffc4c4; }
+
+.alert.leaving {
+    opacity: 0;
 }
 
 .queue-count {
@@ -739,6 +820,31 @@ canvas#gameCanvas.attack-move-mode {
     pointer-events: auto;
 }
 
+#end-screen .menu-btn[hidden] {
+    display: none;
+}
+
+.end-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.end-subtitle {
+    margin: -8px 0 20px;
+    padding: 6px 14px;
+    color: #ddd;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+}
+
+.end-subtitle:empty {
+    display: none;
+}
+
 #end-screen.visible {
     display: flex;
 }
@@ -779,7 +885,8 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .end-title {
-    font-size: 48px;
+    font-size: clamp(26px, 4vw, 48px);
+    text-align: center;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-weight: 200;
     background: rgba(0, 0, 0, 0.7);
@@ -1571,18 +1678,51 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 /* Game Speed Indicator */
-#speed-indicator {
+#hud-topleft {
     position: fixed;
-    top: 20px;
-    left: 20px;
+    top: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 50;
+}
+
+#hud-menu-btn {
+    padding: 7px 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(20, 30, 40, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#hud-menu-btn:hover,
+#hud-menu-btn:focus-visible {
+    background: rgba(50, 70, 90, 0.95);
+    border-color: #fff;
+}
+
+#hud-menu-btn .hud-key {
+    margin-left: 4px;
+    padding: 0 4px;
+    font-size: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 3px;
+    opacity: 0.8;
+}
+
+#speed-indicator {
+    cursor: pointer;
     padding: 8px 16px;
     font-family: 'Courier New', monospace;
     font-size: 14px;
     font-weight: bold;
     letter-spacing: 2px;
     border-radius: 4px;
-    z-index: 50;
-    pointer-events: none;
     transition: all 0.2s ease;
 }
 
@@ -1953,6 +2093,12 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .pause-modal, .help-modal {
+  color: #ddd;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   border: 2px solid #4a90d9;
   border-radius: 8px;
@@ -1970,8 +2116,38 @@ canvas#gameCanvas.attack-move-mode {
 
 .pause-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 15px;
   justify-content: center;
+}
+
+.pause-buttons button.armed {
+  background: linear-gradient(180deg, #d53a3a 0%, #a02a2a 100%);
+  border-color: #f66;
+}
+
+.pause-setting {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  font-size: 13px;
+  color: #bcd;
+}
+
+.pause-setting select {
+  padding: 4px 6px;
+  background: #0a0a1a;
+  color: #ddd;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+}
+
+.pause-hint {
+  margin-top: 18px;
+  font-size: 12px;
+  color: #8aa;
 }
 
 .pause-buttons button, .help-back {
@@ -1991,8 +2167,8 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .help-modal {
-  min-width: 400px;
-  max-width: 500px;
+  width: 560px;
+  padding: 24px 28px;
 }
 
 .help-tabs {
@@ -2019,13 +2195,15 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .help-content {
+  color: #ddd;
+  font-size: 14px;
   background: #0a0a1a;
   border: 1px solid #3a3a5a;
   border-radius: 4px;
   padding: 20px;
   text-align: left;
   margin-bottom: 20px;
-  max-height: 300px;
+  max-height: min(420px, calc(100vh - 220px));
   overflow-y: auto;
 }
 
@@ -2063,4 +2241,118 @@ canvas#gameCanvas.attack-move-mode {
 
 .help-back {
   margin-top: 10px;
+}
+
+/* Main menu actions + setup validation */
+.menu-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.setup-error {
+    display: none;
+    margin-bottom: 12px;
+    padding: 8px 14px;
+    color: #ffb4b4;
+    background: rgba(255, 60, 60, 0.12);
+    border: 1px solid rgba(255, 90, 90, 0.5);
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+}
+
+.setup-error.visible {
+    display: block;
+}
+
+/* Small screens (tablets, phones in landscape): a narrower, more compact sidebar so the
+   battlefield keeps most of the width and the build list stays reachable */
+@media (max-width: 1000px), (max-height: 560px) {
+    #sidebar {
+        width: 210px;
+        min-width: 210px;
+    }
+
+    .sidebar-header {
+        padding: 6px;
+    }
+
+    #minimap-container {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 5 / 4;
+        max-height: 26vh;
+        max-width: calc(26vh * 1.25);
+    }
+
+    .mode-buttons-container {
+        padding: 4px 0;
+        margin-top: 4px;
+    }
+
+    .tab {
+        padding: 6px 0;
+    }
+
+    .build-btn {
+        height: 48px;
+    }
+
+    #alerts {
+        left: calc((100vw - 210px) / 2);
+        max-width: calc(100vw - 240px);
+    }
+
+    .alert {
+        font-size: 13px;
+    }
+}
+
+/* Phones in portrait: the sidebar becomes a bottom panel and the battlefield sits above it */
+@media (max-width: 600px) and (orientation: portrait) {
+    #game-container {
+        flex-direction: column;
+    }
+
+    #sidebar {
+        width: 100%;
+        min-width: 0;
+        height: 45vh;
+        border-left: none;
+        border-top: 3px solid #555;
+    }
+
+    .sidebar-header {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        align-items: center;
+    }
+
+    #minimap-container {
+        display: none;
+    }
+
+    .btn-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    #alerts {
+        left: 50vw;
+        max-width: calc(100vw - 32px);
+    }
+
+    .scoreboard {
+        display: none;
+    }
+}
+
+/* Touch devices have no Esc key: don't advertise one */
+@media (pointer: coarse) {
+    #hud-menu-btn .hud-key {
+        display: none;
+    }
 }

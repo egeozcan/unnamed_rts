@@ -59,7 +59,35 @@ let onDeployMCV: (() => void) | null = null;
 let onToggleDebug: (() => void) | null = null;
 let onToggleMinimap: (() => void) | null = null;
 let onToggleBirdsEye: (() => void) | null = null;
-let onSetSpeed: ((speed: 1 | 2 | 3 | 4 | 5) => void) | null = null;
+let onAdjustSpeed: ((delta: 1 | -1) => void) | null = null;
+let onControlGroup: ((group: number, action: 'recall' | 'assign' | 'add') => void) | null = null;
+let isPaused: (() => boolean) | null = null;
+let onTap: ((wx: number, wy: number) => void) | null = null;
+
+// Touch gesture tracking (one finger): a short, still touch is a tap, movement pans the camera
+const TOUCH_TAP_SLOP = 12;
+const TOUCH_TAP_MAX_MS = 500;
+// Holding a finger still this long starts a box selection (drag) or, released in place, deselects
+const TOUCH_HOLD_MS = 400;
+let touchGesture: {
+    startX: number; startY: number; lastX: number; lastY: number;
+    panning: boolean; holding: boolean; startMs: number; holdTimer: number | null;
+} | null = null;
+let onClearSelection: (() => void) | null = null;
+
+function endTouchGesture(): void {
+    if (touchGesture?.holdTimer != null) window.clearTimeout(touchGesture.holdTimer);
+    if (touchGesture?.holding) inputState.dragStart = null;
+    touchGesture = null;
+}
+
+function setMouseFromClient(clientX: number, clientY: number): void {
+    const rect = canvas.getBoundingClientRect();
+    inputState.rawMouse.x = clientX;
+    inputState.rawMouse.y = clientY;
+    inputState.mouse.x = clientX - rect.left;
+    inputState.mouse.y = clientY - rect.top;
+}
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
 let onUngarrison: (() => void) | null = null;
@@ -81,7 +109,14 @@ export function initInput(
         onToggleDebug: () => void;
         onToggleMinimap: () => void;
         onToggleBirdsEye: () => void;
-        onSetSpeed: (speed: 1 | 2 | 3 | 4 | 5) => void;
+        onAdjustSpeed: (delta: 1 | -1) => void;
+        onControlGroup?: (group: number, action: 'recall' | 'assign' | 'add') => void;
+        /** True while the game is paused: world clicks and gameplay hotkeys are ignored. */
+        isPaused?: () => boolean;
+        /** Touch tap on the battlefield: select what's there, or command the selection. */
+        onTap?: (wx: number, wy: number) => void;
+        /** Touch long-press released in place: clear the selection. */
+        onClearSelection?: () => void;
         onSetStance?: (stance: AttackStance) => void;
         onToggleAttackMove?: () => void;
         onUngarrison?: () => void;
@@ -101,7 +136,11 @@ export function initInput(
     onToggleDebug = callbacks.onToggleDebug;
     onToggleMinimap = callbacks.onToggleMinimap;
     onToggleBirdsEye = callbacks.onToggleBirdsEye;
-    onSetSpeed = callbacks.onSetSpeed;
+    onAdjustSpeed = callbacks.onAdjustSpeed;
+    onControlGroup = callbacks.onControlGroup || null;
+    isPaused = callbacks.isPaused || null;
+    onTap = callbacks.onTap || null;
+    onClearSelection = callbacks.onClearSelection || null;
     onSetStance = callbacks.onSetStance || null;
     onToggleAttackMove = callbacks.onToggleAttackMove || null;
     onUngarrison = callbacks.onUngarrison || null;
@@ -150,75 +189,163 @@ function getScrollCursor(dx: number, dy: number): string {
     return 'all-scroll';
 }
 
+/** Wheel units per zoom step for the +/- keys and one mouse-wheel notch (zoom *= 0.999^units). */
+const KEY_ZOOM_STEP = 150;
+
+/** What a plain (non-pinch) wheel/two-finger scroll does: guessed per event, or forced by the player. */
+export type WheelMode = 'auto' | 'zoom' | 'pan';
+const WHEEL_MODE_STORAGE_KEY = 'rts.wheelMode';
+
+let wheelMode: WheelMode = loadWheelMode();
+// Trackpads send a continuous stream of events (incl. momentum); once a stream looks like a
+// trackpad, keep treating it as one so a stray "notch-sized" delta doesn't jump the zoom
+const TRACKPAD_STREAM_GAP_MS = 120;
+let lastTrackpadEventMs = -Infinity;
+
+function loadWheelMode(): WheelMode {
+    try {
+        const stored = window.localStorage.getItem(WHEEL_MODE_STORAGE_KEY);
+        return stored === 'zoom' || stored === 'pan' ? stored : 'auto';
+    } catch {
+        return 'auto';
+    }
+}
+
+export function getWheelMode(): WheelMode {
+    return wheelMode;
+}
+
+export function setWheelMode(mode: WheelMode): void {
+    wheelMode = mode;
+    try {
+        window.localStorage.setItem(WHEEL_MODE_STORAGE_KEY, mode);
+    } catch {
+        // Storage unavailable (private mode): the choice lasts for this session only
+    }
+}
+
+/**
+ * Tell a notched mouse wheel (zooms) apart from two-finger trackpad scrolling (pans).
+ * Line/page-based deltas are always a wheel; Chromium/WebKit also report pixel deltas for wheels,
+ * but in whole notches (wheelDelta multiples of 120) and never with a horizontal component.
+ * Not every mouse can be told apart this way (e.g. smooth-scrolling wheels on macOS), which is what
+ * the explicit Zoom/Pan setting is for.
+ */
+function isMouseWheelEvent(e: WheelEvent): boolean {
+    if (wheelMode !== 'auto') return wheelMode === 'zoom';
+    if (e.deltaMode !== 0) return true;
+
+    const now = performance.now();
+    const inTrackpadStream = now - lastTrackpadEventMs < TRACKPAD_STREAM_GAP_MS;
+    const legacyDelta = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+    const looksNotched = e.deltaX === 0 && typeof legacyDelta === 'number' && legacyDelta !== 0 && legacyDelta % 120 === 0;
+    if (looksNotched && !inTrackpadStream) return true;
+
+    lastTrackpadEventMs = now;
+    return false;
+}
+
 function setupEventListeners() {
     // Keyboard
     window.addEventListener('keydown', e => {
-        inputState.keys[e.key] = true;
+        // Never steal keys from form fields (debug panel inputs, etc.)
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+            // ...except Escape on the pause menu's own controls, which still closes it
+            if (e.key === 'Escape' && isPaused?.()) {
+                target.blur();
+                onCancel?.();
+            }
+            return;
+        }
+
         if (e.key === 'F3') {
             e.preventDefault(); // Prevent browser's default F3 behavior (find)
             onToggleDebug?.();
+            return;
         }
-        if (e.key === 'm' || e.key === 'M') {
-            onToggleMinimap?.();
-        }
-        if (e.key === 'b' || e.key === 'B') {
-            onToggleBirdsEye?.();
-        }
-        // Game speed controls (1 = slow, 2 = normal, 3 = fast, 4 = very fast, 5 = lightspeed)
-        if (e.key === '1') {
-            onSetSpeed?.(1);
-        }
-        if (e.key === '2') {
-            onSetSpeed?.(2);
-        }
-        if (e.key === '3') {
-            onSetSpeed?.(3);
-        }
-        if (e.key === '4') {
-            onSetSpeed?.(4);
-        }
-        if (e.key === '5') {
-            onSetSpeed?.(5);
-        }
-        // Deploy MCV key handler
-        if (e.key === 'Enter') {
-            onDeployMCV?.();
-        }
-        // Stance controls: F = Aggressive, G = Defensive, H = Hold Ground
-        if (e.key === 'f' || e.key === 'F') {
-            onSetStance?.('aggressive');
-        }
-        if (e.key === 'g' || e.key === 'G') {
-            onSetStance?.('defensive');
-        }
-        if (e.key === 'h' || e.key === 'H') {
-            onSetStance?.('hold_ground');
-        }
-        // Attack-move toggle
-        if (e.key === 'a' || e.key === 'A') {
-            onToggleAttackMove?.();
-        }
-        // Ungarrison selected transports
-        if (e.key === 'u' || e.key === 'U') {
-            onUngarrison?.();
-        }
-        // Switch between the 3D and classic 2D view
-        if (e.key === 'v' || e.key === 'V') {
-            onToggleGraphics?.();
-        }
-        // Cancel the current mode or clear the selection (skipped when an overlay already consumed it)
-        if (e.key === 'Escape' && !e.defaultPrevented) {
-            onCancel?.();
+        // Escape backs out of the current mode, overlay or menu (skipped when an overlay already consumed it)
+        if (e.key === 'Escape') {
+            if (!e.defaultPrevented && !e.repeat) onCancel?.();
+            return;
         }
         // Pause game
-        if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
+        if (e.key === ' ' || ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey)) {
             e.preventDefault();
-            onTogglePause?.();
+            if (!e.repeat) onTogglePause?.();
+            return;
         }
+
+        // Everything below is a gameplay hotkey: inactive while paused
+        if (isPaused?.()) return;
+
+        inputState.keys[e.key] = true;
+
+        // Game speed: [ slower, ] faster. Matched on the typed character, before the digit keys:
+        // on many layouts these need AltGr/Option + a digit key (reported as Ctrl+Alt / Alt)
+        if (e.key === '[' || e.key === ']') {
+            if (!e.repeat && !e.metaKey) onAdjustSpeed?.(e.key === '[' ? -1 : 1);
+            return;
+        }
+
+        // Control groups: Ctrl/Cmd+digit assigns, Shift+digit adds, digit recalls (twice quickly = jump to it).
+        // With Alt held the digit key types something else (AltGr/Option layouts): not a group key
+        if (/^Digit[0-9]$/.test(e.code) && !e.altKey) {
+            const group = Number(e.code.slice(5));
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                onControlGroup?.(group, 'assign');
+            } else if (e.shiftKey) {
+                onControlGroup?.(group, 'add');
+            } else if (!e.altKey && !e.repeat) {
+                onControlGroup?.(group, 'recall');
+            }
+            return;
+        }
+
+        // The remaining hotkeys are plain keys: leave browser/OS shortcuts (Ctrl+F, Cmd+V...) alone
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+        // Zoom: + / - (the mouse wheel zooms too)
+        if (e.key === '+' || e.key === '=') {
+            inputState.wheelZoom -= KEY_ZOOM_STEP;
+            return;
+        }
+        if (e.key === '-' || e.key === '_') {
+            inputState.wheelZoom += KEY_ZOOM_STEP;
+            return;
+        }
+        if (e.repeat) return;
+
+        const key = e.key.toLowerCase();
+        if (key === 'm') onToggleMinimap?.();
+        if (key === 'b') onToggleBirdsEye?.();
+        // Deploy MCV key handler
+        if (e.key === 'Enter') onDeployMCV?.();
+        // Stance controls: F = Aggressive, G = Defensive, H = Hold Ground
+        if (key === 'f') onSetStance?.('aggressive');
+        if (key === 'g') onSetStance?.('defensive');
+        if (key === 'h') onSetStance?.('hold_ground');
+        // Attack-move toggle
+        if (key === 'a') onToggleAttackMove?.();
+        // Ungarrison selected transports
+        if (key === 'u') onUngarrison?.();
+        // Switch between the 3D and classic 2D view
+        if (key === 'v') onToggleGraphics?.();
     });
 
     window.addEventListener('keyup', e => {
         inputState.keys[e.key] = false;
+    });
+
+    // A key released while the window is unfocused never sends keyup: drop all held keys
+    // (otherwise an arrow key keeps scrolling forever), and stop edge-scrolling until the pointer is back
+    window.addEventListener('blur', () => {
+        inputState.keys = {};
+        hasPointerPosition = false;
+    });
+    document.documentElement.addEventListener('mouseleave', () => {
+        hasPointerPosition = false;
     });
 
     // Mouse move
@@ -241,9 +368,9 @@ function setupEventListeners() {
     // Mouse down
     window.addEventListener('mousedown', e => {
         hasPointerPosition = true;
-        // Ignore clicks inside the debug overlay
-        const debugOverlay = document.getElementById('debug-overlay');
-        if (debugOverlay && debugOverlay.style.display !== 'none' && debugOverlay.contains(e.target as Node)) {
+        // Only presses on the battlefield itself become world clicks: menus, overlays, the
+        // scoreboard and the sidebar sit on top of (or beside) the canvas and handle their own clicks
+        if (e.target !== canvas || isPaused?.()) {
             return;
         }
 
@@ -257,8 +384,6 @@ function setupEventListeners() {
         const worldMouse = screenToWorld(inputState.mouse.x, inputState.mouse.y);
         inputState.mouse.wx = worldMouse.x;
         inputState.mouse.wy = worldMouse.y;
-
-        if (inputState.rawMouse.x > canvas.width) return;
 
         if (e.button === 0) {
             // Left click - start drag
@@ -318,7 +443,7 @@ function setupEventListeners() {
 
     // Double click handler (MCV deploy, primary building, etc.)
     window.addEventListener('dblclick', e => {
-        if (e.button === 0 && inputState.rawMouse.x < canvas.width) {
+        if (e.button === 0 && e.target === canvas && !isPaused?.()) {
             const worldMouse = screenToWorld(inputState.mouse.x, inputState.mouse.y);
             if (onDoubleClick) {
                 onDoubleClick(worldMouse.x, worldMouse.y);
@@ -334,22 +459,21 @@ function setupEventListeners() {
 
     // Zoom & Scroll
     window.addEventListener('wheel', e => {
-        // Allow scrolling within the debug overlay
-        const debugOverlay = document.getElementById('debug-overlay');
-        if (debugOverlay && debugOverlay.contains(e.target as Node)) {
-            return; // Let normal scroll behavior happen
-        }
-
-        // Allow scrolling within the sidebar (building list, etc.)
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && sidebar.contains(e.target as Node)) {
-            return; // Let normal scroll behavior happen
+        // Only the battlefield zooms/pans: menus, help, the sidebar and the debug panel scroll normally
+        if (e.target !== canvas) {
+            // ...but a trackpad pinch over the in-game HUD must not zoom the whole page
+            if (e.ctrlKey && document.getElementById('game-container')?.contains(e.target as Node)) e.preventDefault();
+            return;
         }
 
         e.preventDefault();
+        if (isPaused?.()) return;
         if (e.ctrlKey) {
             // Pinch to zoom (Mac touchpad)
             inputState.wheelZoom += e.deltaY;
+        } else if (isMouseWheelEvent(e)) {
+            // A notched mouse wheel zooms (one notch = one zoom step)
+            inputState.wheelZoom += Math.sign(e.deltaY) * KEY_ZOOM_STEP;
         } else {
             // Two finger scroll
             inputState.wheelDeltaX += e.deltaX;
@@ -357,19 +481,37 @@ function setupEventListeners() {
         }
     }, { passive: false });
 
-    // Touch zoom
-    window.addEventListener('touchstart', e => {
+    // Touch: tap = select / command, one-finger drag = pan, two-finger pinch = zoom
+    canvas.addEventListener('touchstart', e => {
         if (e.touches.length === 2) {
+            endTouchGesture();
             inputState.touchDist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
+        } else if (e.touches.length === 1) {
+            const t = e.touches[0];
+            endTouchGesture();
+            const gesture: NonNullable<typeof touchGesture> = {
+                startX: t.clientX, startY: t.clientY, lastX: t.clientX, lastY: t.clientY,
+                panning: false, holding: false, startMs: performance.now(), holdTimer: null
+            };
+            gesture.holdTimer = window.setTimeout(() => {
+                gesture.holdTimer = null;
+                if (touchGesture !== gesture || gesture.panning || isPaused?.()) return;
+                // Long press: the finger now draws a selection box (the renderer draws dragStart -> mouse)
+                gesture.holding = true;
+                const rect = canvas.getBoundingClientRect();
+                inputState.dragStart = { x: gesture.startX - rect.left, y: gesture.startY - rect.top };
+                setMouseFromClient(gesture.lastX, gesture.lastY);
+            }, TOUCH_HOLD_MS);
+            touchGesture = gesture;
         }
-    });
+    }, { passive: true });
 
-    window.addEventListener('touchmove', e => {
+    canvas.addEventListener('touchmove', e => {
+        e.preventDefault();
         if (e.touches.length === 2) {
-            e.preventDefault();
             const newDist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
@@ -379,14 +521,68 @@ function setupEventListeners() {
                 inputState.pinchRatio *= ratio;
             }
             inputState.touchDist = newDist;
+        } else if (e.touches.length === 1 && touchGesture?.holding) {
+            const t = e.touches[0];
+            setMouseFromClient(t.clientX, t.clientY);
+            touchGesture.lastX = t.clientX;
+            touchGesture.lastY = t.clientY;
+        } else if (e.touches.length === 1 && touchGesture) {
+            const t = e.touches[0];
+            if (!touchGesture.panning && Math.hypot(t.clientX - touchGesture.startX, t.clientY - touchGesture.startY) > TOUCH_TAP_SLOP) {
+                touchGesture.panning = true;
+                if (touchGesture.holdTimer != null) window.clearTimeout(touchGesture.holdTimer);
+                touchGesture.holdTimer = null;
+            }
+            if (touchGesture.panning) {
+                // Drag the map with the finger
+                inputState.wheelDeltaX -= t.clientX - touchGesture.lastX;
+                inputState.wheelDeltaY -= t.clientY - touchGesture.lastY;
+            }
+            touchGesture.lastX = t.clientX;
+            touchGesture.lastY = t.clientY;
         }
     }, { passive: false });
 
-    window.addEventListener('touchend', e => {
+    canvas.addEventListener('touchend', e => {
         if (e.touches.length < 2) {
             inputState.touchDist = 0;
-            inputState.pinchRatio = 1;
         }
+        const gesture = touchGesture;
+        if (!gesture || e.touches.length > 0) return;
+        const wasHolding = gesture.holding;
+        const dragStart = inputState.dragStart;
+        endTouchGesture();
+
+        if (wasHolding) e.preventDefault();
+        if (wasHolding && dragStart) {
+            const moved = Math.hypot(gesture.lastX - gesture.startX, gesture.lastY - gesture.startY) > TOUCH_TAP_SLOP;
+            if (!moved) {
+                onClearSelection?.();
+                return;
+            }
+            const rect = canvas.getBoundingClientRect();
+            const ex = gesture.lastX - rect.left;
+            const ey = gesture.lastY - rect.top;
+            const p1 = screenToWorld(Math.min(dragStart.x, ex), Math.min(dragStart.y, ey));
+            const p2 = screenToWorld(Math.max(dragStart.x, ex), Math.max(dragStart.y, ey));
+            const fingerWorld = screenToWorld(ex, ey);
+            onLeftClick?.(fingerWorld.x, fingerWorld.y, true, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+            return;
+        }
+        if (gesture.panning) return;
+        if (performance.now() - gesture.startMs > TOUCH_TAP_MAX_MS) return;
+
+        // A tap: handled here, so suppress the emulated mouse events that would follow
+        e.preventDefault();
+        if (isPaused?.()) return;
+        const rect = canvas.getBoundingClientRect();
+        const world = screenToWorld(gesture.startX - rect.left, gesture.startY - rect.top);
+        onTap?.(world.x, world.y);
+    }, { passive: false });
+
+    canvas.addEventListener('touchcancel', () => {
+        endTouchGesture();
+        inputState.touchDist = 0;
     });
 
     // Minimap click

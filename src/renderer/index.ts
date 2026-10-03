@@ -5,6 +5,8 @@ import { getSpatialGrid } from '../engine/spatial.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
+import { getPlacementError } from '../engine/reducers/buildings.js';
+import { isAlly, isEnemy as isEnemyPlayer } from '../engine/teams.js';
 import type { Scene3D, PlacementGhost } from './three/scene.js';
 import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
 import { GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
@@ -50,6 +52,8 @@ export class Renderer {
     private scene3dLoading = false;
     private scene3dFailed = false;
     private disposed = false;
+    // State of the frame being drawn (placement-ghost validity, tooltip ally colours)
+    private frameState: GameState | null = null;
     private readonly onWindowResize = () => this.resize();
 
     constructor(canvas: HTMLCanvasElement) {
@@ -129,14 +133,14 @@ export class Renderer {
         const sidebar = document.getElementById('sidebar');
         const sidebarHidden = sidebar?.classList.contains('observer-hidden');
 
-        if (container) {
-            // In observer mode, canvas takes full width
-            const sidebarWidth = sidebarHidden ? 0 : 300;
-            this.canvas.width = container.clientWidth - sidebarWidth;
-        } else {
-            this.canvas.width = window.innerWidth - 300;
-        }
-        this.canvas.height = window.innerHeight;
+        // The sidebar narrows on small screens (CSS media queries): measure it instead of assuming 300px.
+        // In observer mode the sidebar is hidden and the canvas takes the full width.
+        const sidebarRect = sidebarHidden || !sidebar ? null : sidebar.getBoundingClientRect();
+        const containerWidth = container?.clientWidth ?? window.innerWidth;
+        // Phones in portrait stack the sidebar below the battlefield instead of beside it
+        const stacked = !!container && getComputedStyle(container).flexDirection === 'column';
+        this.canvas.width = Math.max(1, Math.floor(stacked ? containerWidth : containerWidth - (sidebarRect?.width ?? 0)));
+        this.canvas.height = Math.max(1, Math.floor(stacked ? window.innerHeight - (sidebarRect?.height ?? 0) : window.innerHeight));
         this.scene3d?.setSize(this.canvas.width, this.canvas.height);
     }
 
@@ -145,6 +149,7 @@ export class Renderer {
     }
 
     render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null, scrollOrigin: { x: number; y: number } | null = null) {
+        this.frameState = state;
         const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
 
@@ -285,7 +290,7 @@ export class Renderer {
             if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
                 const x = mousePos.x / zoom + effectiveCamera.x;
                 const y = mousePos.y / zoom + effectiveCamera.y;
-                placement = { key: placingBuilding, x, y, valid: this.isValidBuildLocation(x, y, localPlayerId ?? 0, entities) };
+                placement = { key: placingBuilding, x, y, valid: this.isValidBuildLocation(x, y, localPlayerId ?? 0) };
             }
             this.scene3d!.render({
                 state,
@@ -342,6 +347,8 @@ export class Renderer {
         const primaryBuildingIds = this.primaryBuildingIds;
         primaryBuildingIds.clear();
         for (const pid in state.players) {
+            // Primary buildings are a production setting: only show the viewer's own (all of them for observers)
+            if (localPlayerId !== null && !isAlly(state, Number(pid), localPlayerId)) continue;
             const player = state.players[Number(pid)];
             const primaryBuildings = player?.primaryBuildings;
             if (!primaryBuildings) continue;
@@ -452,7 +459,7 @@ export class Renderer {
         }
 
         // Draw tooltips
-        this.drawTooltip(mousePos, sortedEntities, effectiveCamera, zoom, localPlayerId);
+        this.drawTooltip(mousePos, effectiveCamera, zoom, localPlayerId, fogGrid, fogGridW);
 
 
         ctx.restore();
@@ -1212,7 +1219,7 @@ export class Renderer {
         const my = (mousePos.y / zoom) + camera.y;
 
         const playerId = localPlayerId ?? 0;
-        const valid = this.isValidBuildLocation(mx, my, playerId, entities);
+        const valid = this.isValidBuildLocation(mx, my, playerId);
         const b = RULES.buildings[buildingKey];
         if (!b) return;
 
@@ -1249,35 +1256,9 @@ export class Renderer {
         ctx.restore();
     }
 
-    private isValidBuildLocation(x: number, y: number, owner: number, entities: Record<string, Entity>): boolean {
-        let near = false;
-        const buildRadiusSq = BUILD_RADIUS * BUILD_RADIUS;
-        for (const id in entities) {
-            const e = entities[id];
-            if (e.owner === owner && e.type === 'BUILDING' && !e.dead) {
-                const dx = e.pos.x - x;
-                const dy = e.pos.y - y;
-                if ((dx * dx + dy * dy) < buildRadiusSq) {
-                    near = true;
-                    break;
-                }
-            }
-        }
-
-        // Also check no collision with existing entities
-        for (const id in entities) {
-            const e = entities[id];
-            if (!e.dead) {
-                const dx = e.pos.x - x;
-                const dy = e.pos.y - y;
-                const minDistance = e.radius + 45;
-                if ((dx * dx + dy * dy) < (minDistance * minDistance)) {
-                    return false;
-                }
-            }
-        }
-
-        return near;
+    private isValidBuildLocation(x: number, y: number, owner: number): boolean {
+        if (!this.frameState || !this.frameState.placingBuilding) return false;
+        return getPlacementError(this.frameState, this.frameState.placingBuilding, x, y, owner) === null;
     }
 
     private drawFogOverlay(
@@ -1384,10 +1365,11 @@ export class Renderer {
 
     private drawTooltip(
         mousePos: { x: number; y: number },
-        _entities: Entity[],
         camera: { x: number; y: number },
         zoom: number,
-        localPlayerId: number | null
+        localPlayerId: number | null,
+        fogGrid: Uint8Array | undefined,
+        fogGridW: number
     ) {
         const ctx = this.ctx;
 
@@ -1405,6 +1387,8 @@ export class Renderer {
             // Only show tooltips for units and buildings
             if (entity.dead) continue;
             if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+            // Never name what the fog hides
+            if (fogGrid && fogGrid[Math.floor(entity.pos.y / TILE_SIZE) * fogGridW + Math.floor(entity.pos.x / TILE_SIZE)] === 0) continue;
 
             // Check collision
             const s = this.worldToScreen(entity.pos, camera, zoom);
@@ -1447,7 +1431,9 @@ export class Renderer {
                     const finalY = Math.min(y, this.canvas.height - h - 10);
 
                     // Background
-                    const isEnemy = localPlayerId !== null ? entity.owner !== localPlayerId : entity.owner !== -1;
+                    const isEnemy = localPlayerId !== null
+                        ? (this.frameState ? isEnemyPlayer(this.frameState, entity.owner, localPlayerId) : entity.owner !== localPlayerId)
+                        : entity.owner !== -1;
                     ctx.fillStyle = 'rgba(20, 30, 40, 0.9)';
                     ctx.strokeStyle = isEnemy ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 200, 255, 0.5)';
                     ctx.lineWidth = 1;
