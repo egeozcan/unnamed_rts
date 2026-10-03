@@ -551,7 +551,57 @@ export function validateSkirmishConfig(config: Pick<SkirmishConfig, 'players'>):
     }
     const sides = new Set(config.players.map(p => p.team ? `team:${p.team}` : `slot:${p.slot}`));
     if (sides.size < 2) {
-        return 'Everyone is on the same team - put at least one player on another team (or "—" for free-for-all).';
+        return 'Everyone is on the same team - put at least one player on another team (or "FFA" for free-for-all).';
     }
     return null;
+}
+
+/** sessionStorage key: a skirmish config to start right after the page reloads ("Play Again"). */
+export const REMATCH_STORAGE_KEY = 'rts.rematchConfig';
+
+/** Remember `config` so the next page load starts the same skirmish straight away. */
+export function saveRematchConfig(storage: Pick<Storage, 'setItem'> | null, config: SkirmishConfig): boolean {
+    if (!storage) return false;
+    try {
+        storage.setItem(REMATCH_STORAGE_KEY, JSON.stringify(config));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Read and clear a pending "Play Again" config. Returns null when there is none or it is not a
+ * startable skirmish (so a stale or tampered value can't start a broken game).
+ */
+export function takeRematchConfig(storage: Pick<Storage, 'getItem' | 'removeItem'> | null): SkirmishConfig | null {
+    if (!storage) return null;
+    let raw: string | null = null;
+    try {
+        raw = storage.getItem(REMATCH_STORAGE_KEY);
+        storage.removeItem(REMATCH_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as SkirmishConfig;
+        if (!parsed || !Array.isArray(parsed.players) || !(parsed.mapSize in MAP_SIZES)) return null;
+        const validPlayers = parsed.players.every(p =>
+            p && typeof p.slot === 'number' && typeof p.type === 'string' && p.type !== 'none' && typeof p.color === 'string');
+        if (!validPlayers || validateSkirmishConfig(parsed) !== null) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+/** Game time as m:ss (or h:mm:ss) from the simulation tick (60 ticks = 1 game second). */
+export function formatGameTime(ticks: number): string {
+    const totalSeconds = Math.max(0, Math.floor(ticks / 60));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const ss = String(seconds).padStart(2, '0');
+    return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${ss}` : `${minutes}:${ss}`;
 }

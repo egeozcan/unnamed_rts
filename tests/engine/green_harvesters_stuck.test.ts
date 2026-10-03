@@ -26,8 +26,10 @@ describe('Green Harvesters Stuck', () => {
         // Reproduce scenario from game_state_tick_7338.json:
         // Harvester e_1230_49145 has full cargo but is stuck trying to reach a flee target
         // It should give up on moveTarget and go to refinery instead
+        // (an AI flee order: human players' orders are kept, see ux_input_rules.test.ts)
         let state = {
             ...INITIAL_STATE,
+            players: { ...INITIAL_STATE.players, 0: { ...INITIAL_STATE.players[0], isAi: true } },
             running: true,
             entities: {} as Record<EntityId, Entity>,
             config: { ...INITIAL_STATE.config, width: 1000, height: 1000 }

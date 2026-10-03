@@ -70,22 +70,29 @@ npx vitest run tests/engine/harvester.test.ts
 | Input | Action |
 |-------|--------|
 | **Left Click** | Select unit/building (Shift: add/remove) |
+| **Double Click a unit** | Select all your units of that type on screen |
 | **Left Click + Drag** | Box select multiple units |
 | **Right Click** | Move selected units / Attack target |
-| **Right Click on Well** | Deploy Induction Rig (with rig unit selected) |
+| **Right Click on Well** | Deploy Induction Rig (with rig unit selected; drives there first if far) |
+| **Right Click on minimap** | Move selected units there |
 | **Double Click / Enter** | Deploy MCV (with MCV selected) |
-| **A, then click** | Attack-move |
+| **A, then click** | Attack-move (on the map or the minimap) |
+| **S** | Stop |
+| **Q** | Select all combat units |
+| **C** | Centre camera on the selection |
 | **Middle Mouse Button / screen edge** | Pan camera |
 | **Arrow Keys** | Pan camera |
 | **Mouse Wheel / + -** | Zoom in/out (trackpad: two-finger pan, pinch zoom; wheel mode is set in the menus) |
-| **Ctrl + 0-9 / 0-9** | Assign / select control group (press twice to jump to it) |
-| **[ / ]** | Game speed slower / faster (or click the speed badge) |
+| **Ctrl + 0-9 / Shift + 0-9 / 0-9** | Assign / add to / select control group (press twice to jump to it) |
+| **[ / ]** | Game speed slower / faster (or click / right-click the speed badge) |
 | **F / G / H** | Stance: Attack / Guard / Stand Ground |
+| **U** | Unload selected transports |
 | **Escape** | Cancel mode / deselect / pause menu |
+| **Sell** | Click a building, then click it again to confirm (Shift keeps sell mode on) |
 | **Space / P** | Pause |
 | **V** | Switch 3D / classic 2D view |
 | **F3** | Toggle debug mode |
-| **M** | Toggle minimap |
+| **M** | Toggle minimap (observer mode) |
 | **B** | Toggle bird's eye view |
 | **Touch** | Tap: select / command · hold + drag: box select · hold: deselect · drag/pinch: pan/zoom |
 

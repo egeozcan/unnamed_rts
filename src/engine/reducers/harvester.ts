@@ -17,7 +17,8 @@ export function updateHarvesterBehavior(
     entityList: Entity[],
     mapConfig: { width: number, height: number },
     currentTick: number,
-    harvesterCounts?: Record<EntityId, number>
+    harvesterCounts?: Record<EntityId, number>,
+    keepMoveOrderWhenFull = false
 ): { entity: HarvesterUnit, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
 
     let nextEntity: HarvesterUnit = { ...harvester };
@@ -53,8 +54,9 @@ export function updateHarvesterBehavior(
 
     // 0b. If manual move (flee/player command), skip automated logic
     if (nextEntity.movement.moveTarget) {
-        if (nextEntity.harvester.cargo >= capacity) {
-            // Full cargo - clear flee target immediately so harvester can go unload
+        if (nextEntity.harvester.cargo >= capacity && !keepMoveOrderWhenFull) {
+            // Full cargo - clear AI flee target immediately so harvester can go unload.
+            // Human players' orders are kept: they unload after arriving.
             nextEntity = {
                 ...nextEntity,
                 movement: { ...nextEntity.movement, moveTarget: null, path: null, pathIdx: 0 }
@@ -67,6 +69,10 @@ export function updateHarvesterBehavior(
         nextEntity = handleFullCargo(nextEntity, allEntities, entityList, mapConfig, spatialGrid);
         if (nextEntity.harvester.cargo === 0) {
             creditsEarned = 500;
+            // Unloaded: back to automatic harvesting, even after a player's move order
+            if (nextEntity.harvester.manualMode) {
+                nextEntity = { ...nextEntity, harvester: { ...nextEntity.harvester, manualMode: false } };
+            }
         }
     }
     // 2. If valid resource target, go gather

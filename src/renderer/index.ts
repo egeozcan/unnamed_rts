@@ -1,12 +1,13 @@
 import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS, CommandIndicator, TILE_SIZE } from '../engine/types.js';
-import { getAsset, initGraphics } from './assets.js';
+import { getAssetBitmap, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
+import { pickEntityAt } from '../engine/picking.js';
 import { isUnit, isBuilding, isHarvester } from '../engine/type-guards.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
 import { getPlacementError } from '../engine/reducers/buildings.js';
-import { isAlly, isEnemy as isEnemyPlayer } from '../engine/teams.js';
+import { isAlly } from '../engine/teams.js';
 import type { Scene3D, PlacementGhost } from './three/scene.js';
 import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
 import { GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
@@ -23,6 +24,54 @@ function trailStrokeStyle(opacity: number): string {
         trailStyleCache.set(key, style);
     }
     return style;
+}
+
+/** Device pixel ratio for the overlay canvas backing store (capped to bound fill cost). */
+function overlayPixelRatio(): number {
+    return Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 2);
+}
+
+/** World-pixel radius around the cursor that can contain the centre of any pickable entity. */
+const HOVER_QUERY_RADIUS = 120;
+
+export type OwnerRelation = 'own' | 'ally' | 'enemy' | 'neutral';
+
+/** How `owner` relates to the viewer. Observers (viewer null) see every player as 'neutral'. */
+export function getOwnerRelation(state: GameState | null, owner: number, viewerId: number | null): OwnerRelation {
+    if (viewerId === null || owner < 0) return 'neutral';
+    if (owner === viewerId) return 'own';
+    if (state && isAlly(state, owner, viewerId)) return 'ally';
+    return 'enemy';
+}
+
+/**
+ * HP bar fill colour. Green -> yellow -> red also steps down in brightness and sits on a dark track,
+ * so the bar still reads for red-green colour-blind players.
+ */
+export function hpBarColor(ratio: number): string {
+    if (ratio > 0.6) return '#3fdc4f';
+    if (ratio > 0.3) return '#f2c230';
+    return '#e8392b';
+}
+
+/**
+ * On-screen width (CSS px) of an entity's status bars. Bars are drawn in screen space so they stay
+ * readable when zoomed out and don't balloon when zoomed in; buildings get bars proportional to
+ * their footprint.
+ */
+export function statusBarWidth(entity: Pick<Entity, 'type' | 'w'>, zoom: number): number {
+    if (entity.type === 'BUILDING') return Math.min(120, Math.max(28, entity.w * zoom * 0.8));
+    return Math.min(44, Math.max(22, Math.max(30, entity.w) * zoom));
+}
+
+/**
+ * Whether a building extends the viewer's build range: allied, alive, and not a defense
+ * (mirrors getPlacementError in reducers/buildings.ts).
+ */
+export function extendsBuildRange(state: GameState, entity: Entity, playerId: number): boolean {
+    if (entity.type !== 'BUILDING' || entity.dead) return false;
+    if (!isAlly(state, entity.owner, playerId)) return false;
+    return !RULES.buildings[entity.key]?.isDefense;
 }
 
 export class Renderer {
@@ -55,6 +104,15 @@ export class Renderer {
     // State of the frame being drawn (placement-ghost validity, tooltip ally colours)
     private frameState: GameState | null = null;
     private readonly onWindowResize = () => this.resize();
+    // Logical (CSS px) size of the canvas. All drawing and game math use these; the backing store is
+    // scaled by the device pixel ratio so the overlay stays sharp on HiDPI screens.
+    private cssWidth = 1;
+    private cssHeight = 1;
+    private pixelRatio = 1;
+    // Entity under the cursor this frame (shared picking), for the tooltip and hover marker
+    private hoveredEntity: Entity | null = null;
+    private hoveredResourceId: string | null = null;
+    private oreBarsVisible = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -110,7 +168,7 @@ export class Renderer {
                 // A stale canvas can survive a hot reload
                 document.getElementById('gameCanvas3d')?.remove();
                 this.scene3d = new Scene3D(container, this.canvas);
-                this.scene3d.setSize(this.canvas.width, this.canvas.height);
+                this.scene3d.setSize(this.cssWidth, this.cssHeight);
                 this.applyGraphicsModeToDom();
             })
             .catch(error => {
@@ -139,13 +197,22 @@ export class Renderer {
         const containerWidth = container?.clientWidth ?? window.innerWidth;
         // Phones in portrait stack the sidebar below the battlefield instead of beside it
         const stacked = !!container && getComputedStyle(container).flexDirection === 'column';
-        this.canvas.width = Math.max(1, Math.floor(stacked ? containerWidth : containerWidth - (sidebarRect?.width ?? 0)));
-        this.canvas.height = Math.max(1, Math.floor(stacked ? window.innerHeight - (sidebarRect?.height ?? 0) : window.innerHeight));
-        this.scene3d?.setSize(this.canvas.width, this.canvas.height);
+        const width = Math.max(1, Math.floor(stacked ? containerWidth : containerWidth - (sidebarRect?.width ?? 0)));
+        const height = Math.max(1, Math.floor(stacked ? window.innerHeight - (sidebarRect?.height ?? 0) : window.innerHeight));
+        const pixelRatio = overlayPixelRatio();
+        this.cssWidth = width;
+        this.cssHeight = height;
+        this.pixelRatio = pixelRatio;
+        this.canvas.width = Math.max(1, Math.round(width * pixelRatio));
+        this.canvas.height = Math.max(1, Math.round(height * pixelRatio));
+        this.canvas.style.width = `${width}px`;
+        this.canvas.style.height = `${height}px`;
+        this.scene3d?.setSize(width, height);
     }
 
+    /** Logical (CSS pixel) size of the battlefield canvas - the space input and camera math use. */
     getSize(): { width: number; height: number } {
-        return { width: this.canvas.width, height: this.canvas.height };
+        return { width: this.cssWidth, height: this.cssHeight };
     }
 
     render(state: GameState, dragStart: { x: number; y: number } | null, mousePos: { x: number; y: number }, localPlayerId: number | null = null, scrollOrigin: { x: number; y: number } | null = null) {
@@ -153,20 +220,29 @@ export class Renderer {
         const { camera, zoom, entities, projectiles, particles, selection, placingBuilding, tick } = state;
         const ctx = this.ctx;
 
+        // Browser zoom or a move to another monitor changes the DPR without a resize event
+        if (overlayPixelRatio() !== this.pixelRatio) this.resize();
+        ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+
         this.selectionSet.clear();
+        let harvesterSelected = false;
         for (const selectedId of selection) {
             this.selectionSet.add(selectedId);
+            const selected = entities[selectedId];
+            if (selected && isHarvester(selected)) harvesterSelected = true;
         }
+        // Ore-remaining bars only matter while managing harvesters (or when hovering a crystal)
+        this.oreBarsVisible = harvesterSelected;
 
         // In 3D mode the world is drawn by the WebGL canvas underneath; this canvas only carries the overlay
         const use3D = this.is3DActive();
 
         // Clear
         if (use3D) {
-            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.clearRect(0, 0, this.cssWidth, this.cssHeight);
         } else {
             ctx.fillStyle = '#2d3322';
-            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
         }
 
         // Apply screen shake offset to camera
@@ -184,8 +260,8 @@ export class Renderer {
         ctx.save();
 
         // OPTIMIZATION: Cache frequently accessed values
-        const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
+        const canvasWidth = this.cssWidth;
+        const canvasHeight = this.cssHeight;
         const cameraX = effectiveCameraX;
         const cameraY = effectiveCameraY;
 
@@ -238,6 +314,9 @@ export class Renderer {
 
         // Sort only visible entities by Y for proper layering
         const sortedEntities = screenCulledEntities.sort((a, b) => a.pos.y - b.pos.y);
+
+        // What's under the cursor - same picking as clicks and the cursor (engine/picking.ts)
+        this.updateHover(mousePos, effectiveCamera, zoom, fogGrid, fogGridW);
 
         // OPTIMIZATION: Batch entities by type to reduce context state changes
         // Group entities into batches: RESOURCE, ROCK, WELL, then UNIT/BUILDING by owner
@@ -459,7 +538,7 @@ export class Renderer {
         }
 
         // Draw tooltips
-        this.drawTooltip(mousePos, effectiveCamera, zoom, localPlayerId, fogGrid, fogGridW);
+        this.drawTooltip(mousePos, effectiveCamera, zoom, localPlayerId, use3D);
 
 
         ctx.restore();
@@ -467,8 +546,8 @@ export class Renderer {
 
     private drawMapBorder(camera: { x: number; y: number }, zoom: number, mapWidth: number, mapHeight: number) {
         const ctx = this.ctx;
-        const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
+        const canvasWidth = this.cssWidth;
+        const canvasHeight = this.cssHeight;
 
         // Convert map boundaries to screen coordinates
         const leftEdge = (0 - camera.x) * zoom;
@@ -539,28 +618,16 @@ export class Renderer {
         ctx.translate(sc.x, sc.y);
         ctx.scale(zoom, zoom);
 
-        // Selection circle and HP bar
-        // Always show HP bar if damaged, OR if selected
-        if (isSelected || (entity.hp < entity.maxHp && entity.type !== 'RESOURCE')) {
-            if (isSelected) {
-                ctx.strokeStyle = '#0f0';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(0, 0, entity.radius + 8, 0, Math.PI * 2);
-                ctx.stroke();
+        // Selection circle (HP and other status bars are drawn upright in screen space below)
+        if (isSelected) {
+            this.drawSelectionRing(entity, localPlayerId);
 
-                // MCV deploy hint
-                if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '10px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Deploy (Enter)', 0, entity.radius + 20);
-                }
-            }
-
-            // HP bar (Skipped for resources)
-            if (entity.type !== 'RESOURCE' && (entity.hp < entity.maxHp || isSelected)) {
-                this.drawHpBar(entity);
+            // MCV deploy hint
+            if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Deploy (Enter)', 0, entity.radius + 20);
             }
         }
 
@@ -569,8 +636,8 @@ export class Renderer {
 
         // Draw entity
         if (entity.type === 'RESOURCE') {
-            const img = getAsset(entity.key, entity.owner);
-            if (img && img.complete) {
+            const img = getAssetBitmap(entity.key, entity.owner, entity.w, entity.h, zoom * this.pixelRatio);
+            if (img) {
                 ctx.drawImage(img, -entity.w / 2, -entity.h / 2, entity.w, entity.h);
             } else {
                 ctx.fillStyle = '#d4af37';
@@ -578,9 +645,6 @@ export class Renderer {
                 ctx.arc(0, 0, 10, 0, Math.PI * 2);
                 ctx.fill();
             }
-
-            // Resource amount bar
-            this.drawResourceBar(entity);
         } else if (entity.type === 'ROCK') {
             // Rocks are impassable obstacles - draw as brown/gray shapes
             ctx.fillStyle = '#665544';
@@ -654,7 +718,7 @@ export class Renderer {
             const rotation = isUnit(entity) ? entity.movement.rotation : 0;
             ctx.rotate(rotation);
 
-            const img = getAsset(entity.key, entity.owner);
+            const img = getAssetBitmap(entity.key, entity.owner, entity.w, entity.h, zoom * this.pixelRatio);
             const playerColor = PLAYER_COLORS[entity.owner] || '#888888';
 
             // Get flash from combat component (units always have it, buildings may have it)
@@ -662,20 +726,11 @@ export class Renderer {
             if (flash > 0) {
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(-entity.w / 2, -entity.h / 2, entity.w, entity.h);
-            } else if (img && img.complete) {
+            } else if (img) {
                 ctx.drawImage(img, -entity.w / 2, -entity.h / 2, entity.w, entity.h);
             } else {
                 ctx.fillStyle = playerColor;
                 ctx.fillRect(-entity.w / 2, -entity.h / 2, entity.w, entity.h);
-            }
-
-            // Harvester Cargo Bar
-            if (isHarvester(entity) && entity.harvester.cargo > 0) {
-                const ratio = Math.min(1, entity.harvester.cargo / 500); // 500 is capacity
-                ctx.fillStyle = '#333';
-                ctx.fillRect(-10, -entity.h / 2 - 6, 20, 3);
-                ctx.fillStyle = '#0ff';
-                ctx.fillRect(-10, -entity.h / 2 - 6, 20 * ratio, 3);
             }
 
             // Transport occupancy indicator (e.g. APC with passengers).
@@ -721,10 +776,10 @@ export class Renderer {
 
                         // Draw mini HP bar if damaged
                         if (isDamaged) {
-                            const hpRatio = harrier.hp / harrier.maxHp;
-                            ctx.fillStyle = 'red';
+                            const hpRatio = Math.max(0, harrier.hp / harrier.maxHp);
+                            ctx.fillStyle = '#222';
                             ctx.fillRect(-8, 8, 16, 3);
-                            ctx.fillStyle = '#0f0';
+                            ctx.fillStyle = hpBarColor(hpRatio);
                             ctx.fillRect(-8, 8, 16 * hpRatio, 3);
                         }
 
@@ -765,9 +820,9 @@ export class Renderer {
 
                 // Draw turret asset if available
                 const turretKey = entity.key + '_turret';
-                const turretImg = getAsset(turretKey, entity.owner);
+                const turretImg = getAssetBitmap(turretKey, entity.owner, entity.w, entity.h, zoom * this.pixelRatio);
 
-                if (turretImg && turretImg.complete) {
+                if (turretImg) {
                     ctx.drawImage(turretImg, -entity.w / 2, -entity.h / 2, entity.w, entity.h);
                 } else {
                     // Fallback for missing assets or untracked turret entities
@@ -786,6 +841,9 @@ export class Renderer {
         }
 
         ctx.restore();
+
+        // Bars stay upright and screen-sized whatever the unit's rotation and the zoom
+        this.drawStatusBars(entity, sc.x, sc.y, zoom, isSelected);
     }
 
     /**
@@ -803,11 +861,7 @@ export class Renderer {
         ctx.scale(zoom, zoom);
 
         if (isSelected) {
-            ctx.strokeStyle = '#0f0';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(0, 0, entity.radius + 8, 0, Math.PI * 2);
-            ctx.stroke();
+            this.drawSelectionRing(entity, localPlayerId);
 
             if (entity.key === 'mcv' && localPlayerId !== null && entity.owner === localPlayerId && mode !== 'demo') {
                 ctx.fillStyle = '#fff';
@@ -836,30 +890,19 @@ export class Renderer {
                 const harrier = allEntities[entity.airBase.slots[i] ?? ''];
                 if (!harrier || !isAirUnit(harrier) || harrier.airUnit.state !== 'docked' || harrier.hp >= harrier.maxHp) continue;
                 const pos = AIRBASE_SLOT_OFFSETS[i] || { x: 0, y: 0 };
-                ctx.fillStyle = 'red';
+                const hpRatio = Math.max(0, harrier.hp / harrier.maxHp);
+                ctx.fillStyle = '#222';
                 ctx.fillRect(pos.x - 8, pos.y - padLift - 10, 16, 3);
-                ctx.fillStyle = '#0f0';
-                ctx.fillRect(pos.x - 8, pos.y - padLift - 10, 16 * (harrier.hp / harrier.maxHp), 3);
+                ctx.fillStyle = hpBarColor(hpRatio);
+                ctx.fillRect(pos.x - 8, pos.y - padLift - 10, 16 * hpRatio, 3);
             }
         }
 
         // Everything below floats above the model
-        ctx.translate(0, -heightToScreenLift(getModelHeight(entity) + getAltitude(entity), 1));
+        const liftWorld = heightToScreenLift(getModelHeight(entity) + getAltitude(entity), 1);
+        ctx.translate(0, -liftWorld);
 
-        if (entity.type === 'RESOURCE') {
-            this.drawResourceBar(entity);
-        } else if (entity.hp < entity.maxHp || isSelected) {
-            this.drawHpBar(entity);
-        }
         this.drawRepairIcon(entity, tick);
-
-        if (isHarvester(entity) && entity.harvester.cargo > 0) {
-            const ratio = Math.min(1, entity.harvester.cargo / 500); // 500 is capacity
-            ctx.fillStyle = '#333';
-            ctx.fillRect(-10, -entity.radius - 7, 20, 3);
-            ctx.fillStyle = '#0ff';
-            ctx.fillRect(-10, -entity.radius - 7, 20 * ratio, 3);
-        }
 
         if (entity.type === 'UNIT' && getTransportCapacity(entity) > 0) {
             const passengerCount = passengerCountByTransport.get(entity.id) ?? 0;
@@ -867,26 +910,84 @@ export class Renderer {
         }
 
         ctx.restore();
+
+        this.drawStatusBars(entity, sc.x, sc.y - liftWorld * zoom, zoom, isSelected);
     }
 
-    /** HP bar above an entity, in the entity's zoomed local frame. */
-    private drawHpBar(entity: Entity) {
-        const ctx = this.ctx;
-        ctx.fillStyle = 'red';
-        ctx.fillRect(-15, -entity.radius - 12, 30, 4);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(-15, -entity.radius - 12, 30 * Math.max(0, entity.hp / entity.maxHp), 4);
+    /**
+     * Selection ring in the entity's zoomed local frame. Besides colour, the stroke pattern tells
+     * own (solid), allied (dashed) and enemy (solid with crosshair ticks) apart.
+     */
+    private drawSelectionRing(entity: Entity, localPlayerId: number | null) {
+        const relation = getOwnerRelation(this.frameState, entity.owner, localPlayerId);
+        this.strokeRelationRing(entity.radius + 8, relation, 2, '#0f0');
     }
 
-    /** Remaining-ore bar for a partially mined resource. */
-    private drawResourceBar(entity: Entity) {
-        if (entity.hp >= entity.maxHp) return;
+    /** Ring of radius `r` (current frame units) styled by owner relation. */
+    private strokeRelationRing(r: number, relation: OwnerRelation, lineWidth: number, ownColor: string) {
         const ctx = this.ctx;
-        const ratio = entity.hp / entity.maxHp;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(-12, -15, 24, 4);
-        ctx.fillStyle = '#ffdf00';
-        ctx.fillRect(-12, -15, 24 * ratio, 4);
+        ctx.save();
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = relation === 'enemy' ? '#ff4040' : relation === 'ally' ? '#4db8ff' : ownColor;
+        if (relation === 'ally') ctx.setLineDash([r * 0.35, r * 0.2]);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        if (relation === 'enemy') {
+            // Crosshair ticks: an enemy marker that doesn't rely on red vs green
+            const tick = Math.max(4 * lineWidth, r * 0.3);
+            ctx.beginPath();
+            ctx.moveTo(r - tick / 2, 0); ctx.lineTo(r + tick / 2, 0);
+            ctx.moveTo(-r - tick / 2, 0); ctx.lineTo(-r + tick / 2, 0);
+            ctx.moveTo(0, r - tick / 2); ctx.lineTo(0, r + tick / 2);
+            ctx.moveTo(0, -r - tick / 2); ctx.lineTo(0, -r + tick / 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    /**
+     * HP, harvester-cargo and ore-remaining bars, drawn upright in screen space (CSS px) above the
+     * entity whose (possibly lifted) screen centre is (sx, sy).
+     */
+    private drawStatusBars(entity: Entity, sx: number, sy: number, zoom: number, isSelected: boolean) {
+        const halfExtent = entity.type === 'BUILDING' ? entity.h / 2 : entity.radius;
+        let barBottom = sy - halfExtent * zoom - 3;
+
+        if (entity.type === 'RESOURCE') {
+            if (entity.hp >= entity.maxHp) return;
+            if (!this.oreBarsVisible && this.hoveredResourceId !== entity.id) return;
+            const w = Math.min(32, Math.max(18, 24 * zoom));
+            this.drawBar(sx - w / 2, sy - entity.radius * zoom - 6, w, 3, entity.hp / entity.maxHp, '#ffdf00');
+            return;
+        }
+
+        const width = statusBarWidth(entity, zoom);
+        if (isHarvester(entity) && entity.harvester.cargo > 0) {
+            const ratio = Math.min(1, entity.harvester.cargo / 500); // 500 is capacity
+            this.drawBar(sx - width / 2, barBottom - 3, width, 3, ratio, '#2fe0ff');
+            barBottom -= 3 + 2;
+        }
+
+        if (entity.hp < entity.maxHp || isSelected) {
+            const height = entity.type === 'BUILDING' ? 5 : 4;
+            const ratio = Math.max(0, Math.min(1, entity.hp / entity.maxHp));
+            this.drawBar(sx - width / 2, barBottom - height, width, height, ratio, hpBarColor(ratio));
+        }
+    }
+
+    /** A filled bar with a dark track and a 1px black outline, snapped to whole pixels. */
+    private drawBar(x: number, y: number, w: number, h: number, ratio: number, color: string) {
+        const ctx = this.ctx;
+        const bx = Math.round(x);
+        const by = Math.round(y);
+        const bw = Math.round(w);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, h + 2);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(bx, by, bw, h);
+        ctx.fillStyle = color;
+        ctx.fillRect(bx, by, Math.max(0, Math.min(1, ratio)) * bw, h);
     }
 
     /** Flashing wrench over buildings that are being repaired. */
@@ -1103,7 +1204,7 @@ export class Renderer {
         ctx.globalAlpha = alpha;
 
         // Color based on type
-        const color = indicator.type === 'move' ? '#44ff44' : '#ff4444';
+        const color = indicator.type === 'move' ? '#44ff44' : indicator.type === 'attack_move' ? '#ffaa22' : '#ff4444';
 
         // Outer ring
         ctx.strokeStyle = color;
@@ -1223,11 +1324,12 @@ export class Renderer {
         const b = RULES.buildings[buildingKey];
         if (!b) return;
 
-        // Draw build radius indicators for player buildings
+        // Draw build radius indicators around the buildings that let you build nearby
+        // (own and allied, except defenses - same rule as getPlacementError)
         ctx.save();
         for (const id in entities) {
             const e = entities[id];
-            if (e.owner === playerId && e.type === 'BUILDING' && !e.dead) {
+            if (this.frameState && extendsBuildRange(this.frameState, e, playerId)) {
                 const s = this.worldToScreen(e.pos, camera, zoom);
                 ctx.strokeStyle = 'rgba(255,255,255,0.2)';
                 ctx.beginPath();
@@ -1242,16 +1344,27 @@ export class Renderer {
             y: (my - camera.y) * zoom
         };
         const rx = sc.x - (b.w / 2) * zoom, ry = sc.y - (b.h / 2) * zoom;
+        const rw = b.w * zoom, rh = b.h * zoom;
         if (footprintOnly) {
             // The 3D scene draws a hologram of the building; just mark its footprint
             ctx.fillStyle = valid ? 'rgba(0,255,0,0.15)' : 'rgba(255,0,0,0.15)';
             ctx.strokeStyle = valid ? 'rgba(0,255,0,0.8)' : 'rgba(255,0,0,0.8)';
             ctx.lineWidth = 1.5;
-            ctx.fillRect(rx, ry, b.w * zoom, b.h * zoom);
-            ctx.strokeRect(rx, ry, b.w * zoom, b.h * zoom);
+            ctx.fillRect(rx, ry, rw, rh);
+            ctx.strokeRect(rx, ry, rw, rh);
         } else {
             ctx.fillStyle = valid ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.5)';
-            ctx.fillRect(rx, ry, b.w * zoom, b.h * zoom);
+            ctx.fillRect(rx, ry, rw, rh);
+        }
+        if (!valid) {
+            // A cross marks an invalid spot without relying on red vs green
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(rx, ry); ctx.lineTo(rx + rw, ry + rh);
+            ctx.moveTo(rx + rw, ry); ctx.lineTo(rx, ry + rh);
+            ctx.stroke();
         }
         ctx.restore();
     }
@@ -1363,103 +1476,130 @@ export class Renderer {
         ctx.restore();
     }
 
+    /**
+     * Find the entity under the cursor with the shared pickEntityAt (the same hit test as clicks and
+     * the action cursor), skipping anything the fog hides.
+     */
+    private updateHover(
+        mousePos: { x: number; y: number },
+        camera: { x: number; y: number },
+        zoom: number,
+        fogGrid: Uint8Array | undefined,
+        fogGridW: number
+    ) {
+        this.hoveredEntity = null;
+        this.hoveredResourceId = null;
+        if (mousePos.x < 0 || mousePos.y < 0 || mousePos.x >= this.cssWidth || mousePos.y >= this.cssHeight) return;
+
+        const worldX = camera.x + mousePos.x / zoom;
+        const worldY = camera.y + mousePos.y / zoom;
+        const candidates = getSpatialGrid().queryRadius(worldX, worldY, HOVER_QUERY_RADIUS);
+        const visible = (entity: Entity) =>
+            !fogGrid || fogGrid[Math.floor(entity.pos.y / TILE_SIZE) * fogGridW + Math.floor(entity.pos.x / TILE_SIZE)] !== 0;
+
+        this.hoveredEntity = pickEntityAt(candidates, worldX, worldY, entity =>
+            (entity.type === 'UNIT' || entity.type === 'BUILDING') && visible(entity) && this.getEntityName(entity) !== ''
+            && !(isAirUnit(entity) && entity.airUnit.state === 'docked'));
+        this.hoveredResourceId = pickEntityAt(candidates, worldX, worldY, entity => entity.type === 'RESOURCE' && visible(entity))?.id ?? null;
+    }
+
+    private getEntityName(entity: Entity): string {
+        if (entity.type === 'BUILDING') return RULES.buildings[entity.key]?.name ?? '';
+        if (entity.type === 'UNIT') return RULES.units[entity.key]?.name ?? '';
+        return '';
+    }
+
+    /** "You", "Ally P3 (A)", "Enemy P2", or for observers "P2 (B)". */
+    private getOwnerLabel(owner: number, relation: OwnerRelation): string {
+        if (relation === 'own') return 'You';
+        const player = this.frameState?.players[owner];
+        const name = player ? `P${owner + 1}${player.team ? ` (${player.team})` : ''}` : 'Neutral';
+        if (relation === 'ally') return `Ally ${name}`;
+        if (relation === 'enemy') return `Enemy ${name}`;
+        return name;
+    }
+
     private drawTooltip(
         mousePos: { x: number; y: number },
         camera: { x: number; y: number },
         zoom: number,
         localPlayerId: number | null,
-        fogGrid: Uint8Array | undefined,
-        fogGridW: number
+        use3D: boolean
     ) {
+        const entity = this.hoveredEntity;
+        if (!entity) return;
+        const name = this.getEntityName(entity);
+        if (!name) return;
+
         const ctx = this.ctx;
+        const relation = getOwnerRelation(this.frameState, entity.owner, localPlayerId);
 
-        // Convert mouse position to world coordinates
-        const worldX = camera.x + mousePos.x / zoom;
-        const worldY = camera.y + mousePos.y / zoom;
-
-        // Use spatial grid to find only nearby entities (50 pixel radius covers most entities)
-        const nearbyEntities = getSpatialGrid().queryRadius(worldX, worldY, 60);
-
-        // Sort by Y (descending) to find top-most entity first
-        nearbyEntities.sort((a, b) => b.pos.y - a.pos.y);
-
-        for (const entity of nearbyEntities) {
-            // Only show tooltips for units and buildings
-            if (entity.dead) continue;
-            if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
-            // Never name what the fog hides
-            if (fogGrid && fogGrid[Math.floor(entity.pos.y / TILE_SIZE) * fogGridW + Math.floor(entity.pos.x / TILE_SIZE)] === 0) continue;
-
-            // Check collision
-            const s = this.worldToScreen(entity.pos, camera, zoom);
-            const dx = s.x - mousePos.x;
-            const dy = s.y - mousePos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            // Adjusted radius for simpler hit detection
-            // Use slightly larger radius to make hovering easier
-            if (dist < (entity.radius + 5) * zoom) {
-                let name = '';
-                if (entity.type === 'BUILDING' && RULES.buildings[entity.key]) {
-                    name = RULES.buildings[entity.key].name;
-                } else if (entity.type === 'UNIT' && RULES.units[entity.key]) {
-                    name = RULES.units[entity.key].name;
-                }
-
-                if (name) {
-                    ctx.save();
-                    ctx.font = '12px "Segoe UI", Arial, sans-serif';
-
-                    // In observer mode (localPlayerId === null), show extra debug info
-                    const isObserver = localPlayerId === null;
-                    let tooltipText = name;
-                    let extraLine = '';
-                    if (isObserver) {
-                        extraLine = `${entity.id} (${Math.round(entity.pos.x)}, ${Math.round(entity.pos.y)})`;
-                    }
-
-                    const metrics = ctx.measureText(tooltipText);
-                    const extraMetrics = extraLine ? ctx.measureText(extraLine) : { width: 0 };
-                    const padding = 6;
-                    const w = Math.max(metrics.width, extraMetrics.width) + (padding * 2);
-                    const h = isObserver ? 40 : 24;
-                    const x = mousePos.x + 16;
-                    const y = mousePos.y + 16;
-
-                    // Keep tooltip on screen
-                    const finalX = Math.min(x, this.canvas.width - w - 10);
-                    const finalY = Math.min(y, this.canvas.height - h - 10);
-
-                    // Background
-                    const isEnemy = localPlayerId !== null
-                        ? (this.frameState ? isEnemyPlayer(this.frameState, entity.owner, localPlayerId) : entity.owner !== localPlayerId)
-                        : entity.owner !== -1;
-                    ctx.fillStyle = 'rgba(20, 30, 40, 0.9)';
-                    ctx.strokeStyle = isEnemy ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 200, 255, 0.5)';
-                    ctx.lineWidth = 1;
-
-                    ctx.beginPath();
-                    ctx.roundRect(finalX, finalY, w, h, 4);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // Text
-                    ctx.fillStyle = isEnemy ? '#ffaaaa' : '#ffffff';
-                    ctx.textBaseline = 'middle';
-                    if (isObserver) {
-                        ctx.fillText(tooltipText, finalX + padding, finalY + 12);
-                        ctx.fillStyle = '#aaaaaa';
-                        ctx.font = '10px "Segoe UI", Arial, sans-serif';
-                        ctx.fillText(extraLine, finalX + padding, finalY + 28);
-                    } else {
-                        ctx.fillText(tooltipText, finalX + padding, finalY + (h / 2));
-                    }
-                    ctx.restore();
-
-                    // Only show one tooltip
-                    return;
-                }
-            }
+        // Hover marker (skipped for own units that already show a selection ring). Its shape -
+        // solid / dashed / crosshair - tells own, ally and enemy apart without colour.
+        if (!this.selectionSet.has(entity.id)) {
+            const lift = use3D ? heightToScreenLift(getAltitude(entity), zoom) : 0;
+            const sc = this.worldToScreen(entity.pos, camera, zoom);
+            const r = entity.type === 'BUILDING'
+                ? Math.hypot(entity.w, entity.h) / 2 * zoom + 2
+                : (entity.radius + 6) * zoom;
+            ctx.save();
+            ctx.translate(sc.x, sc.y - lift);
+            ctx.globalAlpha = 0.75;
+            this.strokeRelationRing(Math.max(8, r), relation, 1.5, 'rgba(255, 255, 255, 0.9)');
+            ctx.restore();
         }
+
+        ctx.save();
+        ctx.font = '12px "Segoe UI", Arial, sans-serif';
+
+        const ownerLabel = this.getOwnerLabel(entity.owner, relation);
+        const hpLine = `${ownerLabel} · HP ${Math.max(0, Math.ceil(entity.hp))}/${entity.maxHp}`;
+        const debugLine = this.frameState?.debugMode
+            ? `${entity.id} (${Math.round(entity.pos.x)}, ${Math.round(entity.pos.y)})`
+            : '';
+
+        const padding = 6;
+        const swatch = 8;
+        const nameWidth = ctx.measureText(name).width;
+        ctx.font = '11px "Segoe UI", Arial, sans-serif';
+        const hpWidth = ctx.measureText(hpLine).width + swatch + 5;
+        ctx.font = '10px "Segoe UI", Arial, sans-serif';
+        const debugWidth = debugLine ? ctx.measureText(debugLine).width : 0;
+        const w = Math.max(nameWidth, hpWidth, debugWidth) + padding * 2;
+        const h = debugLine ? 52 : 38;
+
+        // Keep tooltip on screen
+        const finalX = Math.min(mousePos.x + 16, this.cssWidth - w - 10);
+        const finalY = Math.min(mousePos.y + 16, this.cssHeight - h - 10);
+
+        const isEnemy = relation === 'enemy';
+        ctx.fillStyle = 'rgba(20, 30, 40, 0.9)';
+        ctx.strokeStyle = isEnemy ? 'rgba(255, 100, 100, 0.5)' : 'rgba(100, 200, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(finalX, finalY, w, h, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textBaseline = 'middle';
+        ctx.font = '12px "Segoe UI", Arial, sans-serif';
+        ctx.fillStyle = isEnemy ? '#ffaaaa' : '#ffffff';
+        ctx.fillText(name, finalX + padding, finalY + 12);
+
+        // Owner colour swatch + relation/owner + HP
+        ctx.fillStyle = PLAYER_COLORS[entity.owner] ?? '#888888';
+        ctx.fillRect(finalX + padding, finalY + 27 - swatch / 2, swatch, swatch);
+        ctx.strokeStyle = '#000';
+        ctx.strokeRect(finalX + padding + 0.5, finalY + 27 - swatch / 2 + 0.5, swatch - 1, swatch - 1);
+        ctx.font = '11px "Segoe UI", Arial, sans-serif';
+        ctx.fillStyle = '#cfd8dc';
+        ctx.fillText(hpLine, finalX + padding + swatch + 5, finalY + 27);
+
+        if (debugLine) {
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '10px "Segoe UI", Arial, sans-serif';
+            ctx.fillText(debugLine, finalX + padding, finalY + 42);
+        }
+        ctx.restore();
     }
 }

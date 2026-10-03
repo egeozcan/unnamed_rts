@@ -1,12 +1,13 @@
 import {
-    Action, GameState, PLAYER_COLORS, Vector
+    Action, EntityId, GameState, PLAYER_COLORS, Vector
 } from './types';
+import { isDemoTruck } from './type-guards';
 import { isEnemy } from './teams';
 import { createPlayerState } from './reducers/helpers';
 import { tick } from './reducers/game_loop';
 import { startBuild, cancelBuild, queueUnit, dequeueUnit } from './reducers/production';
 import { placeBuilding, sellBuilding, startRepair, stopRepair, setRallyPoint, setPrimaryBuilding } from './reducers/buildings';
-import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, commandUngarrison, setStance } from './reducers/units';
+import { deployMCV, deployInductionRig, commandMove, commandAttack, commandAttackMove, commandUngarrison, commandStop, setStance } from './reducers/units';
 
 // Re-export specific helpers that are used elsewhere (e.g. in tests or UI)
 export { createPlayerState, canBuild, calculatePower, createEntity, getRuleData, createProjectile } from './reducers/helpers';
@@ -80,21 +81,18 @@ export function update(state: GameState, action: Action): GameState {
             const newState = commandAttack(state, action.payload);
             // Only show indicator for human commands (units in selection)
             const isHumanCommand = action.payload.unitIds.some(id => state.selection.includes(id));
-            // A right-click on anything but an enemy is a move to the clicked spot: show it as one
-            const commander = state.entities[action.payload.unitIds[0]];
-            const isAttack = !!target && !!commander && target.owner !== -1 && isEnemy(state, target.owner, commander.owner);
-            const { x, y } = action.payload;
+            // Show what actually happened: red on the target if anyone now attacks it, green where the
+            // units are heading if they only move (e.g. a right-click on a rock or your own building),
+            // and nothing if no unit took the order
+            const indicator = isHumanCommand && target ? describeAttackOrder(state, newState, action.payload.unitIds, action.payload.targetId) : null;
             return {
                 ...newState,
-                commandIndicator: isHumanCommand && target ? {
-                    pos: isAttack || x === undefined || y === undefined ? target.pos : new Vector(x, y),
-                    type: isAttack ? 'attack' : 'move',
-                    startTick: state.tick
-                } : state.commandIndicator
+                commandIndicator: indicator ? { ...indicator, startTick: state.tick } : state.commandIndicator
             };
         }
         case 'SELECT_UNITS':
-            return { ...state, selection: action.payload };
+            // A new selection drops attack-move mode: it was armed for the old one
+            return { ...state, selection: action.payload, attackMoveMode: false };
         case 'SELL_BUILDING':
             return sellBuilding(state, action.payload);
         case 'TOGGLE_SELL_MODE':
@@ -131,11 +129,13 @@ export function update(state: GameState, action: Action): GameState {
                 ...newState,
                 commandIndicator: isHumanCommand ? {
                     pos: new Vector(action.payload.x, action.payload.y),
-                    type: 'move',
+                    type: 'attack_move',
                     startTick: state.tick
                 } : state.commandIndicator
             };
         }
+        case 'COMMAND_STOP':
+            return commandStop(state, action.payload);
         case 'COMMAND_UNGARRISON':
             return commandUngarrison(state, action.payload);
         case 'SET_STANCE':
@@ -149,4 +149,40 @@ export function update(state: GameState, action: Action): GameState {
         default:
             return state;
     }
+}
+
+/**
+ * The indicator for a right-click order on `targetId`, judged from what the order changed: red on an
+ * enemy target that someone now attacks; otherwise green - where the units are heading if they were
+ * sent somewhere (a rock, your own building...), or on the target itself for harvesting, boarding,
+ * docking or repairs. Nothing if no unit took the order.
+ */
+function describeAttackOrder(before: GameState, after: GameState, unitIds: EntityId[], targetId: EntityId): { pos: Vector; type: 'attack' | 'move' } | null {
+    const target = after.entities[targetId] ?? before.entities[targetId];
+    const commander = before.entities[unitIds[0]];
+    const targetIsEnemy = !!target && !!commander && target.owner !== -1 && isEnemy(before, target.owner, commander.owner);
+    let sumX = 0, sumY = 0, moved = 0, changed = false, attacking = false;
+    // (All of the commander's units, not just `unitIds`: a selected Air-Force Command launches its Harriers)
+    const ordered = new Set(unitIds);
+    for (const id in after.entities) {
+        const unit = after.entities[id];
+        const prev = before.entities[id];
+        if (unit.type !== 'UNIT' || !commander || unit.owner !== commander.owner) continue;
+        if (prev === unit && !ordered.has(id)) continue;
+        if (unit.combat?.targetId === targetId || (isDemoTruck(unit) && unit.demoTruck.detonationTargetId === targetId)) {
+            attacking = true;
+        }
+        if (prev === unit) continue;
+        changed = true;
+        const dest = unit.movement.moveTarget;
+        if (dest && (!prev || prev.type !== 'UNIT' || prev.movement.moveTarget !== dest)) {
+            sumX += dest.x;
+            sumY += dest.y;
+            moved++;
+        }
+    }
+    if (targetIsEnemy && attacking) return { pos: target.pos, type: 'attack' };
+    if (!changed && !attacking) return null;
+    if (!targetIsEnemy && moved > 0 && !attacking) return { pos: new Vector(sumX / moved, sumY / moved), type: 'move' };
+    return target ? { pos: target.pos, type: targetIsEnemy && attacking ? 'attack' : 'move' } : null;
 }

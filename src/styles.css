@@ -78,26 +78,66 @@ canvas#gameCanvas.overlay-3d {
     cursor: pointer;
 }
 
+/* Low power: the minimap stays readable; a red frame and a label strip at the top say why
+   production is slow. Gentle 2.4s pulse on the label only (no flashing, no blank frames). */
 #low-power-warning {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     display: none;
     justify-content: center;
-    align-items: center;
-    color: #f00;
-    font-weight: bold;
-    font-size: 20px;
-    text-shadow: 0 0 5px #f00;
-    background: rgba(0, 0, 0, 0.5);
+    align-items: flex-start;
+    box-shadow: inset 0 0 0 2px rgba(255, 70, 70, 0.85), inset 0 0 18px rgba(255, 40, 40, 0.35);
     pointer-events: none;
-    animation: flash 1s infinite;
+    font-size: 0;
+}
+
+#low-power-warning::before {
+    content: 'LOW POWER';
+    margin-top: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: rgba(60, 0, 0, 0.85);
+    border: 1px solid #f55;
+    color: #ffd0d0;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    animation: low-power-pulse 2.4s ease-in-out infinite;
 }
 
 #low-power-warning.visible {
     display: flex;
+}
+
+@keyframes low-power-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Power bar under the power readout: consumed vs produced */
+#power-bar {
+    height: 5px;
+    margin: 3px 0 6px auto;
+    width: 100%;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#power-bar-fill {
+    height: 100%;
+    width: 0;
+    background: #0cc;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+#power-bar.tight #power-bar-fill {
+    background: #fb3;
+}
+
+#power-bar.over #power-bar-fill {
+    background: #f44;
 }
 
 /* Tabs */
@@ -156,10 +196,27 @@ canvas#gameCanvas.overlay-3d {
     display: grid;
 }
 
+/* More buttons below the fold: a sticky fade + hint at the bottom of the list */
+.sidebar-content.more-below::after {
+    content: '\25BE  more';
+    position: sticky;
+    bottom: 0;
+    display: block;
+    height: 26px;
+    margin-top: -26px;
+    padding-top: 10px;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 11px;
+    color: #9f9;
+    background: linear-gradient(to bottom, rgba(17, 17, 17, 0), rgba(17, 17, 17, 0.95) 60%);
+    pointer-events: none;
+    z-index: 4;
+}
+
 /* Build buttons */
 .build-btn {
     background: #2a2a2a;
-    color: #aaa;
     border: 1px solid #444;
     height: 60px;
     position: relative;
@@ -168,7 +225,8 @@ canvas#gameCanvas.overlay-3d {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 10px;
+    font-size: 12px;
+    color: #e2e2e2;
     overflow: hidden;
 }
 
@@ -176,10 +234,28 @@ canvas#gameCanvas.overlay-3d {
     border-color: #888;
 }
 
+/* Locked (missing building / limit): dimmed colours rather than near-invisible opacity, plus a lock */
 .build-btn.disabled {
-    opacity: 0.3;
-    filter: grayscale(100%);
+    background: #1c1c1c;
+    border-color: #333;
+    color: #9a9a9a;
     cursor: not-allowed;
+}
+
+.build-btn.disabled .btn-cost {
+    color: #8f8450;
+}
+
+.build-btn.disabled::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 9px;
+    height: 11px;
+    z-index: 3;
+    opacity: 0.75;
+    background: no-repeat center / contain url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 12"><path d="M2.5 5V3.5a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="%23aaa" stroke-width="1.4"/><rect x="0.5" y="5" width="9" height="6.5" rx="1" fill="%23aaa"/></svg>');
 }
 
 .build-btn.building {
@@ -204,10 +280,22 @@ canvas#gameCanvas.overlay-3d {
     border-color: #fa0;
 }
 
-/* Another structure is being built / waiting for placement: one at a time */
+/* Another structure is being built / waiting for placement: one at a time.
+   Striped "wait" look, distinct from the locked style above. */
 .build-btn.busy {
-    opacity: 0.55;
     cursor: not-allowed;
+    color: #bdbdbd;
+    border-style: dashed;
+    border-color: #6a5a2a;
+}
+
+.build-btn.busy::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: repeating-linear-gradient(-45deg, rgba(255, 190, 60, 0.07) 0 6px, transparent 6px 12px);
 }
 
 /* Production stalled: no credits */
@@ -320,7 +408,7 @@ canvas#gameCanvas.overlay-3d {
 }
 
 .build-btn.building .progress-overlay {
-    background: rgba(200, 150, 0, 0.2);
+    background: rgba(200, 150, 0, 0.3);
 }
 
 .btn-name {
@@ -328,6 +416,10 @@ canvas#gameCanvas.overlay-3d {
     font-weight: bold;
     margin-bottom: 2px;
     text-align: center;
+    /* Long names ("Air-Force Command") wrap inside narrow buttons instead of overflowing */
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    line-height: 1.1;
 }
 
 .btn-cost {
@@ -340,8 +432,12 @@ canvas#gameCanvas.overlay-3d {
     color: #fff;
     font-weight: bold;
     margin-top: 2px;
-    font-size: 11px;
+    font-size: 12px;
     text-shadow: 1px 1px 0 #000;
+}
+
+.btn-status:empty {
+    display: none;
 }
 
 /* Build Button Tooltips (global element appended to body) */
@@ -349,6 +445,8 @@ canvas#gameCanvas.overlay-3d {
     display: none;
     position: fixed;
     width: 220px;
+    max-width: calc(100vw - 16px);
+    box-sizing: border-box;
     background: rgba(10, 10, 15, 0.97);
     border: 1px solid #555;
     border-radius: 6px;
@@ -366,6 +464,21 @@ canvas#gameCanvas.overlay-3d {
     color: #fff;
     font-weight: bold;
     margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.tooltip-cost {
+    color: #ffd700;
+}
+
+.tooltip-busy {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #444;
+    color: #fc6;
+    font-size: 11px;
 }
 
 .tooltip-stats {
@@ -461,8 +574,101 @@ canvas#gameCanvas.overlay-3d {
     border-top: 1px solid #4d4d4d;
 }
 
-.command-bar.hidden {
+.command-bar.hidden,
+.command-bar .stance-section.hidden,
+.command-bar .attack-move-section.hidden {
     display: none;
+}
+
+/* Selection summary (above the command bar) */
+.selection-panel {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    background: #1e1e1e;
+    border-top: 1px solid #4d4d4d;
+    color: #ddd;
+    font-size: 12px;
+}
+
+.selection-panel.hidden {
+    display: none;
+}
+
+.sel-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.sel-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sel-owner {
+    font-size: 10px;
+    padding: 0 5px;
+    border-radius: 3px;
+    border: 1px solid #777;
+    color: #ccc;
+    flex-shrink: 0;
+}
+
+.sel-owner-enemy { border-color: #f55; color: #f99; }
+.sel-owner-allied { border-color: #5af; color: #9cf; }
+
+.sel-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 4px;
+    max-height: 40px;
+    overflow: hidden;
+}
+
+.sel-chip {
+    font-size: 11px;
+    padding: 1px 5px;
+    background: #2c2c2c;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #ddd;
+    white-space: nowrap;
+}
+
+.sel-hp {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.sel-hp-bar {
+    flex: 1;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.sel-hp-fill {
+    height: 100%;
+}
+
+.sel-hp-text {
+    font-size: 11px;
+    color: #ccc;
+    white-space: nowrap;
+}
+
+.sel-extra {
+    margin-top: 3px;
+    font-size: 11px;
+    color: #bbb;
 }
 
 .stance-section {
@@ -646,7 +852,7 @@ canvas#gameCanvas.attack-move-mode {
     padding: 5px;
     background: #222;
     color: #fff;
-    font-size: 11px;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -788,13 +994,23 @@ canvas#gameCanvas.attack-move-mode {
     background: linear-gradient(135deg, rgba(15, 15, 25, 0.97) 0%, rgba(5, 5, 15, 0.99) 100%);
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* Not "center": overflowing content would be pushed above the top edge, out of scroll reach
+       (the logo on phones). Auto margins on the first/last child centre it only when it fits. */
+    justify-content: flex-start;
     align-items: center;
     z-index: 100;
     backdrop-filter: blur(8px);
     overflow-y: auto;
     padding: 20px;
     box-sizing: border-box;
+}
+
+#menu > :first-child {
+    margin-top: auto;
+}
+
+#menu > :last-child {
+    margin-bottom: auto;
 }
 
 /* End Screen */
@@ -804,23 +1020,39 @@ canvas#gameCanvas.attack-move-mode {
     left: 0;
     width: 100%;
     height: 100%;
-    background: transparent;
+    /* Dims the battlefield; clicks still pass through so the map can be panned behind the panel.
+       game.ts sizes it to the canvas so the panel is centred over the play area, not the sidebar. */
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.35) 100%);
     display: none;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     z-index: 100;
     pointer-events: none;
     overflow-y: auto;
     padding: 20px;
     box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-#end-screen .menu-btn {
+.end-panel {
+    margin: auto 0;
     pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    box-sizing: border-box;
+    width: min(660px, 100%);
+    padding: 24px 28px;
+    background: linear-gradient(135deg, rgba(15, 15, 25, 0.94) 0%, rgba(5, 5, 15, 0.96) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+    color: #ddd;
 }
 
-#end-screen .menu-btn[hidden] {
+#end-screen button[hidden] {
     display: none;
 }
 
@@ -829,16 +1061,135 @@ canvas#gameCanvas.attack-move-mode {
     gap: 12px;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: center;
+}
+
+.end-actions .start-btn {
+    padding: 12px 26px;
+}
+
+.end-actions .menu-btn {
+    padding: 12px 22px;
 }
 
 .end-subtitle {
-    margin: -8px 0 20px;
-    padding: 6px 14px;
-    color: #ddd;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 6px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: -8px 0 0;
+    color: #ccc;
     font-size: 15px;
+    text-align: center;
+}
+
+.end-results:empty {
+    display: none;
+}
+
+.end-results {
+    width: 100%;
+}
+
+.end-time {
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+
+.end-time strong {
+    color: #fff;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.end-table-wrap {
+    max-height: min(320px, 40vh);
+    overflow-y: auto;
+}
+
+.end-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.end-table th {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-align: right;
+    padding: 0 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.end-table th:first-child,
+.end-table td:first-child {
+    text-align: left;
+    padding-left: 0;
+}
+
+.end-table td {
+    text-align: right;
+    padding: 7px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.75);
+    white-space: nowrap;
+}
+
+.end-table tr.local td {
+    background: rgba(255, 68, 102, 0.08);
+}
+
+.end-total {
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.end-player {
+    white-space: normal !important;
+}
+
+.end-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.end-name {
+    color: #fff;
+    font-weight: 600;
+}
+
+.end-detail {
+    display: block;
+    margin-left: 15px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.end-status {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.end-status.won {
+    color: #44ff88;
+    background: rgba(68, 255, 136, 0.12);
+}
+
+.end-status.out {
+    color: #ff7777;
+    background: rgba(255, 68, 68, 0.12);
 }
 
 .end-subtitle:empty {
@@ -889,10 +1240,6 @@ canvas#gameCanvas.attack-move-mode {
     text-align: center;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-weight: 200;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 20px 40px;
-    border-radius: 12px;
-    margin-bottom: 24px;
     letter-spacing: 6px;
     text-shadow: 0 0 20px currentColor;
     color: #fff;
@@ -978,7 +1325,10 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .player-team {
-    width: 36px;
+    width: 40px;
+    -webkit-appearance: none;
+    appearance: none;
+    text-align-last: center;
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1001,6 +1351,15 @@ canvas#gameCanvas.attack-move-mode {
     outline: none;
     border-color: rgba(255, 255, 255, 0.3);
     color: #fff;
+}
+
+/* Keyboard focus on the setup controls gets a clear ring (mouse focus stays quiet) */
+.player-team:focus-visible,
+.player-type:focus-visible,
+.ai-implementation:focus-visible,
+.param-row select:focus-visible {
+    outline: 2px solid #ff4466;
+    outline-offset: 1px;
 }
 
 .player-team option {
@@ -1028,6 +1387,17 @@ canvas#gameCanvas.attack-move-mode {
     -webkit-appearance: none;
     appearance: none;
     line-height: 1.2;
+    /* A chevron so they read as dropdowns, and long AI names end in an ellipsis */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 2px center;
+    padding-right: 14px;
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 3px;
 }
 
 .ai-implementation {
@@ -1076,6 +1446,34 @@ canvas#gameCanvas.attack-move-mode {
     display: block;
 }
 
+.observer-detail {
+    display: block;
+    margin-top: 3px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: rgba(170, 210, 255, 0.8);
+}
+
+.slot-legend {
+    display: flex;
+    gap: 14px;
+    margin: -6px 0 8px 18px;
+    color: rgba(255, 255, 255, 0.35);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+}
+
+.setup-description {
+    min-height: 2.6em;
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.55);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
 .map-params {
     display: flex;
     flex-direction: column;
@@ -1109,10 +1507,14 @@ canvas#gameCanvas.attack-move-mode {
     transition: all 0.15s;
     -webkit-appearance: none;
     appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 26px;
 }
 
 .param-row select:hover {
-    background: rgba(0, 0, 0, 0.4);
+    background-color: rgba(0, 0, 0, 0.4);
     border-color: rgba(255, 255, 255, 0.2);
 }
 
@@ -1290,34 +1692,115 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 /* Scoreboard */
-/* Premium Glassmorphism Look */
+/* Premium Glassmorphism Look. Only the header toggle takes the mouse: the rows are see-through
+   to clicks so units underneath can still be selected. */
 .scoreboard {
     position: absolute;
     bottom: 20px;
     left: 20px;
     width: 260px;
-    padding: 16px;
-    background: rgba(10, 12, 16, 0.4);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    padding: 10px 14px 14px;
+    background: rgba(10, 12, 16, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     z-index: 50;
-    transition: all 0.3s ease;
-    pointer-events: auto;
+    pointer-events: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-.scoreboard:hover {
-    background: rgba(10, 12, 16, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+.scoreboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.scoreboard-toggle {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px 3px 4px;
+    margin-left: -4px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.7);
+    font: 600 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.scoreboard-toggle:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
+}
+
+.scoreboard-toggle:focus-visible {
+    outline: 2px solid #ff4466;
+    outline-offset: 1px;
+}
+
+.scoreboard-chevron {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    transition: transform 0.15s;
+}
+
+.scoreboard.collapsed .scoreboard-chevron {
+    transform: rotate(-90deg);
+}
+
+.scoreboard-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.5px;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 4px;
+    border-radius: 2px;
+    margin-left: 4px;
+}
+
+.legend-swatch.military {
+    background: #ff4444;
+}
+
+.legend-swatch.economy {
+    background: #44cc44;
+}
+
+.score-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Collapsed: just the small "Scores" handle */
+.scoreboard.collapsed {
+    width: auto;
+    padding: 4px 8px;
+    gap: 0;
+}
+
+.scoreboard.collapsed .score-rows,
+.scoreboard.collapsed .scoreboard-legend {
+    display: none;
 }
 
 .score-row {
@@ -1745,7 +2228,6 @@ canvas#gameCanvas.attack-move-mode {
     color: #fa4;
     border: 1px solid rgba(255, 136, 68, 0.5);
     text-shadow: 0 0 5px #fa4;
-    animation: speed-fast-pulse 0.5s infinite;
 }
 
 #speed-indicator.speed-4 {
@@ -1753,16 +2235,15 @@ canvas#gameCanvas.attack-move-mode {
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 0.5);
     text-shadow: 0 0 5px #fff;
-    animation: speed-fast-pulse 0.2s infinite;
 }
 
 #speed-indicator.speed-5 {
-    background: rgba(200, 100, 255, 0.4);
-    color: #e0f;
+    background: rgba(120, 40, 170, 0.85);
+    color: #fff;
     border: 2px solid rgba(200, 100, 255, 0.8);
-    text-shadow: 0 0 10px #e0f, 0 0 20px #fff;
+    text-shadow: 0 0 4px rgba(224, 0, 255, 0.8);
     box-shadow: 0 0 15px rgba(200, 100, 255, 0.4);
-    animation: speed-fast-pulse 0.1s infinite;
+    animation: speed-fast-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes speed-fast-pulse {
@@ -1773,7 +2254,16 @@ canvas#gameCanvas.attack-move-mode {
     }
 
     50% {
-        opacity: 0.7;
+        opacity: 0.8;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #speed-indicator,
+    #low-power-warning::before,
+    .build-btn.ready,
+    .tab.tab-ready::after {
+        animation: none !important;
     }
 }
 
@@ -2038,7 +2528,7 @@ canvas#gameCanvas.attack-move-mode {
     }
 
     .player-slots {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: 4px;
     }
 
@@ -2099,31 +2589,45 @@ canvas#gameCanvas.attack-move-mode {
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   overflow-y: auto;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 2px solid #4a90d9;
-  border-radius: 8px;
-  padding: 30px 50px;
+  /* Same look as the main menu: dark glass, hairline border, pink accent */
+  background: linear-gradient(135deg, rgba(15, 15, 25, 0.97) 0%, rgba(5, 5, 15, 0.99) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 30px 40px;
   text-align: center;
-  box-shadow: 0 0 30px rgba(74, 144, 217, 0.3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
 }
 
 .pause-modal h2 {
-  color: #4a90d9;
-  font-size: 32px;
-  margin: 0 0 30px 0;
-  text-shadow: 0 0 10px rgba(74, 144, 217, 0.5);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 200;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  margin: 0 0 26px 0;
 }
 
 .pause-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
+  gap: 12px;
   justify-content: center;
+  align-items: center;
+}
+
+.pause-buttons .start-btn {
+  padding: 12px 32px;
+}
+
+/* Fixed width so "Click again to quit" doesn't make the dialog jump wider */
+#pause-quit {
+  min-width: 11.5em;
 }
 
 .pause-buttons button.armed {
-  background: linear-gradient(180deg, #d53a3a 0%, #a02a2a 100%);
-  border-color: #f66;
+  background: rgba(255, 68, 68, 0.25);
+  border-color: #ff6666;
+  color: #fff;
 }
 
 .pause-setting {
@@ -2131,39 +2635,35 @@ canvas#gameCanvas.attack-move-mode {
   gap: 10px;
   align-items: center;
   justify-content: center;
-  margin-top: 18px;
-  font-size: 13px;
-  color: #bcd;
+  margin-top: 20px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.5px;
 }
 
 .pause-setting select {
-  padding: 4px 6px;
-  background: #0a0a1a;
-  color: #ddd;
-  border: 1px solid #3a3a5a;
-  border-radius: 4px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  font: inherit;
 }
 
 .pause-hint {
-  margin-top: 18px;
+  margin-top: 16px;
   font-size: 12px;
-  color: #8aa;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.pause-buttons button, .help-back {
-  background: linear-gradient(180deg, #3a7bd5 0%, #2a5aa0 100%);
-  border: 1px solid #4a90d9;
-  color: white;
-  padding: 12px 30px;
-  font-size: 16px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.pause-buttons button:hover, .help-back:hover {
-  background: linear-gradient(180deg, #4a90d9 0%, #3a7bd5 100%);
-  transform: scale(1.05);
+.pause-modal button:focus-visible,
+.help-modal button:focus-visible,
+.pause-setting select:focus-visible,
+.help-content:focus-visible,
+#end-screen button:focus-visible,
+.menu-actions button:focus-visible {
+  outline: 2px solid #ff4466;
+  outline-offset: 2px;
 }
 
 .help-modal {
@@ -2173,44 +2673,55 @@ canvas#gameCanvas.attack-move-mode {
 
 .help-tabs {
   display: flex;
-  gap: 5px;
-  margin-bottom: 20px;
+  gap: 4px;
+  margin-bottom: 16px;
   justify-content: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .help-tab {
-  background: #2a2a4a;
-  border: 1px solid #4a4a6a;
-  color: #aaa;
-  padding: 8px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 8px 18px;
+  margin-bottom: -1px;
   cursor: pointer;
-  border-radius: 4px 4px 0 0;
-  transition: all 0.2s;
+  font: 600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.help-tab:hover {
+  color: #fff;
 }
 
 .help-tab.active {
-  background: #3a7bd5;
-  border-color: #4a90d9;
-  color: white;
+  color: #fff;
+  border-bottom-color: #ff4466;
 }
 
 .help-content {
   color: #ddd;
   font-size: 14px;
-  background: #0a0a1a;
-  border: 1px solid #3a3a5a;
-  border-radius: 4px;
-  padding: 20px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 18px 20px;
   text-align: left;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   max-height: min(420px, calc(100vh - 220px));
   overflow-y: auto;
 }
 
 .help-content h3 {
-  color: #4a90d9;
-  margin: 0 0 15px 0;
-  font-size: 18px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 12px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 .help-content table {
@@ -2220,12 +2731,12 @@ canvas#gameCanvas.attack-move-mode {
 
 .help-content td {
   padding: 8px 10px;
-  border-bottom: 1px solid #2a2a4a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .help-content td:first-child {
-  color: #4a90d9;
-  font-weight: bold;
+  color: #ff8fa3;
+  font-weight: 600;
   width: 40%;
 }
 
@@ -2240,7 +2751,20 @@ canvas#gameCanvas.attack-move-mode {
 }
 
 .help-back {
-  margin-top: 10px;
+  margin-top: 4px;
+}
+
+/* Screen-reader-only text (alert announcements) */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Main menu actions + setup validation */
@@ -2266,6 +2790,75 @@ canvas#gameCanvas.attack-move-mode {
 
 .setup-error.visible {
     display: block;
+}
+
+/* Short screens (e.g. 1280x720 laptops): compact the sidebar header and command bar so the
+   build grid keeps ~5 rows visible even with units selected */
+@media (max-height: 800px) {
+    .sidebar-header {
+        padding: 6px 8px;
+    }
+
+    #money-display {
+        font-size: 19px;
+        margin-bottom: 2px;
+    }
+
+    #power-bar {
+        margin: 2px 0 4px auto;
+    }
+
+    #minimap-container {
+        height: min(200px, 21vh);
+        width: calc(min(200px, 21vh) * 1.25);
+        margin-bottom: 4px;
+    }
+
+    .mode-buttons-container {
+        padding: 4px 0 0;
+        margin-top: 4px;
+    }
+
+    .mode-btn {
+        padding: 5px;
+        font-size: 12px;
+    }
+
+    .tab {
+        padding: 5px 0;
+    }
+
+    .tab svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    .build-btn {
+        height: 50px;
+    }
+
+    .selection-panel {
+        padding: 4px 8px;
+    }
+
+    .command-bar {
+        gap: 5px;
+        padding: 5px 8px;
+    }
+
+    .command-label {
+        display: none;
+    }
+
+    .stance-btn {
+        min-height: 28px;
+        padding: 3px 6px;
+    }
+
+    .attack-move-btn,
+    .ungarrison-btn {
+        padding: 5px 8px;
+    }
 }
 
 /* Small screens (tablets, phones in landscape): a narrower, more compact sidebar so the
@@ -2311,6 +2904,87 @@ canvas#gameCanvas.attack-move-mode {
     }
 }
 
+/* Phones (landscape and portrait): the selection summary and command bar shrink to one line
+   each, and the build list keeps at least two rows (the whole sidebar scrolls if needed) */
+@media (max-height: 560px), (max-width: 600px) and (orientation: portrait) {
+    #sidebar {
+        overflow-y: auto;
+    }
+
+    #sidebar-tabs {
+        flex-shrink: 0;
+        min-height: 104px;
+        flex-basis: 104px;
+    }
+
+    .selection-panel {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+
+    .selection-panel .sel-chips,
+    .selection-panel .sel-extra,
+    .selection-panel .sel-owner {
+        display: none;
+    }
+
+    .selection-panel .sel-title {
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .selection-panel .sel-hp {
+        flex: 1;
+        margin-top: 0;
+        min-width: 70px;
+    }
+
+    .command-bar {
+        flex-wrap: nowrap;
+        gap: 3px;
+        padding: 3px 4px;
+    }
+
+    .stance-section {
+        flex: 3;
+        width: auto;
+        min-width: 0;
+    }
+
+    .stance-buttons {
+        gap: 3px;
+    }
+
+    .stance-btn {
+        min-height: 26px;
+        padding: 2px 3px;
+        font-size: 10px;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .stance-hotkey,
+    .command-label {
+        display: none;
+    }
+
+    .attack-move-section,
+    .ungarrison-section {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .attack-move-btn,
+    .ungarrison-btn {
+        height: 100%;
+        padding: 2px 3px;
+        font-size: 10px;
+    }
+}
+
 /* Phones in portrait: the sidebar becomes a bottom panel and the battlefield sits above it */
 @media (max-width: 600px) and (orientation: portrait) {
     #game-container {
@@ -2325,15 +2999,39 @@ canvas#gameCanvas.attack-move-mode {
         border-top: 3px solid #555;
     }
 
+    /* Header: money / power / sell+repair on the left, a compact minimap on the right */
     .sidebar-header {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "money map"
+            "power map"
+            "pbar map"
+            "modes map";
+        column-gap: 8px;
+        row-gap: 2px;
         align-items: center;
     }
 
+    #money-display { grid-area: money; text-align: left; font-size: 18px; margin: 0; }
+    #power-display { grid-area: power; text-align: left; }
+    #power-bar { grid-area: pbar; margin: 0; }
+    #sell-container { grid-area: modes; margin-top: 2px; padding: 2px 0 0; border-top: none; }
+
     #minimap-container {
-        display: none;
+        grid-area: map;
+        display: block;
+        width: 30vw;
+        max-width: 140px;
+        height: auto;
+        max-height: none;
+        aspect-ratio: 5 / 4;
+        margin: 0;
+    }
+
+    #low-power-warning::before {
+        font-size: 10px;
+        padding: 1px 4px;
     }
 
     .btn-grid {
@@ -2355,4 +3053,89 @@ canvas#gameCanvas.attack-move-mode {
     #hud-menu-btn .hud-key {
         display: none;
     }
+}
+
+/* No keyboard on touch devices: the "Esc / Space to resume" hint only confuses */
+@media (hover: none), (pointer: coarse) {
+    .pause-hint {
+        display: none;
+    }
+}
+
+/* Short landscape screens (phones): compact scoreboard so it doesn't cover the battlefield
+   (it also starts collapsed there, see scoreboard.ts) */
+@media (max-height: 500px) {
+    .scoreboard {
+        bottom: 8px;
+        left: 8px;
+        width: 200px;
+        padding: 6px 10px 8px;
+        gap: 4px;
+    }
+
+    .scoreboard.collapsed {
+        width: auto;
+        padding: 3px 6px;
+    }
+
+    .scoreboard .score-rows {
+        gap: 4px;
+    }
+
+    .scoreboard .score-row {
+        min-height: 24px;
+        gap: 8px;
+    }
+
+    .scoreboard .score-bars {
+        gap: 2px;
+    }
+
+    .scoreboard .score-bar-container {
+        height: 4px;
+    }
+
+    .scoreboard .total-score {
+        font-size: 11px;
+    }
+
+    .end-panel {
+        padding: 14px 16px;
+        gap: 10px;
+    }
+
+    .end-table-wrap {
+        max-height: 34vh;
+    }
+}
+
+/* Phones: tighter pause / help / results panels */
+@media (max-width: 600px) {
+    .pause-modal,
+    .help-modal {
+        padding: 22px 16px;
+    }
+
+    .help-tab {
+        padding: 8px 10px;
+    }
+
+    #end-screen {
+        padding: 10px;
+    }
+
+    .end-panel {
+        padding: 18px 14px;
+    }
+
+    .end-table td,
+    .end-table th {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+}
+
+/* The end screen takes focus itself (so Enter/Space can't press Play Again by accident) */
+#end-screen:focus {
+    outline: none;
 }

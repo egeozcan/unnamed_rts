@@ -18,11 +18,12 @@
       <!-- Player Slots -->
       <div class="skirmish-section players-section">
         <div class="section-title">Players</div>
+        <div class="slot-legend" aria-hidden="true"><span>Team</span><span>Player / AI personality</span></div>
         <div class="player-slots">
           <div class="player-slot" data-slot="0">
             <div class="player-color" style="--player-color: #4488ff"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -35,7 +36,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none">—</option>
+                <option value="none">Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -45,7 +46,7 @@
           <div class="player-slot" data-slot="1">
             <div class="player-color" style="--player-color: #ff4444"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -58,7 +59,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium" selected>Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none">—</option>
+                <option value="none">Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -68,7 +69,7 @@
           <div class="player-slot" data-slot="2">
             <div class="player-color" style="--player-color: #44ff88"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -81,7 +82,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -91,7 +92,7 @@
           <div class="player-slot" data-slot="3">
             <div class="player-color" style="--player-color: #ffcc44"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -104,7 +105,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -114,7 +115,7 @@
           <div class="player-slot" data-slot="4">
             <div class="player-color" style="--player-color: #ff44ff"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -127,7 +128,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -137,7 +138,7 @@
           <div class="player-slot" data-slot="5">
             <div class="player-color" style="--player-color: #44ffff"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -150,7 +151,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -160,7 +161,7 @@
           <div class="player-slot" data-slot="6">
             <div class="player-color" style="--player-color: #ff8844"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -173,7 +174,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -183,7 +184,7 @@
           <div class="player-slot" data-slot="7">
             <div class="player-color" style="--player-color: #8844ff"></div>
             <select class="player-team">
-              <option value="">—</option>
+              <option value="">FFA</option>
               <option value="A">A</option>
               <option value="B">B</option>
               <option value="C">C</option>
@@ -196,7 +197,7 @@
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
-                <option value="none" selected>—</option>
+                <option value="none" selected>Closed</option>
               </select>
               <select class="ai-implementation">
                 <option value="classic" selected>Classic</option>
@@ -204,7 +205,8 @@
             </div>
           </div>
         </div>
-        <div id="observer-mode" class="observer-indicator">Observer Mode</div>
+        <div id="setup-description" class="setup-description" aria-live="polite"></div>
+        <div id="observer-mode" class="observer-indicator">Observer Mode<span class="observer-detail">No human player - you'll watch the AIs battle it out</span></div>
       </div>
 
       <!-- Map Parameters -->
@@ -212,7 +214,7 @@
         <div class="section-title">Map</div>
         <div class="map-params">
           <div class="param-row">
-            <label>Size</label>
+            <label for="map-size">Size</label>
             <select id="map-size">
               <option value="small">Small</option>
               <option value="medium" selected>Medium</option>
@@ -221,7 +223,7 @@
             </select>
           </div>
           <div class="param-row">
-            <label>Resources</label>
+            <label for="resource-density">Resources</label>
             <select id="resource-density">
               <option value="low">Low</option>
               <option value="medium" selected>Medium</option>
@@ -229,7 +231,7 @@
             </select>
           </div>
           <div class="param-row">
-            <label>Obstacles</label>
+            <label for="rock-density">Obstacles</label>
             <select id="rock-density">
               <option value="low">Few</option>
               <option value="medium" selected>Normal</option>
@@ -237,7 +239,7 @@
             </select>
           </div>
           <div class="param-row">
-            <label>Fog of War</label>
+            <label for="fog-of-war">Fog of War</label>
             <select id="fog-of-war">
               <option value="on" selected>On</option>
               <option value="off">Off</option>
@@ -252,7 +254,7 @@
             </select>
           </div>
           <div class="param-row">
-            <label>Graphics</label>
+            <label for="graphics-mode">Graphics</label>
             <select id="graphics-mode" title="Switch in-game with V">
               <option value="3d" selected>3D</option>
               <option value="2d">Classic 2D</option>
@@ -269,12 +271,16 @@
     </div>
   </div>
 
-  <div id="end-screen" role="dialog" aria-labelledby="end-title">
-    <div id="end-title" class="end-title">GAME OVER</div>
-    <div id="end-subtitle" class="end-subtitle"></div>
-    <div class="end-actions">
-      <button class="menu-btn" id="spectate-btn" hidden>Keep Watching</button>
-      <button class="menu-btn" id="restart-btn">Main Menu</button>
+  <div id="end-screen" role="dialog" aria-labelledby="end-title" aria-describedby="end-subtitle">
+    <div class="end-panel">
+      <div id="end-title" class="end-title">GAME OVER</div>
+      <div id="end-subtitle" class="end-subtitle"></div>
+      <div id="end-results" class="end-results"></div>
+      <div class="end-actions">
+        <button class="start-btn" id="play-again-btn" title="Start a new battle with the same players and map settings">Play Again</button>
+        <button class="menu-btn" id="spectate-btn" hidden>Keep Watching</button>
+        <button class="menu-btn" id="restart-btn">Main Menu</button>
+      </div>
     </div>
   </div>
 
@@ -296,6 +302,7 @@
       <div class="sidebar-header">
         <div id="money-display">$ 0</div>
         <div id="power-display" title="Power produced / consumed. Production slows when consumption exceeds output.">Power: 0/0</div>
+        <div id="power-bar" title="Power used vs produced"><div id="power-bar-fill"></div></div>
         <div id="minimap-container">
           <canvas id="minimapCanvas"></canvas>
           <div id="low-power-warning">LOW POWER</div>
@@ -343,6 +350,9 @@
         <div id="tab-vehicles" class="btn-grid"></div>
         <div id="tab-air" class="btn-grid"></div>
       </div>
+
+      <!-- Selection summary: count by type and HP (single selection: name, owner, HP, stance/cargo/ammo) -->
+      <div id="selection-panel" class="selection-panel hidden"></div>
 
       <!-- Command bar for unit stances and attack-move -->
       <div id="command-bar" class="command-bar hidden">

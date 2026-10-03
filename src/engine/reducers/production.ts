@@ -218,6 +218,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
 
                         let spawnPos = new Vector(100, 100); // Default fallback
                         let rallyPoint: Vector | null = null;
+                        let exitFactory: BuildingEntity | null = null;
 
                         const factories = playerBuildings.filter(e => e.key === spawnBuildingKey);
                         if (factories.length > 0) {
@@ -231,6 +232,8 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                             // Check for rally point
                             if (factory.building.rallyPoint) {
                                 rallyPoint = factory.building.rallyPoint;
+                            } else {
+                                exitFactory = factory;
                             }
                         } else {
                             // Fallback to conyard
@@ -241,6 +244,13 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
                         const newUnit = createEntity(spawnPos.x, spawnPos.y, player.id, 'UNIT', q.current!, state);
                         const offset = new Vector((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
                         let movedUnit = { ...newUnit, pos: newUnit.pos.add(offset) };
+
+                        // Without a rally point, drive out to a free spot in front of the door
+                        // so consecutive units don't pile up on the spawn point.
+                        // Harvesters head off to ore on their own.
+                        if (!rallyPoint && exitFactory && movedUnit.type === 'UNIT' && movedUnit.key !== 'harvester') {
+                            rallyPoint = findFreeExitSlot(exitFactory, movedUnit.radius, state, createdEntities);
+                        }
 
                         // Apply rally point if set
                         if (rallyPoint && movedUnit.type === 'UNIT' && 'movement' in movedUnit) {
@@ -597,4 +607,74 @@ export function cancelBuild(state: GameState, payload: { category: string; playe
         },
         placingBuilding: newPlacingBuilding
     };
+}
+
+/**
+ * Find a free spot in front of a factory's door for a newly produced unit.
+ * Slots fill row by row, centre first, skipping anything occupied by a unit
+ * (or a unit already heading there), a building or a rock.
+ */
+function findFreeExitSlot(
+    factory: BuildingEntity,
+    radius: number,
+    state: GameState,
+    createdEntities: Entity[]
+): Vector | null {
+    const spacing = radius * 2 + 6;
+    const firstRowY = factory.pos.y + factory.h / 2 + 20 + spacing;
+    const doorX = factory.pos.x;
+    const { width, height } = state.config;
+
+    const near: Entity[] = [];
+    const reach = Math.max(factory.w, factory.h) + spacing * 6;
+    const consider = (e: Entity) => {
+        if (e.dead || e.type === 'RESOURCE') return;
+        const extent = Math.max(e.radius, (e.w || 0) / 2, (e.h || 0) / 2);
+        if (Math.abs(e.pos.x - doorX) > reach + extent || Math.abs(e.pos.y - firstRowY) > reach + extent) {
+            // Still consider units heading into the area
+            if (!(e.type === 'UNIT' && 'movement' in e && e.movement.moveTarget)) return;
+        }
+        near.push(e);
+    };
+    for (const id in state.entities) consider(state.entities[id]);
+    for (const e of createdEntities) consider(e);
+
+    const isFree = (p: Vector): boolean => {
+        if (p.x < radius || p.y < radius || p.x > width - radius || p.y > height - radius) return false;
+        for (const e of near) {
+            if (e.type === 'BUILDING' || e.type === 'ROCK') {
+                const hw = (e.w || e.radius * 2) / 2 + radius;
+                const hh = (e.h || e.radius * 2) / 2 + radius;
+                if (Math.abs(p.x - e.pos.x) < hw && Math.abs(p.y - e.pos.y) < hh) return false;
+                continue;
+            }
+            const minDist = e.radius + radius;
+            if (e.pos.dist(p) < minDist) return false;
+            const mt = e.type === 'UNIT' && 'movement' in e ? e.movement.moveTarget : null;
+            if (mt && Math.hypot(mt.x - p.x, mt.y - p.y) < minDist) return false;
+        }
+        return true;
+    };
+
+    for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 7; col++) {
+            // 0, +1, -1, +2, -2, ...
+            const offset = col === 0 ? 0 : (col % 2 === 1 ? 1 : -1) * Math.ceil(col / 2);
+            const p = new Vector(doorX + offset * spacing, firstRowY + row * spacing);
+            if (isFree(p)) return p;
+        }
+    }
+    // The area in front of the door is taken (e.g. another building): try rings round the factory
+    for (let ring = 1; ring <= 4; ring++) {
+        const r = Math.max(factory.w, factory.h) / 2 + 20 + ring * spacing;
+        const steps = Math.ceil((2 * Math.PI * r) / spacing);
+        for (let i = 0; i < steps; i++) {
+            // Start below the door and alternate sides
+            const k = i === 0 ? 0 : (i % 2 === 1 ? 1 : -1) * Math.ceil(i / 2);
+            const angle = Math.PI / 2 + (k * 2 * Math.PI) / steps;
+            const p = new Vector(factory.pos.x + Math.cos(angle) * r, factory.pos.y + Math.sin(angle) * r);
+            if (isFree(p)) return p;
+        }
+    }
+    return null;
 }

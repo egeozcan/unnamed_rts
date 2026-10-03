@@ -182,7 +182,7 @@ export class Scene3D {
         container.insertBefore(this.canvas, before);
 
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.renderer.setPixelRatio(scenePixelRatio());
         this.renderer.setClearColor(0x14180f);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -228,6 +228,9 @@ export class Scene3D {
     }
 
     setSize(width: number, height: number): void {
+        // Browser zoom or moving the window to another monitor changes the DPR mid-game
+        const pixelRatio = scenePixelRatio();
+        if (this.renderer.getPixelRatio() !== pixelRatio) this.renderer.setPixelRatio(pixelRatio);
         this.renderer.setSize(width, height, false);
         this.canvas.style.width = `${width}px`;
         this.canvas.style.height = `${height}px`;
@@ -237,8 +240,10 @@ export class Scene3D {
         const { state, zoom, width, height, camera } = frame;
         if (width <= 0 || height <= 0) return;
 
-        if (this.canvas.width !== Math.floor(width * this.renderer.getPixelRatio()) ||
-            this.canvas.height !== Math.floor(height * this.renderer.getPixelRatio())) {
+        const pixelRatio = scenePixelRatio();
+        if (this.renderer.getPixelRatio() !== pixelRatio ||
+            this.canvas.width !== Math.floor(width * pixelRatio) ||
+            this.canvas.height !== Math.floor(height * pixelRatio)) {
             this.setSize(width, height);
         }
 
@@ -767,6 +772,11 @@ export class Scene3D {
 // ---------------------------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------------------------
+
+/** Device pixel ratio for the WebGL canvas, capped at 2 to bound fill-rate cost. */
+function scenePixelRatio(): number {
+    return Math.min(window.devicePixelRatio || 1, 2);
+}
 
 function ensurePointCapacity(geometry: THREE.BufferGeometry, count: number): THREE.BufferGeometry {
     const existing = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;

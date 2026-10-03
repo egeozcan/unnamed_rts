@@ -4,7 +4,7 @@ import {
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid, ownerBit } from '../spatial';
-import { moveToward } from './movement';
+import { moveToward, trackMoveProgress, isMoveHopeless } from './movement';
 import { isAlly, isEnemy } from '../teams';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
 
@@ -113,12 +113,14 @@ export function updateCombatUnitBehavior(
     } else if (nextEntity.movement.moveTarget) {
         // No target, just moving (regular move or attack-move in progress)
         nextEntity = moveToward(nextEntity, nextEntity.movement.moveTarget, entityList) as CombatUnit;
-        if (nextEntity.pos.dist(nextEntity.movement.moveTarget!) < 10) {
+        nextEntity = trackMoveProgress(nextEntity);
+        const givenUp = isMoveHopeless(nextEntity);
+        if (givenUp || nextEntity.pos.dist(nextEntity.movement.moveTarget!) < 10) {
             // Reached intermediate waypoint - check if we still need to reach finalDest
             const finalDest = nextEntity.movement.finalDest;
             const distToFinal = finalDest ? nextEntity.pos.dist(finalDest) : 0;
 
-            if (finalDest && distToFinal > 15) {
+            if (finalDest && distToFinal > 15 && !givenUp) {
                 // Still far from final destination - continue moving toward it
                 // This prevents units from getting stuck when collision pushes them away
                 nextEntity = {
@@ -141,7 +143,10 @@ export function updateCombatUnitBehavior(
                         stuckTimer: 0,
                         unstuckTimer: 0,
                         unstuckDir: null,
-                        avgVel: undefined
+                        avgVel: undefined,
+                        lastDistToMoveTarget: undefined,
+                        bestDistToMoveTarget: undefined,
+                        moveTargetNoProgressTicks: undefined
                     },
                     combat: {
                         ...nextEntity.combat,
@@ -271,6 +276,19 @@ function clearTargetAndReturnHome(unit: CombatUnit, isAttackMove: boolean): Comb
     }
 }
 
+/** Whether a unit of `radius` at `p` would overlap no building or rock. */
+function isClearOfObstacles(p: Vector, radius: number, spatialGrid: ReturnType<typeof getSpatialGrid>): boolean {
+    let clear = true;
+    spatialGrid.forEachInRadius(p.x, p.y, 150, (e) => {
+        if (e.dead || (e.type !== 'BUILDING' && e.type !== 'ROCK')) return;
+        if (Math.abs(p.x - e.pos.x) < e.w / 2 + radius && Math.abs(p.y - e.pos.y) < e.h / 2 + radius) {
+            clear = false;
+            return false;
+        }
+    });
+    return clear;
+}
+
 /**
  * Check if this idle unit is blocking a moving ally that is STUCK, and if so, scatter out of the way.
  * Only triggers when the moving ally is actually stuck - not just passing by.
@@ -323,15 +341,20 @@ function checkAndScatterForAlly(
             if (perpDist < unit.radius + otherUnit.radius) {
                 // Scatter perpendicular to their movement
                 // Use "keep right" convention: move to the right side of their path
-                const scatterDir = new Vector(-dirToTarget.y, dirToTarget.x);
+                // (or the left side if a building or rock is in the way; stay put if both are)
+                const keepRight = new Vector(-dirToTarget.y, dirToTarget.x);
                 const scatterDist = 35 + Math.random() * 15; // Random scatter distance
-                const scatterTarget = unit.pos.add(scatterDir.scale(scatterDist));
+                const scatterTarget = [keepRight, keepRight.scale(-1)]
+                    .map(dir => unit.pos.add(dir.scale(scatterDist)))
+                    .find(p => isClearOfObstacles(p, unit.radius, spatialGrid));
+                if (!scatterTarget) return;
 
                 scatter = {
                     ...unit,
                     movement: {
                         ...unit.movement,
                         moveTarget: scatterTarget,
+                        finalDest: null,  // Don't head on to an old order's destination afterwards
                         path: null,
                         pathIdx: 0
                     }

@@ -7,7 +7,8 @@ import { getSpatialGrid } from '../engine/spatial.js';
 import { pickEntityAt, isHiddenByFog } from '../engine/picking.js';
 import { isEnemy } from '../engine/teams.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
-import { getTransportPassengers, isGarrisonableTransport, isTransportedUnit } from '../engine/transport.js';
+import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../engine/transport.js';
+import { isAirUnit } from '../engine/entity-helpers.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
@@ -42,6 +43,10 @@ export function initUI(
     if (!listenersInitialized) {
         setupTabs();
         setupButtons();
+
+        const buildList = document.getElementById('sidebar-tabs');
+        buildList?.addEventListener('scroll', updateScrollAffordance, { passive: true });
+        window.addEventListener('resize', updateScrollAffordance);
 
         const sellBtn = document.getElementById('sell-btn');
         if (sellBtn) {
@@ -80,6 +85,7 @@ export function setTab(tab: string) {
         document.querySelectorAll('.tab')[tabIndex]?.classList.add('active');
     }
     document.getElementById('tab-' + tab)?.classList.add('active');
+    updateScrollAffordance();
 }
 
 function setupButtons() {
@@ -123,6 +129,10 @@ function setupButtons() {
 let globalTooltip: HTMLElement | null = null;
 
 function getGlobalTooltip(): HTMLElement {
+    // Reuse an existing element (e.g. after an HMR reload of this module) so two can't coexist
+    if (!globalTooltip || !globalTooltip.isConnected) {
+        globalTooltip = document.getElementById('build-tooltip');
+    }
     if (!globalTooltip) {
         globalTooltip = document.createElement('div');
         globalTooltip.id = 'build-tooltip';
@@ -132,62 +142,158 @@ function getGlobalTooltip(): HTMLElement {
     return globalTooltip;
 }
 
-interface TooltipInfo {
+/** Number of aircraft pads on one Air-Force Command (mirrors production.ts). */
+const AIR_PADS_PER_BASE = 6;
+
+export interface BuildBlockers {
+    /** Names of missing buildings: the production building for the category first, then prerequisites. */
     missingPrereqs: string[];
+    /** True when the category's production building (e.g. Air-Force Command for aircraft) is what's lacking. */
+    missingProductionBuilding: boolean;
     limitReached: boolean;
     currentCount: number;
     maxCount: number | null;
+    /** Aircraft pads (air category only): total across Air-Force Commands and used (incl. queued). */
+    airPads: { total: number; used: number } | null;
+    airPadsFull: boolean;
 }
 
-function getTooltipInfo(key: string, category: string): TooltipInfo {
-    const result: TooltipInfo = {
+/**
+ * Everything that keeps a player from building `key`, using the same checks as canBuild()
+ * (production building, prerequisites, maxCount) plus the aircraft pad limit the air queue enforces.
+ */
+export function getBuildBlockers(
+    key: string,
+    category: string,
+    playerId: number,
+    entities: Record<EntityId, Entity>,
+    airQueue?: { current: string | null; queued?: readonly string[] } | null
+): BuildBlockers {
+    const result: BuildBlockers = {
         missingPrereqs: [],
+        missingProductionBuilding: false,
         limitReached: false,
         currentCount: 0,
-        maxCount: null
+        maxCount: null,
+        airPads: null,
+        airPadsFull: false
     };
 
-    if (!gameState) return result;
-
-    const isBuilding = category === 'building';
-    const data = isBuilding ? RULES.buildings[key] : RULES.units[key];
+    const data = category === 'building' ? RULES.buildings[key] : RULES.units[key];
     if (!data) return result;
 
-    // Get player's buildings and count of this specific item
-    const playerId = 0; // Human player
     const playerBuildings = new Set<string>();
+    const airBases: Entity[] = [];
+    const harriers: Entity[] = [];
     let count = 0;
 
-    for (const entity of Object.values(gameState.entities)) {
-        if (entity.owner === playerId && !entity.dead) {
-            if (entity.type === 'BUILDING') {
-                playerBuildings.add(entity.key);
-                if (entity.key === key) count++;
-            } else if (entity.type === 'UNIT' && entity.key === key) {
-                count++;
-            }
+    for (const entity of Object.values(entities)) {
+        if (entity.owner !== playerId || entity.dead) continue;
+        if (entity.type === 'BUILDING') {
+            playerBuildings.add(entity.key);
+            if (entity.key === 'airforce_command' && entity.airBase) airBases.push(entity);
+        } else if (entity.type === 'UNIT' && entity.key === 'harrier') {
+            harriers.push(entity);
         }
+        if ((entity.type === 'BUILDING' || entity.type === 'UNIT') && entity.key === key) count++;
     }
 
     result.currentCount = count;
-
-    // Check maxCount limit
     if (data.maxCount) {
         result.maxCount = data.maxCount;
         result.limitReached = count >= data.maxCount;
     }
 
-    // Find missing prerequisites
-    if (data.prerequisites) {
-        for (const prereq of data.prerequisites) {
-            if (!playerBuildings.has(prereq)) {
-                const prereqData = RULES.buildings[prereq];
-                result.missingPrereqs.push(prereqData?.name || prereq);
+    const missing: string[] = [];
+    const nameOf = (k: string) => RULES.buildings[k]?.name || k;
+    const productionBuildings: string[] = RULES.productionBuildings?.[category] || [];
+    if (productionBuildings.length > 0 && !productionBuildings.some(b => playerBuildings.has(b))) {
+        result.missingProductionBuilding = true;
+        missing.push(productionBuildings.map(nameOf).join(' or '));
+    }
+    for (const prereq of data.prerequisites || []) {
+        if (playerBuildings.has(prereq)) continue;
+        if (result.missingProductionBuilding && productionBuildings.includes(prereq)) continue;
+        missing.push(nameOf(prereq));
+    }
+    result.missingPrereqs = missing;
+
+    // The air queue refuses new aircraft once every pad is spoken for (production.ts)
+    if (category === 'air' && airBases.length > 0) {
+        const liveHarriers = harriers.filter(h => {
+            const air = isAirUnit(h) ? h.airUnit : undefined;
+            if (air?.state === 'docked' && air.homeBaseId) {
+                const home = entities[air.homeBaseId];
+                if (!home) return false;
+                if (home.type === 'BUILDING' && home.airBase && !home.airBase.slots.includes(h.id)) return false;
             }
-        }
+            return true;
+        }).length;
+        const inQueue = (airQueue?.current === 'harrier' ? 1 : 0) +
+            (airQueue?.queued || []).filter(k => k === 'harrier').length;
+        const total = airBases.length * AIR_PADS_PER_BASE;
+        const used = liveHarriers + inQueue;
+        result.airPads = { total, used };
+        result.airPadsFull = used >= total;
     }
 
     return result;
+}
+
+export interface TooltipRect { left: number; top: number; right: number; bottom: number; width: number; height: number; }
+
+/**
+ * Place the build tooltip so it never covers the hovered button or its neighbours and stays on screen:
+ * left of the whole sidebar when there is room (desktop), otherwise above the sidebar / button
+ * (portrait bottom panel), always clamped to the viewport.
+ */
+export function computeTooltipPosition(
+    btn: TooltipRect,
+    sidebar: TooltipRect | null,
+    tipW: number,
+    tipH: number,
+    viewportW: number,
+    viewportH: number,
+    margin: number = 8
+): { left: number; top: number } {
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, Math.max(lo, hi)));
+    const maxLeft = viewportW - tipW - margin;
+    const maxTop = viewportH - tipH - margin;
+
+    // Sidebar on the right with room beside it: hang the tooltip off the sidebar's left edge
+    if (sidebar && sidebar.left - tipW - margin >= margin) {
+        return {
+            left: sidebar.left - tipW - margin,
+            top: clamp(btn.top, margin, maxTop)
+        };
+    }
+
+    const left = clamp(btn.left + btn.width / 2 - tipW / 2, margin, maxLeft);
+    // Sidebar at the bottom (portrait): put the tooltip over the battlefield, above the panel
+    if (sidebar && sidebar.top - tipH - margin >= margin) {
+        return { left, top: sidebar.top - tipH - margin };
+    }
+    // Otherwise above the button, or below it when there is no room above
+    let top = btn.top - tipH - margin;
+    if (top < margin) top = btn.bottom + margin;
+    return { left, top: clamp(top, margin, maxTop) };
+}
+
+// Latest production snapshot from updateButtons(), so tooltips can explain "busy" buttons
+let lastQueues: Record<string, { current: string | null; progress: number; queued?: readonly string[] }> | null = null;
+let lastReadyToPlace: string | null = null;
+let lastPlayerId = 0;
+
+function getBusyReason(key: string): string | null {
+    if (!RULES.buildings[key]) return null;
+    if (lastReadyToPlace && lastReadyToPlace !== key) {
+        return `${RULES.buildings[lastReadyToPlace]?.name || lastReadyToPlace} is ready - place it (or right-click it to cancel) first`;
+    }
+    const q = lastQueues?.building;
+    if (q?.current && q.current !== key) {
+        return `Construction Yard busy: building ${RULES.buildings[q.current]?.name || q.current} (${Math.floor(q.progress)}%)`;
+    }
+    return null;
 }
 
 function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
@@ -220,10 +326,37 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
     const description = data.description || '';
 
     // Get prerequisite and limit info
-    const info = getTooltipInfo(key, category);
+    const info: BuildBlockers = gameState
+        ? getBuildBlockers(key, category, lastPlayerId, gameState.entities, lastQueues?.air)
+        : getBuildBlockers(key, category, lastPlayerId, {});
 
     // Build the requirements/restrictions HTML
     let restrictionsHtml = '';
+
+    const busyReason = btn.classList.contains('busy') ? getBusyReason(key) : null;
+    if (busyReason) {
+        restrictionsHtml += `
+            <div class="tooltip-busy">
+                <div class="tooltip-requires-title">One structure at a time</div>
+                ${busyReason}
+            </div>
+        `;
+    }
+
+    if (info.airPads) {
+        restrictionsHtml += info.airPadsFull
+            ? `
+            <div class="tooltip-requires">
+                <div class="tooltip-requires-title">No free pad</div>
+                All ${info.airPads.total} pads are taken (Harriers + queue). Build another Air-Force Command.
+            </div>
+        `
+            : `
+            <div class="tooltip-limit">
+                Pads: ${info.airPads.used}/${info.airPads.total} used
+            </div>
+        `;
+    }
 
     if (info.limitReached) {
         restrictionsHtml += `
@@ -250,19 +383,35 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
     }
 
     tooltip.innerHTML = `
-        <div class="tooltip-title">${data.name}</div>
+        <div class="tooltip-title"><span>${data.name}</span><span class="tooltip-cost">$${data.cost}</span></div>
         <div class="tooltip-stats">${stats}</div>
         ${description ? `<div class="tooltip-desc">${description}</div>` : ''}
         ${restrictionsHtml}
     `;
 
-    // Position to the left of the button
-    const rect = btn.getBoundingClientRect();
-    const tooltipWidth = 220;
-    tooltip.style.top = `${rect.top}px`;
-    tooltip.style.left = `${rect.left - tooltipWidth - 10}px`;
+    // Measure while invisible, then place it clear of the sidebar buttons and inside the viewport
+    tooltip.style.visibility = 'hidden';
     tooltip.style.display = 'block';
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    const tipW = tooltip.offsetWidth || 220;
+    const tipH = tooltip.offsetHeight || 120;
+    const sidebar = document.getElementById('sidebar');
+    const pos = computeTooltipPosition(
+        btn.getBoundingClientRect(),
+        sidebar ? sidebar.getBoundingClientRect() : null,
+        tipW,
+        tipH,
+        window.innerWidth,
+        window.innerHeight
+    );
+    tooltip.style.left = `${pos.left}px`;
+    tooltip.style.top = `${pos.top}px`;
+    tooltip.style.visibility = '';
 }
+
+// Button under the pointer, so its tooltip (busy %, pads, limits) refreshes with production
+let hoveredBuildBtn: { btn: HTMLElement; key: string; category: string } | null = null;
 
 function hideTooltip() {
     if (globalTooltip) {
@@ -283,8 +432,14 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
     `;
 
     // Show/hide tooltip on hover
-    btn.addEventListener('mouseenter', () => showTooltipForButton(btn, key, category));
-    btn.addEventListener('mouseleave', hideTooltip);
+    btn.addEventListener('mouseenter', () => {
+        hoveredBuildBtn = { btn, key, category };
+        showTooltipForButton(btn, key, category);
+    });
+    btn.addEventListener('mouseleave', () => {
+        hoveredBuildBtn = null;
+        hideTooltip();
+    });
 
     btn.onclick = (e) => {
         if (gameState?.mode === 'demo') return;
@@ -345,6 +500,9 @@ export function updateButtons(
     credits: number = Infinity
 ) {
     const owner = playerId;
+    lastQueues = queues;
+    lastReadyToPlace = readyToPlace;
+    lastPlayerId = playerId;
     // Production pays as it goes: with an empty wallet every queue stalls
     const outOfFunds = credits < 1;
 
@@ -447,7 +605,7 @@ export function updateButtons(
             if (state) {
                 state.building = true;
                 state.progress = q.progress;
-                state.statusText = outOfFunds ? 'NO FUNDS' : 'BUILDING';
+                state.statusText = formatBuildStatus(q.progress, outOfFunds);
                 state.onHold = outOfFunds;
                 state.queueCount = 1 + (queuedCounts[q.current] || 0);
             }
@@ -568,6 +726,31 @@ export function updateButtons(
         if (tab.classList.contains('tab-ready') !== ready) tab.classList.toggle('tab-ready', ready);
         if (tab.classList.contains('tab-busy') !== busy) tab.classList.toggle('tab-busy', busy);
     });
+
+    updateScrollAffordance();
+
+    if (hoveredBuildBtn) {
+        if (hoveredBuildBtn.btn.isConnected) {
+            showTooltipForButton(hoveredBuildBtn.btn, hoveredBuildBtn.key, hoveredBuildBtn.category);
+        } else {
+            hoveredBuildBtn = null;
+            hideTooltip();
+        }
+    }
+}
+
+/** Status line on the item being built: the percentage, or why it has stalled. */
+export function formatBuildStatus(progress: number, outOfFunds: boolean): string {
+    const pct = Math.max(0, Math.min(99, Math.floor(progress)));
+    return outOfFunds ? `NO FUNDS ${pct}%` : `${pct}%`;
+}
+
+/** Fade + "more" hint at the bottom of the build list while items are hidden below the fold. */
+function updateScrollAffordance() {
+    const list = document.getElementById('sidebar-tabs');
+    if (!list) return;
+    const moreBelow = list.scrollHeight - list.scrollTop - list.clientHeight > 4;
+    if (list.classList.contains('more-below') !== moreBelow) list.classList.toggle('more-below', moreBelow);
 }
 
 export function updateGameState(state: GameState) {
@@ -647,6 +830,14 @@ export function updatePower(out: number, inPower: number) {
     if (el) {
         // Only touch classes / the warning banner when the text (and so the state) changed
         if (!setTextIfChanged(el, `Power: ${out} / ${inPower}`)) return;
+        // Bar: share of produced power that is consumed (full + red when over budget)
+        const fill = document.getElementById('power-bar-fill');
+        if (fill) {
+            const ratio = out > 0 ? inPower / out : (inPower > 0 ? 1 : 0);
+            fill.style.width = `${Math.min(100, Math.round(ratio * 100))}%`;
+            fill.parentElement?.classList.toggle('over', out < inPower);
+            fill.parentElement?.classList.toggle('tight', out >= inPower && ratio >= 0.85);
+        }
         if (out < inPower) {
             el.classList.add('low-power');
             document.getElementById('low-power-warning')?.classList.add('visible');
@@ -1289,6 +1480,9 @@ function parseGameState(json: string): GameState | null {
             for (const p of data.projectiles) {
                 if (p.pos) p.pos = new Vector(p.pos.x, p.pos.y);
                 if (p.vel) p.vel = new Vector(p.vel.x, p.vel.y);
+                // Older saves have no startPos (the 3D view needs it): start from where it is now
+                p.startPos = p.startPos ? new Vector(p.startPos.x, p.startPos.y) : p.pos;
+                p.trailPoints = Array.isArray(p.trailPoints) ? p.trailPoints.map((t: { x: number; y: number }) => new Vector(t.x, t.y)) : [];
             }
         }
 
@@ -1359,30 +1553,44 @@ export function initCommandBar(
  * Shows the bar when combat units are selected, highlights active stance.
  */
 export function updateCommandBar(state: GameState) {
+    gameState = state;
+    updateSelectionPanel(state);
+
     const commandBar = document.getElementById('command-bar');
     const canvas = document.getElementById('gameCanvas');
     if (!commandBar) return;
 
+    const humanId = getHumanPlayerId(state);
     const selectedUnits = state.selection
         .map(id => state.entities[id])
-        .filter((entity): entity is UnitEntity => Boolean(entity && isUnit(entity) && !isTransportedUnit(entity)));
+        .filter((entity): entity is UnitEntity => Boolean(
+            entity && !entity.dead && isUnit(entity) && !isTransportedUnit(entity) &&
+            (humanId === null || entity.owner === humanId)
+        ));
 
-    // Check if we have combat units selected (not harvesters, MCVs)
-    const hasCombatUnits = selectedUnits.some(entity =>
-        entity.key !== 'harvester' && entity.key !== 'mcv'
-    );
+    // Stances / attack-move only mean something for armed units (not harvesters, engineers,
+    // medics, rigs, MCVs or demo trucks)
+    const combatUnits = selectedUnits.filter(isArmedUnit);
+    const hasCombatUnits = combatUnits.length > 0;
     const hasLoadedTransportSelected = selectedUnits.some(entity =>
         isGarrisonableTransport(entity) && getTransportPassengers(state.entities, entity.id).length > 0
     );
+
+    const stanceSection = commandBar.querySelector('.stance-section');
+    const attackMoveSection = commandBar.querySelector('.attack-move-section');
+    if (stanceSection && stanceSection.classList.contains('hidden') === hasCombatUnits) {
+        stanceSection.classList.toggle('hidden', !hasCombatUnits);
+    }
+    if (attackMoveSection && attackMoveSection.classList.contains('hidden') === hasCombatUnits) {
+        attackMoveSection.classList.toggle('hidden', !hasCombatUnits);
+    }
 
     // Show/hide command bar
     if (hasCombatUnits || hasLoadedTransportSelected) {
         commandBar.classList.remove('hidden');
 
         // Get the dominant stance of selected units
-        const stances = selectedUnits
-            .filter(e => e.key !== 'harvester' && e.key !== 'mcv')
-            .map(e => e.combat?.stance || 'aggressive');
+        const stances = combatUnits.map(e => e.combat?.stance || 'aggressive');
 
         // Find most common stance
         const stanceCounts = stances.reduce((acc, s) => {
@@ -1435,6 +1643,110 @@ export function updateCommandBar(state: GameState) {
             canvas.classList.remove('attack-move-mode');
         }
     }
+}
+
+// ==================== Selection Summary ====================
+
+function getHumanPlayerId(state: GameState): number | null {
+    if (state.mode === 'demo') return null;
+    for (const p of Object.values(state.players)) {
+        if (!p.isAi) return p.id;
+    }
+    return null;
+}
+
+/** Units that can fight, so stances and attack-move apply to them. */
+function isArmedUnit(entity: UnitEntity): boolean {
+    if (isHarvester(entity) || isEngineer(entity) || isInductionRig(entity)) return false;
+    return (RULES.units[entity.key]?.damage ?? 0) > 0;
+}
+
+function entityDisplayName(entity: Entity): string {
+    if (entity.type === 'UNIT') return RULES.units[entity.key]?.name || entity.key;
+    if (entity.type === 'BUILDING') return RULES.buildings[entity.key]?.name || entity.key;
+    if (entity.type === 'RESOURCE') return 'Ore';
+    if (entity.type === 'ROCK') return 'Rock';
+    return entity.key;
+}
+
+function hpColor(ratio: number): string {
+    return ratio > 0.6 ? '#3c3' : ratio > 0.3 ? '#fc3' : '#f44';
+}
+
+const STANCE_LABELS: Record<string, string> = { aggressive: 'Attack', defensive: 'Guard', hold_ground: 'Stand Ground' };
+
+/**
+ * Compact summary of the current selection: count by type and combined HP, or for a single
+ * entity its name, owner, HP and the most useful extra (stance, cargo, ammo, passengers).
+ */
+export function buildSelectionSummaryHtml(state: GameState): string {
+    const humanId = getHumanPlayerId(state);
+    const selected = state.selection
+        .map(id => state.entities[id])
+        .filter((e): e is Entity => Boolean(e && !e.dead && !(isUnit(e) && isTransportedUnit(e))));
+    if (selected.length === 0) return '';
+
+    const hpBar = (hp: number, maxHp: number, label: string) => {
+        const ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+        return `<div class="sel-hp"><div class="sel-hp-bar"><div class="sel-hp-fill" style="width:${Math.round(ratio * 100)}%;background:${hpColor(ratio)}"></div></div><span class="sel-hp-text">${label}</span></div>`;
+    };
+
+    if (selected.length === 1) {
+        const e = selected[0];
+        let owner = '';
+        if (e.owner === -1) owner = 'Neutral';
+        else if (humanId !== null && e.owner !== humanId) owner = isEnemy(state, e.owner, humanId) ? 'Enemy' : 'Allied';
+        else if (humanId === null && state.players[e.owner]) owner = `Player ${e.owner + 1}`;
+
+        const extras: string[] = [];
+        if (isUnit(e)) {
+            if (isHarvester(e)) {
+                const capacity = (RULES.units[e.key] as { capacity?: number } | undefined)?.capacity;
+                extras.push(`Cargo ${Math.floor(e.harvester.cargo)}${capacity ? '/' + capacity : ''}`);
+            }
+            if (isAirUnit(e)) extras.push(`Ammo ${e.airUnit.ammo}/${e.airUnit.maxAmmo}`);
+            if (isGarrisonableTransport(e)) extras.push(`Passengers ${getTransportPassengers(state.entities, e.id).length}`);
+            if ((humanId === null || e.owner === humanId) && isArmedUnit(e)) {
+                extras.push(`Stance: ${STANCE_LABELS[e.combat?.stance || 'aggressive'] || e.combat?.stance}`);
+            }
+        }
+        const hpLabel = e.maxHp > 0 ? `${Math.ceil(e.hp)}/${e.maxHp}` : '';
+        return `
+            <div class="sel-title"><span class="sel-name">${entityDisplayName(e)}</span>${owner ? `<span class="sel-owner sel-owner-${owner.toLowerCase().replace(/\s+\d+$/, '')}">${owner}</span>` : ''}</div>
+            ${e.maxHp > 0 ? hpBar(e.hp, e.maxHp, hpLabel) : ''}
+            ${extras.length ? `<div class="sel-extra">${extras.join(' &middot; ')}</div>` : ''}
+        `;
+    }
+
+    const counts = new Map<string, number>();
+    let hp = 0;
+    let maxHp = 0;
+    for (const e of selected) {
+        const name = entityDisplayName(e);
+        counts.set(name, (counts.get(name) || 0) + 1);
+        hp += Math.max(0, e.hp);
+        maxHp += e.maxHp;
+    }
+    const chips = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, n]) => `<span class="sel-chip">${name}${n > 1 ? ` &times;${n}` : ''}</span>`)
+        .join('');
+    const pct = maxHp > 0 ? Math.round((hp / maxHp) * 100) : 0;
+    return `
+        <div class="sel-title"><span class="sel-name">${selected.length} selected</span></div>
+        <div class="sel-chips">${chips}</div>
+        ${maxHp > 0 ? hpBar(hp, maxHp, `${pct}% HP`) : ''}
+    `;
+}
+
+function updateSelectionPanel(state: GameState) {
+    const panel = document.getElementById('selection-panel');
+    if (!panel) return;
+    const html = buildSelectionSummaryHtml(state);
+    if (!hasChanged(panel, html)) return;
+    panel.innerHTML = html;
+    panel.classList.toggle('hidden', html === '');
+    updateScrollAffordance();
 }
 
 // All action cursor CSS class names
@@ -1518,6 +1830,8 @@ function canAnyUnitAttackTarget(state: GameState, targetEntity: Entity, playerId
         if (!entity || entity.dead || entity.owner !== playerId) continue;
         if (!isUnit(entity)) continue;
         if (isTransportedUnit(entity)) continue;
+        // A harvester's gun is self-defence only: ordered onto an enemy it just drives there
+        if (entity.key === 'harvester') continue;
 
         const unitData = RULES.units[entity.key];
         if (!unitData || unitData.damage <= 0) continue;
@@ -1576,9 +1890,15 @@ export function updateActionCursor(
     // Get selection info
     const selInfo = getSelectionInfo(state, playerId);
 
-    // No units selected → no action cursor
+    // No units selected → no action cursor, except that a selected Barracks/Factory
+    // sets its rally point with a right-click
     if (!selInfo.hasUnits) {
-        clearCursors();
+        const only = state.selection.length === 1 ? state.entities[state.selection[0]] : undefined;
+        if (only && !only.dead && only.owner === playerId && (only.key === 'barracks' || only.key === 'factory')) {
+            setCursor('move');
+        } else {
+            clearCursors();
+        }
         return;
     }
 
@@ -1626,6 +1946,17 @@ export function updateActionCursor(
             setCursor('engineer-repair');
             return;
         }
+        // Harvesters dock at your refinery; infantry board your transport if it has room
+        if (selInfo.hasHarvesters && hoveredEntity.key === 'refinery') {
+            setCursor('harvest');
+            return;
+        }
+        if (isGarrisonableTransport(hoveredEntity) && !state.selection.includes(hoveredEntity.id) &&
+            getTransportPassengers(state.entities, hoveredEntity.id).length < getTransportCapacity(hoveredEntity) &&
+            state.selection.some(id => { const e = state.entities[id]; return !!e && isInfantryUnit(e); })) {
+            setCursor('deploy');
+            return;
+        }
         // Otherwise a right-click on your own stuff moves the selection next to it
         setCursor('move');
         return;
@@ -1663,6 +1994,9 @@ export function updateActionCursor(
             // Check if any selected unit can actually attack this target
             if (canAnyUnitAttackTarget(state, hoveredEntity, playerId)) {
                 setCursor('attack');
+            } else if (!selInfo.hasCombatUnits) {
+                // Harvesters / rigs don't attack: they just drive there
+                setCursor('move');
             } else {
                 // Can't attack (e.g., ground unit vs air target)
                 setCursor('no-entry');

@@ -7,6 +7,7 @@ import {
 import { pickEntityAt, isHiddenByFog } from '../../src/engine/picking';
 import { getPlacementError } from '../../src/engine/reducers/buildings';
 import { validateSkirmishConfig } from '../../src/game-utils';
+import { isMoveHopeless } from '../../src/engine/reducers/movement';
 
 function stateWith(entities: Entity[], teams: Record<number, 'A' | 'B' | null> = {}): GameState {
     const record: Record<EntityId, Entity> = {};
@@ -210,6 +211,182 @@ describe('validateSkirmishConfig', () => {
         expect(validateSkirmishConfig({ players: [player(0, null), player(1, null)] })).toBeNull();
         expect(validateSkirmishConfig({ players: [player(0, 'A'), player(1, 'B')] })).toBeNull();
         expect(validateSkirmishConfig({ players: [player(0, 'A'), player(1, 'A'), player(2, null)] })).toBeNull();
+    });
+});
+
+// Both sides need a building, or the game is already over and ticks do nothing
+const bases = () => [
+    createTestBuilding({ id: 'cy0', key: 'conyard', owner: 0, x: 1400, y: 1400 }),
+    createTestBuilding({ id: 'cy1', key: 'conyard', owner: 1, x: 1800, y: 1800 })
+];
+
+describe('player orders', () => {
+    beforeEach(() => resetTestEntityCounter());
+
+    it('a full harvester follows a human player\'s move order all the way', () => {
+        const harv = createTestHarvester({ id: 'h', owner: 0, x: 100, y: 100, cargo: 500 });
+        let state = update(stateWith([...bases(), harv]), { type: 'COMMAND_MOVE', payload: { unitIds: ['h'], x: 700, y: 100 } });
+        for (let i = 0; i < 600; i++) state = update(state, { type: 'TICK' });
+        const h = state.entities['h'] as typeof harv;
+        expect(h.pos.x).toBeGreaterThan(650);
+        expect(h.harvester.cargo).toBe(500);
+    });
+
+    it('an AI flee order on a full harvester is still dropped so it can unload', () => {
+        const harv = createTestHarvester({ id: 'h', owner: 1, x: 100, y: 100, cargo: 500 });
+        let state = update(stateWith([...bases(), harv]), { type: 'COMMAND_MOVE', payload: { unitIds: ['h'], x: 700, y: 100 } });
+        state = update(state, { type: 'TICK' });
+        expect((state.entities['h'] as typeof harv).movement.moveTarget).toBeNull();
+    });
+
+    it('a short move order doesn\'t resume an interrupted earlier trip', () => {
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 100, y: 100 });
+        let state = stateWith([...bases(), { ...unit, movement: { ...unit.movement, finalDest: new Vector(1000, 1000) } }]);
+        state = update(state, { type: 'COMMAND_MOVE', payload: { unitIds: ['u'], x: 150, y: 100 } });
+        for (let i = 0; i < 400; i++) state = update(state, { type: 'TICK' });
+        const u = state.entities['u'] as typeof unit;
+        expect(u.movement.moveTarget).toBeNull();
+        expect(Math.hypot(u.pos.x - 150, u.pos.y - 100)).toBeLessThan(20);
+    });
+
+    it('a unit gives up on a nearby spot it can\'t get any closer to', () => {
+        const pp = createTestBuilding({ id: 'pp', key: 'power', owner: 0, x: 400, y: 400 });
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 400, y: 340 });
+        // Target inside the building: unreachable
+        let state = stateWith([...bases(), pp, unit]);
+        state = {
+            ...state,
+            entities: { ...state.entities, u: { ...unit, movement: { ...unit.movement, moveTarget: new Vector(400, 400), finalDest: new Vector(400, 400) } } }
+        };
+        for (let i = 0; i < 900; i++) state = update(state, { type: 'TICK' });
+        expect((state.entities['u'] as typeof unit).movement.moveTarget).toBeNull();
+    });
+});
+
+describe('stop and command feedback', () => {
+    beforeEach(() => resetTestEntityCounter());
+
+    it('Stop clears move and attack orders', () => {
+        const enemy = createTestCombatUnit({ id: 'e', owner: 1, x: 600, y: 600 });
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 100, y: 100 });
+        let state = update(stateWith([...bases(), enemy, unit]), { type: 'COMMAND_ATTACK', payload: { unitIds: ['u'], targetId: 'e' } });
+        expect((state.entities['u'] as typeof unit).combat.targetId).toBe('e');
+        state = update(state, { type: 'COMMAND_STOP', payload: { unitIds: ['u'] } });
+        const u = state.entities['u'] as typeof unit;
+        expect(u.combat.targetId).toBeNull();
+        expect(u.movement.moveTarget).toBeNull();
+    });
+
+    it('a harvester-only right-click on an enemy shows a move, not an attack', () => {
+        const enemy = createTestCombatUnit({ id: 'e', owner: 1, x: 600, y: 600 });
+        const harv = createTestHarvester({ id: 'h', owner: 0, x: 100, y: 100 });
+        const state = update({ ...stateWith([...bases(), enemy, harv]), selection: ['h'] }, {
+            type: 'COMMAND_ATTACK', payload: { unitIds: ['h'], targetId: 'e', x: 600, y: 600 }
+        });
+        expect(state.commandIndicator?.type).toBe('move');
+    });
+
+    it('a combat unit right-clicking an enemy shows an attack on the target', () => {
+        const enemy = createTestCombatUnit({ id: 'e', owner: 1, x: 600, y: 600 });
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 100, y: 100 });
+        const state = update({ ...stateWith([...bases(), enemy, unit]), selection: ['u'] }, {
+            type: 'COMMAND_ATTACK', payload: { unitIds: ['u'], targetId: 'e', x: 600, y: 600 }
+        });
+        expect(state.commandIndicator?.type).toBe('attack');
+        expect(state.commandIndicator?.pos.x).toBe(600);
+    });
+
+    it('a harvester sent to ore gets a green marker on the ore', () => {
+        const ore = createTestResource({ id: 'ore', x: 400, y: 400 });
+        const harv = createTestHarvester({ id: 'h', owner: 0, x: 100, y: 100 });
+        const state = update({ ...stateWith([...bases(), ore, harv]), selection: ['h'] }, {
+            type: 'COMMAND_ATTACK', payload: { unitIds: ['h'], targetId: 'ore', x: 400, y: 400 }
+        });
+        expect(state.commandIndicator?.type).toBe('move');
+    });
+
+    it('re-clicking an enemy the units already attack still shows the attack marker', () => {
+        const enemy = createTestCombatUnit({ id: 'e', owner: 1, x: 600, y: 600 });
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 100, y: 100 });
+        let state = update({ ...stateWith([...bases(), enemy, unit]), selection: ['u'] }, {
+            type: 'COMMAND_ATTACK', payload: { unitIds: ['u'], targetId: 'e' }
+        });
+        state = update({ ...state, commandIndicator: null }, { type: 'COMMAND_ATTACK', payload: { unitIds: ['u'], targetId: 'e' } });
+        expect(state.commandIndicator?.type).toBe('attack');
+    });
+
+    it('attack-move shows its own indicator, and a new selection drops attack-move mode', () => {
+        const unit = createTestCombatUnit({ id: 'u', owner: 0, x: 100, y: 100 });
+        let state = update({ ...stateWith([...bases(), unit]), selection: ['u'] }, { type: 'COMMAND_ATTACK_MOVE', payload: { unitIds: ['u'], x: 500, y: 500 } });
+        expect(state.commandIndicator?.type).toBe('attack_move');
+        state = update(state, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
+        expect(state.attackMoveMode).toBe(true);
+        state = update(state, { type: 'SELECT_UNITS', payload: [] });
+        expect(state.attackMoveMode).toBe(false);
+    });
+});
+
+describe('isMoveHopeless', () => {
+    const unitWith = (dist: number, ticks: number) => {
+        const u = createTestCombatUnit({ id: 'u', owner: 0, x: 0, y: 0 });
+        return { ...u, movement: { ...u.movement, lastDistToMoveTarget: dist, moveTargetNoProgressTicks: ticks } };
+    };
+    it('gives up near the spot after ~4 s without progress, anywhere after ~15 s', () => {
+        expect(isMoveHopeless(unitWith(50, 400))).toBe(false);
+        expect(isMoveHopeless(unitWith(50, 500))).toBe(true);
+        expect(isMoveHopeless(unitWith(250, 500))).toBe(false);
+        expect(isMoveHopeless(unitWith(250, 2000))).toBe(true);
+    });
+});
+
+describe('produced units without a rally point', () => {
+    it('find spots round the side when a building blocks the doorway', () => {
+        const barracks = createTestBuilding({ id: 'brk', key: 'barracks', owner: 0, x: 400, y: 400 });
+        // A War Factory right below the Barracks door
+        const factory = createTestBuilding({ id: 'wf', key: 'factory', owner: 0, x: 400, y: 400 + barracks.h / 2 + 60 });
+        const power = createTestBuilding({ id: 'pp', key: 'power', owner: 0, x: 250, y: 300 });
+        let state = stateWith([...bases(), barracks, factory, power]);
+        state = { ...state, players: { ...state.players, 0: { ...state.players[0], credits: 5000 } } };
+        for (let n = 0; n < 3; n++) {
+            state = update(state, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } });
+        }
+        for (let i = 0; i < 6000 && Object.values(state.entities).filter(e => e.type === 'UNIT').length < 3; i++) {
+            state = update(state, { type: 'TICK' });
+        }
+        expect(Object.values(state.entities).filter(e => e.type === 'UNIT').length).toBe(3);
+        for (let i = 0; i < 1500; i++) state = update(state, { type: 'TICK' });
+        const units = Object.values(state.entities).filter(e => e.type === 'UNIT');
+        for (let i = 0; i < units.length; i++) {
+            for (let j = i + 1; j < units.length; j++) {
+                const a = units[i].pos, b = units[j].pos;
+                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(units[i].radius * 2 - 1);
+            }
+        }
+    });
+
+    it('drive out to separate spots in front of the factory instead of stacking', () => {
+        const barracks = createTestBuilding({ id: 'brk', key: 'barracks', owner: 0, x: 400, y: 400 });
+        const power = createTestBuilding({ id: 'pp', key: 'power', owner: 0, x: 250, y: 300 });
+        let state = stateWith([...bases(), barracks, power]);
+        state = { ...state, players: { ...state.players, 0: { ...state.players[0], credits: 5000 } } };
+        for (let n = 0; n < 4; n++) {
+            state = update(state, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } });
+        }
+        for (let i = 0; i < 6000 && Object.values(state.entities).filter(e => e.type === 'UNIT').length < 4; i++) {
+            state = update(state, { type: 'TICK' });
+        }
+        const units = Object.values(state.entities).filter(e => e.type === 'UNIT');
+        expect(units.length).toBe(4);
+        for (let i = 0; i < 1500; i++) state = update(state, { type: 'TICK' });
+        const finalUnits = Object.values(state.entities).filter(e => e.type === 'UNIT');
+        for (let i = 0; i < finalUnits.length; i++) {
+            // Out of the doorway, below the barracks
+            expect(finalUnits[i].pos.y).toBeGreaterThan(400 + barracks.h / 2);
+            for (let j = i + 1; j < finalUnits.length; j++) {
+                const a = finalUnits[i].pos, b = finalUnits[j].pos;
+                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(finalUnits[i].radius * 2 - 1);
+            }
+        }
     });
 });
 

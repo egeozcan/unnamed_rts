@@ -91,6 +91,9 @@ function setMouseFromClient(clientX: number, clientY: number): void {
 let onSetStance: ((stance: AttackStance) => void) | null = null;
 let onToggleAttackMove: (() => void) | null = null;
 let onUngarrison: (() => void) | null = null;
+let onStop: (() => void) | null = null;
+let onSelectArmy: (() => void) | null = null;
+let onCenterOnSelection: (() => void) | null = null;
 let onDoubleClick: ((wx: number, wy: number) => void) | null = null;
 let onTogglePause: (() => void) | null = null;
 let onToggleGraphics: (() => void) | null = null;
@@ -99,6 +102,8 @@ let getZoom: (() => number) | null = null;
 let getCamera: (() => { x: number; y: number }) | null = null;
 let listenersInitialized = false;
 let hasPointerPosition = false;
+// The canvas rect as of the last mouse move (edge scrolling reads it every frame without forcing a layout)
+let edgeScrollRect: DOMRect | null = null;
 
 export function initInput(
     gameCanvas: HTMLCanvasElement,
@@ -120,6 +125,9 @@ export function initInput(
         onSetStance?: (stance: AttackStance) => void;
         onToggleAttackMove?: () => void;
         onUngarrison?: () => void;
+        onStop?: () => void;
+        onSelectArmy?: () => void;
+        onCenterOnSelection?: () => void;
         onDoubleClick?: (wx: number, wy: number) => void;
         onTogglePause?: () => void;
         onToggleGraphics?: () => void;
@@ -144,6 +152,9 @@ export function initInput(
     onSetStance = callbacks.onSetStance || null;
     onToggleAttackMove = callbacks.onToggleAttackMove || null;
     onUngarrison = callbacks.onUngarrison || null;
+    onStop = callbacks.onStop || null;
+    onSelectArmy = callbacks.onSelectArmy || null;
+    onCenterOnSelection = callbacks.onCenterOnSelection || null;
     onDoubleClick = callbacks.onDoubleClick || null;
     onTogglePause = callbacks.onTogglePause || null;
     onToggleGraphics = callbacks.onToggleGraphics || null;
@@ -276,10 +287,11 @@ function setupEventListeners() {
             return;
         }
 
+        // Track held keys even while paused, so a modifier held across unpausing still counts
+        inputState.keys[e.key] = true;
+
         // Everything below is a gameplay hotkey: inactive while paused
         if (isPaused?.()) return;
-
-        inputState.keys[e.key] = true;
 
         // Game speed: [ slower, ] faster. Matched on the typed character, before the digit keys:
         // on many layouts these need AltGr/Option + a digit key (reported as Ctrl+Alt / Alt)
@@ -330,6 +342,10 @@ function setupEventListeners() {
         if (key === 'a') onToggleAttackMove?.();
         // Ungarrison selected transports
         if (key === 'u') onUngarrison?.();
+        // S = stop, Q = select all combat units, C = centre the camera on the selection
+        if (key === 's') onStop?.();
+        if (key === 'q') onSelectArmy?.();
+        if (key === 'c') onCenterOnSelection?.();
         // Switch between the 3D and classic 2D view
         if (key === 'v') onToggleGraphics?.();
     });
@@ -343,8 +359,15 @@ function setupEventListeners() {
     window.addEventListener('blur', () => {
         inputState.keys = {};
         hasPointerPosition = false;
+        // The mouseup that ends a drag box may never arrive either
+        inputState.dragStart = null;
+        endTouchGesture();
     });
     document.documentElement.addEventListener('mouseleave', () => {
+        hasPointerPosition = false;
+    });
+    // After a resize the last pointer position may now be at an edge: wait for a real move
+    window.addEventListener('resize', () => {
         hasPointerPosition = false;
     });
 
@@ -354,6 +377,7 @@ function setupEventListeners() {
         inputState.rawMouse.x = e.clientX;
         inputState.rawMouse.y = e.clientY;
         const rect = canvas.getBoundingClientRect();
+        edgeScrollRect = rect;
         inputState.mouse.x = e.clientX - rect.left;
         inputState.mouse.y = e.clientY - rect.top;
 
@@ -501,6 +525,7 @@ function setupEventListeners() {
                 if (touchGesture !== gesture || gesture.panning || isPaused?.()) return;
                 // Long press: the finger now draws a selection box (the renderer draws dragStart -> mouse)
                 gesture.holding = true;
+                navigator.vibrate?.(15); // Feel for the hold where the device supports it
                 const rect = canvas.getBoundingClientRect();
                 inputState.dragStart = { x: gesture.startX - rect.left, y: gesture.startY - rect.top };
                 setMouseFromClient(gesture.lastX, gesture.lastY);
@@ -553,7 +578,9 @@ function setupEventListeners() {
         const dragStart = inputState.dragStart;
         endTouchGesture();
 
-        if (wasHolding) e.preventDefault();
+        // Every one-finger gesture is handled here: suppress the emulated mouse events that would
+        // follow (a long press started while paused would otherwise turn into a click)
+        e.preventDefault();
         if (wasHolding && dragStart) {
             const moved = Math.hypot(gesture.lastX - gesture.startX, gesture.lastY - gesture.startY) > TOUCH_TAP_SLOP;
             if (!moved) {
@@ -572,8 +599,6 @@ function setupEventListeners() {
         if (gesture.panning) return;
         if (performance.now() - gesture.startMs > TOUCH_TAP_MAX_MS) return;
 
-        // A tap: handled here, so suppress the emulated mouse events that would follow
-        e.preventDefault();
         if (isPaused?.()) return;
         const rect = canvas.getBoundingClientRect();
         const world = screenToWorld(gesture.startX - rect.left, gesture.startY - rect.top);
@@ -637,12 +662,18 @@ export function handleCameraInput(
     if (keys.ArrowLeft) dx -= speed;
     if (keys.ArrowRight) dx += speed;
 
-    // Edge scrolling (only after we've seen a real pointer position)
-    if (hasPointerPosition) {
-        if (inputState.rawMouse.x < 10) dx -= speed;
-        if (inputState.rawMouse.x > window.innerWidth - 10) dx += speed;
-        if (inputState.rawMouse.y < 10) dy -= speed;
-        if (inputState.rawMouse.y > window.innerHeight - 10) dy += speed;
+    // Edge scrolling (only after we've seen a real pointer position): the pointer must be on the
+    // battlefield, within 10px of its edge - not over the sidebar or another panel
+    if (hasPointerPosition && edgeScrollRect) {
+        const rect = edgeScrollRect;
+        const { x, y } = inputState.rawMouse;
+        const onCanvas = x >= rect.left - 1 && x <= rect.right + 1 && y >= rect.top - 1 && y <= rect.bottom + 1;
+        if (onCanvas) {
+            if (x < rect.left + 10) dx -= speed;
+            if (x > rect.right - 10) dx += speed;
+            if (y < rect.top + 10) dy -= speed;
+            if (y > rect.bottom - 10) dy += speed;
+        }
     }
 
     // Wheel/Touchpad scrolling
@@ -667,12 +698,29 @@ export function handleCameraInput(
         }
     }
 
-    // Allow panning 300px past map edges to see units under UI panels
-    const panBuffer = 300;
-    return {
-        x: Math.max(-panBuffer / zoom, Math.min(mapWidth - canvasWidth / zoom + panBuffer / zoom, camera.x + dx)),
-        y: Math.max(-panBuffer / zoom, Math.min(mapHeight - canvasHeight / zoom + panBuffer / zoom, camera.y + dy))
+    return clampCamera(camera.x + dx, camera.y + dy, canvasWidth, canvasHeight, zoom, mapWidth, mapHeight);
+}
+
+// Panning may go 300 screen px past the map edges, to see units under UI panels
+const CAMERA_PAN_BUFFER = 300;
+
+/**
+ * Keep the camera (top-left world position) within the map plus the pan buffer. On an axis where
+ * the whole map fits in the view, the map is centred instead.
+ */
+export function clampCamera(
+    x: number, y: number,
+    viewWidth: number, viewHeight: number,
+    zoom: number,
+    mapWidth: number, mapHeight: number
+): { x: number; y: number } {
+    const clampAxis = (value: number, view: number, map: number) => {
+        const visible = view / zoom;
+        if (visible >= map) return map / 2 - visible / 2;
+        const buffer = CAMERA_PAN_BUFFER / zoom;
+        return Math.max(-buffer, Math.min(map - visible + buffer, value));
     };
+    return { x: clampAxis(x, viewWidth, mapWidth), y: clampAxis(y, viewHeight, mapHeight) };
 }
 
 export function handleZoomInput(currentZoom: number): number {

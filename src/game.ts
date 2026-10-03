@@ -12,23 +12,25 @@ declare global {
 import './styles.css';
 import { Renderer } from './renderer/index.js';
 import { initUI, updateButtons, updateMoney, updatePower, hideMenu, updateSellModeUI, updateRepairModeUI, setObserverMode, updateDebugUI, setLoadGameStateCallback, setCloseDebugCallback, setStatusMessage, initCommandBar, updateCommandBar, updateActionCursor } from './ui/index.js';
-import { initMinimap, renderMinimap, setMinimapClickHandler } from './ui/minimap.js';
+import { initMinimap, renderMinimap, setMinimapClickHandler, setMinimapCommandHandler, pingMinimap } from './ui/minimap.js';
 import { pushAlert, resetAlerts } from './ui/alerts.js';
 import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu, isHelpVisible, showHelp, closeHelp } from './ui/pause-menu.js';
-import { initInput, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
+import { initInput, clampCamera, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
 import { computeAiActions, getAIImplementationOptions, resetAIState, resetAIImplementations, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
-import { RULES } from './data/schemas/index.js';
+import { RULES, isUnitData } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
 import { isAirUnit } from './engine/entity-helpers.js';
-import { isTransportedUnit } from './engine/transport.js';
+import { isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from './engine/transport.js';
 import { pickEntityAt, isHiddenByFog } from './engine/picking.js';
 import { createFogGrid } from './engine/reducers/fog.js';
 import { createEntityCache } from './engine/perf.js';
 import { applySkirmishSettingsToUI, collectSkirmishSettingsFromUI, loadSkirmishSettingsFromStorage, saveSkirmishSettingsToStorage } from './skirmish/persistence.js';
-import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap, validateSkirmishConfig } from './game-utils.js';
+import { getStartingPositions as getStartingPositionsForMap, generateMap as generateSkirmishMap, validateSkirmishConfig, saveRematchConfig, takeRematchConfig } from './game-utils.js';
+import { renderEndResults, showEndScreen } from './ui/end-screen.js';
+import { enhanceSkirmishSetup } from './ui/skirmish-setup.js';
 
 // Game speed setting (1 = slow, 2 = medium, 3 = fast, 5 = lightspeed)
 type GameSpeed = 1 | 2 | 3 | 4 | 5;
@@ -43,6 +45,14 @@ let humanPlayerId: number | null = 0; // Track which player is human (null = obs
 let prePauseMode: 'game' | 'demo' | null = null;
 let humanDefeatShown = false;
 let lastAlertedNotification: GameState['notification'] = null;
+// Induction Rigs ordered onto a far well, deployed when they arrive (rig id -> well id)
+const RIG_DEPLOY_RANGE = 80;
+const pendingRigDeploys = new Map<EntityId, EntityId>();
+// Touch-first device: alerts say "tap" instead of "click"
+const IS_TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+// Sell mode asks for a second click on the same building within this time
+const SELL_CONFIRM_MS = 3000;
+let pendingSell: { id: EntityId; until: number } | null = null;
 let wasLowPower = false;
 
 // HMR: Restore state from previous hot reload if available
@@ -350,6 +360,19 @@ function populateAiImplementationSelects() {
     }
 }
 
+/** The setup of the running skirmish, for "Play Again". */
+let lastSkirmishConfig: SkirmishConfig | null = null;
+/** The human player after they were eliminated and chose to keep watching (for the final screen). */
+let defeatedHumanId: number | null = null;
+
+function getSafeSessionStorage(): Storage | null {
+    try {
+        return window.sessionStorage;
+    } catch {
+        return null;
+    }
+}
+
 function getSafeLocalStorage(): Storage | null {
     try {
         return window.localStorage;
@@ -439,6 +462,7 @@ document.getElementById('start-skirmish-btn')?.addEventListener('click', () => {
     const setupError = validateSkirmishConfig(config);
     showSetupError(setupError ?? '');
     if (setupError) return;
+    lastSkirmishConfig = config;
     startGameWithConfig(config);
 });
 
@@ -461,9 +485,15 @@ document.getElementById('game-container')?.addEventListener('click', e => {
     if (button) button.blur();
 });
 
-// The speed badge doubles as a control (touch / keyboards without [ ]): click = faster, wrapping round
-document.getElementById('speed-indicator')?.addEventListener('click', () => {
-    setGameSpeed((gameSpeed % 5 + 1) as GameSpeed);
+// The speed badge doubles as a control (touch / keyboards without [ ]): click = faster, wrapping round;
+// right-click or Shift+click = slower
+const speedIndicator = document.getElementById('speed-indicator');
+speedIndicator?.addEventListener('click', (e) => {
+    setGameSpeed((e.shiftKey ? (gameSpeed + 3) % 5 + 1 : gameSpeed % 5 + 1) as GameSpeed);
+});
+speedIndicator?.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    setGameSpeed(Math.max(1, gameSpeed - 1) as GameSpeed);
 });
 
 document.getElementById('hud-menu-btn')?.addEventListener('click', (e) => {
@@ -477,6 +507,12 @@ document.getElementById('restart-btn')?.addEventListener('click', () => {
     location.reload();
 });
 
+// Play Again: reload for a clean slate (renderer, worker, input) and start the same setup at once
+document.getElementById('play-again-btn')?.addEventListener('click', () => {
+    if (lastSkirmishConfig) saveRematchConfig(getSafeSessionStorage(), lastSkirmishConfig);
+    location.reload();
+});
+
 document.getElementById('spectate-btn')?.addEventListener('click', spectateAfterDefeat);
 
 // Initialize skirmish UI
@@ -486,6 +522,17 @@ setupSkirmishUI();
 setupSkirmishPersistence();
 setupGraphicsModeSelect();
 setupWheelModeSelect();
+enhanceSkirmishSetup(aiImplementationOptions);
+
+// "Play Again" from the previous page: start that skirmish straight away (after this module has
+// finished initialising). Not after a hot reload, which restores its own game.
+{
+    const rematch = import.meta.hot?.data?.gameState ? null : takeRematchConfig(getSafeSessionStorage());
+    if (rematch) {
+        lastSkirmishConfig = rematch;
+        setTimeout(() => startGameWithConfig(rematch), 0);
+    }
+}
 
 // Helper to reconstruct Vector objects from plain {x, y} when loading game state
 function reconstructVectors(state: GameState): GameState {
@@ -716,8 +763,8 @@ function startGameWithConfig(config: SkirmishConfig) {
             currentState = {
                 ...currentState,
                 camera: {
-                    x: startPos.x - canvas.width / 2,
-                    y: startPos.y - canvas.height / 2
+                    x: startPos.x - renderer.getSize().width / 2,
+                    y: startPos.y - renderer.getSize().height / 2
                 }
             };
         }
@@ -787,7 +834,6 @@ function startGameWithConfig(config: SkirmishConfig) {
     if (isObserverMode) {
         const observerZoom = 0.25; // Max zoom-out level (matches input clamp)
         const size = renderer.getSize();
-        const panBuffer = 300;
         const mapWidth = currentState.config.width;
         const mapHeight = currentState.config.height;
 
@@ -797,10 +843,7 @@ function startGameWithConfig(config: SkirmishConfig) {
         currentState = {
             ...currentState,
             zoom: observerZoom,
-            camera: {
-                x: Math.max(-panBuffer / observerZoom, Math.min(mapWidth - size.width / observerZoom + panBuffer / observerZoom, centeredX)),
-                y: Math.max(-panBuffer / observerZoom, Math.min(mapHeight - size.height / observerZoom + panBuffer / observerZoom, centeredY))
-            }
+            camera: clampCamera(centeredX, centeredY, size.width, size.height, observerZoom, mapWidth, mapHeight)
         };
     }
 
@@ -809,36 +852,21 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     // Set up minimap click handler to pan camera
     setMinimapClickHandler((worldX, worldY) => {
-        const size = renderer.getSize();
-        const mapWidth = currentState.config.width;
-        const mapHeight = currentState.config.height;
-        const zoom = currentState.zoom;
+        centerCameraOn(worldX, worldY);
+    });
 
-        // Center camera on clicked point
-        const newX = Math.max(0, Math.min(mapWidth - size.width / zoom, worldX - size.width / zoom / 2));
-        const newY = Math.max(0, Math.min(mapHeight - size.height / zoom, worldY - size.height / zoom / 2));
-
-        currentState = {
-            ...currentState,
-            camera: { x: newX, y: newY }
-        };
+    // Minimap orders: right-click moves (or sets a rally point / cancels a mode like
+    // on the map), and left-click in attack-move mode attack-moves. Always a ground order.
+    setMinimapCommandHandler((worldX, worldY, button) => {
+        if (currentState.mode !== 'game') return false;
+        if (button === 0 && !currentState.attackMoveMode) return false;
+        handleRightClick(worldX, worldY, true);
+        return true;
     });
 
     // Set up bird's eye view click handler to pan camera and close
     setBirdsEyeClickHandler((worldX, worldY) => {
-        const size = renderer.getSize();
-        const mapWidth = currentState.config.width;
-        const mapHeight = currentState.config.height;
-        const zoom = currentState.zoom;
-
-        // Center camera on clicked point
-        const newX = Math.max(0, Math.min(mapWidth - size.width / zoom, worldX - size.width / zoom / 2));
-        const newY = Math.max(0, Math.min(mapHeight - size.height / zoom, worldY - size.height / zoom / 2));
-
-        currentState = {
-            ...currentState,
-            camera: { x: newX, y: newY }
-        };
+        centerCameraOn(worldX, worldY);
     });
 
     // Set up bird's eye close handler
@@ -890,7 +918,7 @@ function handleControlGroup(group: number, action: 'recall' | 'assign' | 'add') 
     if (action === 'assign' || action === 'add') {
         const base = action === 'add' ? (controlGroups.get(group) ?? []).filter(isOwnedAlive) : [];
         const members = [...new Set([...base, ...currentState.selection.filter(isOwnedAlive)])];
-        if (members.length === 0) return;
+        if (members.length === 0 || (action === 'add' && members.length === base.length)) return;
         controlGroups.set(group, members);
         currentState = {
             ...currentState,
@@ -927,15 +955,10 @@ function handleControlGroup(group: number, action: 'recall' | 'assign' | 'add') 
 function centerCameraOn(worldX: number, worldY: number) {
     const size = renderer.getSize();
     const zoom = currentState.zoom;
-    const panBuffer = 300;
-    const mapWidth = currentState.config.width;
-    const mapHeight = currentState.config.height;
     currentState = {
         ...currentState,
-        camera: {
-            x: Math.max(-panBuffer / zoom, Math.min(mapWidth - size.width / zoom + panBuffer / zoom, worldX - size.width / zoom / 2)),
-            y: Math.max(-panBuffer / zoom, Math.min(mapHeight - size.height / zoom + panBuffer / zoom, worldY - size.height / zoom / 2))
-        }
+        camera: clampCamera(worldX - size.width / zoom / 2, worldY - size.height / zoom / 2,
+            size.width, size.height, zoom, currentState.config.width, currentState.config.height)
     };
 }
 
@@ -972,7 +995,11 @@ function createInputCallbacks(): Parameters<typeof initInput>[1] {
         onToggleAttackMove: () => {
             if (currentState.mode !== 'game') return;
             // Nothing to order: don't arm a mode that would swallow the next click
-            const hasUnits = getCommandableSelection().some(id => currentState.entities[id]?.type === 'UNIT');
+            // (attack-move only commands ground units other than harvesters and MCVs)
+            const hasUnits = getCommandableSelection().some(id => {
+                const e = currentState.entities[id];
+                return e?.type === 'UNIT' && e.key !== 'harvester' && e.key !== 'mcv' && !isAirUnit(e);
+            });
             if (!currentState.attackMoveMode && !hasUnits) return;
             currentState = update(currentState, { type: 'TOGGLE_ATTACK_MOVE_MODE' });
             updateButtonsUI();
@@ -983,6 +1010,32 @@ function createInputCallbacks(): Parameters<typeof initInput>[1] {
                 payload: { unitIds: currentState.selection }
             });
             updateButtonsUI();
+        },
+        onStop: () => {
+            if (currentState.mode !== 'game') return;
+            const unitIds = getCommandableSelection();
+            if (unitIds.length === 0) return;
+            currentState = update(currentState, { type: 'COMMAND_STOP', payload: { unitIds } });
+            for (const id of unitIds) pendingRigDeploys.delete(id);
+            updateButtonsUI();
+        },
+        onSelectArmy: () => {
+            if (currentState.mode !== 'game' || humanPlayerId === null) return;
+            const army = Object.values(currentState.entities)
+                .filter(e => isArmyUnit(e, humanPlayerId!))
+                .map(e => e.id);
+            if (army.length === 0) return;
+            currentState = update(currentState, { type: 'SELECT_UNITS', payload: army });
+            updateButtonsUI();
+        },
+        onCenterOnSelection: () => {
+            if (currentState.mode !== 'game') return;
+            const selected = currentState.selection.map(id => currentState.entities[id]).filter(e => e && !e.dead);
+            if (selected.length === 0) return;
+            centerCameraOn(
+                selected.reduce((sum, e) => sum + e.pos.x, 0) / selected.length,
+                selected.reduce((sum, e) => sum + e.pos.y, 0) / selected.length
+            );
         },
         onToggleGraphics: toggleGraphicsMode,
         onCancel: handleCancel,
@@ -1098,16 +1151,28 @@ function handleLeftClick(wx: number, wy: number, isDrag: boolean, dragRect?: { x
         return;
     }
 
-    // Sell Mode
+    // Sell Mode: the first click names the building and its refund, a second click on it sells.
+    // Sell mode then ends, unless Shift is held to keep selling.
     if (currentState.sellMode) {
         if (humanPlayerId === null) return;
         const clicked = pickEntityAt(currentState.entities, wx, wy, e => e.owner === humanPlayerId && isBuilding(e));
-        if (clicked) {
+        if (!clicked || !isBuilding(clicked)) return;
+        const now = performance.now();
+        if (pendingSell && pendingSell.id === clicked.id && now < pendingSell.until) {
+            pendingSell = null;
             currentState = update(currentState, {
                 type: 'SELL_BUILDING',
                 payload: { buildingId: clicked.id, playerId: humanPlayerId }
             });
+            if (!getInputState().keys['Shift'] && currentState.sellMode) {
+                currentState = update(currentState, { type: 'TOGGLE_SELL_MODE' });
+            }
             updateButtonsUI();
+        } else {
+            pendingSell = { id: clicked.id, until: now + SELL_CONFIRM_MS };
+            const data = RULES.buildings[clicked.key];
+            const refund = Math.floor((data?.cost ?? 0) * (RULES.economy?.sellBuildingReturnPercentage || 0.5) * (clicked.hp / clicked.maxHp));
+            pushAlert(`Sell ${data?.name ?? clicked.key} for $${refund}? ${IS_TOUCH ? 'Tap' : 'Click'} it again to confirm`, 'warning');
         }
         return;
     }
@@ -1247,7 +1312,10 @@ function handleTap(wx: number, wy: number) {
     const hasUnits = selection.some(id => currentState.entities[id]?.type === 'UNIT');
     const isRallyBuilding = selection.length === 1 && ['barracks', 'factory'].includes(currentState.entities[selection[0]]?.key ?? '');
     const commands = hasUnits || (isRallyBuilding && !own);
-    if (!commands || (own && own.type === 'UNIT')) {
+    // Tapping your own transport with infantry selected loads them, like a right-click
+    const loadsTransport = !!own && !selection.includes(own.id) && isGarrisonableTransport(own) &&
+        selection.some(id => isInfantryUnit(currentState.entities[id]));
+    if (!commands || (own && own.type === 'UNIT' && !loadsTransport)) {
         handleLeftClick(wx, wy, false);
     } else {
         handleRightClick(wx, wy);
@@ -1263,7 +1331,7 @@ function getCommandableSelection(): EntityId[] {
     });
 }
 
-function handleRightClick(wx: number, wy: number) {
+function handleRightClick(wx: number, wy: number, groundOnly = false) {
     if (currentState.mode !== 'game') return;
 
     // Cancel sell mode
@@ -1320,7 +1388,8 @@ function handleRightClick(wx: number, wy: number) {
 
     // Find target
     // Unexplored fog hides its entities from clicks too (right-clicking there just moves)
-    const targetId: EntityId | null = pickEntityAt(currentState.entities, wx, wy,
+    // (Minimap orders are always ground orders - a dot is too small to target.)
+    const targetId: EntityId | null = groundOnly ? null : pickEntityAt(currentState.entities, wx, wy,
         e => !isHiddenByFog(currentState, e, humanPlayerId))?.id ?? null;
 
     // Issue commands
@@ -1338,20 +1407,19 @@ function handleRightClick(wx: number, wy: number) {
 
             if (selectedRigId) {
                 const rig = currentState.entities[selectedRigId];
-                const deployRange = 80;
-
-                if (rig && rig.pos.dist(targetEntity.pos) <= deployRange) {
+                if (rig && rig.pos.dist(targetEntity.pos) <= RIG_DEPLOY_RANGE) {
                     // Close enough - deploy the rig
                     currentState = update(currentState, {
                         type: 'DEPLOY_INDUCTION_RIG',
                         payload: { unitId: selectedRigId, wellId: targetId }
                     });
                 } else {
-                    // Too far - move toward the well first
+                    // Too far - move toward the well first, then deploy on arrival
                     currentState = update(currentState, {
                         type: 'COMMAND_MOVE',
                         payload: { unitIds: [selectedRigId], x: targetEntity.pos.x, y: targetEntity.pos.y }
                     });
+                    pendingRigDeploys.set(selectedRigId, targetId);
                 }
                 return;
             }
@@ -1398,6 +1466,33 @@ function handleRightClick(wx: number, wy: number) {
     }
 }
 
+/**
+ * Deploy Induction Rigs that were sent to a far well once they get there. A rig that is
+ * given another order (or gives up on the trip) forgets the deploy.
+ */
+function deployArrivedRigs() {
+    for (const [rigId, wellId] of pendingRigDeploys) {
+        const rig = currentState.entities[rigId];
+        const well = currentState.entities[wellId];
+        if (!rig || rig.dead || rig.type !== 'UNIT' || !well || well.dead) {
+            pendingRigDeploys.delete(rigId);
+            continue;
+        }
+        if (rig.pos.dist(well.pos) <= RIG_DEPLOY_RANGE) {
+            pendingRigDeploys.delete(rigId);
+            currentState = update(currentState, {
+                type: 'DEPLOY_INDUCTION_RIG',
+                payload: { unitId: rigId, wellId }
+            });
+            continue;
+        }
+        const target = rig.movement.moveTarget ? (rig.movement.finalDest ?? rig.movement.moveTarget) : null;
+        if (!target || Math.hypot(target.x - well.pos.x, target.y - well.pos.y) > RIG_DEPLOY_RANGE) {
+            pendingRigDeploys.delete(rigId);
+        }
+    }
+}
+
 function attemptMCVDeploy() {
     if (humanPlayerId === null) return;
 
@@ -1422,8 +1517,35 @@ const PRIMARY_BUILDING_MAP: Record<string, 'infantry' | 'vehicle'> = {
     'factory': 'vehicle'
 };
 
+/** Own fighting units: not harvesters, MCVs, engineers or other support units, and not inside a transport. */
+function isArmyUnit(e: Entity, owner: number): boolean {
+    if (e.type !== 'UNIT' || e.dead || e.owner !== owner || isTransportedUnit(e)) return false;
+    if (isAirUnit(e) && e.airUnit.state === 'docked') return false;
+    if (NON_ARMY_UNITS.has(e.key)) return false;
+    const data = RULES.units[e.key];
+    return !!data && isUnitData(data) && data.damage > 0;
+}
+const NON_ARMY_UNITS = new Set(['harvester', 'mcv', 'induction_rig', 'engineer']);
+
 function handleDoubleClick(wx: number, wy: number) {
     if (humanPlayerId === null || currentState.mode !== 'game') return;
+    // In a click mode the clicks belong to that mode
+    if (currentState.sellMode || currentState.repairMode || currentState.placingBuilding || currentState.attackMoveMode) return;
+
+    // Double-click on one of your units: select every unit of that type on screen
+    const clickedUnit = pickEntityAt(currentState.entities, wx, wy, e => e.type === 'UNIT' && e.owner === humanPlayerId);
+    if (clickedUnit && clickedUnit.key !== 'mcv') {
+        const size = renderer.getSize();
+        const { x: camX, y: camY } = currentState.camera;
+        const zoom = currentState.zoom;
+        const sameType = Object.values(currentState.entities)
+            .filter(e => e.type === 'UNIT' && !e.dead && e.owner === humanPlayerId && e.key === clickedUnit.key && !isTransportedUnit(e) &&
+                e.pos.x >= camX && e.pos.x <= camX + size.width / zoom && e.pos.y >= camY && e.pos.y <= camY + size.height / zoom)
+            .map(e => e.id);
+        currentState = update(currentState, { type: 'SELECT_UNITS', payload: sameType.length > 0 ? sameType : [clickedUnit.id] });
+        updateButtonsUI();
+        return;
+    }
 
     // Check if double-clicked on a production building owned by human player
     for (const id in currentState.entities) {
@@ -1452,6 +1574,8 @@ function handleDoubleClick(wx: number, wy: number) {
 }
 
 function updateButtonsUI() {
+    // A half-confirmed sale is forgotten once sell mode ends
+    if (!currentState.sellMode) pendingSell = null;
     // Use human player's UI, or first player if observer
     const pid = humanPlayerId !== null ? humanPlayerId : Object.keys(currentState.players).map(Number)[0];
     const player = currentState.players[pid];
@@ -1521,6 +1645,7 @@ function gameLoop(timestamp: number = 0) {
         }
     }
     const simMs = performance.now() - simStartMs;
+    deployArrivedRigs();
     announceGameEvents(preSimState, currentState);
     checkHumanDefeat();
 
@@ -1593,25 +1718,19 @@ function gameLoop(timestamp: number = 0) {
         const newCameraX = worldX - mouseX / newZoom;
         const newCameraY = worldY - mouseY / newZoom;
 
-        const mapWidth = currentState.config.width;
-        const mapHeight = currentState.config.height;
-        const panBuffer = 300;
-
+        const size = renderer.getSize();
         currentState = {
             ...currentState,
             zoom: newZoom,
-            camera: {
-                x: Math.max(-panBuffer / newZoom, Math.min(mapWidth - canvas.width / newZoom + panBuffer / newZoom, newCameraX)),
-                y: Math.max(-panBuffer / newZoom, Math.min(mapHeight - canvas.height / newZoom + panBuffer / newZoom, newCameraY))
-            }
+            camera: clampCamera(newCameraX, newCameraY, size.width, size.height, newZoom, currentState.config.width, currentState.config.height)
         };
     }
 
     const newCamera = handleCameraInput(
         currentState.camera,
         currentState.zoom,
-        canvas.width,
-        canvas.height,
+        renderer.getSize().width,
+        renderer.getSize().height,
         currentState.config.width,
         currentState.config.height
     );
@@ -1742,7 +1861,7 @@ function announceGameEvents(prev: GameState, next: GameState) {
 
     if (player.readyToPlace && player.readyToPlace !== prevPlayer.readyToPlace) {
         const name = RULES.buildings[player.readyToPlace]?.name ?? player.readyToPlace;
-        pushAlert(`Construction complete: ${name} - click it in the sidebar to place`, 'success');
+        pushAlert(`Construction complete: ${name} - ${IS_TOUCH ? 'tap' : 'click'} it in the sidebar to place`, 'success');
     }
 
     const producing = Object.values(player.queues).some(q => q.current);
@@ -1764,8 +1883,10 @@ function announceGameEvents(prev: GameState, next: GameState) {
         if (e.hp < before.hp) {
             if (e.type === 'BUILDING') {
                 pushAlert('Our base is under attack!', 'error', 'base-attack', 20000);
+                pingMinimap(e.pos.x, e.pos.y);
             } else if (e.type === 'UNIT' && e.key === 'harvester') {
                 pushAlert('Harvester under attack!', 'error', 'harvester-attack', 20000);
+                pingMinimap(e.pos.x, e.pos.y);
             }
         }
     }
@@ -1796,7 +1917,8 @@ function checkHumanDefeat() {
     endTitle.style.color = '#ff4444';
     if (endSubtitle) endSubtitle.textContent = 'Your base was destroyed. The battle continues without you.';
     if (spectateBtn) spectateBtn.hidden = false;
-    endScreen.classList.add('visible');
+    renderEndResults(currentState, { localPlayerId: humanPlayerId });
+    showGameEndScreen();
 }
 
 /** Switch a defeated player to observing the rest of the match. */
@@ -1809,12 +1931,20 @@ function spectateAfterDefeat() {
     if (humanPlayerId !== null) {
         const { [humanPlayerId]: _ownFog, ...otherFog } = currentState.fogOfWar ?? {};
         currentState = { ...currentState, fogOfWar: otherFog, selection: [], placingBuilding: null, sellMode: false, repairMode: false, attackMoveMode: false };
+        defeatedHumanId = humanPlayerId;
     }
     humanPlayerId = null;
     currentState = { ...currentState, mode: 'demo' };
     setObserverMode(true);
     renderer.resize();
     updateButtonsUI();
+}
+
+/** The end screen, offering Play Again only when there is a setup to replay (not after a hot reload or a debug state load). */
+function showGameEndScreen() {
+    const playAgain = document.getElementById('play-again-btn');
+    if (playAgain) playAgain.hidden = !lastSkirmishConfig;
+    showEndScreen();
 }
 
 function checkWinCondition() {
@@ -1830,7 +1960,6 @@ function checkWinCondition() {
             const spectateBtn = document.getElementById('spectate-btn');
             if (spectateBtn) spectateBtn.hidden = true;
 
-            endScreen.classList.add('visible');
             if (currentState.winner === -1) {
                 // Draw
                 endTitle.textContent = 'DRAW';
@@ -1860,7 +1989,19 @@ function checkWinCondition() {
                     endTitle.textContent = `PLAYER ${currentState.winner + 1} WINS`;
                     endTitle.style.color = winnerColor;
                 }
+                // A human who was knocked out earlier and kept watching
+                if (defeatedHumanId !== null && endSubtitle) {
+                    const defeatedTeam = currentState.players[defeatedHumanId]?.team;
+                    endSubtitle.textContent = defeatedTeam != null && defeatedTeam === winnerTeam
+                        ? 'Your team won - even though your base fell.'
+                        : 'You were eliminated earlier in the battle.';
+                }
             }
+
+            // The tick has stopped: refresh the scoreboard now so it shows the final result
+            updateScoreboard(currentState, undefined, true);
+            renderEndResults(currentState, { localPlayerId: humanPlayerId ?? defeatedHumanId });
+            showGameEndScreen();
         }
     }
 }

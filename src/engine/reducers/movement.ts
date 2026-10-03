@@ -390,3 +390,47 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
         }
     };
 }
+
+/**
+ * Track how close a unit has come to its move target: `moveTargetNoProgressTicks` counts the
+ * ticks since it last got meaningfully closer. See `isMoveHopeless`.
+ */
+export function trackMoveProgress<T extends UnitEntity>(unit: T): T {
+    const target = unit.movement.moveTarget;
+    if (!target) return unit;
+    const dist = Math.hypot(target.x - unit.pos.x, target.y - unit.pos.y);
+    const last = unit.movement.lastDistToMoveTarget;
+    const best = unit.movement.bestDistToMoveTarget;
+    let bestDist: number;
+    let ticks: number;
+    if (last === undefined || best === undefined || Math.abs(dist - last) > 20) {
+        // First tick, or the target jumped (a new order): start over
+        bestDist = dist;
+        ticks = 0;
+    } else if (dist < best - 8) {
+        // Real progress (a few px of creeping round a corner doesn't count)
+        bestDist = dist;
+        ticks = 0;
+    } else {
+        bestDist = best;
+        ticks = (unit.movement.moveTargetNoProgressTicks || 0) + 1;
+    }
+    return {
+        ...unit,
+        movement: { ...unit.movement, lastDistToMoveTarget: dist, bestDistToMoveTarget: bestDist, moveTargetNoProgressTicks: ticks }
+    };
+}
+
+// Close to the spot (blocked by a footprint or by units that already arrived): give up after ~4 s
+// at normal speed - enough for a short detour round a building
+const NEAR_TARGET_RADIUS = 80;
+const NEAR_TARGET_GIVE_UP_TICKS = 480;
+// Anywhere else (wedged against a building on the way): give up after ~15 s with no progress
+const FAR_GIVE_UP_TICKS = 1800;
+
+/** Whether a unit tracked by `trackMoveProgress` should drop its move order as unreachable. */
+export function isMoveHopeless(unit: UnitEntity): boolean {
+    const ticks = unit.movement.moveTargetNoProgressTicks || 0;
+    const dist = unit.movement.lastDistToMoveTarget ?? Infinity;
+    return ticks > FAR_GIVE_UP_TICKS || (dist < NEAR_TARGET_RADIUS && ticks > NEAR_TARGET_GIVE_UP_TICKS);
+}

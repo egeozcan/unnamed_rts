@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, DemoTruckUnit, Projectile, BuildingEntity, AttackStance
+    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, DemoTruckUnit, Projectile, BuildingEntity, AttackStance, TILE_SIZE
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
@@ -10,7 +10,7 @@ import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, 
 import { updateHarvesterBehavior } from './harvester';
 import { updateCombatUnitBehavior } from './combat';
 import { updateDemoTruckBehavior, setDetonationTarget } from './demo_truck';
-import { moveToward } from './movement';
+import { moveToward, trackMoveProgress, isMoveHopeless } from './movement';
 import { getSpatialGrid } from '../spatial';
 
 // Re-export for backwards compatibility
@@ -94,7 +94,7 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
             // Harvester: clear harvesting targets and enable manual mode
             nextEntities[unit.id] = {
                 ...unit,
-                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                movement: { ...unit.movement, moveTarget: formationTarget, finalDest: null, path: null, lastDistToMoveTarget: undefined, bestDistToMoveTarget: undefined, moveTargetNoProgressTicks: undefined },
                 combat: { ...unit.combat, targetId: null },
                 harvester: { ...unit.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
             };
@@ -102,7 +102,7 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
             // A move order disarms the truck; otherwise it turns straight back to its old target
             nextEntities[unit.id] = {
                 ...unit,
-                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                movement: { ...unit.movement, moveTarget: formationTarget, finalDest: null, path: null, lastDistToMoveTarget: undefined, bestDistToMoveTarget: undefined, moveTargetNoProgressTicks: undefined },
                 combat: { ...unit.combat, targetId: null },
                 demoTruck: { ...unit.demoTruck, detonationTargetId: null, detonationTargetPos: null }
             };
@@ -110,7 +110,7 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
             // Combat unit
             nextEntities[unit.id] = {
                 ...unit,
-                movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+                movement: { ...unit.movement, moveTarget: formationTarget, finalDest: null, path: null, lastDistToMoveTarget: undefined, bestDistToMoveTarget: undefined, moveTargetNoProgressTicks: undefined },
                 combat: { ...unit.combat, targetId: null }
             };
         }
@@ -132,6 +132,61 @@ function calculateUngarrisonPositions(transport: UnitEntity, unitCount: number):
         ));
     }
     return positions;
+}
+
+/**
+ * Stop: ground units drop their move and attack orders and stand where they are.
+ * Harvesters stay idle (manual mode) until given a new order; armed demo trucks are disarmed.
+ */
+export function commandStop(state: GameState, payload: { unitIds: EntityId[] }): GameState {
+    let nextEntities: Record<EntityId, Entity> | null = null;
+    for (const id of payload.unitIds) {
+        const unit = state.entities[id];
+        if (!unit || unit.dead || unit.type !== 'UNIT' || isAirUnit(unit) || isTransportedUnit(unit)) continue;
+        const movement = {
+            ...unit.movement,
+            moveTarget: null,
+            finalDest: null,
+            path: null,
+            pathIdx: 0,
+            vel: new Vector(0, 0),
+            stuckTimer: 0,
+            unstuckTimer: 0,
+            unstuckDir: null,
+            lastDistToMoveTarget: undefined,
+            bestDistToMoveTarget: undefined,
+            moveTargetNoProgressTicks: undefined,
+            repairTargetId: null
+        };
+        let stopped: UnitEntity;
+        if (unit.key === 'harvester') {
+            const harv = unit as HarvesterUnit;
+            stopped = {
+                ...harv,
+                movement,
+                combat: { ...harv.combat, targetId: null },
+                harvester: { ...harv.harvester, resourceTargetId: null, baseTargetId: null, manualMode: true }
+            };
+        } else if (isDemoTruck(unit)) {
+            stopped = {
+                ...unit,
+                movement,
+                combat: { ...unit.combat, targetId: null },
+                demoTruck: { ...unit.demoTruck, detonationTargetId: null, detonationTargetPos: null }
+            };
+        } else if ('combat' in unit && unit.combat) {
+            stopped = {
+                ...unit,
+                movement,
+                combat: { ...unit.combat, targetId: null, attackMoveTarget: null, stanceHomePos: null }
+            } as UnitEntity;
+        } else {
+            stopped = { ...unit, movement } as UnitEntity;
+        }
+        nextEntities ??= { ...state.entities };
+        nextEntities[id] = stopped;
+    }
+    return nextEntities ? { ...state, entities: nextEntities } : state;
 }
 
 export function commandUngarrison(state: GameState, payload: { unitIds: EntityId[] }): GameState {
@@ -223,26 +278,56 @@ function calculateAttackSpreadPositions(targetPos: Vector, attackerPositions: Ve
 }
 
 /**
- * `point` moved to just outside `target`'s footprint (grown by `margin`) via the nearest edge;
+ * The area `target` blocks: its footprint, plus for buildings the collision-grid tiles marked
+ * for it (see `markGrid`), which can stick out past the footprint.
+ */
+function getBlockedRect(target: Entity): { left: number; right: number; top: number; bottom: number } {
+    const left = target.pos.x - target.w / 2;
+    const top = target.pos.y - target.h / 2;
+    const rect = { left, right: left + target.w, top, bottom: top + target.h };
+    if (target.type !== 'BUILDING') return rect;
+    const gx = Math.floor(left / TILE_SIZE);
+    const gy = Math.floor(top / TILE_SIZE);
+    return {
+        left: Math.min(rect.left, gx * TILE_SIZE),
+        right: Math.max(rect.right, (gx + Math.ceil(target.w / TILE_SIZE)) * TILE_SIZE),
+        top: Math.min(rect.top, gy * TILE_SIZE),
+        bottom: Math.max(rect.bottom, (gy + Math.ceil(target.h / TILE_SIZE)) * TILE_SIZE)
+    };
+}
+
+/**
+ * `point` moved to just outside `target`'s blocked area (grown by `margin`) via the nearest edge;
  * returned unchanged (same object) when it is already outside. A point at the exact centre leaves
  * towards `fallbackFrom` (e.g. where the units are coming from).
  */
 function pushOutsideFootprint(point: Vector, target: Entity, margin: number, fallbackFrom?: Vector): Vector {
-    const halfW = target.w / 2 + margin;
-    const halfH = target.h / 2 + margin;
-    let dx = point.x - target.pos.x;
-    let dy = point.y - target.pos.y;
-    if (Math.abs(dx) >= halfW || Math.abs(dy) >= halfH) return point;
+    const rect = getBlockedRect(target);
+    const left = rect.left - margin;
+    const right = rect.right + margin;
+    const top = rect.top - margin;
+    const bottom = rect.bottom + margin;
+    if (point.x <= left || point.x >= right || point.y <= top || point.y >= bottom) return point;
 
+    const cx = (left + right) / 2;
+    const cy = (top + bottom) / 2;
+    let dx = point.x - cx;
+    let dy = point.y - cy;
     if (dx === 0 && dy === 0 && fallbackFrom) {
-        dx = fallbackFrom.x - target.pos.x;
-        dy = fallbackFrom.y - target.pos.y;
+        dx = fallbackFrom.x - cx;
+        dy = fallbackFrom.y - cy;
     }
     // Leave through the edge the point is relatively closest to
-    if (Math.abs(dx) / halfW >= Math.abs(dy) / halfH) {
-        return new Vector(target.pos.x + (dx >= 0 ? halfW : -halfW), point.y);
+    if (Math.abs(dx) / (right - cx) >= Math.abs(dy) / (bottom - cy)) {
+        return new Vector(dx >= 0 ? right : left, point.y);
     }
-    return new Vector(point.x, target.pos.y + (dy >= 0 ? halfH : -halfH));
+    return new Vector(point.x, dy >= 0 ? bottom : top);
+}
+
+/** Whether `p` sits on a vertical (left/right) edge of `target`'s blocked area grown by `margin`. */
+function isOnVerticalEdge(p: Vector, target: Entity, margin: number): boolean {
+    const rect = getBlockedRect(target);
+    return p.x <= rect.left - margin + 0.01 || p.x >= rect.right + margin - 0.01;
 }
 
 /**
@@ -446,7 +531,14 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
     // The clicked point is usually on the target itself (a building, a rock): gather just outside it
     // instead, or units would chase spots inside an impassable footprint forever
     const clickPoint = new Vector(payload.x ?? target.pos.x, payload.y ?? target.pos.y);
-    const anchor = pushOutsideFootprint(clickPoint, target, 25, state.entities[fallbackMoveIds[0]]?.pos);
+    const pushed = pushOutsideFootprint(clickPoint, target, 25, state.entities[fallbackMoveIds[0]]?.pos);
+    // A building at the map edge can push the anchor off the map: keep it on, on the other side if need be
+    const { width: mapW, height: mapH } = state.config;
+    let anchor = pushed;
+    if (pushed.x < 20 || pushed.x > mapW - 20 || pushed.y < 20 || pushed.y > mapH - 20) {
+        const mirrored = pushOutsideFootprint(new Vector(2 * target.pos.x - clickPoint.x, 2 * target.pos.y - clickPoint.y), target, 25);
+        anchor = new Vector(Math.max(20, Math.min(mapW - 20, mirrored.x)), Math.max(20, Math.min(mapH - 20, mirrored.y)));
+    }
     const moved = commandMove(nextState, { unitIds: fallbackMoveIds, x: anchor.x, y: anchor.y });
 
     // Formation slots spread around the anchor can still fall on the footprint: push those out too
@@ -469,7 +561,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
         if (!unit || unit.type !== 'UNIT' || !unit.movement.moveTarget) continue;
         const edgeSlot = pushOutsideFootprint(unit.movement.moveTarget, target, unit.radius + 5, unit.pos);
         // Tangent of the edge the slot sits on
-        const onVerticalEdge = Math.abs(edgeSlot.x - target.pos.x) >= target.w / 2 + unit.radius + 5 - 0.01;
+        const onVerticalEdge = isOnVerticalEdge(edgeSlot, target, unit.radius + 5);
         const step = unit.radius * 2 + 4;
         let slot = edgeSlot;
         for (let i = 1; i <= 24 && takenSlots.some(t => t.pos.dist(slot) < t.radius + unit.radius + 2); i++) {
@@ -678,13 +770,16 @@ export function updateUnit(
 
     // Handle harvester units
     if (nextEntity.key === 'harvester') {
+        // Human players' move orders are carried out in full; the AI's flee orders time out
+        const isPlayerOrder = state?.players[nextEntity.owner]?.isAi === false;
         const result = updateHarvesterBehavior(
             nextEntity as HarvesterUnit,
             allEntities,
             entityList,
             mapConfig,
             currentTick,
-            harvesterCounts
+            harvesterCounts,
+            isPlayerOrder
         );
 
         // Handle harvester attacking with explicit targetId (rare case - AI commanded attack)
@@ -733,11 +828,20 @@ export function updateUnit(
 
             const clearDistance = 30;
             const harvesterFleeTimeout = 40;
-            const isStuckOnFlee = (nextEntity.movement.stuckTimer || 0) > harvesterFleeTimeout;
-            let moveTargetTicks = result.entity.movement.moveTargetNoProgressTicks || 0;
-            moveTargetTicks++;
-            const absoluteFleeTimeout = 90;
-            const isFleeTimedOut = moveTargetTicks > absoluteFleeTimeout;
+            const isStuckOnFlee = !isPlayerOrder && (nextEntity.movement.stuckTimer || 0) > harvesterFleeTimeout;
+            // AI flee orders time out after a fixed time; player orders when no closer for a while
+            let moveTargetTicks: number;
+            let isFleeTimedOut: boolean;
+            if (isPlayerOrder) {
+                // Like other ground units: only give up when close to the spot and getting no closer
+                // (detours on the way there are fine; pathfinding gives up on unreachable far spots)
+                nextEntity = trackMoveProgress(nextEntity);
+                moveTargetTicks = nextEntity.movement.moveTargetNoProgressTicks || 0;
+                isFleeTimedOut = isMoveHopeless(nextEntity);
+            } else {
+                moveTargetTicks = (result.entity.movement.moveTargetNoProgressTicks || 0) + 1;
+                isFleeTimedOut = moveTargetTicks > 90;
+            }
 
             // Check if target is unreachable (inside a building)
             const spatialGrid = getSpatialGrid();
@@ -820,7 +924,24 @@ export function updateUnit(
 
         // Handle standard move target (right-click to move without attack)
         if (result.entity.movement.moveTarget && !result.shouldDetonate) {
-            const movedTruck = moveToward(result.entity, result.entity.movement.moveTarget, entityList) as DemoTruckUnit;
+            let movedTruck = trackMoveProgress(moveToward(result.entity, result.entity.movement.moveTarget, entityList) as DemoTruckUnit);
+            // Arrived (or stuck just short of a blocked spot): stop, like other ground units
+            const arrived = movedTruck.pos.dist(result.entity.movement.moveTarget) < 10;
+            if (arrived || isMoveHopeless(movedTruck)) {
+                movedTruck = {
+                    ...movedTruck,
+                    movement: {
+                        ...movedTruck.movement,
+                        moveTarget: null,
+                        finalDest: null,
+                        path: null,
+                        pathIdx: 0,
+                        lastDistToMoveTarget: undefined,
+                        bestDistToMoveTarget: undefined,
+                        moveTargetNoProgressTicks: undefined
+                    }
+                };
+            }
             return { entity: movedTruck, projectile: null, creditsEarned: 0, resourceDamage: null };
         }
 
@@ -890,7 +1011,7 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
 
         nextEntities[unit.id] = {
             ...unit,
-            movement: { ...unit.movement, moveTarget: formationTarget, path: null },
+            movement: { ...unit.movement, moveTarget: formationTarget, finalDest: null, path: null, lastDistToMoveTarget: undefined, bestDistToMoveTarget: undefined, moveTargetNoProgressTicks: undefined },
             combat: {
                 ...unit.combat,
                 targetId: null,  // Will auto-acquire targets during move
