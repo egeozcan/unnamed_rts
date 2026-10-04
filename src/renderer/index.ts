@@ -486,7 +486,17 @@ export class Renderer {
             for (const proj of projectiles) {
                 if (proj.dead) continue;
                 const p = proj.pos;
-                if (p.x < projLeft || p.x > projRight || p.y < projTop || p.y - proj.arcHeight > projBottom) continue;
+                if (p.x < projLeft || p.x > projRight || p.y < projTop || p.y - proj.arcHeight > projBottom) {
+                    // Head is off-screen, but a long trail (fast missiles) can still reach into view
+                    let trailVisible = false;
+                    for (const t of proj.trailPoints) {
+                        if (t.x >= projLeft && t.x <= projRight && t.y >= projTop && t.y - proj.arcHeight <= projBottom) {
+                            trailVisible = true;
+                            break;
+                        }
+                    }
+                    if (!trailVisible) continue;
+                }
                 this.drawProjectile(proj, effectiveCamera, zoom, entities);
             }
 

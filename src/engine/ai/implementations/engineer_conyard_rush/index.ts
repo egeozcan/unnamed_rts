@@ -1692,51 +1692,7 @@ export function computeEngineerConyardRushAiActions(
         runtimeState.captureRefundReserveActive = false;
     }
 
-    return dropNoOpStanceActions(sanitizeEngineerConyardRushActions(actions, state, playerId), state);
-}
-
-/**
- * Raid/shuttle logic re-issues SET_STANCE hold_ground for the same APCs and
- * escorts on every tick. SET_STANCE only writes `stance` and clears
- * `stanceHomePos`, and between AI ticks nothing but SET_STANCE changes
- * `stance`, so a SET_STANCE for a unit that (after earlier SET_STANCE actions
- * in this list) already has that stance and a null home position changes
- * nothing. Drop those unit ids, and the action when none remain. Must run on
- * the sanitized list so dropping ids cannot change which actions survive.
- */
-export function dropNoOpStanceActions(actions: Action[], state: GameState): Action[] {
-    if (!actions.some(action => action.type === 'SET_STANCE')) return actions;
-
-    // Stance per unit as it will be after the SET_STANCE actions seen so far
-    const pendingStance = new Map<EntityId, string>();
-    const result: Action[] = [];
-    for (const action of actions) {
-        if (action.type !== 'SET_STANCE') {
-            result.push(action);
-            continue;
-        }
-        const { stance, unitIds } = action.payload;
-        const needed = unitIds.filter(unitId => {
-            const unit = state.entities[unitId];
-            // Passengers ignore SET_STANCE but may be unloaded later in this list: always keep
-            if (!unit || unit.type !== 'UNIT' || !unit.combat || isTransportedUnit(unit)) return true;
-            const pending = pendingStance.get(unitId);
-            if (pending !== undefined) return pending !== stance;
-            return !(unit.combat.stance === stance && unit.combat.stanceHomePos === null);
-        });
-        for (const unitId of unitIds) {
-            const unit = state.entities[unitId];
-            if (unit && unit.type === 'UNIT' && unit.combat && !isTransportedUnit(unit)) {
-                pendingStance.set(unitId, stance);
-            }
-        }
-        if (needed.length === unitIds.length) {
-            result.push(action);
-        } else if (needed.length > 0) {
-            result.push({ ...action, payload: { ...action.payload, unitIds: needed } });
-        }
-    }
-    return result;
+    return sanitizeEngineerConyardRushActions(actions, state, playerId);
 }
 
 export const EngineerConyardRushAIImplementation: AIImplementation = {

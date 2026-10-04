@@ -1,3 +1,4 @@
+import { dangerFreeGoalRadius } from './path_danger.js';
 /**
  * Web Worker for A* Pathfinding
  * Runs pathfinding calculations off the main thread
@@ -143,6 +144,8 @@ function findPath(request: PathRequest): PathResult {
     const closedSet = new Uint8Array(gridSize);
     const openMap = new Map<number, PathNode>();
     const dangerGrid = request.ownerId !== undefined ? dangerGrids.get(request.ownerId) : null;
+    // Same goal-in-danger exemption as the in-thread A* (see path_danger.ts)
+    const dangerFreeRadius = dangerFreeGoalRadius(actualGoalGx, actualGoalGy, gridW, gridH, dangerGrid);
 
     // Octile heuristic
     const dx0 = Math.abs(actualGoalGx - startGx);
@@ -229,7 +232,8 @@ function findPath(request: PathRequest): PathResult {
                 if (collisionGrid[cy * gridW + nx] === 1 || collisionGrid[ny * gridW + cx] === 1) continue;
             }
 
-            const dangerCost = dangerGrid ? dangerGrid[neighborKey] : 0;
+            const dangerCost = dangerGrid && (Math.abs(nx - actualGoalGx) > dangerFreeRadius || Math.abs(ny - actualGoalGy) > dangerFreeRadius)
+                ? dangerGrid[neighborKey] : 0;
             const g = cg + cost + dangerCost;
             const existingNode = openMap.get(neighborKey);
 

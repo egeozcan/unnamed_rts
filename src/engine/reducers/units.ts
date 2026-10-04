@@ -1104,13 +1104,17 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
 export function setStance(state: GameState, payload: { unitIds: EntityId[]; stance: AttackStance }): GameState {
     const { unitIds, stance } = payload;
 
-    const nextEntities = { ...state.entities };
+    // Copied lazily: AIs re-issue stances every tick, and a write that changes nothing
+    // shouldn't cost a full entity-map copy.
+    let nextEntities: Record<EntityId, Entity> | null = null;
 
     for (const id of unitIds) {
-        const entity = nextEntities[id];
+        const entity = (nextEntities ?? state.entities)[id];
         if (entity && entity.type === 'UNIT' && entity.combat && !isTransportedUnit(entity)) {
             // Only apply stance to combat units (exclude harvesters and MCVs)
             if (entity.key !== 'harvester' && entity.key !== 'mcv') {
+                if (entity.combat.stance === stance && entity.combat.stanceHomePos === null) continue;
+                nextEntities ??= { ...state.entities };
                 nextEntities[id] = {
                     ...entity,
                     combat: {
@@ -1124,5 +1128,5 @@ export function setStance(state: GameState, payload: { unitIds: EntityId[]; stan
         }
     }
 
-    return { ...state, entities: nextEntities };
+    return nextEntities ? { ...state, entities: nextEntities } : state;
 }
