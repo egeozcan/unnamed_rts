@@ -7,7 +7,8 @@ import {
 
 /**
  * Reference: the original object-based A* + smoothing that findPath replaced with a
- * typed-array implementation. findPath must produce identical paths.
+ * typed-array implementation (plus the danger-free zone around the goal). findPath must
+ * produce identical paths.
  */
 interface RefNode { x: number; y: number; g: number; f: number; parent: RefNode | null; }
 
@@ -62,6 +63,7 @@ function referenceFindPath(start: Vector, goal: Vector, entityRadius: number, ow
         }
         return min;
     };
+    const freeR = refDangerFreeRadius(agx, agy, W, H, danger);
     const closed = new Uint8Array(W * H);
     const open = new Map<number, RefNode>();
     const dx0 = Math.abs(agx - startGx), dy0 = Math.abs(agy - startGy);
@@ -92,7 +94,9 @@ function referenceFindPath(start: Vector, goal: Vector, entityRadius: number, ow
             const nk = ny * W + nx;
             if (closed[nk] === 1 || collisionGrid[nk] === 1) continue;
             if (dx !== 0 && dy !== 0 && (collisionGrid[c.y * W + nx] === 1 || collisionGrid[ny * W + c.x] === 1)) continue;
-            const g = c.g + cost + (danger ? danger[nk] : 0);
+            // Danger is ignored within the goal's depth into danger (see refDangerFreeRadius)
+            const nearGoal = Math.abs(nx - agx) <= freeR && Math.abs(ny - agy) <= freeR;
+            const g = c.g + cost + (danger && !nearGoal ? danger[nk] : 0);
             const ex = open.get(nk);
             if (!ex || g < ex.g) {
                 const hdx = Math.abs(agx - nx), hdy = Math.abs(agy - ny);
@@ -108,6 +112,18 @@ function referenceFindPath(start: Vector, goal: Vector, entityRadius: number, ow
         }
     }
     return null;
+}
+
+/** -1 if the goal tile is safe, else Chebyshev distance to the nearest danger-free tile (max 8). */
+function refDangerFreeRadius(gx: number, gy: number, W: number, H: number, danger: Uint8Array | null | undefined): number {
+    if (!danger || gx < 0 || gx >= W || gy < 0 || gy >= H || danger[gy * W + gx] === 0) return -1;
+    let best = 8;
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            if (danger[y * W + x] === 0) best = Math.min(best, Math.max(Math.abs(x - gx), Math.abs(y - gy)));
+        }
+    }
+    return best;
 }
 
 function refSmooth(path: Vector[], r: number, ownerId?: number): Vector[] {
@@ -187,6 +203,16 @@ describe('findPath typed-array A* equivalence', () => {
         }
         expect(compared).toBeGreaterThan(1000);
         expect(found).toBeGreaterThan(100);
+    });
+
+    it('finds a path to a goal inside enemy danger (e.g. an attack target under defense cover)', () => {
+        // Open 120x60 tile map; the goal is the center of a defense's danger zone. Danger costs
+        // around the goal used to make A* flood the map and run out of iterations.
+        refreshCollisionGrid({}, { width: 120 * TILE_SIZE, height: 60 * TILE_SIZE }, [0]);
+        markDanger(0, 100 * TILE_SIZE, 30 * TILE_SIZE, 7 * TILE_SIZE);
+        setPathCacheTick(5_000_000);
+        const path = findPath(new Vector(2 * TILE_SIZE, 30 * TILE_SIZE), new Vector(100 * TILE_SIZE + 20, 30 * TILE_SIZE + 20), 10, 0);
+        expect(path).not.toBeNull();
     });
 
     it('returns the cached path on a repeat query', () => {

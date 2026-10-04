@@ -380,10 +380,11 @@ describe('Performance Benchmarks', () => {
                 findPath(start, goal, 15, 0);
             }, 1);
 
-            // Second call - cache hit (same tick)
-            const cachedCallTime = measureTime(() => {
+            // Second call - cache hit (same tick). Best of several batches, so a GC pause
+            // under parallel test load can't dominate the (sub-microsecond) average.
+            const cachedCallTime = Math.min(...Array.from({ length: 5 }, () => measureTime(() => {
                 findPath(start, goal, 15, 0);
-            }, 100);
+            }, 100)));
 
             console.log(`Pathfinding cache test:`);
             console.log(`  First call (cache miss): ${firstCallTime.toFixed(3)}ms`);
