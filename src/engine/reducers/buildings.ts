@@ -377,7 +377,8 @@ export function updateWells(
     entities: Record<EntityId, Entity>,
     tick: number,
     config: MapConfig,
-    _players: Record<number, import('../types').PlayerState>
+    _players: Record<number, import('../types').PlayerState>,
+    entitiesOwned = false
 ): { entities: Record<EntityId, Entity>; playerCredits: Record<number, number> } {
     const wellConfig = RULES.wells?.well;
     if (!wellConfig) return { entities, playerCredits: {} };
@@ -400,9 +401,10 @@ export function updateWells(
     const spatialGrid = getSpatialGrid();
 
     // Copy-on-write: most ticks nothing about the wells changes, so avoid cloning the whole
-    // entity map (thousands of entries on big maps) until the first real write.
+    // entity map (thousands of entries on big maps) until the first real write. When the caller
+    // already owns `entities` (e.g. production wrote to it this tick), it is updated in place.
     let nextEntities = entities;
-    let owned = false;
+    let owned = entitiesOwned;
     const own = () => {
         if (!owned) {
             nextEntities = { ...entities };
@@ -412,17 +414,22 @@ export function updateWells(
 
     // Index deployed induction rigs by well in a single pass instead of rescanning every
     // entity for every well. The first rig found per well wins (matches the old scan order).
+    // The same pass collects the live wells (in map order) so the processing loop below doesn't
+    // rescan every entity (and is unaffected by entries added while processing).
     const rigIdByWell = new Map<EntityId, EntityId>();
+    const wellIds: EntityId[] = [];
     for (const id in entities) {
         const entity = entities[id];
-        if (entity.type === 'BUILDING' && entity.key === 'induction_rig_deployed' && !entity.dead) {
+        if (entity.type === 'WELL') {
+            if (!entity.dead) wellIds.push(id);
+        } else if (entity.type === 'BUILDING' && entity.key === 'induction_rig_deployed' && !entity.dead) {
             const wellId = entity.inductionRig?.wellId;
             if (wellId !== undefined && !rigIdByWell.has(wellId)) rigIdByWell.set(wellId, id);
         }
     }
 
     // Process each well
-    for (const id in entities) {
+    for (const id of wellIds) {
         const entity = nextEntities[id];
         if (entity.type !== 'WELL' || entity.dead) continue;
 

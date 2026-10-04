@@ -76,7 +76,7 @@ export function tick(state: GameState): GameState {
 
     // Update Wells - spawn new ore and grow existing ore near wells
     // Also handles induction rig income generation
-    const wellResult = updateWells(nextEntities, nextTick, state.config, nextPlayers);
+    const wellResult = updateWells(nextEntities, nextTick, state.config, nextPlayers, entitiesOwned);
     nextEntities = wellResult.entities;
 
     // Apply induction rig credits (with difficulty modifier for AI players)
@@ -153,10 +153,12 @@ export function tick(state: GameState): GameState {
     const splashEvents: { projectile: Projectile; hitPos: Vector; includePrimaryTarget: boolean }[] = [];
     // Temporary state for interception checks (uses updatedEntities from this tick)
     const interceptionState = { ...state, entities: updatedEntities };
+    // Interception-aura entities, collected once per tick (updatedEntities doesn't change in the loop)
+    const auraEntities = collectInterceptionAuras(updatedEntities);
 
     [...state.projectiles, ...newProjs].forEach(p => {
         // Apply AA interception damage to interceptable projectiles
-        const interceptedProj = applyInterception(interceptionState, p);
+        const interceptedProj = applyInterceptionFrom(interceptionState, p, auraEntities);
         // If projectile was killed by interception, don't process further
         if (interceptedProj.dead) {
             pushImpact(p, p.pos.x, p.pos.y, true, true);
@@ -262,13 +264,9 @@ export function tick(state: GameState): GameState {
 
     // Apply Splash Damage from projectile hits
     for (const splash of splashEvents) {
-        // Apply splash damage to all entities in radius (except the primary target which already took direct damage)
-        const tempState = { ...state, entities: updatedEntities };
-        const splashResult = applySplashDamage(tempState, splash.projectile, splash.hitPos, { includePrimaryTarget: splash.includePrimaryTarget });
-        // Copy updated entities back
-        for (const id in splashResult.entities) {
-            updatedEntities[id] = splashResult.entities[id];
-        }
+        // Apply splash damage to all entities in radius (except the primary target which already took direct damage).
+        // updatedEntities is tick-local, so it is updated in place.
+        applySplashDamageToEntities(updatedEntities, splash.projectile, splash.hitPos, { includePrimaryTarget: splash.includePrimaryTarget });
     }
 
     // Process Demo Truck Explosions (chain reactions)
@@ -277,8 +275,10 @@ export function tick(state: GameState): GameState {
         : { entities: updatedEntities, particles: [], explosionCount: 0 };
     // Note: We use a mutable reference approach here since updatedEntities is from destructuring
     // Copy the explosion-processed entities back into updatedEntities object
-    for (const id in explosionResult.entities) {
-        updatedEntities[id] = explosionResult.entities[id];
+    if (explosionResult.entities !== updatedEntities) {
+        for (const id in explosionResult.entities) {
+            updatedEntities[id] = explosionResult.entities[id];
+        }
     }
     const explosionParticles = explosionResult.particles;
     const triggerScreenShake = explosionResult.explosionCount > 0;
@@ -989,6 +989,18 @@ export function updateEntities(
     };
 }
 
+// Whether a unit key flies (rules are static, so cache per key)
+const flyerByKey = new Map<string, boolean>();
+function isFlyerKey(key: string): boolean {
+    let fly = flyerByKey.get(key);
+    if (fly === undefined) {
+        const data = getRuleData(key);
+        fly = !!(data && isUnitData(data) && data.fly === true);
+        flyerByKey.set(key, fly);
+    }
+    return fly;
+}
+
 // Mutable version of Entity for collision resolution (allows position updates)
 type MutableEntity = { -readonly [K in keyof Entity]: Entity[K] };
 
@@ -1012,9 +1024,7 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
         if (original.type === 'UNIT' && !original.dead) {
             if (isTransportedUnit(original)) continue;
             // Skip flying units from ground collision - they fly above everything
-            const unitData = getRuleData(original.key);
-            const canFly = unitData && isUnitData(unitData) && unitData.fly === true;
-            if (canFly) continue; // Air units don't participate in ground collision
+            if (isFlyerKey(original.key)) continue; // Air units don't participate in ground collision
 
             const e: MutableEntity = { ...original };
             workingEntities[id] = e;
@@ -1069,121 +1079,113 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
             if (a.dead) continue;
 
             // Use spatial grid to find nearby entities instead of checking all
-            const nearby = spatialGrid.queryRadius(a.pos.x, a.pos.y, MAX_CHECK_RADIUS);
-
-            for (const nearbyEntity of nearby) {
+            spatialGrid.forEachInRadius(a.pos.x, a.pos.y, MAX_CHECK_RADIUS, (nearbyEntity) => {
                 // Skip self and already processed pairs (use id comparison to avoid duplicates)
-                if (nearbyEntity.id <= a.id) continue;
+                if (nearbyEntity.id <= a.id) return;
 
                 // Get the working copy (with potentially updated position)
                 let b = workingEntities[nearbyEntity.id];
-                if (!b || b.dead) continue;
+                if (!b || b.dead) return;
 
                 const isUnitB = b.type === 'UNIT';
-                // Units that have no working copy yet (e.g. infantry that boarded a transport this tick, after
-                // the grid was built) still collide like before, so clone them lazily. Flyers are skipped below.
-                if (isUnitB && !workingUnits.has(b)) {
-                    const bData = getRuleData(b.key);
-                    if (!(bData && isUnitData(bData) && bData.fly === true)) {
-                        const copy: MutableEntity = { ...b };
-                        workingEntities[nearbyEntity.id] = copy;
-                        workingUnits.add(copy);
-                        b = copy;
-                    }
-                }
                 // a is always a unit, skip if b is not a unit and not a building/resource that matters
-                if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') continue;
-
+                if (!isUnitB && b.type !== 'BUILDING' && b.type !== 'ROCK') return;
                 // Skip flying units in collision checks - they fly above ground units
-                if (isUnitB) {
-                    const bData = getRuleData(b.key);
-                    if (bData && isUnitData(bData) && bData.fly === true) continue;
-                }
+                if (isUnitB && isFlyerKey(b.key)) return;
 
+                // Cheap overlap test first (most candidates don't overlap)
                 const dist = a.pos.dist(b.pos);
                 // Allow slight soft overlap to reduce jittering
                 const softOverlap = 2;
                 const minDist = a.radius + b.radius - softOverlap;
+                if (!(dist < minDist && dist > 0.001)) return;
 
-                if (dist < minDist && dist > 0.001) {
-                    // Skip collision if A is a vehicle docking to B (Service Depot)
-                    const aUnit = a as unknown as UnitEntity;
-                    if (!isUnitB && b.type === 'BUILDING' && b.key === 'service_depot' && aUnit.movement?.repairTargetId === b.id) {
-                        continue;
-                    }
-
-                    hadOverlap = true; // Found an overlap
-                    const overlap = minDist - dist;
-                    const dir = b.pos.sub(a.pos).norm();
-
-                    if (isUnitB) {
-                        // Determine which unit is moving vs stationary
-                        // A unit is "moving" if it has an explicit moveTarget OR is actively following a path
-                        // Having only combat.targetId doesn't mean moving - unit may be in attack position
-                        const aUnit = a as unknown as UnitEntity;
-                        const bUnit = b as unknown as UnitEntity;
-
-                        // Check for active path following (has path waypoints remaining)
-                        const aHasActivePath = aUnit.movement.path !== null &&
-                            aUnit.movement.pathIdx < aUnit.movement.path.length;
-                        const bHasActivePath = bUnit.movement.path !== null &&
-                            bUnit.movement.pathIdx < bUnit.movement.path.length;
-
-                        // Use avgVel to detect meaningful movement vs stuck oscillation
-                        // Units oscillating from collision have low avgVel magnitude
-                        const aAvgVelMag = aUnit.movement.avgVel ?
-                            Math.sqrt(aUnit.movement.avgVel.x ** 2 + aUnit.movement.avgVel.y ** 2) : 0;
-                        const bAvgVelMag = bUnit.movement.avgVel ?
-                            Math.sqrt(bUnit.movement.avgVel.x ** 2 + bUnit.movement.avgVel.y ** 2) : 0;
-
-                        // Threshold for meaningful movement (units actively traveling, not oscillating)
-                        const movingThreshold = 0.8;
-
-                        const aMoving = aUnit.movement.moveTarget !== null ||
-                            (aHasActivePath && aAvgVelMag > movingThreshold);
-                        const bMoving = bUnit.movement.moveTarget !== null ||
-                            (bHasActivePath && bAvgVelMag > movingThreshold);
-
-                        // Use stronger push to counteract movement speed
-                        const pushScale = Math.min(overlap, 2.5);
-
-                        if (aMoving && !bMoving) {
-                            // A is moving, B is stationary - A yields more
-                            const push = dir.scale(pushScale);
-                            a.pos = a.pos.sub(push.scale(0.8));
-                            b.pos = b.pos.add(push.scale(0.2));
-                        } else if (bMoving && !aMoving) {
-                            // B is moving, A is stationary - B yields more
-                            const push = dir.scale(pushScale);
-                            a.pos = a.pos.sub(push.scale(0.2));
-                            b.pos = b.pos.add(push.scale(0.8));
-                        } else if (aMoving && bMoving) {
-                            // BOTH moving - use both radial push and perpendicular slide
-                            const push = dir.scale(pushScale * 0.5);
-                            a.pos = a.pos.sub(push);
-                            b.pos = b.pos.add(push);
-
-                            // Also use perpendicular push to slide past each other (keep right)
-                            // Reduced from 0.5 to 0.15 to prevent "dancing" in dense clumps
-                            const perpA = new Vector(-dir.y, dir.x);
-                            const perpB = new Vector(dir.y, -dir.x);
-                            a.pos = a.pos.add(perpA.scale(pushScale * 0.15));
-                            b.pos = b.pos.add(perpB.scale(pushScale * 0.15));
-                        } else {
-                            // Both stationary - minimal push
-                            const totalR = a.radius + b.radius;
-                            const ratioA = b.radius / totalR;
-                            const ratioB = a.radius / totalR;
-                            const push = dir.scale(pushScale * 0.5); // Half strength for stationary
-                            a.pos = a.pos.sub(push.scale(ratioA));
-                            b.pos = b.pos.add(push.scale(ratioB));
-                        }
-                    } else {
-                        // A is unit, B is building/rock - A yields completely
-                        a.pos = a.pos.sub(dir.scale(overlap));
-                    }
+                // Units that have no working copy yet (e.g. infantry that boarded a transport this tick, after
+                // the grid was built) still collide like before, so clone them lazily before moving them.
+                if (isUnitB && !workingUnits.has(b)) {
+                    const copy: MutableEntity = { ...b };
+                    workingEntities[nearbyEntity.id] = copy;
+                    workingUnits.add(copy);
+                    b = copy;
                 }
-            }
+
+                // Skip collision if A is a vehicle docking to B (Service Depot)
+                const aUnit = a as unknown as UnitEntity;
+                if (!isUnitB && b.type === 'BUILDING' && b.key === 'service_depot' && aUnit.movement?.repairTargetId === b.id) {
+                    return;
+                }
+
+                hadOverlap = true; // Found an overlap
+                const overlap = minDist - dist;
+                const dir = b.pos.sub(a.pos).norm();
+
+                if (isUnitB) {
+                    // Determine which unit is moving vs stationary
+                    // A unit is "moving" if it has an explicit moveTarget OR is actively following a path
+                    // Having only combat.targetId doesn't mean moving - unit may be in attack position
+                    const aUnit = a as unknown as UnitEntity;
+                    const bUnit = b as unknown as UnitEntity;
+
+                    // Check for active path following (has path waypoints remaining)
+                    const aHasActivePath = aUnit.movement.path !== null &&
+                        aUnit.movement.pathIdx < aUnit.movement.path.length;
+                    const bHasActivePath = bUnit.movement.path !== null &&
+                        bUnit.movement.pathIdx < bUnit.movement.path.length;
+
+                    // Use avgVel to detect meaningful movement vs stuck oscillation
+                    // Units oscillating from collision have low avgVel magnitude
+                    const aAvgVelMag = aUnit.movement.avgVel ?
+                        Math.sqrt(aUnit.movement.avgVel.x ** 2 + aUnit.movement.avgVel.y ** 2) : 0;
+                    const bAvgVelMag = bUnit.movement.avgVel ?
+                        Math.sqrt(bUnit.movement.avgVel.x ** 2 + bUnit.movement.avgVel.y ** 2) : 0;
+
+                    // Threshold for meaningful movement (units actively traveling, not oscillating)
+                    const movingThreshold = 0.8;
+
+                    const aMoving = aUnit.movement.moveTarget !== null ||
+                        (aHasActivePath && aAvgVelMag > movingThreshold);
+                    const bMoving = bUnit.movement.moveTarget !== null ||
+                        (bHasActivePath && bAvgVelMag > movingThreshold);
+
+                    // Use stronger push to counteract movement speed
+                    const pushScale = Math.min(overlap, 2.5);
+
+                    if (aMoving && !bMoving) {
+                        // A is moving, B is stationary - A yields more
+                        const push = dir.scale(pushScale);
+                        a.pos = a.pos.sub(push.scale(0.8));
+                        b.pos = b.pos.add(push.scale(0.2));
+                    } else if (bMoving && !aMoving) {
+                        // B is moving, A is stationary - B yields more
+                        const push = dir.scale(pushScale);
+                        a.pos = a.pos.sub(push.scale(0.2));
+                        b.pos = b.pos.add(push.scale(0.8));
+                    } else if (aMoving && bMoving) {
+                        // BOTH moving - use both radial push and perpendicular slide
+                        const push = dir.scale(pushScale * 0.5);
+                        a.pos = a.pos.sub(push);
+                        b.pos = b.pos.add(push);
+
+                        // Also use perpendicular push to slide past each other (keep right)
+                        // Reduced from 0.5 to 0.15 to prevent "dancing" in dense clumps
+                        const perpA = new Vector(-dir.y, dir.x);
+                        const perpB = new Vector(dir.y, -dir.x);
+                        a.pos = a.pos.add(perpA.scale(pushScale * 0.15));
+                        b.pos = b.pos.add(perpB.scale(pushScale * 0.15));
+                    } else {
+                        // Both stationary - minimal push
+                        const totalR = a.radius + b.radius;
+                        const ratioA = b.radius / totalR;
+                        const ratioB = a.radius / totalR;
+                        const push = dir.scale(pushScale * 0.5); // Half strength for stationary
+                        a.pos = a.pos.sub(push.scale(ratioA));
+                        b.pos = b.pos.add(push.scale(ratioB));
+                    }
+                } else {
+                    // A is unit, B is building/rock - A yields completely
+                    a.pos = a.pos.sub(dir.scale(overlap));
+                }
+            });
         }
 
         // OPTIMIZATION: Early exit if no overlaps detected in this iteration
@@ -1375,26 +1377,37 @@ export function applySplashDamage(
     hitPos: Vector,
     options: { includePrimaryTarget?: boolean; airLevel?: boolean } = {}
 ): GameState {
-    const splashRadius = projectile.splash;
-    if (splashRadius <= 0) return state;
-
-    const primaryTarget = state.entities[projectile.targetId];
-    const airLevel = options.airLevel ?? (primaryTarget ? isFlyingEntity(primaryTarget) : false);
-
+    if (projectile.splash <= 0) return state;
     const entities = { ...state.entities };
+    applySplashDamageToEntities(entities, projectile, hitPos, options);
+    return { ...state, entities };
+}
+
+/** applySplashDamage() that updates an owned entity map in place. */
+function applySplashDamageToEntities(
+    entities: Record<EntityId, Entity>,
+    projectile: Projectile,
+    hitPos: Vector,
+    options: { includePrimaryTarget?: boolean; airLevel?: boolean }
+): void {
+    const splashRadius = projectile.splash;
+    if (splashRadius <= 0) return;
+
+    const primaryTarget = entities[projectile.targetId];
+    const airLevel = options.airLevel ?? (primaryTarget ? isFlyingEntity(primaryTarget) : false);
 
     // Find all entities that could be affected
     for (const id in entities) {
         const entity = entities[id];
         if (entity.dead) continue;
         if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
+        // Distance first: it rejects almost everything and is cheaper than the checks below
+        const dist = hitPos.dist(entity.pos);
+        if (dist >= splashRadius) continue;
         if (entity.type === 'UNIT' && isTransportedUnit(entity)) continue;
         // Skip the primary target - they already took direct damage
         if (id === projectile.targetId && !options.includePrimaryTarget) continue;
         if (isFlyingEntity(entity) !== airLevel) continue;
-
-        const dist = hitPos.dist(entity.pos);
-        if (dist >= splashRadius) continue;
 
         // Linear falloff: 100% at center, 0% at edge
         const falloff = 1 - (dist / splashRadius);
@@ -1437,8 +1450,6 @@ export function applySplashDamage(
             }
         }
     }
-
-    return { ...state, entities };
 }
 
 /**
@@ -1466,9 +1477,14 @@ function nextTurretAngle(entity: UnitEntity | Entity, entities: Record<EntityId,
 function recentVisualEvents(previous: readonly VisualEvent[] | undefined, fresh: VisualEvent[], tick: number): readonly VisualEvent[] | undefined {
     const oldest = tick - VISUAL_EVENT_TTL;
     if (!previous || previous.length === 0) return fresh.length > 0 ? fresh : previous;
-    if (fresh.length === 0 && previous[0].tick > oldest) return previous;
-    const kept = previous[previous.length - 1].tick > oldest ? previous.filter(e => e.tick > oldest) : [];
-    return kept.length > 0 ? kept.concat(fresh) : fresh;
+    // Events are appended in tick order, so the expired ones are a prefix
+    let firstKept = 0;
+    while (firstKept < previous.length && previous[firstKept].tick <= oldest) firstKept++;
+    if (fresh.length === 0 && firstKept === 0) return previous;
+    if (firstKept === previous.length) return fresh;
+    const kept = firstKept === 0 ? previous.slice() : previous.slice(firstKept);
+    for (let i = 0; i < fresh.length; i++) kept.push(fresh[i]);
+    return kept;
 }
 
 /**
@@ -1634,9 +1650,32 @@ function processExplosions(
  * Friendly AA does not intercept own team's projectiles.
  */
 export function applyInterception(state: GameState, projectile: Projectile): Projectile {
+    return applyInterceptionFrom(state, projectile, collectInterceptionAuras(state.entities));
+}
+
+type InterceptionAura = NonNullable<NonNullable<ReturnType<typeof getRuleData>>['interceptionAura']>;
+
+/** Live entities with an interception aura, in entity-map order. */
+function collectInterceptionAuras(entities: Record<EntityId, Entity>): { entity: Entity; aura: InterceptionAura }[] {
+    const result: { entity: Entity; aura: InterceptionAura }[] = [];
+    for (const id in entities) {
+        const entity = entities[id];
+        if (entity.dead) continue;
+        const aura = getRuleData(entity.key)?.interceptionAura;
+        if (aura) result.push({ entity, aura });
+    }
+    return result;
+}
+
+function applyInterceptionFrom(
+    state: GameState,
+    projectile: Projectile,
+    auraEntities: readonly { entity: Entity; aura: InterceptionAura }[]
+): Projectile {
     // Only intercept projectiles that have HP (are interceptable)
     if (projectile.hp <= 0 && projectile.maxHp <= 0) return projectile;
     if (projectile.dead) return projectile;
+    if (auraEntities.length === 0) return projectile;
 
     // Get projectile owner's team
     const sourceEntity = state.entities[projectile.ownerId];
@@ -1644,15 +1683,8 @@ export function applyInterception(state: GameState, projectile: Projectile): Pro
 
     let totalDamage = 0;
 
-    // Check all entities for interception auras
-    for (const id in state.entities) {
-        const entity = state.entities[id];
-        if (entity.dead) continue;
-
-        // Get interception aura from rules
-        const data = getRuleData(entity.key);
-        const aura = data?.interceptionAura;
-        if (!aura) continue;
+    // Check all entities with interception auras
+    for (const { entity, aura } of auraEntities) {
 
         // Allied AA doesn't intercept allied projectiles
         if (isAlly(state, entity.owner, projectileOwner)) continue;
