@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clampCamera } from '../../src/input/index.js';
+import { clampCamera, getMinZoom } from '../../src/input/index.js';
 
 describe('clampCamera', () => {
     it('allows panning up to 300 screen px past the map edges', () => {
@@ -14,5 +14,23 @@ describe('clampCamera', () => {
         const cam = clampCamera(-1200, 0, 1000, 800, 0.25, 2000, 4000);
         expect(cam.x).toBe(1000 - 2000);
         expect(cam.y).toBe(0);
+    });
+});
+
+describe('getMinZoom', () => {
+    it('is 0.25 when the map already fits at that zoom', () => {
+        expect(getMinZoom(1600, 900, 3000, 3000)).toBe(0.25);
+    });
+
+    it('zooms out further so the whole of a big map fits in the view', () => {
+        // Huge 5000x5000 map in a 1600x900 view: the height is the limiting axis
+        const zoom = getMinZoom(1600, 900, 5000, 5000);
+        expect(zoom).toBeCloseTo(900 / 5000, 10);
+        expect(1600 / zoom).toBeGreaterThanOrEqual(5000);
+        expect(900 / zoom).toBeGreaterThanOrEqual(5000 - 1e-6);
+    });
+
+    it('falls back to 0.25 for a zero-sized view', () => {
+        expect(getMinZoom(0, 0, 5000, 5000)).toBe(0.25);
     });
 });

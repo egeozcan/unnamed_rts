@@ -724,7 +724,19 @@ export function clampCamera(
     return { x: clampAxis(x, viewWidth, mapWidth), y: clampAxis(y, viewHeight, mapHeight) };
 }
 
-export function handleZoomInput(currentZoom: number): number {
+export const MAX_ZOOM = 2.0;
+const DEFAULT_MIN_ZOOM = 0.25;
+
+/**
+ * The furthest the view may zoom out: 0.25, or further if that is needed to fit the whole map in
+ * the view (big maps, small windows).
+ */
+export function getMinZoom(viewWidth: number, viewHeight: number, mapWidth: number, mapHeight: number): number {
+    const fit = Math.min(viewWidth / mapWidth, viewHeight / mapHeight);
+    return fit > 0 ? Math.min(DEFAULT_MIN_ZOOM, fit) : DEFAULT_MIN_ZOOM;
+}
+
+export function handleZoomInput(currentZoom: number, minZoom: number = DEFAULT_MIN_ZOOM): number {
     let newZoom = currentZoom;
 
     // Mouse wheel zoom
@@ -739,5 +751,6 @@ export function handleZoomInput(currentZoom: number): number {
         inputState.pinchRatio = 1;
     }
 
-    return Math.max(0.25, Math.min(2.0, newZoom));
+    if (newZoom === currentZoom) return currentZoom;
+    return Math.max(minZoom, Math.min(MAX_ZOOM, newZoom));
 }

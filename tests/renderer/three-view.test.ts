@@ -63,9 +63,9 @@ describe('3D view camera', () => {
         expect(raised.depth).toBeLessThan(ground.depth);
     });
 
-    it('keeps the whole visible ground and anything up to 100 units tall inside the depth range', () => {
+    it.each([0.25, 0.05])('keeps the whole visible ground and anything up to 100 units tall inside the depth range (zoom %s)', (zoom) => {
         const threeCamera = new THREE.OrthographicCamera();
-        const camera = { x: 100, y: 100 }, zoom = 0.25;
+        const camera = { x: 100, y: 100 };
         applyViewCamera(threeCamera, camera, zoom, WIDTH, HEIGHT);
         for (const [sx, sy] of [[0, 0], [WIDTH, 0], [0, HEIGHT], [WIDTH, HEIGHT]]) {
             for (const height of [0, 100]) {

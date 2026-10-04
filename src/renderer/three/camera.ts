@@ -28,13 +28,16 @@ export function applyViewCamera(
     target.right = halfW;
     target.top = halfH * cosT;
     target.bottom = -halfH * cosT;
+    // Ground at the top/bottom of the view is halfH * sin(tilt) nearer/further than the centre;
+    // back the camera off when zoomed far out so neither end gets clipped
+    const distance = Math.max(CAMERA_DISTANCE, halfH * sinT + 500);
     target.near = 1;
-    target.far = CAMERA_DISTANCE * 2;
+    target.far = distance * 2;
 
     const cx = camera.x + halfW;
     const cz = camera.y + halfH;
     target.up.set(0, sinT, -cosT);
-    target.position.set(cx, CAMERA_DISTANCE * cosT, cz + CAMERA_DISTANCE * sinT);
+    target.position.set(cx, distance * cosT, cz + distance * sinT);
     target.lookAt(cx, 0, cz);
     target.updateProjectionMatrix();
     target.updateMatrixWorld();

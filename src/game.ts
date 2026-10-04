@@ -18,7 +18,7 @@ import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu, isHelpVisible, showHelp, closeHelp } from './ui/pause-menu.js';
-import { initInput, clampCamera, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
+import { initInput, clampCamera, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getMinZoom, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
 import { computeAiActions, getAIImplementationOptions, resetAIState, resetAIImplementations, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
 import { RULES, isUnitData } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
@@ -833,10 +833,10 @@ function startGameWithConfig(config: SkirmishConfig) {
     renderer.resize();
 
     if (isObserverMode) {
-        const observerZoom = 0.25; // Max zoom-out level (matches input clamp)
         const size = renderer.getSize();
         const mapWidth = currentState.config.width;
         const mapHeight = currentState.config.height;
+        const observerZoom = getMinZoom(size.width, size.height, mapWidth, mapHeight); // Fully zoomed out
 
         const centeredX = mapWidth / 2 - size.width / (2 * observerZoom);
         const centeredY = mapHeight / 2 - size.height / (2 * observerZoom);
@@ -1677,7 +1677,9 @@ function gameLoop(timestamp: number = 0) {
     const renderStartMs = performance.now();
 
     const oldZoom = currentState.zoom;
-    const newZoom = handleZoomInput(oldZoom);
+    const zoomViewSize = renderer.getSize();
+    const newZoom = handleZoomInput(oldZoom,
+        getMinZoom(zoomViewSize.width, zoomViewSize.height, currentState.config.width, currentState.config.height));
 
     if (newZoom !== oldZoom) {
         // Zoom towards mouse
