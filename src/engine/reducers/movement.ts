@@ -67,7 +67,11 @@ export function moveToward(entity: UnitEntity, targetParam: Vector, _allEntities
     let unstuckDir = ensureVector(entity.movement.unstuckDir);
     let unstuckTimer = entity.movement.unstuckTimer || 0;
     // Convert path vectors from plain objects if loaded from JSON save
-    let path = entity.movement.path ? entity.movement.path.map(p => ensureVector(p)!) : null;
+    // (paths are read-only and shared, so only copy when conversion is actually needed)
+    const storedPath = entity.movement.path;
+    let path = storedPath && !storedPath.every(p => p instanceof Vector)
+        ? storedPath.map(p => ensureVector(p)!)
+        : storedPath;
     let pathIdx = entity.movement.pathIdx || 0;
     // Convert finalDest to Vector if it's a plain object (e.g., loaded from JSON save)
     let finalDest = ensureVector(entity.movement.finalDest);

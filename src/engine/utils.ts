@@ -12,7 +12,7 @@ interface PathCacheEntry {
     path: Vector[] | null;
     tick: number;
 }
-const pathCache = new Map<string, PathCacheEntry>();
+const pathCache = new Map<PathCacheKey, PathCacheEntry>();
 const PATH_CACHE_TTL = 300; // Valid for 300 ticks (~250ms at lightning speed, 5s at normal)
 const PATH_CACHE_MAX_SIZE = 2000; // Support 400+ entities with path variations
 let currentPathTick = 0;
@@ -28,8 +28,23 @@ export function setPathCacheTick(tick: number): void {
     currentPathTick = tick;
 }
 
-function getPathCacheKey(startGx: number, startGy: number, goalGx: number, goalGy: number, ownerId?: number): string {
-    return `${startGx},${startGy}->${goalGx},${goalGy}:${ownerId ?? -1}`;
+type PathCacheKey = number | string;
+
+// Packs (start, goal, owner) into one safe integer: 4 x 11-bit coords + 5-bit owner = 49 bits.
+// Falls back to a string key for out-of-range values (never collides with numeric keys).
+const KEY_COORD_OFFSET = 1024;
+const KEY_COORD_RANGE = 2048;
+function packCoord(v: number): number {
+    const c = v + KEY_COORD_OFFSET;
+    return c >= 0 && c < KEY_COORD_RANGE ? c : -1;
+}
+function getPathCacheKey(startGx: number, startGy: number, goalGx: number, goalGy: number, ownerId?: number): PathCacheKey {
+    const sx = packCoord(startGx), sy = packCoord(startGy), gx = packCoord(goalGx), gy = packCoord(goalGy);
+    const owner = (ownerId ?? -1) + 1;
+    if (sx < 0 || sy < 0 || gx < 0 || gy < 0 || owner < 0 || owner >= 32 || !Number.isInteger(owner)) {
+        return `${startGx},${startGy}->${goalGx},${goalGy}:${ownerId ?? -1}`;
+    }
+    return (((sx * KEY_COORD_RANGE + sy) * KEY_COORD_RANGE + gx) * KEY_COORD_RANGE + gy) * 32 + owner;
 }
 
 function areUint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -702,66 +717,268 @@ export function isValidMCVSpot(x: number, y: number, selfId: string | null, enti
 }
 
 // A* Pathfinding
-interface PathNode {
-    x: number;
-    y: number;
-    g: number; // cost from start
-    h: number; // heuristic to goal
-    f: number; // g + h
-    parent: PathNode | null;
+
+// 8 directions - N, NE, E, SE, S, SW, W, NW
+const DIR_DX = [0, 1, 1, 1, 0, -1, -1, -1];
+const DIR_DY = [-1, -1, 0, 1, 1, 1, 0, -1];
+const DIR_COST = [1, 1.41, 1, 1.41, 1, 1.41, 1, 1.41];
+const MAX_ASTAR_ITERATIONS = 4000;
+
+// Preallocated A* scratch buffers, sized to the current grid. Open/closed membership
+// is generation-stamped so the buffers never need clearing between searches.
+let astarSize = 0;
+let astarG = new Float64Array(0);
+let astarF = new Float64Array(0);
+let astarParent = new Int32Array(0);
+let astarOpen = new Uint32Array(0);
+let astarClosed = new Uint32Array(0);
+let astarHeap = new Int32Array(0);
+let astarGen = 0;
+
+function ensureAstarBuffers(size: number): void {
+    if (astarSize === size) return;
+    astarSize = size;
+    astarG = new Float64Array(size);
+    astarF = new Float64Array(size);
+    astarParent = new Int32Array(size);
+    astarOpen = new Uint32Array(size);
+    astarClosed = new Uint32Array(size);
+    astarHeap = new Int32Array(size);
+    astarGen = 0;
 }
 
-class MinHeap {
-    private heap: PathNode[] = [];
-
-    push(node: PathNode): void {
-        this.heap.push(node);
-        this.bubbleUp(this.heap.length - 1);
+/**
+ * Grid A* over cell indices. Returns the path as cell indices (start..goal), or null.
+ * The start cell must be inside the grid. The binary heap (sift order and the
+ * in-place decrease-key that updates f without re-sifting) deliberately mirrors the
+ * original object-based implementation so results are identical.
+ */
+function astarGrid(
+    startGx: number, startGy: number, goalGx: number, goalGy: number,
+    gridW: number, gridH: number, collisionGrid: Uint8Array, dangerGrid: Uint8Array | null | undefined
+): number[] | null {
+    ensureAstarBuffers(gridW * gridH);
+    astarGen++;
+    if (astarGen === 0xffffffff) {
+        astarOpen.fill(0);
+        astarClosed.fill(0);
+        astarGen = 1;
     }
+    const gen = astarGen;
+    const gArr = astarG, fArr = astarF, parent = astarParent, open = astarOpen, closed = astarClosed, heap = astarHeap;
+    let heapSize = 0;
 
-    pop(): PathNode | null {
-        if (this.heap.length === 0) return null;
-        const min = this.heap[0];
-        const last = this.heap.pop()!;
-        if (this.heap.length > 0) {
-            this.heap[0] = last;
-            this.bubbleDown(0);
+    const push = (k: number): void => {
+        let i = heapSize++;
+        heap[i] = k;
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (fArr[heap[p]] <= fArr[heap[i]]) break;
+            const t = heap[p]; heap[p] = heap[i]; heap[i] = t;
+            i = p;
+        }
+    };
+    const pop = (): number => {
+        const min = heap[0];
+        const last = heap[--heapSize];
+        if (heapSize > 0) {
+            heap[0] = last;
+            let i = 0;
+            for (;;) {
+                const l = 2 * i + 1;
+                const r = l + 1;
+                let s = i;
+                if (l < heapSize && fArr[heap[l]] < fArr[heap[s]]) s = l;
+                if (r < heapSize && fArr[heap[r]] < fArr[heap[s]]) s = r;
+                if (s === i) break;
+                const t = heap[s]; heap[s] = heap[i]; heap[i] = t;
+                i = s;
+            }
         }
         return min;
-    }
+    };
 
-    isEmpty(): boolean {
-        return this.heap.length === 0;
-    }
+    // Octile heuristic for 8-directional movement
+    const dx0 = Math.abs(goalGx - startGx);
+    const dy0 = Math.abs(goalGy - startGy);
+    const startKey = startGy * gridW + startGx;
+    gArr[startKey] = 0;
+    fArr[startKey] = Math.max(dx0, dy0) + 0.41 * Math.min(dx0, dy0);
+    parent[startKey] = -1;
+    open[startKey] = gen;
+    push(startKey);
 
-    private bubbleUp(i: number): void {
-        while (i > 0) {
-            const parent = Math.floor((i - 1) / 2);
-            if (this.heap[parent].f <= this.heap[i].f) break;
-            [this.heap[parent], this.heap[i]] = [this.heap[i], this.heap[parent]];
-            i = parent;
+    const goalInGrid = goalGx >= 0 && goalGx < gridW && goalGy >= 0 && goalGy < gridH;
+    const goalKey = goalInGrid ? goalGy * gridW + goalGx : -1;
+
+    let iterations = 0;
+    while (heapSize > 0 && iterations < MAX_ASTAR_ITERATIONS) {
+        iterations++;
+        const currentKey = pop();
+        if (closed[currentKey] === gen) continue;
+
+        if (currentKey === goalKey) {
+            const out: number[] = [];
+            for (let n = currentKey; n !== -1; n = parent[n]) out.push(n);
+            return out.reverse();
+        }
+
+        closed[currentKey] = gen;
+        open[currentKey] = 0;
+
+        const cx = currentKey % gridW;
+        const cy = (currentKey - cx) / gridW;
+        const cg = gArr[currentKey];
+
+        for (let d = 0; d < 8; d++) {
+            const dx = DIR_DX[d];
+            const dy = DIR_DY[d];
+            const nx = cx + dx;
+            const ny = cy + dy;
+            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH) continue;
+
+            const nk = ny * gridW + nx;
+            if (closed[nk] === gen) continue;
+            if (collisionGrid[nk] === 1) continue;
+
+            // Check diagonal corner cutting
+            if (dx !== 0 && dy !== 0) {
+                if (collisionGrid[cy * gridW + nx] === 1 || collisionGrid[ny * gridW + cx] === 1) continue;
+            }
+
+            const dangerCost = dangerGrid ? dangerGrid[nk] : 0;
+            const g = cg + DIR_COST[d] + dangerCost;
+            const isOpen = open[nk] === gen;
+
+            if (!isOpen || g < gArr[nk]) {
+                const hdx = Math.abs(goalGx - nx);
+                const hdy = Math.abs(goalGy - ny);
+                const h = Math.max(hdx, hdy) + 0.41 * Math.min(hdx, hdy);
+                gArr[nk] = g;
+                fArr[nk] = g + h;
+                parent[nk] = currentKey;
+                if (!isOpen) {
+                    open[nk] = gen;
+                    push(nk);
+                }
+            }
         }
     }
-
-    private bubbleDown(i: number): void {
-        while (true) {
-            const left = 2 * i + 1;
-            const right = 2 * i + 2;
-            let smallest = i;
-
-            if (left < this.heap.length && this.heap[left].f < this.heap[smallest].f) {
-                smallest = left;
-            }
-            if (right < this.heap.length && this.heap[right].f < this.heap[smallest].f) {
-                smallest = right;
-            }
-            if (smallest === i) break;
-            [this.heap[smallest], this.heap[i]] = [this.heap[i], this.heap[smallest]];
-            i = smallest;
-        }
-    }
+    return null;
 }
 
+/**
+ * Object-based A* kept only for the rare case of a start cell outside the grid
+ * (which the index-based search cannot represent). Returns cell coordinates as
+ * a flat [x0, y0, x1, y1, ...] array, or null.
+ */
+function astarGridOutOfBounds(
+    startGx: number, startGy: number, goalGx: number, goalGy: number,
+    gridW: number, gridH: number, collisionGrid: Uint8Array, dangerGrid: Uint8Array | null | undefined
+): number[] | null {
+    interface PathNode { x: number; y: number; g: number; f: number; parent: PathNode | null; }
+    const heap: PathNode[] = [];
+    const push = (node: PathNode): void => {
+        heap.push(node);
+        let i = heap.length - 1;
+        while (i > 0) {
+            const p = Math.floor((i - 1) / 2);
+            if (heap[p].f <= heap[i].f) break;
+            [heap[p], heap[i]] = [heap[i], heap[p]];
+            i = p;
+        }
+    };
+    const pop = (): PathNode => {
+        const min = heap[0];
+        const last = heap.pop()!;
+        if (heap.length > 0) {
+            heap[0] = last;
+            let i = 0;
+            for (;;) {
+                const l = 2 * i + 1;
+                const r = 2 * i + 2;
+                let s = i;
+                if (l < heap.length && heap[l].f < heap[s].f) s = l;
+                if (r < heap.length && heap[r].f < heap[s].f) s = r;
+                if (s === i) break;
+                [heap[s], heap[i]] = [heap[i], heap[s]];
+                i = s;
+            }
+        }
+        return min;
+    };
+
+    const closedSet = new Uint8Array(gridW * gridH);
+    const openMap = new Map<number, PathNode>();
+    const dx0 = Math.abs(goalGx - startGx);
+    const dy0 = Math.abs(goalGy - startGy);
+    const startH = Math.max(dx0, dy0) + 0.41 * Math.min(dx0, dy0);
+    const startNode: PathNode = { x: startGx, y: startGy, g: 0, f: startH, parent: null };
+    push(startNode);
+    openMap.set(startGy * gridW + startGx, startNode);
+
+    let iterations = 0;
+    while (heap.length > 0 && iterations < MAX_ASTAR_ITERATIONS) {
+        iterations++;
+        const current = pop();
+        const currentKey = current.y * gridW + current.x;
+        if (closedSet[currentKey] === 1) continue;
+
+        if (current.x === goalGx && current.y === goalGy) {
+            const coords: number[] = [];
+            for (let n: PathNode | null = current; n; n = n.parent) coords.push(n.y, n.x);
+            return coords.reverse();
+        }
+
+        closedSet[currentKey] = 1;
+        openMap.delete(currentKey);
+
+        for (let d = 0; d < 8; d++) {
+            const dx = DIR_DX[d];
+            const dy = DIR_DY[d];
+            const nx = current.x + dx;
+            const ny = current.y + dy;
+            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH) continue;
+            const nk = ny * gridW + nx;
+            if (closedSet[nk] === 1) continue;
+            if (collisionGrid[nk] === 1) continue;
+            if (dx !== 0 && dy !== 0) {
+                if (collisionGrid[current.y * gridW + nx] === 1 || collisionGrid[ny * gridW + current.x] === 1) continue;
+            }
+            const g = current.g + DIR_COST[d] + (dangerGrid ? dangerGrid[nk] : 0);
+            const existing = openMap.get(nk);
+            if (!existing || g < existing.g) {
+                const hdx = Math.abs(goalGx - nx);
+                const hdy = Math.abs(goalGy - ny);
+                const h = Math.max(hdx, hdy) + 0.41 * Math.min(hdx, hdy);
+                if (!existing) {
+                    const node: PathNode = { x: nx, y: ny, g, f: g + h, parent: current };
+                    push(node);
+                    openMap.set(nk, node);
+                } else {
+                    existing.g = g;
+                    existing.f = g + h;
+                    existing.parent = current;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function storePathInCache(cacheKey: PathCacheKey, path: Vector[] | null): void {
+    if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
+        // Remove oldest entry (simple eviction - first entry)
+        const firstKey = pathCache.keys().next().value;
+        if (firstKey !== undefined && firstKey !== '') pathCache.delete(firstKey);
+    }
+    pathCache.set(cacheKey, { path, tick: currentPathTick });
+}
+
+/**
+ * Find a path from start to goal. The returned array (and the cached copy) is shared
+ * and must be treated as read-only by callers.
+ */
 export function findPath(start: Vector, goal: Vector, entityRadius: number = 10, ownerId?: number): Vector[] | null {
     // Convert world coordinates to grid coordinates
     const startGx = Math.floor(start.x / TILE_SIZE);
@@ -773,16 +990,20 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
     const cacheKey = getPathCacheKey(startGx, startGy, goalGx, goalGy, ownerId);
     const cachedEntry = pathCache.get(cacheKey);
     if (cachedEntry && (currentPathTick - cachedEntry.tick) < PATH_CACHE_TTL) {
-        // Return a copy of cached path (since paths get modified during use)
-        return cachedEntry.path ? cachedEntry.path.map(v => new Vector(v.x, v.y)) : null;
+        // Paths are read-only (Vectors are immutable), so the cached array can be shared
+        return cachedEntry.path;
     }
+
+    const gridW = getGridW();
+    const gridH = getGridH();
+    const collisionGrid = gridManager.collisionGrid;
 
     // Check if goal is blocked - if so, find nearest unblocked tile
     let actualGoalGx = goalGx;
     let actualGoalGy = goalGy;
 
-    if (goalGx >= 0 && goalGx < getGridW() && goalGy >= 0 && goalGy < getGridH()) {
-        if (gridManager.collisionGrid[goalGy * getGridW() + goalGx] === 1) {
+    if (goalGx >= 0 && goalGx < gridW && goalGy >= 0 && goalGy < gridH) {
+        if (collisionGrid[goalGy * gridW + goalGx] === 1) {
             // Find nearest unblocked tile
             let found = false;
             for (let r = 1; r <= 5 && !found; r++) {
@@ -791,8 +1012,8 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
                         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
                         const nx = goalGx + dx;
                         const ny = goalGy + dy;
-                        if (nx >= 0 && nx < getGridW() && ny >= 0 && ny < getGridH()) {
-                            if (gridManager.collisionGrid[ny * getGridW() + nx] === 0) {
+                        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH) {
+                            if (collisionGrid[ny * gridW + nx] === 0) {
                                 actualGoalGx = nx;
                                 actualGoalGy = ny;
                                 found = true;
@@ -804,170 +1025,52 @@ export function findPath(start: Vector, goal: Vector, entityRadius: number = 10,
         }
     }
 
+    const startInGrid = startGx >= 0 && startGx < gridW && startGy >= 0 && startGy < gridH;
+
     // If start is blocked, return null
-    if (startGx >= 0 && startGx < getGridW() && startGy >= 0 && startGy < getGridH()) {
-        if (gridManager.collisionGrid[startGy * getGridW() + startGx] === 1) {
-            // We're on a blocked tile - return direct movement to let steering handle it
-            return null;
-        }
+    if (startInGrid && collisionGrid[startGy * gridW + startGx] === 1) {
+        // We're on a blocked tile - return direct movement to let steering handle it
+        return null;
     }
 
-    // A* algorithm - OPTIMIZED: Use numeric keys and typed arrays
-    const gridW = getGridW();
-    const gridH = getGridH();
-    const gridSize = gridW * gridH;
+    const dangerGrid = ownerId !== undefined ? gridManager.dangerGrids[ownerId] : null;
 
-    const openSet = new MinHeap();
-    const closedSet = new Uint8Array(gridSize); // 0 = open, 1 = closed
-    const openMap = new Map<number, PathNode>(); // numeric key = y * gridW + x
-    const dangerGrid = ownerId !== undefined ? dangerGrids[ownerId] : null;
-    const collisionGrid = gridManager.collisionGrid;
-
-    // Octile heuristic for 8-directional movement (more accurate than Manhattan)
-    const dx0 = Math.abs(actualGoalGx - startGx);
-    const dy0 = Math.abs(actualGoalGy - startGy);
-    const startH = Math.max(dx0, dy0) + 0.41 * Math.min(dx0, dy0);
-
-    const startNode: PathNode = {
-        x: startGx,
-        y: startGy,
-        g: 0,
-        h: startH,
-        f: startH,
-        parent: null
-    };
-
-    const startKey = startGy * gridW + startGx;
-    openSet.push(startNode);
-    openMap.set(startKey, startNode);
-
-    // 8 directions: [dx, dy, cost] - N, NE, E, SE, S, SW, W, NW (moved outside loop)
-    const dirs: [number, number, number][] = [[0,-1,1], [1,-1,1.41], [1,0,1], [1,1,1.41], [0,1,1], [-1,1,1.41], [-1,0,1], [-1,-1,1.41]];
-
-    let iterations = 0;
-    const maxIterations = 4000;
-
-    while (!openSet.isEmpty() && iterations < maxIterations) {
-        iterations++;
-        const current = openSet.pop()!;
-        const currentKey = current.y * gridW + current.x;
-
-        // Skip if already processed (can happen with duplicate heap entries)
-        if (closedSet[currentKey] === 1) continue;
-
-        if (current.x === actualGoalGx && current.y === actualGoalGy) {
-            // Reconstruct path
-            const gridPath: { x: number, y: number }[] = [];
-            let node: PathNode | null = current;
-            while (node) {
-                gridPath.unshift({ x: node.x, y: node.y });
-                node = node.parent;
+    let path: Vector[] | null = null;
+    const half = TILE_SIZE / 2;
+    if (startInGrid) {
+        const cells = astarGrid(startGx, startGy, actualGoalGx, actualGoalGy, gridW, gridH, collisionGrid, dangerGrid);
+        if (cells) {
+            path = new Array<Vector>(cells.length);
+            for (let i = 0; i < cells.length; i++) {
+                const k = cells[i];
+                const x = k % gridW;
+                path[i] = new Vector(x * TILE_SIZE + half, ((k - x) / gridW) * TILE_SIZE + half);
             }
-
-            // Convert grid path to world coordinates and smooth
-            const path: Vector[] = [];
-            for (const p of gridPath) {
-                path.push(new Vector(
-                    p.x * TILE_SIZE + TILE_SIZE / 2,
-                    p.y * TILE_SIZE + TILE_SIZE / 2
-                ));
-            }
-
-            // Add actual goal position
-            path.push(goal);
-
-            // OPTIMIZATION: Skip smoothing for short paths - not worth the hasLineOfSight cost
-            if (path.length <= 4) {
-                // Cache and return unsmoothed short path
-                if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
-                    const firstKey = pathCache.keys().next().value;
-                    if (firstKey) pathCache.delete(firstKey);
-                }
-                pathCache.set(cacheKey, { path, tick: currentPathTick });
-                return path;
-            }
-
-            // Smooth longer paths - remove intermediate waypoints that are in direct line of sight
-            const smoothedPath = smoothPath(path, entityRadius, ownerId);
-
-            // Cache the result
-            if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
-                // Remove oldest entry (simple eviction - first entry)
-                const firstKey = pathCache.keys().next().value;
-                if (firstKey) pathCache.delete(firstKey);
-            }
-            pathCache.set(cacheKey, { path: smoothedPath, tick: currentPathTick });
-
-            return smoothedPath;
         }
-
-        closedSet[currentKey] = 1;
-        openMap.delete(currentKey);
-
-        // Process neighbors
-        const cx = current.x;
-        const cy = current.y;
-        const cg = current.g;
-
-        for (let d = 0; d < 8; d++) {
-            const dx = dirs[d][0];
-            const dy = dirs[d][1];
-            const cost = dirs[d][2];
-
-            const nx = cx + dx;
-            const ny = cy + dy;
-
-            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH) continue;
-
-            const neighborKey = ny * gridW + nx;
-            if (closedSet[neighborKey] === 1) continue;
-            if (collisionGrid[neighborKey] === 1) continue;
-
-            // Check diagonal corner cutting
-            if (dx !== 0 && dy !== 0) {
-                if (collisionGrid[cy * gridW + nx] === 1 || collisionGrid[ny * gridW + cx] === 1) continue;
-            }
-
-            // Danger cost
-            const dangerCost = dangerGrid ? dangerGrid[neighborKey] : 0;
-            const g = cg + cost + dangerCost;
-            const existingNode = openMap.get(neighborKey);
-
-            if (!existingNode || g < existingNode.g) {
-                // Octile heuristic
-                const hdx = Math.abs(actualGoalGx - nx);
-                const hdy = Math.abs(actualGoalGy - ny);
-                const h = Math.max(hdx, hdy) + 0.41 * Math.min(hdx, hdy);
-
-                const newNode: PathNode = {
-                    x: nx,
-                    y: ny,
-                    g,
-                    h,
-                    f: g + h,
-                    parent: current
-                };
-
-                if (!existingNode) {
-                    openSet.push(newNode);
-                    openMap.set(neighborKey, newNode);
-                } else {
-                    existingNode.g = g;
-                    existingNode.f = g + h;
-                    existingNode.parent = current;
-                }
+    } else {
+        const coords = astarGridOutOfBounds(startGx, startGy, actualGoalGx, actualGoalGy, gridW, gridH, collisionGrid, dangerGrid);
+        if (coords) {
+            path = [];
+            for (let i = 0; i < coords.length; i += 2) {
+                path.push(new Vector(coords[i] * TILE_SIZE + half, coords[i + 1] * TILE_SIZE + half));
             }
         }
     }
 
-    // No path found - cache the negative result too
-    if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
-        const firstKey = pathCache.keys().next().value;
-        if (firstKey) pathCache.delete(firstKey);
+    if (!path) {
+        // No path found - cache the negative result too
+        storePathInCache(cacheKey, null);
+        return null;
     }
-    pathCache.set(cacheKey, { path: null, tick: currentPathTick });
 
-    return null;
+    // Add actual goal position
+    path.push(goal);
+
+    // OPTIMIZATION: Skip smoothing for short paths - not worth the hasLineOfSight cost
+    // Smooth longer paths - remove intermediate waypoints that are in direct line of sight
+    const result = path.length <= 4 ? path : smoothPath(path, entityRadius, ownerId);
+    storePathInCache(cacheKey, result);
+    return result;
 }
 
 function smoothPath(path: Vector[], entityRadius: number, ownerId?: number): Vector[] {
@@ -994,36 +1097,37 @@ function smoothPath(path: Vector[], entityRadius: number, ownerId?: number): Vec
 function hasLineOfSight(from: Vector, to: Vector, entityRadius: number, ownerId?: number): boolean {
     const dist = from.dist(to);
     const steps = Math.ceil(dist / (TILE_SIZE / 2));
-    const dangerGrid = ownerId !== undefined ? dangerGrids[ownerId] : null;
+    const dangerGrid = ownerId !== undefined ? gridManager.dangerGrids[ownerId] : null;
+    const gridW = getGridW();
+    const gridH = getGridH();
+    const collisionGrid = gridManager.collisionGrid;
+
+    // Points around the line to account for entity radius: center, +x, -x, +y, -y
+    const offX0 = 0, offX1 = entityRadius, offX2 = -entityRadius, offX3 = 0, offX4 = 0;
+    const offY0 = 0, offY1 = 0, offY2 = 0, offY3 = entityRadius, offY4 = -entityRadius;
+    const blockedAt = (px: number, py: number): boolean => {
+        const gx = Math.floor(px / TILE_SIZE);
+        const gy = Math.floor(py / TILE_SIZE);
+        if (gx >= 0 && gx < gridW && gy >= 0 && gy < gridH) {
+            const idx = gy * gridW + gx;
+            if (collisionGrid[idx] === 1) return true;
+            if (dangerGrid && dangerGrid[idx] > 0) return true;
+        }
+        return false;
+    };
 
     for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const x = from.x + (to.x - from.x) * t;
         const y = from.y + (to.y - from.y) * t;
-
-        // Check a few points around the line to account for entity radius
-        const checkOffsets = [
-            { dx: 0, dy: 0 },
-            { dx: entityRadius, dy: 0 },
-            { dx: -entityRadius, dy: 0 },
-            { dx: 0, dy: entityRadius },
-            { dx: 0, dy: -entityRadius }
-        ];
-
-        for (const offset of checkOffsets) {
-            const gx = Math.floor((x + offset.dx) / TILE_SIZE);
-            const gy = Math.floor((y + offset.dy) / TILE_SIZE);
-
-            if (gx >= 0 && gx < getGridW() && gy >= 0 && gy < getGridH()) {
-                const idx = gy * getGridW() + gx;
-                if (gridManager.collisionGrid[idx] === 1) {
-                    return false;
-                }
-                // Check danger
-                if (dangerGrid && dangerGrid[idx] > 0) {
-                    return false;
-                }
-            }
+        if (
+            blockedAt(x + offX0, y + offY0) ||
+            blockedAt(x + offX1, y + offY1) ||
+            blockedAt(x + offX2, y + offY2) ||
+            blockedAt(x + offX3, y + offY3) ||
+            blockedAt(x + offX4, y + offY4)
+        ) {
+            return false;
         }
     }
     return true;
