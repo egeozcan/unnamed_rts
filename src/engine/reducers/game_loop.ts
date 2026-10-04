@@ -1,6 +1,6 @@
 import {
     type GameState, type EntityId, type Entity, type Projectile, type Particle, type UnitEntity, Vector, type HarvesterUnit,
-    type ExplosionEvent
+    type ExplosionEvent, type VisualEvent, VISUAL_EVENT_TTL
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
@@ -19,6 +19,7 @@ import { getDemoTruckExplosionStats } from './demo_truck';
 import { updateFogOfWar } from './fog';
 import { isAlly } from '../teams';
 import { DebugEvents } from '../debug/events';
+import { aimAngle, applyMovementInertia, getTurretTurnRate, stepTurret, wrapAngle } from '../inertia';
 
 const MAX_TRAIL_POINTS = 30;
 
@@ -129,6 +130,23 @@ export function tick(state: GameState): GameState {
         }
     }
 
+    // Effects for the renderer (muzzle flashes, impacts, wrecks) - visual only
+    const visualEvents: VisualEvent[] | null = headless ? null : [];
+    if (visualEvents) {
+        for (const p of newProjs) {
+            visualEvents.push({
+                kind: 'fire', tick: nextTick, sourceId: p.ownerId, targetId: p.targetId,
+                weaponType: p.weaponType || p.type, archetype: p.archetype
+            });
+        }
+    }
+    const pushImpact = (p: Projectile, x: number, y: number, air: boolean, intercepted = false) => {
+        visualEvents?.push({
+            kind: 'impact', tick: nextTick, x, y, weaponType: p.weaponType || p.type, archetype: p.archetype,
+            splash: p.splash, damage: p.damage, air, intercepted
+        });
+    };
+
     // Projectile Updates
     const nextProjectiles: Projectile[] = [];
     const damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
@@ -141,12 +159,20 @@ export function tick(state: GameState): GameState {
         const interceptedProj = applyInterception(interceptionState, p);
         // If projectile was killed by interception, don't process further
         if (interceptedProj.dead) {
+            pushImpact(p, p.pos.x, p.pos.y, true, true);
             return; // Skip this projectile, don't add to nextProjectiles
         }
         const res = updateProjectile(interceptedProj, updatedEntities, state.config.width, state.config.height);
         if (!res.proj.dead) {
             // Update trail points before adding to nextProjectiles (skip in headless mode)
             nextProjectiles.push(headless ? res.proj : updateProjectileTrail(res.proj));
+        } else if (visualEvents) {
+            // Hits, ground bursts, and shots reaching a target that died meanwhile; not shots
+            // cancelled mid-flight because their target vanished
+            const target = updatedEntities[p.targetId];
+            if (res.damage || res.detonation || target?.dead) {
+                pushImpact(p, res.proj.pos.x, res.proj.pos.y, !res.detonation && !!target && isFlyingEntity(target));
+            }
         }
         if (res.damage) {
             damageEvents.push(res.damage);
@@ -247,7 +273,7 @@ export function tick(state: GameState): GameState {
 
     // Process Demo Truck Explosions (chain reactions)
     const explosionResult = hasDemoTruck
-        ? processExplosions(updatedEntities, nextTick, headless)
+        ? processExplosions(updatedEntities, nextTick, headless, visualEvents)
         : { entities: updatedEntities, particles: [], explosionCount: 0 };
     // Note: We use a mutable reference approach here since updatedEntities is from destructuring
     // Copy the explosion-processed entities back into updatedEntities object
@@ -397,6 +423,14 @@ export function tick(state: GameState): GameState {
         const ent = updatedEntities[id];
         if (ent.dead) {
             anyDead = true;
+            // Killed (not consumed like engineers and hijackers, which leave with HP to spare)
+            if (visualEvents && ent.hp <= 0 && (ent.type === 'UNIT' || ent.type === 'BUILDING')) {
+                visualEvents.push({
+                    kind: 'destroyed', tick: nextTick, x: ent.pos.x, y: ent.pos.y, entityType: ent.type,
+                    key: ent.key, owner: ent.owner, rotation: ent.type === 'UNIT' ? ent.movement.rotation : 0,
+                    radius: ent.radius, air: isFlyingEntity(ent)
+                });
+            }
             continue;
         }
         if (ent.type === 'BUILDING') {
@@ -520,6 +554,7 @@ export function tick(state: GameState): GameState {
         players: nextPlayers,
         projectiles: nextProjectiles,
         particles: nextParticles,
+        visualEvents: visualEvents ? recentVisualEvents(state.visualEvents, visualEvents, nextTick) : state.visualEvents,
         camera: nextCamera,
         winner: nextWinner,
         running: nextRunning,
@@ -805,34 +840,32 @@ export function updateEntities(
         // Movement, rotation, cooldown, flash, turret updates (units only)
         let currentEnt = nextEntities[id];
         if (currentEnt.type === 'UNIT') {
-            const vel = currentEnt.movement.vel;
-            if (vel.mag() > 0) {
-                currentEnt = { ...currentEnt, prevPos: currentEnt.pos, pos: currentEnt.pos.add(vel) };
+            const movement = currentEnt.movement;
+            if (movement.vel.mag() > 0) {
+                const vel = applyMovementInertia(currentEnt.key, movement.vel, movement.lastVel, movement.currentSpeed ?? 0);
+                let rotation = movement.rotation;
                 const data = getRuleData(currentEnt.key);
                 const canFly = data && isUnitData(data) && data.fly;
-                if (data && !canFly && !headless) {
-                    // Smooth rotation
-                    const targetRot = Math.atan2(vel.y, vel.x);
-                    let diff = targetRot - currentEnt.movement.rotation;
-                    while (diff > Math.PI) diff -= Math.PI * 2;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    let newRotation = currentEnt.movement.rotation + diff * 0.2;
-                    while (newRotation > Math.PI) newRotation -= Math.PI * 2;
-                    while (newRotation < -Math.PI) newRotation += Math.PI * 2;
-                    currentEnt = {
-                        ...currentEnt,
-                        movement: { ...currentEnt.movement, rotation: newRotation }
-                    };
+                if (data && !canFly) {
+                    // Smooth rotation (the turret returns to it when idle, so it runs headless too)
+                    rotation = wrapAngle(rotation + wrapAngle(Math.atan2(vel.y, vel.x) - rotation) * 0.2);
                 }
                 currentEnt = {
                     ...currentEnt,
+                    prevPos: currentEnt.pos,
+                    pos: currentEnt.pos.add(vel),
                     movement: {
-                        ...currentEnt.movement,
+                        ...movement,
+                        rotation,
                         vel: new Vector(0, 0),
                         // Store the velocity before clearing so avgVel can track intended movement
-                        lastVel: vel
+                        lastVel: vel,
+                        currentSpeed: vel.mag()
                     }
                 };
+                nextEntities[id] = currentEnt;
+            } else if (movement.currentSpeed) {
+                currentEnt = { ...currentEnt, movement: { ...movement, currentSpeed: 0 } };
                 nextEntities[id] = currentEnt;
             }
 
@@ -852,24 +885,9 @@ export function updateEntities(
                 currentEnt = nextEntities[id] as UnitEntity;
             }
 
-            // Turret angles are visual-only; skip in headless simulation.
-            if (!headless && currentEnt.combat.targetId) {
-                const target = nextEntities[currentEnt.combat.targetId];
-                if (target && !target.dead) {
-                    const deltaX = target.pos.x - currentEnt.pos.x;
-                    const deltaY = target.pos.y - currentEnt.pos.y;
-                    const targetTurretAngle = Math.atan2(deltaY, deltaX);
-
-                    let angleDiff = targetTurretAngle - currentEnt.combat.turretAngle;
-                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-                    const newTurretAngle = currentEnt.combat.turretAngle + angleDiff * 0.25;
-                    nextEntities[id] = {
-                        ...currentEnt,
-                        combat: { ...currentEnt.combat, turretAngle: newTurretAngle }
-                    };
-                }
+            const turretAngle = nextTurretAngle(currentEnt, nextEntities, headless);
+            if (turretAngle !== currentEnt.combat.turretAngle) {
+                nextEntities[id] = { ...currentEnt, combat: { ...currentEnt.combat, turretAngle } };
             }
         } else if (currentEnt.type === 'BUILDING' && currentEnt.combat) {
             let combat = currentEnt.combat;
@@ -886,25 +904,9 @@ export function updateEntities(
                 nextEntities[id] = { ...currentEnt, combat };
             }
 
-            // Turret angles are visual-only; skip in headless simulation.
-            if (!headless && combat.targetId) {
-                const target = nextEntities[combat.targetId];
-                if (target && !target.dead) {
-                    const deltaX = target.pos.x - currentEnt.pos.x;
-                    const deltaY = target.pos.y - currentEnt.pos.y;
-                    // Add π/2 offset because building turret SVGs point UP, not RIGHT
-                    const targetTurretAngle = Math.atan2(deltaY, deltaX) + Math.PI / 2;
-
-                    let angleDiff = targetTurretAngle - combat.turretAngle;
-                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-                    const newTurretAngle = combat.turretAngle + angleDiff * 0.25;
-                    nextEntities[id] = {
-                        ...currentEnt,
-                        combat: { ...combat, turretAngle: newTurretAngle }
-                    };
-                }
+            const turretAngle = nextTurretAngle(currentEnt, nextEntities, headless);
+            if (turretAngle !== combat.turretAngle) {
+                nextEntities[id] = { ...currentEnt, combat: { ...combat, turretAngle } };
             }
         }
     }
@@ -1423,13 +1425,44 @@ export function applySplashDamage(
 }
 
 /**
+ * Where an armed unit's or defense's turret points after this tick. Turrets with a traverse rate
+ * (`turretTurn`) gate firing, so they turn in headless simulation too; the rest are cosmetic.
+ * Idle vehicle turrets swing back over the hull while driving.
+ */
+function nextTurretAngle(entity: UnitEntity | Entity, entities: Record<EntityId, Entity>, headless: boolean): number {
+    if (!('combat' in entity) || !entity.combat) return 0;
+    const { combat } = entity;
+    const rate = getTurretTurnRate(entity.key);
+    if (rate === null && headless) return combat.turretAngle;
+
+    const target = combat.targetId ? entities[combat.targetId] : undefined;
+    if (target && !target.dead) {
+        return stepTurret(combat.turretAngle, aimAngle(entity, target.pos), rate);
+    }
+    if (rate !== null && entity.type === 'UNIT' && entity.movement.currentSpeed) {
+        return stepTurret(combat.turretAngle, entity.movement.rotation, rate * 0.5);
+    }
+    return combat.turretAngle;
+}
+
+/** This tick's visual events plus the ones still within VISUAL_EVENT_TTL (shared when nothing changed). */
+function recentVisualEvents(previous: readonly VisualEvent[] | undefined, fresh: VisualEvent[], tick: number): readonly VisualEvent[] | undefined {
+    const oldest = tick - VISUAL_EVENT_TTL;
+    if (!previous || previous.length === 0) return fresh.length > 0 ? fresh : previous;
+    if (fresh.length === 0 && previous[0].tick > oldest) return previous;
+    const kept = previous[previous.length - 1].tick > oldest ? previous.filter(e => e.tick > oldest) : [];
+    return kept.length > 0 ? kept.concat(fresh) : fresh;
+}
+
+/**
  * Process demo truck explosions with chain reaction support.
  * Uses breadth-first queue processing to prevent stack overflow.
  */
 function processExplosions(
     entities: Record<EntityId, Entity>,
-    _tick: number,
-    headless?: boolean
+    tick: number,
+    headless?: boolean,
+    visualEvents?: VisualEvent[] | null
 ): { entities: Record<EntityId, Entity>; particles: Particle[]; explosionCount: number } {
     const explosionQueue: ExplosionEvent[] = [];
     const explodedIds = new Set<EntityId>();
@@ -1465,6 +1498,10 @@ function processExplosions(
         // Spawn explosion particles (skip in headless mode)
         if (!headless) {
             particles = particles.concat(spawnExplosionParticles(explosion.pos, explosion.radius));
+            visualEvents?.push({
+                kind: 'impact', tick, x: explosion.pos.x, y: explosion.pos.y, weaponType: 'explosion',
+                archetype: 'artillery', splash: explosion.radius, damage: explosion.damage, air: false
+            });
         }
 
         // Apply splash damage to all entities in radius
@@ -1498,7 +1535,7 @@ function processExplosions(
                 // Emit state-change event for explosion damage
                 if (import.meta.env?.DEV && finalDamage > 0) {
                     DebugEvents.emit('state-change', {
-                        tick: _tick,
+                        tick,
                         playerId: ent.owner,
                         entityId: ent.id,
                         data: {
@@ -1511,7 +1548,7 @@ function processExplosions(
                     });
                     if (nowDead) {
                         DebugEvents.emit('state-change', {
-                            tick: _tick,
+                            tick,
                             playerId: ent.owner,
                             entityId: ent.id,
                             data: {

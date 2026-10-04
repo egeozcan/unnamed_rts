@@ -6,6 +6,7 @@ import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid, ownerBit } from '../spatial';
 import { moveToward, trackMoveProgress, isMoveHopeless } from './movement';
 import { isAlly, isEnemy } from '../teams';
+import { isAimedAt } from '../inertia';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
 
 // Maximum distance a unit will pursue a target when on defensive stance or attack-move
@@ -777,7 +778,7 @@ function handleCombatTarget(
             };
         }
 
-        if (unit.combat.cooldown <= 0) {
+        if (unit.combat.cooldown <= 0 && isAimedAt(unit, unit.combat.turretAngle, target.pos)) {
             projectile = createProjectile(unit, target);
             nextUnit = {
                 ...nextUnit,

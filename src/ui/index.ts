@@ -1293,7 +1293,8 @@ function setupDebugSaveLoadHandlers() {
     // Helper to serialize state with Vector objects as plain objects
     const serializeState = (s: GameState): string => {
         return JSON.stringify(s, (_key, value) => {
-            if (value && typeof value === 'object' && 'x' in value && 'y' in value && typeof value.x === 'number' && typeof value.y === 'number') {
+            // Only Vectors: other objects with x/y (e.g. visual events) must keep their other fields
+            if (value instanceof Vector) {
                 return { x: value.x, y: value.y };
             }
             return value;

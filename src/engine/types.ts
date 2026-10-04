@@ -218,6 +218,48 @@ export interface Particle {
     readonly text?: string;
 }
 
+/**
+ * Something the renderer should show an effect for. Emitted by the tick (never in headless mode) and
+ * kept for VISUAL_EVENT_TTL ticks, so a renderer that only draws every few ticks still sees each one.
+ */
+export type VisualEvent =
+    | {
+        readonly kind: 'fire';
+        readonly tick: number;
+        readonly sourceId: EntityId;
+        readonly targetId: EntityId;
+        readonly weaponType: string;
+        readonly archetype: ProjectileArchetype;
+    }
+    | {
+        /** A projectile hit, burst on the ground, or was shot down ('intercepted') */
+        readonly kind: 'impact';
+        readonly tick: number;
+        readonly x: number;
+        readonly y: number;
+        readonly weaponType: string;
+        readonly archetype: ProjectileArchetype;
+        readonly splash: number;
+        readonly damage: number;
+        /** The hit happened at aircraft altitude */
+        readonly air: boolean;
+        readonly intercepted?: boolean;
+    }
+    | {
+        readonly kind: 'destroyed';
+        readonly tick: number;
+        readonly x: number;
+        readonly y: number;
+        readonly entityType: 'UNIT' | 'BUILDING';
+        readonly key: string;
+        readonly owner: number;
+        readonly rotation: number;
+        readonly radius: number;
+        readonly air: boolean;
+    };
+
+export const VISUAL_EVENT_TTL = 30;
+
 export interface ExplosionEvent {
     readonly pos: Vector;
     readonly damage: number;
@@ -317,6 +359,8 @@ export interface GameState {
     readonly entities: Record<EntityId, Entity>; // Changed to Record for easier ID lookup
     readonly projectiles: Projectile[];
     readonly particles: Particle[];
+    /** Recent fire / impact / destruction events for visual effects (see VisualEvent) */
+    readonly visualEvents?: readonly VisualEvent[];
     readonly selection: EntityId[]; // Store IDs
     // A non-own entity clicked for inspection (shown in the selection panel, never commanded)
     readonly inspectedId?: EntityId | null;

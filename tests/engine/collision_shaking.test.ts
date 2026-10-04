@@ -300,8 +300,8 @@ describe('Collision Resolution - Unit Shaking', () => {
                 payload: { unitIds: ['mover'], x: 1600, y: 1500 }
             });
 
-            // Run a few ticks to build up avgVel
-            for (let i = 0; i < 5; i++) {
+            // Run a few ticks to build up avgVel (the tank accelerates from a standstill first)
+            for (let i = 0; i < 15; i++) {
                 state = update(state, { type: 'TICK' });
             }
 

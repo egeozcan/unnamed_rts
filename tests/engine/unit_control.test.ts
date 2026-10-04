@@ -377,8 +377,8 @@ describe('Unit Control', () => {
                 payload: { unitIds: ['harv1'], x: 400, y: 500 }
             });
 
-            // Run ticks until it reaches destination
-            for (let i = 0; i < 50; i++) {
+            // Run ticks until it reaches destination (harvesters accelerate slowly)
+            for (let i = 0; i < 100; i++) {
                 state = update(state, { type: 'TICK' });
             }
 

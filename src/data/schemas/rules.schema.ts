@@ -86,6 +86,8 @@ export const BuildingSchema = z.object({
   damage: z.number().optional(),
   rate: z.number().optional(),
   weaponType: WeaponTypeSchema.optional(),
+  // Weapon inertia: turret traverse in degrees per tick; the weapon only fires once aimed (omit = instant)
+  turretTurn: z.number().positive().optional(),
   // Air base fields
   landingSlots: z.number().positive().optional(),
   reloadTicks: z.number().positive().optional(),
@@ -116,6 +118,10 @@ export const UnitSchema = z.object({
   damage: z.number(), // Can be negative for healers
   rate: z.number().optional(),
   weaponType: WeaponTypeSchema.optional(),
+  // Weapon inertia: turret traverse in degrees per tick; the weapon only fires once aimed (omit = instant)
+  turretTurn: z.number().positive().optional(),
+  // Movement inertia: ticks to reach full speed from a standstill (omit = instant)
+  accelTicks: z.number().positive().optional(),
   // Optional fields
   splash: z.number().optional(),
   capacity: z.number().optional(),

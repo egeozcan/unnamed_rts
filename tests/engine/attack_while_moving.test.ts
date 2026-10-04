@@ -42,7 +42,8 @@ describe('Attack While Moving', () => {
                 maxHp: 400,
                 moveTarget: new Vector(800, 800), // Has a move destination
                 targetId: 'enemy1', // And a target to attack
-                cooldown: 0
+                cooldown: 0,
+                turretAngle: Math.PI / 4 // Already aimed at the enemy (south-east)
             });
 
             const enemy = createTestCombatUnit({
@@ -88,7 +89,8 @@ describe('Attack While Moving', () => {
                 maxHp: 700,
                 moveTarget: new Vector(800, 800), // Has a move destination
                 targetId: 'enemy1', // And a target to attack
-                cooldown: 0
+                cooldown: 0,
+                turretAngle: Math.PI / 4 // Already aimed at the enemy (south-east)
             });
 
             const enemy = createTestCombatUnit({
@@ -131,7 +133,8 @@ describe('Attack While Moving', () => {
                 maxHp: 180,
                 moveTarget: new Vector(1000, 1000),
                 targetId: 'enemy1',
-                cooldown: 0
+                cooldown: 0,
+                turretAngle: Math.PI / 4 // Already aimed at the enemy (south-east)
             });
 
             const enemy = createTestCombatUnit({
@@ -174,7 +177,8 @@ describe('Attack While Moving', () => {
                 maxHp: 60,
                 moveTarget: new Vector(800, 800),
                 targetId: 'enemy1',
-                cooldown: 0
+                cooldown: 0,
+                turretAngle: Math.PI / 4 // Already aimed at the enemy (south-east)
             });
 
             const enemy = createTestCombatUnit({

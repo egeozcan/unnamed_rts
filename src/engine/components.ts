@@ -22,6 +22,8 @@ export interface MovementComponent {
     // Stores the velocity from last frame before it was cleared.
     // Used for avgVel calculation to track intended movement (not collision displacement).
     readonly lastVel?: Vector;
+    // Speed actually moved last tick (0 when standing still), for acceleration - see inertia.ts
+    readonly currentSpeed?: number;
     // Progress tracking for flee destinations (harvesters)
     readonly lastDistToMoveTarget?: number;
     readonly bestDistToMoveTarget?: number;

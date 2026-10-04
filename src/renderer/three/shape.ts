@@ -86,6 +86,15 @@ export class Shape {
         return this.push(geometry, paint);
     }
 
+    /** Box centred on (x, y, z), pitched (nose up, around Z) and then yawed (launcher boxes, tilted plates). */
+    obox(x: number, y: number, z: number, sx: number, sy: number, sz: number, paint: Paint, pitch = 0, yaw = 0): this {
+        const geometry = new THREE.BoxGeometry(sx, sy, sz);
+        if (pitch) geometry.rotateZ(pitch);
+        if (yaw) geometry.rotateY(-yaw);
+        geometry.translate(x, y, z);
+        return this.push(geometry, paint);
+    }
+
     /** Vertical cylinder (or cone frustum) centred on (x, z), standing on y0. */
     cyl(x: number, z: number, radiusTop: number, radiusBottom: number, y0: number, sy: number, paint: Paint, segments = 10): this {
         const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, sy, segments);

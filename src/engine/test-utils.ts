@@ -112,6 +112,7 @@ export interface CombatUnitOptions {
     lastAttackerId?: EntityId | null;
     lastDamageTick?: number;
     cooldown?: number;
+    turretAngle?: number;
     dead?: boolean;
     rotation?: number;
     path?: Vector[] | null;
@@ -152,7 +153,8 @@ export function createTestCombatUnit(options: CombatUnitOptions = {}): CombatUni
             targetId: options.targetId ?? null,
             lastAttackerId: options.lastAttackerId ?? null,
             lastDamageTick: options.lastDamageTick,
-            cooldown: options.cooldown ?? 0
+            cooldown: options.cooldown ?? 0,
+            turretAngle: options.turretAngle ?? 0
         }
     };
 }

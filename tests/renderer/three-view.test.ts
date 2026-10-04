@@ -113,6 +113,31 @@ describe('3D models', () => {
         expect(bounds.min.y).toBeGreaterThanOrEqual(-0.001);
     });
 
+    it.each([...unitKeys, ...buildingKeys])('%s has consistent weapon metadata (muzzles, ammo slots)', key => {
+        const def = getModelDef(key);
+        const slots = def.ammoSlots ?? 0;
+        for (const part of def.parts) {
+            if (part.ammoSlot !== undefined) expect(part.ammoSlot).toBeLessThan(slots);
+            if (part.spinAxis !== undefined) expect(part.mode).toBe('spin');
+        }
+        for (const muzzle of def.muzzles ?? []) {
+            if (muzzle.ammoSlot !== undefined) expect(muzzle.ammoSlot).toBeLessThan(slots);
+            if (muzzle.frame === 'turret') expect(def.parts.some(p => p.mode === 'turret')).toBe(true);
+        }
+        // Every ammo slot is drawn by some part, so a launch visibly empties something
+        for (let slot = 0; slot < slots; slot++) {
+            expect(def.parts.some(p => p.ammoSlot === slot)).toBe(true);
+        }
+
+        const data = RULES.units[key] ?? RULES.buildings[key];
+        const armed = !!data?.weaponType && (data.damage ?? 0) !== 0;
+        if (armed) expect(def.muzzles?.length ?? 0).toBeGreaterThan(0);
+    });
+
+    it('gives the harrier one underwing missile slot per ammo point', () => {
+        expect(getModelDef('harrier').ammoSlots).toBe(RULES.units.harrier.ammo ?? 1);
+    });
+
     it('flies aircraft low enough that clicking the drawn aircraft still selects it', () => {
         const harrier = createTestHarrier({});
         const heli = createTestCombatUnit({ key: 'heli' as CombatUnitKey });

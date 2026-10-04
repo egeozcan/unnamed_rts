@@ -6,6 +6,7 @@ import { createEntity, getRuleData, createProjectile, killPlayerEntities } from 
 import { getSpatialGrid } from '../spatial';
 import { isAlly, isEnemy } from '../teams';
 import { isTransportedUnit } from '../transport';
+import { isAimedAt } from '../inertia';
 
 function rectOverlap(r1: { l: number; r: number; t: number; b: number }, r2: { l: number; r: number; t: number; b: number }): boolean {
     return !(r2.l > r1.r || r2.r < r1.l || r2.t > r1.b || r2.b < r1.t);
@@ -349,7 +350,7 @@ export function updateBuilding(entity: BuildingEntity, allEntities: Record<Entit
             const targetIsTransported = target && target.type === 'UNIT' && isTransportedUnit(target);
             const targetIsEnemy = target ? (!state || isEnemy(state, entity.owner, target.owner)) : false;
             if (target && !target.dead && !targetIsTransported && targetIsEnemy && entity.pos.dist(target.pos) <= (data.range || 200)) {
-                if (nextEntity.combat!.cooldown <= 0) {
+                if (nextEntity.combat!.cooldown <= 0 && isAimedAt(nextEntity, nextEntity.combat!.turretAngle, target.pos)) {
                     projectile = createProjectile(nextEntity, target);
                     nextEntity = {
                         ...nextEntity,
