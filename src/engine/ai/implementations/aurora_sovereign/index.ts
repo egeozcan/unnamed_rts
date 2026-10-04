@@ -5,6 +5,7 @@ import { AIImplementation, AIImplementationDifficulty } from '../../contracts.js
 import { computeAuroraTitanSnapshotAiActions } from './titan_core_snapshot.js';
 import { checkPrerequisites, hasProductionBuildingFor } from '../../utils.js';
 import { getAIState, resetAIState } from '../../state.js';
+import { EnemyComposition, isArmyUnitKey, rankCounterUnits } from '../../counters.js';
 
 type RuntimeState = {
     lastRallyTick: number;
@@ -210,55 +211,38 @@ function filterHydraActions(
     return filtered;
 }
 
+// Aurora's flavor: armored columns backed by rocket infantry. Builds are retargeted to
+// the best counter within this roster once the enemy army is known.
+const AURORA_INFANTRY = ['rocket', 'grenadier', 'rifle', 'flamer'];
+const AURORA_VEHICLES = ['heavy', 'stealth', 'light', 'mlrs', 'artillery', 'flame_tank', 'mammoth'];
+
+function pickBuildable(ranked: string[], myBuildings: Entity[]): string | null {
+    return ranked.find(key => checkPrerequisites(key, myBuildings)) ?? null;
+}
+
 function retargetProductionActions(
     actions: Action[],
-    state: GameState,
     myBuildings: Entity[],
-    dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
-    enemyCombatCount: number
+    myUnits: Entity[],
+    composition: EnemyComposition
 ): Action[] {
-    const antiArmorMode = dominantArmor === 'heavy' ||
-        (dominantArmor === 'mixed' && enemyCombatCount >= 9);
-    if (!antiArmorMode) {
+    if (Object.keys(composition.counterScores).length === 0) {
         return actions;
     }
 
-    const hasTech = myBuildings.some(b => b.key === 'tech' && !b.dead);
+    const infantryKey = pickBuildable(rankCounterUnits(composition, AURORA_INFANTRY, myUnits), myBuildings);
+    const vehicleKey = pickBuildable(rankCounterUnits(composition, AURORA_VEHICLES, myUnits), myBuildings);
 
     return actions.map(action => {
-        if (!isActionType(action, 'START_BUILD')) {
+        if (!isActionType(action, 'START_BUILD') || !isArmyUnitKey(action.payload.key)) {
             return action;
         }
-
-        if (action.payload.category === 'infantry' &&
-            action.payload.key !== 'rocket' &&
-            checkPrerequisites('rocket', myBuildings)) {
-            return {
-                ...action,
-                payload: {
-                    ...action.payload,
-                    key: 'rocket'
-                }
-            };
+        const replacement = action.payload.category === 'infantry' ? infantryKey :
+            action.payload.category === 'vehicle' ? vehicleKey : null;
+        if (!replacement || replacement === action.payload.key) {
+            return action;
         }
-
-        if (action.payload.category === 'vehicle') {
-            const replacement =
-                (hasTech && state.tick >= 5200 && checkPrerequisites('mlrs', myBuildings)) ? 'mlrs' :
-                    checkPrerequisites('heavy', myBuildings) ? 'heavy' :
-                        null;
-            if (replacement && action.payload.key !== replacement) {
-                return {
-                    ...action,
-                    payload: {
-                        ...action.payload,
-                        key: replacement
-                    }
-                };
-            }
-        }
-
-        return action;
+        return { ...action, payload: { ...action.payload, key: replacement } };
     });
 }
 
@@ -359,7 +343,8 @@ function maybeQueueFallbackProduction(
     state: GameState,
     playerId: number,
     myBuildings: Entity[],
-    dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
+    myUnits: Entity[],
+    composition: EnemyComposition,
     heavyProfile: boolean
 ): void {
     const player = state.players[playerId];
@@ -368,10 +353,7 @@ function maybeQueueFallbackProduction(
     if (!player.queues.infantry.current &&
         hasProductionBuildingFor('infantry', myBuildings) &&
         !hasQueuedBuildOfCategory(actions, 'infantry')) {
-        const infantryKey =
-            checkPrerequisites('rocket', myBuildings) ? 'rocket' :
-                (dominantArmor === 'infantry' && checkPrerequisites('grenadier', myBuildings)) ? 'grenadier' :
-                    'rifle';
+        const infantryKey = pickBuildable(rankCounterUnits(composition, AURORA_INFANTRY, myUnits), myBuildings) ?? 'rifle';
         actions.push({
             type: 'START_BUILD',
             payload: { category: 'infantry', key: infantryKey, playerId }
@@ -381,14 +363,9 @@ function maybeQueueFallbackProduction(
     if (!player.queues.vehicle.current &&
         hasProductionBuildingFor('vehicle', myBuildings) &&
         !hasQueuedBuildOfCategory(actions, 'vehicle')) {
-        const hasTech = myBuildings.some(b => b.key === 'tech' && !b.dead);
-        const vehicleKey =
-            (heavyProfile && hasTech && checkPrerequisites('mlrs', myBuildings)) ? 'mlrs' :
-                (heavyProfile && hasTech && checkPrerequisites('artillery', myBuildings)) ? 'artillery' :
-                ((heavyProfile || dominantArmor === 'heavy') && checkPrerequisites('heavy', myBuildings)) ? 'heavy' :
-                    (dominantArmor === 'infantry' && checkPrerequisites('flame_tank', myBuildings)) ? 'flame_tank' :
-                        checkPrerequisites('light', myBuildings) ? 'light' :
-                            null;
+        // With no enemy army seen yet, a heavy profile opens with heavies and siege.
+        const roster = heavyProfile ? ['heavy', 'artillery', ...AURORA_VEHICLES] : ['light', ...AURORA_VEHICLES];
+        const vehicleKey = pickBuildable(rankCounterUnits(composition, roster, myUnits), myBuildings);
 
         if (vehicleKey) {
             actions.push({
@@ -645,10 +622,9 @@ export function computeAuroraSovereignAiActions(
     actions = filterHydraActions(actions, state, enemyDefenseCount, enemyCombatCount, combatUnits.length);
     actions = retargetProductionActions(
         actions,
-        state,
         myBuildings,
-        aiState.enemyIntelligence.dominantArmor,
-        enemyCombatCount
+        myUnits,
+        aiState.enemyIntelligence.composition
     );
 
     maybeQueueMacroBuilding(
@@ -669,7 +645,8 @@ export function computeAuroraSovereignAiActions(
         state,
         playerId,
         myBuildings,
-        aiState.enemyIntelligence.dominantArmor,
+        myUnits,
+        aiState.enemyIntelligence.composition,
         tacticalProfile.heavyProfile
     );
 

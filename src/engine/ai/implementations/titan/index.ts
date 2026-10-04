@@ -47,6 +47,7 @@ import {
 import { updateHarvesterAI } from '../../harvester/index.js';
 import { AIImplementation } from '../../contracts.js';
 import { AIPersonality, RULES } from '../../../../data/schemas/index.js';
+import { EnemyComposition, rankCounterUnits } from '../../counters.js';
 
 // ============================================================================
 // Hydra AI - Adaptive multi-pronged strategy
@@ -97,19 +98,10 @@ const BOOM_RUSH_MIN_BOOM_SCORE = 25;
 const BOOM_RUSH_VENGEANCE_BOOST = 225;
 
 // --- Dual Production Constants ---
-const INFANTRY_PRIORITY: Record<string, string[]> = {
-    mixed: ['rocket', 'grenadier', 'rifle'],
-    infantry: ['grenadier', 'rocket', 'flamer'],      // splash vs infantry
-    heavy: ['rocket', 'rocket', 'grenadier'],       // anti-armor
-    light: ['rocket', 'grenadier', 'rifle']         // general purpose
-};
-
-const VEHICLE_PRIORITY: Record<string, string[]> = {
-    mixed: ['heavy', 'light', 'flame_tank'],
-    infantry: ['flame_tank', 'light', 'heavy'],        // flame tanks devastate infantry
-    heavy: ['heavy', 'light', 'artillery'],          // heavy vs heavy
-    light: ['heavy', 'light', 'flame_tank']          // general
-};
+// Candidate units in flavor order; ensureDualProduction ranks them against the
+// enemy composition (see ../../counters.ts), so the flavor order only breaks ties.
+const INFANTRY_CANDIDATES = ['rocket', 'grenadier', 'rifle', 'flamer'];
+const VEHICLE_CANDIDATES = ['heavy', 'light', 'stealth', 'flame_tank', 'artillery', 'apc', 'mlrs'];
 
 // --- Rush Detection ---
 
@@ -247,7 +239,7 @@ function ensureDualProduction(
     playerId: number,
     myBuildings: Entity[],
     myUnits: Entity[],
-    dominantArmor: string
+    composition: EnemyComposition
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -257,7 +249,7 @@ function ensureDualProduction(
         !player.queues.infantry.current &&
         !actions.some(a => isActionType(a, 'START_BUILD') && a.payload.category === 'infantry')) {
 
-        const prefs = INFANTRY_PRIORITY[dominantArmor] || INFANTRY_PRIORITY['mixed'];
+        const prefs = rankCounterUnits(composition, INFANTRY_CANDIDATES, myUnits);
 
         // Count existing special units
         const engineerCount = myUnits.filter(u => u.key === 'engineer' && !u.dead).length;
@@ -336,7 +328,7 @@ function ensureDualProduction(
                 return;
             }
 
-            const prefs = VEHICLE_PRIORITY[dominantArmor] || VEHICLE_PRIORITY['mixed'];
+            const prefs = rankCounterUnits(composition, VEHICLE_CANDIDATES, myUnits);
             for (const key of prefs) {
                 const data = RULES.units[key];
                 if (!data) continue;
@@ -567,20 +559,6 @@ export function computeTitanAiActions(state: GameState, playerId: number, shared
     updateEnemyIntelligence(aiState, enemies, state.tick);
     updateVengeance(state, playerId, aiState, [...myBuildings, ...myUnits]);
 
-    // Adapt personality based on enemy composition
-    const dominantArmor = aiState.enemyIntelligence.dominantArmor;
-    if (dominantArmor === 'infantry') {
-        personality.unit_preferences = {
-            infantry: ['grenadier', 'rocket', 'flamer'],
-            vehicle: ['flame_tank', 'light', 'heavy']
-        };
-    } else if (dominantArmor === 'heavy') {
-        personality.unit_preferences = {
-            infantry: ['rocket', 'rocket', 'grenadier'],
-            vehicle: ['heavy', 'artillery', 'light']
-        };
-    }
-
     // Detect if enemy is booming - become more aggressive
     const maxBoomScore = Object.values(aiState.enemyIntelligence.boomScores).reduce(
         (max, s) => Math.max(max, s), 0
@@ -788,7 +766,7 @@ export function computeTitanAiActions(state: GameState, playerId: number, shared
 
     // --- HYDRA SPECIAL: Dual Production Enforcement ---
     // This is the core advantage: NEVER let production buildings idle
-    ensureDualProduction(actions, state, playerId, myBuildings, myUnits, dominantArmor);
+    ensureDualProduction(actions, state, playerId, myBuildings, myUnits, aiState.enemyIntelligence.composition);
 
     // --- COMBAT EXECUTION ---
     if (isDummy) {

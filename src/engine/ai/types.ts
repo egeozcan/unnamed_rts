@@ -1,6 +1,7 @@
 import { EntityId, Vector } from '../types.js';
 import { PersonalityName } from '../../data/schemas/index.js';
 import { HarvesterAIState } from './harvester/types.js';
+import { DominantArmor, EnemyComposition } from './counters.js';
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';
@@ -57,8 +58,10 @@ export interface AIPlayerState {
         lastUpdate: number;
         unitCounts: Record<string, number>;
         buildingCounts: Record<string, number>;
-        dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed';
+        dominantArmor: DominantArmor;
         boomScores: Record<number, number>;
+        // Cost-weighted armor mix, enemy air/defense counts and per-unit counter scores
+        composition: EnemyComposition;
     };
     // Vengeance tracking: damage received from each player (higher = more likely to target)
     vengeanceScores: Record<number, number>;
@@ -71,9 +74,4 @@ export interface AIPlayerState {
     isDoomed: boolean;
     // Harvester AI state
     harvesterAI: HarvesterAIState;
-}
-
-export interface CounterUnits {
-    infantry: string[];
-    vehicle: string[];
 }

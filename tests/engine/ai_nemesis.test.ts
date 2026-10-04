@@ -5,6 +5,7 @@ import { computeNemesisAiActions, sanitizeNemesisActions } from '../../src/engin
 import { getNemesisRuntimeState } from '../../src/engine/ai/implementations/nemesis/state.js';
 import { Action, BuildingKey, Entity, EntityId, GameState, UnitKey } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester } from '../../src/engine/test-utils.js';
+import { RULES } from '../../src/data/schemas/index.js';
 
 const NEMESIS_ID = 'nemesis';
 const ME = 1;
@@ -121,15 +122,37 @@ describe('Nemesis AI', () => {
 
     it('kites shorter-ranged anti-air between shots', () => {
         getNemesisRuntimeState(ME).openingDone = true;
-        const heli = unit('heli0', ME, 'heli', 2000, 2000, { cooldown: 10 });
-        const rocket = unit('er', ENEMY, 'rocket', 1800, 2000);
-        const state = createState([...airBase(), heli, rocket], 9000, 5000);
+        const heliRange = RULES.units.heli.range;
+        // Any ground anti-air unit the helicopter outranges (rules-driven, not hardcoded)
+        const kiteable = (Object.keys(RULES.units) as UnitKey[]).find(key => {
+            const data = RULES.units[key];
+            const weapon = data.weaponType;
+            return !data.fly && data.damage > 0 && Boolean(weapon) &&
+                Boolean(RULES.weaponTargeting?.[weapon!]?.canTargetAir) && data.range < heliRange - 40;
+        });
+        if (!kiteable) return;
+        const threatRange = RULES.units[kiteable].range;
+        const heli = unit('heli0', ME, 'heli', 1800 + threatRange - 20, 2000, { cooldown: 10 });
+        const threat = unit('er', ENEMY, kiteable, 1800, 2000);
+        const state = createState([...airBase(), heli, threat], 9000, 5000);
         const move = computeNemesisAiActions(state, ME)
             .find((a): a is Extract<Action, { type: 'COMMAND_MOVE' }> => a.type === 'COMMAND_MOVE' && a.payload.unitIds.includes('heli0'));
         expect(move).toBeDefined();
         const standOff = Math.hypot(move!.payload.x - 1800, move!.payload.y - 2000);
-        expect(standOff).toBeGreaterThan(240); // outside rocket range
-        expect(standOff).toBeLessThan(300); // still inside helicopter range
+        expect(standOff).toBeGreaterThan(threatRange); // outside the threat's range
+        expect(standOff).toBeLessThan(heliRange); // still inside helicopter range
+    });
+
+    it('does not try to kite anti-air that outranges the helicopter', () => {
+        getNemesisRuntimeState(ME).openingDone = true;
+        const heliRange = RULES.units.heli.range;
+        if (RULES.units.rocket.range <= heliRange) return;
+        const heli = unit('heli0', ME, 'heli', 2000, 2000, { cooldown: 10 });
+        const rocket = unit('er', ENEMY, 'rocket', 1800, 2000);
+        const state = createState([...airBase(), heli, rocket], 9000, 5000);
+        const kite = computeNemesisAiActions(state, ME)
+            .find(a => a.type === 'COMMAND_MOVE' && a.payload.unitIds.includes('heli0'));
+        expect(kite).toBeUndefined();
     });
 
     it('never issues commands for entities it does not own', () => {

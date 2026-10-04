@@ -1,0 +1,8 @@
+{
+    "infantry": "rifle:4,rocket:4,grenadier:2",
+    "armor": "light:3,heavy:4,mammoth:3",
+    "air": "heli:6,harrier:4",
+    "siege": "artillery:4,mlrs:2,light:3,rocket:1",
+    "mech": "jeep:3,apc:3,flame_tank:4",
+    "mixed": "rifle:2,rocket:2,light:2,heavy:2,apc:1,stealth:1"
+}

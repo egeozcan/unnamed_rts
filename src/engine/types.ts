@@ -205,6 +205,8 @@ export interface Projectile {
     readonly maxHp: number;
     readonly arcHeight: number;
     readonly startPos: Vector;
+    /** Ground point the shot was aimed at (target position at fire time) */
+    readonly targetPos?: Vector;
     readonly trailPoints: readonly Vector[];
 }
 

@@ -5,6 +5,7 @@ import { EntityCache } from '../perf.js';
 export * from './types.js';
 export * from './state.js';
 export * from './utils.js';
+export * from './counters.js';
 export * from './planning.js';
 export * from './action_economy.js';
 export * from './action_combat.js';
@@ -33,7 +34,6 @@ import {
     findNearestUncoveredOre,
     isWithinBuildRange,
     findNearestBuilding,
-    getCounterUnits,
     AI_CONSTANTS,
     DIFFICULTY_MODIFIERS,
     getDifficultyModifiers,
@@ -45,6 +45,7 @@ import {
     VENGEANCE_DECAY,
     VENGEANCE_PER_HIT
 } from './utils.js';
+import { getCounterUnits } from './counters.js';
 
 import {
     detectThreats,

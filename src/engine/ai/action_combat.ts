@@ -666,7 +666,7 @@ function selectBestTarget(
         }
 
         // Defensive buildings
-        if (enemy.type === 'BUILDING' && ['turret', 'pillbox', 'obelisk', 'sam', 'mammoth'].includes(enemy.key)) {
+        if (enemy.type === 'BUILDING' && ['turret', 'pillbox', 'obelisk', 'sam_site'].includes(enemy.key)) {
             if (isThreat) score += 100;
             else if (distFromGroup < 300) score += 75;
         }
@@ -1551,8 +1551,8 @@ export function handleAirStrikes(
 
     // Define high-value target priorities for air strikes
     const buildingPriorities = ['conyard', 'factory', 'refinery', 'airforce_command', 'barracks', 'power', 'sam_site', 'turret'];
-    // High-value combat units to target
-    const unitPriorities = ['harvester', 'mcv', 'mammoth', 'medium_tank', 'light_tank', 'rocket_soldier', 'minigunner'];
+    // High-value targets for the harrier's anti-armor missiles (weak vs infantry, cannot hit air)
+    const unitPriorities = ['harvester', 'mcv', 'mammoth', 'heavy', 'stealth', 'mlrs', 'artillery', 'light', 'flame_tank'];
 
     // Find best target for air strike
     let bestTarget: Entity | null = null;

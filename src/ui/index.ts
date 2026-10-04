@@ -1482,6 +1482,7 @@ function parseGameState(json: string): GameState | null {
                 if (p.vel) p.vel = new Vector(p.vel.x, p.vel.y);
                 // Older saves have no startPos (the 3D view needs it): start from where it is now
                 p.startPos = p.startPos ? new Vector(p.startPos.x, p.startPos.y) : p.pos;
+                if (p.targetPos) p.targetPos = new Vector(p.targetPos.x, p.targetPos.y);
                 p.trailPoints = Array.isArray(p.trailPoints) ? p.trailPoints.map((t: { x: number; y: number }) => new Vector(t.x, t.y)) : [];
             }
         }

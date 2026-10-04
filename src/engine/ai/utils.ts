@@ -1,6 +1,5 @@
 import { GameState, Entity, EntityId, Vector } from '../types.js';
 import { RULES } from '../../data/schemas/index.js';
-import { CounterUnits } from './types.js';
 
 // ===== AI CONSTANTS =====
 // Consolidated configuration object for all AI behavior constants
@@ -507,45 +506,6 @@ export function isValidPlacement(
     }
 
     return true;
-}
-
-// ===== COUNTER-BUILDING LOGIC =====
-
-export function getCounterUnits(
-    dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed',
-    prefs?: { infantry?: string[]; vehicle?: string[] },
-    forcePrefs: boolean = false
-): CounterUnits {
-    if (forcePrefs && prefs) {
-        return {
-            infantry: prefs.infantry || [],
-            vehicle: prefs.vehicle || []
-        };
-    }
-
-    switch (dominantArmor) {
-        case 'infantry':
-            return {
-                infantry: ['flamer', 'sniper', 'grenadier', 'rifle'],
-                vehicle: ['flame_tank', 'apc', 'light']
-            };
-        case 'heavy':
-            return {
-                infantry: ['rocket'],
-                vehicle: ['mlrs', 'artillery', 'mammoth', 'heavy']
-            };
-        case 'light':
-            return {
-                infantry: ['commando', 'rifle', 'rocket'],
-                vehicle: ['light', 'heavy', 'stealth']
-            };
-        case 'mixed':
-        default:
-            return {
-                infantry: ['rifle', 'rocket', 'flamer'],
-                vehicle: ['heavy', 'light', 'flame_tank']
-            };
-    }
 }
 
 export function checkPrerequisites(key: string, playerBuildings: Entity[]): boolean {

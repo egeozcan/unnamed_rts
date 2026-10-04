@@ -13,10 +13,9 @@ import { getNemesisRuntimeState, NemesisRuntimeState, resetNemesisRuntimeState }
 //
 // Aurora Sovereign's economy and ground army serve as the chassis. On top of it,
 // Nemesis plays the one strategy no other built-in AI uses: an early tech switch
-// into massed attack helicopters. Equal-budget duels show helicopters beating every
-// ground composition except massed MLRS; turrets, pillboxes and most weapons cannot
-// target air; and the shared counter logic answers "light armor" with units that
-// cannot shoot up. See README.md for the measurements behind each layer.
+// into massed attack helicopters. Turrets and most ground weapons cannot target air,
+// though rockets, missiles, SAM sites and small arms can. See README.md for the
+// measurements behind each layer.
 //
 // Fair play: every action targets only this player's own entities and queues and
 // goes through the normal reducer, exactly like the other built-in AIs.
@@ -60,10 +59,34 @@ const HELI_BASE_GUARD_RADIUS = 650;
 // Siege units shell the base from beyond the normal guard radius - and cannot shoot back at air.
 const SIEGE_KEYS = new Set(['artillery', 'mlrs']);
 const SIEGE_GUARD_RADIUS = 950;
-const KITEABLE_AA = new Set(['rocket', 'stealth']);
 const KITE_BUFFER = 30;
-const AA_UNIT_WEIGHT: Readonly<Record<string, number>> = { rocket: 0.5, mlrs: 1.6, stealth: 1.0, heli: 0.8, commando: 0, sniper: 0 };
-const AA_BUILDING_WEIGHT: Readonly<Record<string, number>> = { sam_site: 3, obelisk: 4 };
+// Anti-air threat per unit/building, derived from rules.json: sustained damage per minute
+// against air armor, relative to a rocket soldier's (rocket = 0.5).
+const AA_REFERENCE_DPM = 64;
+const AA_BUILDING_SCALE = 2;
+const aaWeightCache = new Map<string, number>();
+
+function antiAirWeight(key: string, isBuilding: boolean): number {
+    const cacheKey = (isBuilding ? 'B:' : '') + key;
+    const cached = aaWeightCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const data = isBuilding ? RULES.buildings[key] : RULES.units[key];
+    let weight = 0;
+    const weaponType = data?.weaponType;
+    if (data && weaponType && (data.damage ?? 0) > 0 && RULES.weaponTargeting?.[weaponType]?.canTargetAir) {
+        const modifier = RULES.damageModifiers?.[weaponType]?.air ?? 1;
+        const dpm = (data.damage ?? 0) * modifier / Math.max(1, data.rate ?? 60) * 60;
+        weight = dpm / AA_REFERENCE_DPM * (isBuilding ? AA_BUILDING_SCALE : 1);
+    }
+    aaWeightCache.set(cacheKey, weight);
+    return weight;
+}
+
+/** Anti-air units shorter-ranged than the helicopter, which it can kite between shots. */
+function isKiteableAntiAir(key: string): boolean {
+    const range = unitData(key)?.range ?? 0;
+    return antiAirWeight(key, false) > 0 && range < (unitData('heli')?.range ?? 0);
+}
 const HELI_TARGET_VALUE: Readonly<Record<string, number>> = {
     harvester: 950,
     mlrs: 900,
@@ -308,12 +331,12 @@ function antiAirDanger(pos: Vector, enemies: Entity[]): number {
     for (const e of enemies) {
         if (e.dead) continue;
         if (e.type === 'BUILDING') {
-            const w = AA_BUILDING_WEIGHT[e.key];
+            const w = antiAirWeight(e.key, true);
             if (!w) continue;
             const range = (RULES.buildings[e.key]?.range ?? 300) + 60;
             if (e.pos.dist(pos) <= range) danger += w;
         } else if (e.type === 'UNIT') {
-            const w = AA_UNIT_WEIGHT[e.key];
+            const w = antiAirWeight(e.key, false);
             if (!w || isTransportedUnit(e)) continue;
             const range = (unitData(e.key)?.range ?? 200) + 80;
             if (e.pos.dist(pos) <= range) danger += w;
@@ -349,7 +372,7 @@ function runHeliCommand(ctx: Ctx, claimed: Set<EntityId>, out: Action[]): void {
         const baseDist = nearestDistance(e.pos, myBuildings);
         const siege = SIEGE_KEYS.has(e.key);
         if (baseDist > (siege ? SIEGE_GUARD_RADIUS : HELI_BASE_GUARD_RADIUS)) continue;
-        const score = (AA_UNIT_WEIGHT[e.key] ?? 0) * 400 + (siege ? 500 : 0) + (unitData(e.key)?.cost ?? 0) * 0.2 - baseDist - e.pos.dist(center) * 0.2;
+        const score = antiAirWeight(e.key, false) * 400 + (siege ? 500 : 0) + (unitData(e.key)?.cost ?? 0) * 0.2 - baseDist - e.pos.dist(center) * 0.2;
         if (score > bestScore) {
             bestScore = score;
             best = e;
@@ -390,7 +413,7 @@ function runHeliCommand(ctx: Ctx, claimed: Set<EntityId>, out: Action[]): void {
         return;
     }
     const kiteFrom = enemies.filter(e => e.type === 'UNIT' && !e.dead && !isTransportedUnit(e) &&
-        KITEABLE_AA.has(e.key)) as UnitEntity[];
+        isKiteableAntiAir(e.key)) as UnitEntity[];
     const heliRange = unitData('heli')?.range ?? 300;
     for (const h of helis) {
         if (h.combat.cooldown > 0) {

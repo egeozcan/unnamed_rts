@@ -1,3 +1,4 @@
+import { RULES } from '../../src/data/schemas/index';
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { GameState, Entity, EntityId, BuildingKey } from '../../src/engine/types';
@@ -133,8 +134,8 @@ describe('Linear Production - Resource Deduction', () => {
                 'barracks': createEntity('barracks', 0, 'BUILDING', 'barracks', 350, 300),
             };
 
-            // Start with only 50 credits (rifle costs 100)
-            let state = createTestState(entities, 50);
+            // Start with half the cost of a rifle
+            let state = createTestState(entities, RULES.units.rifle.cost / 2);
 
             state = update(state, {
                 type: 'START_BUILD',
@@ -146,7 +147,7 @@ describe('Linear Production - Resource Deduction', () => {
                 state = update(state, { type: 'TICK' });
             }
 
-            // Progress should be around 50% (spent 50 of 100)
+            // Progress should be around 50% (spent half the cost)
             const progress = state.players[0].queues.infantry.progress;
             expect(progress).toBeGreaterThan(45);
             expect(progress).toBeLessThan(55);

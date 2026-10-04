@@ -132,7 +132,7 @@ export function tick(state: GameState): GameState {
     // Projectile Updates
     let nextProjectiles: Projectile[] = [];
     let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
-    let splashEvents: { projectile: Projectile; hitPos: Vector }[] = [];
+    let splashEvents: { projectile: Projectile; hitPos: Vector; includePrimaryTarget: boolean }[] = [];
     // Temporary state for interception checks (uses updatedEntities from this tick)
     const interceptionState = { ...state, entities: updatedEntities };
 
@@ -152,8 +152,11 @@ export function tick(state: GameState): GameState {
             damageEvents.push(res.damage);
             // Track splash damage events for projectiles that hit their target
             if (p.splash > 0) {
-                splashEvents.push({ projectile: p, hitPos: res.proj.pos });
+                splashEvents.push({ projectile: p, hitPos: res.proj.pos, includePrimaryTarget: false });
             }
+        } else if (res.detonation && p.splash > 0) {
+            // Ground burst that missed its target: splash everything there, target included
+            splashEvents.push({ projectile: p, hitPos: res.detonation, includePrimaryTarget: true });
         }
     });
 
@@ -235,7 +238,7 @@ export function tick(state: GameState): GameState {
     for (const splash of splashEvents) {
         // Apply splash damage to all entities in radius (except the primary target which already took direct damage)
         const tempState = { ...state, entities: updatedEntities };
-        const splashResult = applySplashDamage(tempState, splash.projectile, splash.hitPos);
+        const splashResult = applySplashDamage(tempState, splash.projectile, splash.hitPos, { includePrimaryTarget: splash.includePrimaryTarget });
         // Copy updated entities back
         for (const id in splashResult.entities) {
             updatedEntities[id] = splashResult.entities[id];
@@ -1227,17 +1230,31 @@ function resolveCollisions(entities: Record<EntityId, Entity>): Record<EntityId,
     return workingEntities as Record<EntityId, Entity>;
 }
 
-export function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId } } {
+// Archetypes that burst at their aimed ground point (with splash) even if the target moved away
+const GROUND_BURST_ARCHETYPES: ReadonlySet<string> = new Set(['artillery', 'grenade']);
+
+/** Closest point to `p` on the segment a-b. */
+function closestPointOnSegment(a: Vector, b: Vector, p: Vector): Vector {
+    const ab = b.sub(a);
+    const lenSq = ab.dot(ab);
+    if (lenSq === 0) return a;
+    const t = Math.max(0, Math.min(1, p.sub(a).dot(ab) / lenSq));
+    return a.add(ab.scale(t));
+}
+
+export function updateProjectile(proj: Projectile, entities: Record<EntityId, Entity>, mapWidth: number, mapHeight: number): { proj: Projectile, damage?: { targetId: EntityId, amount: number, attackerId: EntityId }, detonation?: Vector } {
     let currentVel = proj.vel;
     const target = entities[proj.targetId];
+    const groundBurstPos = GROUND_BURST_ARCHETYPES.has(proj.archetype) ? proj.targetPos : undefined;
+    const targetTransported = !!target && target.type === 'UNIT' && isTransportedUnit(target);
 
-    if (target && target.type === 'UNIT' && isTransportedUnit(target)) {
+    if (targetTransported && !groundBurstPos) {
         return { proj: { ...proj, dead: true } };
     }
 
-    // Homing logic for missiles (SAMs, Stealth Tanks)
+    // Homing logic for missile-archetype weapons (SAMs, Stealth Tanks, Harriers...)
     // They track their target perfectly
-    if (proj.weaponType === 'missile' && target && !target.dead) {
+    if (proj.archetype === 'missile' && target && !target.dead) {
         const speed = proj.speed || 28;
         const dir = target.pos.sub(proj.pos).norm();
         currentVel = dir.scale(speed);
@@ -1255,14 +1272,11 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
         return { proj: nextProj, damage: damageEvent };
     }
 
-    // Kill projectile if target no longer exists
-    if (!target) {
-        nextProj.dead = true;
-        return { proj: nextProj, damage: damageEvent };
-    }
-
-    if (!target.dead) {
-        if (nextPos.dist(target.pos) < target.radius + 15) {
+    // Hit test along the whole step (segment vs circle) so fast shots can't tunnel past small targets
+    if (target && !target.dead && !targetTransported) {
+        const hitPos = closestPointOnSegment(proj.pos, nextPos, target.pos);
+        if (hitPos.dist(target.pos) < target.radius + 15) {
+            nextProj.pos = hitPos;
             nextProj.dead = true;
 
             // Apply damage modifiers
@@ -1277,8 +1291,27 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
                 amount: Math.round(proj.damage * modifier),
                 attackerId: proj.ownerId
             };
+            return { proj: nextProj, damage: damageEvent };
         }
-    } else if (nextPos.dist(target.pos) < 20) {
+    }
+
+    // Artillery/grenades that missed their (moved, dead or gone) target burst where they were aimed
+    if (groundBurstPos) {
+        if (proj.pos.dist(groundBurstPos) <= currentVel.mag()) {
+            nextProj.pos = groundBurstPos;
+            nextProj.dead = true;
+            return { proj: nextProj, detonation: groundBurstPos };
+        }
+        return { proj: nextProj };
+    }
+
+    // Kill projectile if target no longer exists
+    if (!target) {
+        nextProj.dead = true;
+        return { proj: nextProj, damage: damageEvent };
+    }
+
+    if (target.dead && closestPointOnSegment(proj.pos, nextPos, target.pos).dist(target.pos) < 20) {
         // Target is dead, kill projectile when it reaches where target was
         nextProj.dead = true;
     }
@@ -1303,18 +1336,31 @@ export function updateProjectileTrail(projectile: Projectile): Projectile {
     };
 }
 
+function isFlyingEntity(entity: Entity): boolean {
+    const data = getRuleData(entity.key);
+    return !!data && isUnitData(data) && data.fly === true;
+}
+
 /**
  * Apply splash damage from a projectile hit.
  * Uses linear falloff: full damage at center, zero at edge.
  * Includes friendly fire - damages all entities regardless of owner.
+ * Only hits entities at the blast's level: ground blasts skip aircraft, air blasts skip ground.
+ *
+ * @param options.includePrimaryTarget - also splash the primary target (ground bursts that missed it)
+ * @param options.airLevel - blast level; defaults to the primary target's level (ground if it is gone)
  */
 export function applySplashDamage(
     state: GameState,
     projectile: Projectile,
-    hitPos: Vector
+    hitPos: Vector,
+    options: { includePrimaryTarget?: boolean; airLevel?: boolean } = {}
 ): GameState {
     const splashRadius = projectile.splash;
     if (splashRadius <= 0) return state;
+
+    const primaryTarget = state.entities[projectile.targetId];
+    const airLevel = options.airLevel ?? (primaryTarget ? isFlyingEntity(primaryTarget) : false);
 
     let entities = { ...state.entities };
 
@@ -1325,7 +1371,8 @@ export function applySplashDamage(
         if (entity.type !== 'UNIT' && entity.type !== 'BUILDING') continue;
         if (entity.type === 'UNIT' && isTransportedUnit(entity)) continue;
         // Skip the primary target - they already took direct damage
-        if (id === projectile.targetId) continue;
+        if (id === projectile.targetId && !options.includePrimaryTarget) continue;
+        if (isFlyingEntity(entity) !== airLevel) continue;
 
         const dist = hitPos.dist(entity.pos);
         if (dist >= splashRadius) continue;

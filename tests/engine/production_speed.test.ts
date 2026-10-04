@@ -80,7 +80,8 @@ describe('Production Speed - Multiple Buildings', () => {
             state1 = update(state1, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } });
             state3 = update(state3, { type: 'START_BUILD', payload: { category: 'infantry', key: 'rifle', playerId: 0 } });
 
-            for (let i = 0; i < 100; i++) {
+            // Rifles build in 180 ticks; stay below 90 so the 3-barracks build doesn't complete
+            for (let i = 0; i < 60; i++) {
                 state1 = update(state1, { type: 'TICK' });
                 state3 = update(state3, { type: 'TICK' });
             }

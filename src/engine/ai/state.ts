@@ -4,6 +4,7 @@ import { AIPlayerState } from './types.js';
 import { VENGEANCE_DECAY, VENGEANCE_PER_HIT } from './utils.js';
 import { isUnit } from '../type-guards.js';
 import { createInitialHarvesterAIState } from './harvester/types.js';
+import { analyzeEnemyComposition, createEmptyComposition } from './counters.js';
 
 // Select a random personality from available personalities
 function selectRandomPersonality(): PersonalityName {
@@ -47,7 +48,8 @@ export function getAIState(playerId: number): AIPlayerState {
                 unitCounts: {},
                 buildingCounts: {},
                 dominantArmor: 'mixed',
-                boomScores: {}
+                boomScores: {},
+                composition: createEmptyComposition()
             },
             vengeanceScores: {},
             lastCombatTick: 0,
@@ -123,34 +125,16 @@ export function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[
 
     const unitCounts: Record<string, number> = {};
     const buildingCounts: Record<string, number> = {};
-    let infantryCount = 0;
-    let lightCount = 0;
-    let heavyCount = 0;
 
     for (const e of enemies) {
         if (e.type === 'UNIT') {
             unitCounts[e.key] = (unitCounts[e.key] || 0) + 1;
-
-            // Categorize by armor type
-            const data = RULES.units?.[e.key];
-            if (data) {
-                if (data.armor === 'infantry') infantryCount++;
-                else if (data.armor === 'light') lightCount++;
-                else if (data.armor === 'heavy' || data.armor === 'medium') heavyCount++;
-            }
         } else if (e.type === 'BUILDING') {
             buildingCounts[e.key] = (buildingCounts[e.key] || 0) + 1;
         }
     }
 
-    // Determine dominant armor type
-    let dominantArmor: 'infantry' | 'light' | 'heavy' | 'mixed' = 'mixed';
-    const total = infantryCount + lightCount + heavyCount;
-    if (total > 0) {
-        if (infantryCount > total * 0.6) dominantArmor = 'infantry';
-        else if (heavyCount > total * 0.4) dominantArmor = 'heavy';
-        else if (lightCount > total * 0.4) dominantArmor = 'light';
-    }
+    const composition = analyzeEnemyComposition(enemies);
 
     // Compute per-enemy boom scores (only after tick 600 when we have scouting data)
     const boomScores: Record<number, number> = {};
@@ -199,8 +183,9 @@ export function updateEnemyIntelligence(aiState: AIPlayerState, enemies: Entity[
         lastUpdate: tick,
         unitCounts,
         buildingCounts,
-        dominantArmor,
-        boomScores
+        dominantArmor: composition.dominantArmor,
+        boomScores,
+        composition
     };
 }
 

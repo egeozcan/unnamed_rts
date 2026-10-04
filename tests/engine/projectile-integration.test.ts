@@ -344,8 +344,8 @@ describe('Projectile System Integration', () => {
             expect(artilleryProjectiles.length).toBeGreaterThan(0);
             if (artilleryProjectiles.length > 0) {
                 const proj = artilleryProjectiles[0];
-                expect(proj.hp).toBe(150); // Artillery has 150 HP
-                expect(proj.maxHp).toBe(150);
+                expect(proj.hp).toBe(0); // Shells cannot be intercepted
+                expect(proj.maxHp).toBe(0);
                 expect(proj.arcHeight).toBeGreaterThan(0); // Should have arc
             }
         });

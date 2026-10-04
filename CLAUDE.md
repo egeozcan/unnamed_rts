@@ -18,6 +18,13 @@ npm run test:coverage # Generate coverage report to ./coverage/
 
 Single test file: `npx vitest run tests/engine/harvester.test.ts`
 
+Balance (army-vs-army sim, see `npm run balance:sim -- --help`):
+```bash
+npm run balance:sim -- --matrix --budget 6000 --check          # unit-vs-unit RPS matrix
+npm run balance:sim -- --comps src/scripts/balance_comps.json --check   # archetype comps
+```
+Rerun both after changing `rules.json`; AI counter tables live in `src/engine/ai/counters.ts` and must agree with them.
+
 ## Architecture
 
 ### State Management

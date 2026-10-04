@@ -12,7 +12,6 @@ import {
     checkPrerequisites,
     countProductionBuildings,
     getProductionBuildingsFor,
-    getCounterUnits,
     isRefineryUseful,
     getPriorityIndex,
     isValidPlacement,
@@ -32,6 +31,7 @@ import {
 } from './utils.js';
 import { getAIState, findBaseCenter } from './state.js';
 import { findCaptureOpportunities } from './planning.js';
+import { getCounterUnits, desiredAntiAirSites, pickDefenseBuilding, wantsCounterTech } from './counters.js';
 
 const TANK_ADVANTAGE_MIN_ENEMY_ARMORED_UNITS = 2;
 const TANK_ADVANTAGE_MIN_ABSOLUTE_LEAD = 1;
@@ -128,8 +128,8 @@ export function handleEconomy(
             const turretData = RULES.buildings['turret'];
             const pillboxData = RULES.buildings['pillbox'];
 
-            let defToBuild = 'turret';
-            if (player.credits < (turretData?.cost || 800) && player.credits >= (pillboxData?.cost || 400)) {
+            let defToBuild: string = pickDefenseBuilding(aiState.enemyIntelligence.composition, buildings);
+            if (defToBuild === 'turret' && player.credits < (turretData?.cost || 800) && player.credits >= (pillboxData?.cost || 400)) {
                 defToBuild = 'pillbox';
             }
 
@@ -151,6 +151,19 @@ export function handleEconomy(
                 }
                 // Don't return, let unit production happen too
             }
+        }
+    }
+
+    // ANTI-AIR: turrets cannot shoot aircraft, so answer an enemy air force with SAM sites
+    const buildingQueuedThisTick = actions.some(a =>
+        a.type === 'START_BUILD' && (a.payload as { category: string }).category === 'building'
+    );
+    if (hasConyard && buildingQueueEmpty && !buildingQueuedThisTick) {
+        const samCount = buildings.filter(b => b.key === 'sam_site' && !b.dead).length;
+        const samData = RULES.buildings['sam_site'];
+        if (samData && samCount < desiredAntiAirSites(aiState.enemyIntelligence.composition) &&
+            checkPrerequisites('sam_site', buildings) && player.credits >= samData.cost) {
+            actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'sam_site', playerId } });
         }
     }
 
@@ -304,12 +317,13 @@ export function handleEconomy(
             }
         }
     } else if (aiState.investmentPriority === 'defense') {
-        // DEFENSE PRIORITY: Build turrets
+        // DEFENSE PRIORITY: Build turrets (SAM sites while enemy air is unanswered)
         if (hasConyard && buildingQueueEmpty) {
-            const turretData = RULES.buildings['turret'];
-            const canBuildTurret = checkPrerequisites('turret', buildings);
+            const defenseKey = pickDefenseBuilding(aiState.enemyIntelligence.composition, buildings);
+            const turretData = RULES.buildings[defenseKey];
+            const canBuildTurret = checkPrerequisites(defenseKey, buildings);
             if (canBuildTurret && turretData && player.credits >= turretData.cost) {
-                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: defenseKey, playerId } });
                 // Don't return - continue with unit production for defense
             }
         }
@@ -326,11 +340,12 @@ export function handleEconomy(
         // Build more defenses if we have surplus and not too many already
         const maxDefenses = personality.defense_investment ?? MAX_SURPLUS_TURRETS;
         if (existingTurrets < maxDefenses) {
-            const canBuildTurret = checkPrerequisites('turret', buildings);
-            const turretData = RULES.buildings['turret'];
+            const defenseKey = pickDefenseBuilding(aiState.enemyIntelligence.composition, buildings);
+            const canBuildTurret = checkPrerequisites(defenseKey, buildings);
+            const turretData = RULES.buildings[defenseKey];
 
             if (canBuildTurret && turretData && player.credits >= turretData.cost) {
-                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'turret', playerId } });
+                actions.push({ type: 'START_BUILD', payload: { category: 'building', key: defenseKey, playerId } });
                 // Don't return - allow unit production to continue
             }
         }
@@ -554,6 +569,19 @@ export function handleEconomy(
         }
     }
 
+    // COUNTER TECH: unlock the Tech Center when the enemy army is best answered by
+    // tech units (missile tanks vs heavy armor/air, siege vs turtles)
+    const techData = RULES.buildings['tech'];
+    if (hasConyard && hasFactory && buildingQueueEmpty && techData &&
+        !actions.some(a => a.type === 'START_BUILD' && (a.payload as { category: string }).category === 'building') &&
+        !buildings.some(b => b.key === 'tech') &&
+        player.queues.building.current !== 'tech' && player.readyToPlace !== 'tech' &&
+        checkPrerequisites('tech', buildings) &&
+        player.credits >= techData.cost + 500 &&
+        wantsCounterTech(aiState.enemyIntelligence.composition)) {
+        actions.push({ type: 'START_BUILD', payload: { category: 'building', key: 'tech', playerId } });
+    }
+
     // Unit production - STAGGERED for smoother resource usage
     const prefs = personality.unit_preferences;
 
@@ -581,9 +609,10 @@ export function handleEconomy(
 
     // Get counter-building unit preferences based on enemy composition
     const counterUnits = getCounterUnits(
-        aiState.enemyIntelligence.dominantArmor,
+        aiState.enemyIntelligence.composition,
         prefs,
-        personality.strict_unit_preferences
+        personality.strict_unit_preferences,
+        ownedUnits
     );
     const tankAdvantage = getEnemyTankAdvantage(enemies, ownedEntities);
     const enemyHasTankAdvantage = tankAdvantage.hasAdvantage;

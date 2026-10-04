@@ -12,10 +12,13 @@ pairing at 8,000 credits a side, including against rocket infantry and Aurora's 
 20,000 a side only massed MLRS beats them. The rest of the rules make it worse for the
 opponents:
 
-- Turrets, pillboxes and all bullet, cannon and flame weapons cannot target air.
-- The shared counter-unit logic (`getCounterUnits`) answers a "light armor" army with
-  rifles, commandos and tanks, none of which can shoot aircraft.
-- No other built-in AI ever builds a helicopter, so none of them has been tuned against one.
+- Turrets and cannon, shell and flame weapons cannot target air.
+- No other built-in AI builds helicopters.
+
+These measurements predate the air rework: aircraft now have their own `air` armor
+class, and rocket soldiers, rifles, APCs, missile tanks, MLRS and SAM sites shoot them
+down. The shared counter logic (`../../counters.ts`) classifies an air army as `air`,
+answers it with that anti-air, and builds SAM sites (see `desiredAntiAirSites`).
 
 ## Layers
 
@@ -27,7 +30,7 @@ opponents:
 | Power governor | Low power quarters every queue's speed. If a build would cause a brownout, it is cancelled (full refund) and a power plant goes first. |
 | Sheltered placement | The Tech Center and Air-Force Commands are placed on the far side of the base from the enemy. |
 | Heli command | All helicopters focus one target. Home defence comes first, with a wider radius for artillery and MLRS, which shell from range and cannot shoot back at air. Otherwise strikes start from 2 helicopters, preferring harvesters, anti-air and production, and skipping targets whose anti-air cover outweighs the wing. |
-| Kiting | Helicopter range is 300, rockets 240, stealth tanks 180. Between shots a helicopter backs off to just outside the threat's range, then re-engages. |
+| Kiting | Between shots a helicopter backs off to just outside the reach of anti-air it outranges (read from rules.json), then re-engages. Anti-air weights come from each weapon's damage against air armor. |
 
 ## Fair play
 

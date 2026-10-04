@@ -56,9 +56,10 @@ describe('Unit Counter System - Damage Modifiers', () => {
             expect(modifier).toBeGreaterThanOrEqual(1.0);
         });
 
-        it('rockets are effective vs medium armor', () => {
-            const modifier = RULES.damageModifiers.rocket.medium;
-            expect(modifier).toBeGreaterThanOrEqual(1.0);
+        it('rockets are effective vs tanks but poor vs fast light vehicles', () => {
+            expect(RULES.damageModifiers.rocket.medium).toBeGreaterThanOrEqual(0.8);
+            expect(RULES.damageModifiers.rocket.heavy).toBeGreaterThanOrEqual(0.8);
+            expect(RULES.damageModifiers.rocket.light).toBeLessThan(RULES.damageModifiers.rocket.heavy);
         });
 
         it('missiles are weak vs infantry', () => {
@@ -182,7 +183,7 @@ describe('Unit Armor Assignments', () => {
     });
 
     it('light vehicles have light armor', () => {
-        const lightVehicles = ['jeep', 'apc', 'artillery', 'mlrs', 'heli'];
+        const lightVehicles = ['jeep', 'apc', 'artillery', 'mlrs'];
         for (const unitKey of lightVehicles) {
             const unit = RULES.units[unitKey];
             expect(unit?.armor).toBe('light');
@@ -225,8 +226,55 @@ describe('Weapon Type Assignments', () => {
         expect(RULES.units.heavy.weaponType).toBe('cannon');
     });
 
-    it('siege units have heavy cannon', () => {
+    it('siege units have long-range splash weapons', () => {
         expect(RULES.units.mammoth.weaponType).toBe('heavy_cannon');
-        expect(RULES.units.artillery.weaponType).toBe('heavy_cannon');
+        expect(RULES.units.artillery.weaponType).toBe('shell');
+        expect(RULES.units.mlrs.weaponType).toBe('missile');
+    });
+
+    it('SAM sites use air-only missiles', () => {
+        expect(RULES.buildings.sam_site.weaponType).toBe('aa_missile');
+    });
+});
+
+describe('Air Armor and Anti-Air', () => {
+    it('aircraft have air armor', () => {
+        expect(RULES.units.heli.armor).toBe('air');
+        expect(RULES.units.harrier.armor).toBe('air');
+    });
+
+    it('every weapon has a modifier for every armor type', () => {
+        for (const [weapon, modifiers] of Object.entries(RULES.damageModifiers)) {
+            for (const armor of Object.keys(RULES.armorTypes)) {
+                expect(modifiers[armor], `${weapon} vs ${armor}`).toBeTypeOf('number');
+            }
+        }
+    });
+
+    it('aa_missile only hits aircraft', () => {
+        expect(RULES.weaponTargeting?.aa_missile).toEqual({ canTargetGround: false, canTargetAir: true });
+        expect(RULES.damageModifiers.aa_missile.air).toBeGreaterThanOrEqual(1.0);
+    });
+
+    it('missiles (Missile Tank, MLRS) hit ground and air', () => {
+        expect(RULES.weaponTargeting?.missile).toEqual({ canTargetGround: true, canTargetAir: true });
+    });
+
+    it('rockets are full-strength anti-air', () => {
+        expect(RULES.weaponTargeting?.rocket?.canTargetAir).toBe(true);
+        expect(RULES.damageModifiers.rocket.air).toBeGreaterThanOrEqual(1.0);
+    });
+
+    it('every army has a ground answer to aircraft', () => {
+        const antiAir = Object.entries(RULES.units)
+            .filter(([, u]) => !u.fly && u.damage > 0 && u.weaponType && RULES.weaponTargeting?.[u.weaponType]?.canTargetAir
+                && Math.round(u.damage * RULES.damageModifiers[u.weaponType].air) > 0)
+            .map(([key]) => key);
+        expect(antiAir).toEqual(expect.arrayContaining(['rocket', 'rifle', 'apc', 'stealth', 'mlrs']));
+    });
+
+    it('tank shells and artillery shells cannot be intercepted', () => {
+        expect(RULES.weaponArchetypes?.heavy_cannon.interceptable).toBe(false);
+        expect(RULES.weaponArchetypes?.shell.interceptable).toBe(false);
     });
 });

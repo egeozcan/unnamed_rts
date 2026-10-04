@@ -1,6 +1,6 @@
 import { GameState, PlayerState, Entity, EntityId, Vector, BuildingEntity, AirUnit } from '../types';
 import { RULES } from '../../data/schemas/index';
-import { canBuild, calculatePower, getRuleData, createEntity } from './helpers';
+import { canBuild, calculatePower, getRuleData, createEntity, getBuildTicks } from './helpers';
 import { getDifficultyModifiers } from '../ai/utils';
 import { type EntityCache } from '../perf';
 import { isAirBase } from '../entity-helpers';
@@ -74,7 +74,7 @@ export function updateProduction(player: PlayerState, _entities: Record<EntityId
         // Apply difficulty build speed bonus for AI players
         const difficultySpeedMult = player.isAi ? getDifficultyModifiers(player.difficulty).buildSpeedBonus : 1.0;
 
-        const costPerTick = (totalCost / 600) * speedMult * speedFactor * difficultySpeedMult;
+        const costPerTick = (totalCost / getBuildTicks(q.current)) * speedMult * speedFactor * difficultySpeedMult;
 
         // Linear cost deduction: spend only what we can afford
         const affordableCost = Math.min(costPerTick, nextPlayer.credits);

@@ -2,14 +2,15 @@ import { z } from 'zod';
 
 // Armor types enum
 export const ArmorTypeSchema = z.enum([
-  'none', 'infantry', 'light', 'medium', 'heavy', 'building', 'hijacker'
+  'none', 'infantry', 'light', 'medium', 'heavy', 'building', 'hijacker', 'air'
 ]);
 export type ArmorType = z.infer<typeof ArmorTypeSchema>;
 
 // Weapon types enum
 export const WeaponTypeSchema = z.enum([
   'bullet', 'ap_bullet', 'cannon', 'heavy_cannon', 'rocket',
-  'missile', 'flame', 'sniper', 'laser', 'grenade', 'heal', 'air_missile'
+  'missile', 'flame', 'sniper', 'laser', 'grenade', 'heal', 'air_missile',
+  'aa_missile', 'shell'
 ]);
 export type WeaponType = z.infer<typeof WeaponTypeSchema>;
 

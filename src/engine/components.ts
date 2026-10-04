@@ -44,6 +44,7 @@ export interface CombatComponent {
     readonly stance?: AttackStance;  // Default: 'aggressive'
     readonly attackMoveTarget?: Vector | null;  // Destination for attack-move command
     readonly stanceHomePos?: Vector | null;  // Position to return to for defensive stance / attack-move
+    readonly autoTargetId?: EntityId | null;  // targetId when it was picked by auto-targeting (not an order)
 }
 
 // ============ HARVESTER COMPONENT ============

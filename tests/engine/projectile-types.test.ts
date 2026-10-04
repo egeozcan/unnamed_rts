@@ -62,11 +62,14 @@ describe('Weapon Archetypes Configuration', () => {
         });
     });
 
-    it('should define archetype for heavy_cannon as artillery', () => {
+    it('should define archetype for heavy_cannon and shell as non-interceptable artillery', () => {
         expect(RULES.weaponArchetypes!.heavy_cannon).toEqual({
             archetype: 'artillery',
-            interceptable: true,
-            hp: 150
+            interceptable: false
+        });
+        expect(RULES.weaponArchetypes!.shell).toEqual({
+            archetype: 'artillery',
+            interceptable: false
         });
     });
 
@@ -104,15 +107,15 @@ describe('createProjectile with Archetypes', () => {
         expect(proj.speed).toBe(9);
     });
 
-    it('should create artillery projectile for heavy_cannon', () => {
+    it('should create artillery projectile for artillery shells', () => {
         const source = createTestCombatUnit({ key: 'artillery', x: 0, y: 0 });
         const target = createTestCombatUnit({ key: 'rifle', x: 300, y: 0 });
 
         const proj = createProjectile(source, target);
 
         expect(proj.archetype).toBe('artillery');
-        expect(proj.hp).toBe(150);
-        expect(proj.maxHp).toBe(150);
+        expect(proj.hp).toBe(0); // not interceptable
+        expect(proj.maxHp).toBe(0);
         expect(proj.speed).toBe(6);
     });
 
@@ -123,8 +126,8 @@ describe('createProjectile with Archetypes', () => {
         const proj = createProjectile(source, target);
 
         expect(proj.archetype).toBe('missile');
-        expect(proj.hp).toBe(100);
-        expect(proj.maxHp).toBe(100);
+        expect(proj.hp).toBe(0); // aa_missile is not interceptable
+        expect(proj.maxHp).toBe(0);
         expect(proj.speed).toBe(28);
     });
 
@@ -168,20 +171,9 @@ describe('Interception Aura Configuration', () => {
         });
     });
 
-    it('should have interceptionAura on mlrs', () => {
-        const mlrs = RULES.units.mlrs;
-        expect(mlrs.interceptionAura).toEqual({
-            radius: 120,
-            dps: 80
-        });
-    });
-
-    it('should have interceptionAura on rocket soldier', () => {
-        const rocket = RULES.units.rocket;
-        expect(rocket.interceptionAura).toEqual({
-            radius: 60,
-            dps: 40
-        });
+    it('has no cosmetic interception auras on units (they could never kill a projectile)', () => {
+        expect(RULES.units.mlrs.interceptionAura).toBeUndefined();
+        expect(RULES.units.rocket.interceptionAura).toBeUndefined();
     });
 });
 

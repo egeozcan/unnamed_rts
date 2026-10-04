@@ -163,6 +163,22 @@ export function getRuleData(key: string): Building | Unit | null {
     return null;
 }
 
+/** Base build time for structures (10s at 60 ticks/s). */
+export const BUILDING_BUILD_TICKS = 600;
+
+/**
+ * Base build time in ticks for one production building at full power, before
+ * multi-building / low-power / AI difficulty multipliers.
+ * Units scale with cost - clamp(120 + 0.3 * cost, 180, 900) - so cheap counters
+ * arrive quickly while expensive units still spend credits faster per building.
+ * Structures keep a flat build time.
+ */
+export function getBuildTicks(key: string): number {
+    const data = getRuleData(key);
+    if (!data || isBuildingData(data)) return BUILDING_BUILD_TICKS;
+    return Math.min(900, Math.max(180, 120 + 0.3 * data.cost));
+}
+
 export function createEntity(x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, state: GameState): Entity {
     const id = 'e_' + state.tick + '_' + Math.floor(Math.random() * 100000);
 
@@ -334,6 +350,7 @@ export function createProjectile(source: Entity, target: Entity): Projectile {
         maxHp: hp,
         arcHeight,
         startPos: source.pos,
+        targetPos: target.pos,
         trailPoints: []
     };
 }

@@ -11,6 +11,48 @@ import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, 
 // Maximum distance a unit will pursue a target when on defensive stance or attack-move
 const DEFENSIVE_PURSUIT_RANGE = 400;
 
+// Units auto-acquire targets this far beyond their weapon range
+const ACQUIRE_RANGE_SLACK = 50;
+
+// Auto-picked targets are re-prioritized this often (staggered per unit), and only swapped for one
+// scoring this many times higher, so units don't flip between similar targets
+const RETARGET_INTERVAL = 20;
+const RETARGET_HYSTERESIS = 1.3;
+
+function retargetPhase(id: EntityId): number {
+    return id.charCodeAt(id.length - 1) + id.length;
+}
+
+/**
+ * How much a unit wants to shoot `other` (higher is better, always > 0):
+ * - effectiveness: the weapon's damage modifier against the target's armor (counters first)
+ * - threat: targets that can hurt this unit outrank harmless ones (harvesters, medics, rigs...)
+ * - structures without weapons come last for everyone
+ * - targets already within weapon range beat ones it would have to approach, nearer ones win ties
+ */
+function targetPriority(data: ReturnType<typeof getRuleData>, other: Entity, dist: number): number {
+    if (!data || !isUnitData(data)) return 0;
+    const modifiers = RULES.damageModifiers as Record<string, Record<string, number>> | undefined;
+    const otherData = getRuleData(other.key);
+    const effectiveness = Math.max(0.05, modifiers?.[data.weaponType || 'bullet']?.[otherData?.armor || 'none'] ?? 1);
+
+    let threat = 0.6;
+    const otherWeapon = otherData?.weaponType;
+    if (otherWeapon && otherData && (otherData.damage ?? 0) > 0 && (other.type === 'UNIT' || ('combat' in other && !!other.combat))) {
+        const targeting = RULES.weaponTargeting?.[otherWeapon] || { canTargetGround: true, canTargetAir: false };
+        const canHitMe = data.fly === true ? targeting.canTargetAir : targeting.canTargetGround;
+        const vsMe = modifiers?.[otherWeapon]?.[data.armor || 'none'] ?? 1;
+        if (canHitMe && vsMe > 0) threat = 1;
+    }
+    const kind = other.type === 'BUILDING' && !other.combat ? 0.3 : 1;
+
+    const range = data.range || 100;
+    const acquireRange = range + ACQUIRE_RANGE_SLACK;
+    const nearness = 1 - 0.25 * Math.min(1, dist / acquireRange);
+    const reach = dist <= range + other.radius ? 1 : 0.5;
+    return effectiveness * threat * kind * nearness * reach;
+}
+
 /**
  * Update combat unit behavior - handles auto-targeting and attacks.
  *
@@ -79,9 +121,29 @@ export function updateCombatUnitBehavior(
                     ...nextEntity,
                     combat: {
                         ...nextEntity.combat,
-                        targetId: result,
+                        targetId: result.id,
+                        autoTargetId: result.id,
                         stanceHomePos: shouldRecordHome ? nextEntity.pos : nextEntity.combat.stanceHomePos
                     }
+                };
+            }
+        }
+    } else if (
+        nextEntity.combat.targetId &&
+        nextEntity.combat.targetId === nextEntity.combat.autoTargetId &&
+        state && (state.tick + retargetPhase(nextEntity.id)) % RETARGET_INTERVAL === 0
+    ) {
+        // Every so often, swap an auto-picked target for a clearly better one in range
+        // (never one the player ordered, which leaves autoTargetId unset)
+        const current = allEntities[nextEntity.combat.targetId];
+        const searchRange = stance === 'hold_ground' ? range : undefined;
+        const best = current && !current.dead ? findCombatTarget(nextEntity, data, spatialGrid, searchRange, state) : null;
+        if (best && best.id !== current.id) {
+            const currentScore = targetPriority(data, current, nextEntity.pos.dist(current.pos));
+            if (best.score > currentScore * RETARGET_HYSTERESIS) {
+                nextEntity = {
+                    ...nextEntity,
+                    combat: { ...nextEntity.combat, targetId: best.id, autoTargetId: best.id }
                 };
             }
         }
@@ -422,14 +484,14 @@ function findCombatTarget(
     spatialGrid: ReturnType<typeof getSpatialGrid>,
     maxRange?: number,
     state?: GameState
-): EntityId | null {
+): { id: EntityId; score: number } | null {
 
     if (!data || !isUnitData(data)) return null;
 
     const isHealer = data.damage < 0;
     const isEngineer = data.canCaptureEnemyBuildings || data.canRepairFriendlyBuildings;
     const isHijacker = data.canHijackVehicles;
-    const range = maxRange ?? ((data.range || 100) + (isHealer ? 100 : 50));
+    const range = maxRange ?? ((data.range || 100) + (isHealer ? 100 : ACQUIRE_RANGE_SLACK));
 
     const weaponType = data.weaponType || 'bullet';
     const targeting = RULES.weaponTargeting?.[weaponType] || { canTargetGround: true, canTargetAir: false };
@@ -492,10 +554,17 @@ function findCombatTarget(
             }
         }
     }
+    if (generic) {
+        // Ordinary attackers pick the best target in range, not just the nearest
+        const best = spatialGrid.findBest(unit.pos.x, unit.pos.y, range, predicate,
+            (e, dist) => targetPriority(data, e, dist), alliedMask);
+        return best ? { id: best.entity.id, score: best.score } : null;
+    }
+
     const found = spatialGrid.findNearest(unit.pos.x, unit.pos.y, searchRadius, predicate, alliedMask);
 
     if (found && found.pos.dist(unit.pos) <= range) {
-        return found.id;
+        return { id: found.id, score: 1 };
     }
 
     return null;
@@ -602,9 +671,10 @@ function handleCombatTarget(
     const dist = unit.pos.dist(target.pos);
     const range = data.range || 100;
 
-    // Ground units should NEVER chase air units - only attack if already in range
-    // If air target is out of range, clear target and move on
-    if (isTargetAir && dist > range) {
+    // Units never chase air units across the map: they only step in on aircraft within the
+    // auto-acquire distance, and drop anything further. (Dropping everything out of weapon range would
+    // freeze the unit: it re-acquires the same aircraft next tick and drops it again without moving.)
+    if (isTargetAir && dist > range + ACQUIRE_RANGE_SLACK) {
         return {
             entity: {
                 ...unit,

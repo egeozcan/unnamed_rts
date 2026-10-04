@@ -48,6 +48,7 @@ import {
 import { updateHarvesterAI } from '../../harvester/index.js';
 import { AIImplementation } from '../../contracts.js';
 import { AIPersonality, RULES, isUnitData } from '../../../../data/schemas/index.js';
+import { EnemyComposition, applyCounterWeights, pickDefenseBuilding, rankCounterUnits } from '../../counters.js';
 import {
     getSentinelOpportunistRuntimeState,
     resetSentinelOpportunistRuntimeState
@@ -94,7 +95,7 @@ const TARGET_DEFENSES_FORTIFY = 3;
 const TARGET_DEFENSES_EXPANSION = 4;
 const TARGET_DEFENSES_ASSAULT = 4;
 
-const DEFENSE_BUILD_ORDER = ['turret', 'sam_site', 'pillbox', 'obelisk'];
+const DEFENSE_BUILD_ORDER = ['turret', 'pillbox', 'obelisk'];
 
 // Garrison fractions and minimums
 const GARRISON_FRACTION_FORTIFY = 0.65;
@@ -132,7 +133,12 @@ const STRICT_RUSH_COMBAT_RATIO = 1.4;
 const STRICT_RUSH_VENGEANCE_BOOST = 260;
 
 const NON_COMBAT_UNIT_KEYS = new Set(['harvester', 'mcv', 'engineer', 'induction_rig', 'hijacker', 'demo_truck']);
-const VEHICLE_PRODUCTION_KEYS = ['heavy', 'artillery', 'light'] as const;
+const VEHICLE_PRODUCTION_KEYS: readonly string[] = ['heavy', 'artillery', 'light'];
+// Counter rosters (see ../../counters.ts): the turtle stays heavy/siege-flavored
+// but may add missile tanks, flame tanks and flamers when they answer the enemy.
+const COUNTER_VEHICLES = ['heavy', 'artillery', 'light', 'stealth', 'flame_tank', 'mlrs'];
+const COUNTER_INFANTRY = ['rocket', 'rifle', 'grenadier', 'flamer'];
+const COUNTER_WEIGHT = 8;
 const TECH_CHAIN = ['factory', 'tech', 'airforce_command'] as const;
 
 const INFANTRY_WEIGHTS: Record<Phase, Record<string, number>> = {
@@ -176,9 +182,10 @@ function choosePreferredInfantry(
     phase: Phase,
     myBuildings: Entity[],
     credits: number,
-    tick: number
+    tick: number,
+    composition: EnemyComposition
 ): string | null {
-    const weights = INFANTRY_WEIGHTS[phase];
+    const weights = applyCounterWeights(INFANTRY_WEIGHTS[phase], composition, COUNTER_INFANTRY, COUNTER_WEIGHT);
     const candidates: { key: string; weight: number }[] = [];
     let totalWeight = 0;
 
@@ -208,9 +215,16 @@ function choosePreferredInfantry(
     return candidates[candidates.length - 1].key;
 }
 
-function choosePreferredVehicle(myBuildings: Entity[], credits: number, tick: number): string | null {
+function choosePreferredVehicle(
+    myBuildings: Entity[],
+    credits: number,
+    tick: number,
+    composition: EnemyComposition
+): string | null {
+    const hasCounterData = Object.keys(composition.counterScores).length > 0;
+    const roster = hasCounterData ? rankCounterUnits(composition, COUNTER_VEHICLES) : VEHICLE_PRODUCTION_KEYS;
     const candidates: string[] = [];
-    for (const key of VEHICLE_PRODUCTION_KEYS) {
+    for (const key of roster) {
         const data = RULES.units[key];
         if (!data) continue;
         if (data.cost > credits) continue;
@@ -222,7 +236,8 @@ function choosePreferredVehicle(myBuildings: Entity[], credits: number, tick: nu
         return null;
     }
 
-    return candidates[tick % candidates.length];
+    // Best counter once the enemy army is known; otherwise rotate through the flavor roster
+    return hasCounterData ? candidates[0] : candidates[tick % candidates.length];
 }
 
 function enforceProductionBias(
@@ -231,7 +246,8 @@ function enforceProductionBias(
     phase: Phase,
     myBuildings: Entity[],
     credits: number,
-    tick: number
+    tick: number,
+    composition: EnemyComposition
 ): Action[] {
     const remapped: Action[] = [];
     let infantryCursor = 0;
@@ -244,7 +260,7 @@ function enforceProductionBias(
         }
 
         if (action.payload.category === 'infantry') {
-            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryCursor);
+            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryCursor, composition);
             infantryCursor++;
             if (!preferred) {
                 remapped.push(action);
@@ -264,7 +280,7 @@ function enforceProductionBias(
                 continue;
             }
 
-            const preferred = choosePreferredVehicle(myBuildings, credits, tick + vehicleCursor);
+            const preferred = choosePreferredVehicle(myBuildings, credits, tick + vehicleCursor, composition);
             vehicleCursor++;
             if (!preferred) {
                 continue;
@@ -330,7 +346,8 @@ function queueDefenseIfPossible(
     playerId: number,
     myBuildings: Entity[],
     phase: Phase,
-    defenseCount: number
+    defenseCount: number,
+    composition: EnemyComposition
 ): void {
     const target = phase === 'assault'
         ? TARGET_DEFENSES_ASSAULT
@@ -352,7 +369,11 @@ function queueDefenseIfPossible(
     );
     if (alreadyQueuedBuilding) return;
 
-    for (const defenseKey of DEFENSE_BUILD_ORDER) {
+    // SAM sites jump the queue while enemy aircraft are unanswered
+    const defenseOrder = pickDefenseBuilding(composition, myBuildings) === 'sam_site'
+        ? ['sam_site', ...DEFENSE_BUILD_ORDER]
+        : DEFENSE_BUILD_ORDER;
+    for (const defenseKey of defenseOrder) {
         const data = RULES.buildings[defenseKey];
         if (!data) continue;
         if (!checkPrerequisites(defenseKey, myBuildings)) continue;
@@ -560,7 +581,8 @@ function queueSpecialInfantry(
     enemies: Entity[],
     baseCenter: Vector,
     phase: Phase,
-    specialistGateOpen: boolean
+    specialistGateOpen: boolean,
+    composition: EnemyComposition
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -579,7 +601,7 @@ function queueSpecialInfantry(
         }
     }
 
-    const preferred = choosePreferredInfantry(phase, myBuildings, player.credits, state.tick);
+    const preferred = choosePreferredInfantry(phase, myBuildings, player.credits, state.tick, composition);
     if (!preferred) return;
 
     actions.push({
@@ -592,7 +614,8 @@ function queueVehicleIfPossible(
     actions: Action[],
     state: GameState,
     playerId: number,
-    myBuildings: Entity[]
+    myBuildings: Entity[],
+    composition: EnemyComposition
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -604,7 +627,7 @@ function queueVehicleIfPossible(
     );
     if (hasQueuedVehicle) return;
 
-    const preferred = choosePreferredVehicle(myBuildings, player.credits, state.tick);
+    const preferred = choosePreferredVehicle(myBuildings, player.credits, state.tick, composition);
     if (!preferred) return;
 
     const cost = RULES.units[preferred]?.cost ?? 1200;
@@ -1116,7 +1139,8 @@ export function computeSentinelOpportunistAiActions(state: GameState, playerId: 
         phase,
         myBuildings,
         player.credits,
-        state.tick
+        state.tick,
+        aiState.enemyIntelligence.composition
     );
     const specialistGateOpen = isSpecialistGateOpen(aiState, hasImmediateThreat, player.credits, combatUnits.length);
     economyActions = rewriteInfantryBuildForSpecialists(
@@ -1135,14 +1159,14 @@ export function computeSentinelOpportunistAiActions(state: GameState, playerId: 
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
     actions.push(...handleInductionRigOperations(state, playerId, myBuildings, myUnits));
 
-    queueDefenseIfPossible(actions, state, playerId, myBuildings, phase, defenses.length);
+    queueDefenseIfPossible(actions, state, playerId, myBuildings, phase, defenses.length, aiState.enemyIntelligence.composition);
     ensureExtraBarracks(actions, state, playerId, myBuildings, phase);
     ensureTechChain(actions, state, playerId, myBuildings);
 
-    queueSpecialInfantry(actions, state, playerId, myBuildings, myUnits, enemies, baseCenter, phase, specialistGateOpen);
+    queueSpecialInfantry(actions, state, playerId, myBuildings, myUnits, enemies, baseCenter, phase, specialistGateOpen, aiState.enemyIntelligence.composition);
 
     if (hasFactory) {
-        queueVehicleIfPossible(actions, state, playerId, myBuildings);
+        queueVehicleIfPossible(actions, state, playerId, myBuildings, aiState.enemyIntelligence.composition);
     }
 
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));

@@ -47,6 +47,7 @@ import {
 import { updateHarvesterAI } from '../../harvester/index.js';
 import { AIImplementation } from '../../contracts.js';
 import { AIPersonality, RULES, isUnitData } from '../../../../data/schemas/index.js';
+import { EnemyComposition, applyCounterWeights, pickDefenseBuilding, rankCounterUnits } from '../../counters.js';
 
 type Phase = 'fortify' | 'expansion' | 'assault';
 
@@ -101,7 +102,7 @@ const TARGET_DEFENSES_ASSAULT = 3;
 // Prioritize stronger defenses when available (turrets, SAMs).
 // Early game: turret/sam fail prereqs, falls through to pillbox.
 // Mid/late game: turrets and SAMs built first (stronger).
-const DEFENSE_BUILD_ORDER = ['turret', 'sam_site', 'pillbox', 'obelisk'];
+const DEFENSE_BUILD_ORDER = ['turret', 'pillbox', 'obelisk'];
 
 // Base garrison - disabled to let updateStrategy handle all combat decisions
 const GARRISON_FRACTION_FORTIFY = 0;
@@ -115,6 +116,10 @@ const GARRISON_PATROL_RADIUS = 300;      // How close to base garrison units sta
 // Rockets (300cr, range 220, 35 effective vs buildings/heavy) are the backbone.
 // Grenadiers (250cr, splash 35, 32 effective vs buildings) for splash damage.
 // Flamers (400cr, short range 80 but devastating DPS) as support.
+// Infantry that can be weighted up when it counters the enemy (see ../../counters.ts)
+const COUNTER_INFANTRY = ['rocket', 'rifle', 'grenadier', 'flamer', 'sniper'];
+const COUNTER_WEIGHT = 8;
+
 const INFANTRY_WEIGHTS: Record<Phase, Record<string, number>> = {
     fortify: {
         rifle: 3,
@@ -175,9 +180,10 @@ function choosePreferredInfantry(
     phase: Phase,
     myBuildings: Entity[],
     credits: number,
-    tick: number
+    tick: number,
+    composition: EnemyComposition
 ): string | null {
-    const weights = INFANTRY_WEIGHTS[phase];
+    const weights = applyCounterWeights(INFANTRY_WEIGHTS[phase], composition, COUNTER_INFANTRY, COUNTER_WEIGHT);
 
     // Build candidates list with weights
     const candidates: { key: string; weight: number }[] = [];
@@ -216,7 +222,8 @@ function enforceProductionBias(
     phase: Phase,
     myBuildings: Entity[],
     credits: number,
-    tick: number
+    tick: number,
+    composition: EnemyComposition
 ): Action[] {
     let infantryIndex = 0;
     return actions.map(action => {
@@ -225,7 +232,7 @@ function enforceProductionBias(
 
         // Remap infantry builds through weighted selection for variety
         if (buildAction.payload.category === 'infantry') {
-            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryIndex);
+            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryIndex, composition);
             infantryIndex++;
             if (!preferred) return action;
             return {
@@ -240,7 +247,7 @@ function enforceProductionBias(
         // with our preferred priority (demo trucks → artillery → heavy/flame).
         // Keep harvesters untouched.
         if (buildAction.payload.category === 'vehicle' && buildAction.payload.key !== 'harvester') {
-            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryIndex);
+            const preferred = choosePreferredInfantry(phase, myBuildings, credits, tick + infantryIndex, composition);
             infantryIndex++;
             if (!preferred) return action;
             return {
@@ -303,7 +310,8 @@ function queueDefenseIfPossible(
     playerId: number,
     myBuildings: Entity[],
     phase: Phase,
-    defenseCount: number
+    defenseCount: number,
+    composition: EnemyComposition
 ): void {
     const target = phase === 'assault' ? TARGET_DEFENSES_ASSAULT :
         phase === 'expansion' ? TARGET_DEFENSES_EXPANSION : TARGET_DEFENSES_FORTIFY;
@@ -325,7 +333,11 @@ function queueDefenseIfPossible(
     if (alreadyQueuedBuilding) return;
 
     // Pick the best defense we can afford from the priority order
-    for (const defenseKey of DEFENSE_BUILD_ORDER) {
+    // SAM sites jump the queue while enemy aircraft are unanswered
+    const defenseOrder = pickDefenseBuilding(composition, myBuildings) === 'sam_site'
+        ? ['sam_site', ...DEFENSE_BUILD_ORDER]
+        : DEFENSE_BUILD_ORDER;
+    for (const defenseKey of defenseOrder) {
         const data = RULES.buildings[defenseKey];
         if (!data) continue;
         if (!checkPrerequisites(defenseKey, myBuildings)) continue;
@@ -350,7 +362,8 @@ function queueSpecialInfantry(
     playerId: number,
     myBuildings: Entity[],
     myUnits: Entity[],
-    phase: Phase
+    phase: Phase,
+    composition: EnemyComposition
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -390,7 +403,7 @@ function queueSpecialInfantry(
     }
 
     // Fill empty queue with weighted selection (rockets, grenadiers, etc.)
-    const preferred = choosePreferredInfantry(phase, myBuildings, player.credits, state.tick);
+    const preferred = choosePreferredInfantry(phase, myBuildings, player.credits, state.tick, composition);
     if (!preferred) return;
 
     actions.push({
@@ -409,7 +422,8 @@ function queueVehicleIfPossible(
     state: GameState,
     playerId: number,
     myBuildings: Entity[],
-    myUnits: Entity[]
+    myUnits: Entity[],
+    composition: EnemyComposition
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -463,8 +477,8 @@ function queueVehicleIfPossible(
         }
     }
 
-    // Priority 3: Heavy tanks or flame tanks for direct combat
-    const combatVehicles = ['heavy', 'flame_tank'];
+    // Priority 3: the tank that best counters the enemy army
+    const combatVehicles = rankCounterUnits(composition, ['heavy', 'flame_tank', 'stealth', 'light', 'apc'], myUnits);
     for (const key of combatVehicles) {
         if (!checkPrerequisites(key, myBuildings)) continue;
         const cost = RULES.units[key]?.cost ?? 1000;
@@ -885,7 +899,7 @@ export function computeInfantryFortressAiActions(state: GameState, playerId: num
     );
 
     // Redirect non-harvester, non-demo_truck vehicle builds to infantry
-    economyActions = enforceProductionBias(economyActions, playerId, phase, myBuildings, player.credits, state.tick);
+    economyActions = enforceProductionBias(economyActions, playerId, phase, myBuildings, player.credits, state.tick, aiState.enemyIntelligence.composition);
 
     actions.push(...economyActions);
     actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
@@ -898,14 +912,14 @@ export function computeInfantryFortressAiActions(state: GameState, playerId: num
     ensureTechChain(actions, state, playerId, myBuildings);
 
     // Queue defenses to hit phase targets
-    queueDefenseIfPossible(actions, state, playerId, myBuildings, phase, defenses.length);
+    queueDefenseIfPossible(actions, state, playerId, myBuildings, phase, defenses.length, aiState.enemyIntelligence.composition);
 
     // Proactively queue infantry if nothing in queue
-    queueSpecialInfantry(actions, state, playerId, myBuildings, myUnits, phase);
+    queueSpecialInfantry(actions, state, playerId, myBuildings, myUnits, phase, aiState.enemyIntelligence.composition);
 
     // Proactively queue vehicles - demo trucks for harassment, light tanks for combat
     if (hasFactory) {
-        queueVehicleIfPossible(actions, state, playerId, myBuildings, myUnits);
+        queueVehicleIfPossible(actions, state, playerId, myBuildings, myUnits, aiState.enemyIntelligence.composition);
     }
 
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));

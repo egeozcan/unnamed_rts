@@ -45,6 +45,7 @@ import {
 import { updateHarvesterAI } from '../../harvester/index.js';
 import { AIImplementation } from '../../contracts.js';
 import { AIPersonality, RULES } from '../../../../data/schemas/index.js';
+import { EnemyComposition, rankCounterUnits } from '../../counters.js';
 
 const COMMIT_REFINERIES = 4;
 const COMMIT_TANKS = 8;
@@ -52,7 +53,9 @@ const COMMIT_HEAVIES = 3;
 const FORCE_COMMIT_TICK = 25200;
 const FORCE_COMMIT_MIN_TANKS = 5;
 
-const TANK_KEYS = new Set(['heavy', 'light']);
+const TANK_KEYS = new Set(['heavy', 'light', 'stealth', 'flame_tank', 'mammoth']);
+// Tanks that count toward the heavy-armor commit condition
+const MAIN_BATTLE_TANK_KEYS = new Set(['heavy', 'stealth', 'mammoth']);
 
 type VehicleStartBuildAction = Extract<Action, { type: 'START_BUILD' }> & {
     payload: { category: 'vehicle'; key: string; playerId: number };
@@ -130,33 +133,33 @@ function removeInfantryAndExtraBarracksBuilds(actions: Action[], myBuildings: En
     });
 }
 
-function choosePreferredTank(myBuildings: Entity[], credits: number): 'heavy' | 'light' | null {
-    const canBuildHeavy = checkPrerequisites('heavy', myBuildings);
-    const canBuildLight = checkPrerequisites('light', myBuildings);
+// Tank roster in flavor order (heavy first); ranked against the enemy army so the
+// all-in brings tank destroyers vs heavies, heavies vs light tanks, flame tanks vs infantry.
+const TANK_ROSTER = ['heavy', 'light', 'stealth', 'flame_tank', 'mammoth'];
 
-    if (!canBuildHeavy && !canBuildLight) {
+function choosePreferredTank(
+    myBuildings: Entity[],
+    credits: number,
+    composition: EnemyComposition,
+    myUnits: Entity[]
+): string | null {
+    const buildable = rankCounterUnits(composition, TANK_ROSTER, myUnits)
+        .filter(key => checkPrerequisites(key, myBuildings));
+    if (buildable.length === 0) {
         return null;
     }
-
-    const heavyCost = RULES.units['heavy']?.cost || 1600;
-    if (canBuildHeavy && (credits >= heavyCost || !canBuildLight)) {
-        return 'heavy';
-    }
-
-    if (canBuildLight) {
-        return 'light';
-    }
-
-    return canBuildHeavy ? 'heavy' : null;
+    return buildable.find(key => (RULES.units[key]?.cost ?? Infinity) <= credits) ?? buildable[0];
 }
 
 function enforceTankProductionBias(
     actions: Action[],
     playerId: number,
     myBuildings: Entity[],
-    credits: number
+    credits: number,
+    composition: EnemyComposition,
+    myUnits: Entity[]
 ): Action[] {
-    const preferredTank = choosePreferredTank(myBuildings, credits);
+    const preferredTank = choosePreferredTank(myBuildings, credits, composition, myUnits);
     if (!preferredTank) {
         return actions;
     }
@@ -190,7 +193,9 @@ function queueTankIfPossible(
     actions: Action[],
     state: GameState,
     playerId: number,
-    myBuildings: Entity[]
+    myBuildings: Entity[],
+    composition: EnemyComposition,
+    myUnits: Entity[]
 ): void {
     const player = state.players[playerId];
     if (!player) return;
@@ -198,7 +203,7 @@ function queueTankIfPossible(
     if (player.queues.vehicle.current) return;
     if (actions.some(isTankVehicleBuildAction)) return;
 
-    const preferredTank = choosePreferredTank(myBuildings, player.credits);
+    const preferredTank = choosePreferredTank(myBuildings, player.credits, composition, myUnits);
     if (!preferredTank) return;
 
     actions.push({
@@ -232,7 +237,7 @@ export function computeEcoTankAllInAiActions(state: GameState, playerId: number,
         u.key !== 'demo_truck'
     );
     const tanks = myUnits.filter(isTankUnit);
-    const heavies = tanks.filter(unit => unit.key === 'heavy');
+    const heavies = tanks.filter(unit => MAIN_BATTLE_TANK_KEYS.has(unit.key));
     const refineries = myBuildings.filter(b => b.key === 'refinery' && !b.dead);
 
     const baseCenter = findBaseCenter(myBuildings);
@@ -375,21 +380,21 @@ export function computeEcoTankAllInAiActions(state: GameState, playerId: number,
         economyActions = removeInfantryAndExtraBarracksBuilds(economyActions, myBuildings);
 
         if (!underEcoGoals) {
-            economyActions = enforceTankProductionBias(economyActions, playerId, myBuildings, player.credits);
+            economyActions = enforceTankProductionBias(economyActions, playerId, myBuildings, player.credits, aiState.enemyIntelligence.composition, myUnits);
         }
 
         actions.push(...economyActions);
         actions.push(...handleMCVOperations(state, playerId, aiState, myBuildings, myUnits));
         actions.push(...handleInductionRigOperations(state, playerId, myBuildings, myUnits));
     } else {
-        queueTankIfPossible(actions, state, playerId, myBuildings);
+        queueTankIfPossible(actions, state, playerId, myBuildings, aiState.enemyIntelligence.composition, myUnits);
     }
 
     actions.push(...handleBuildingRepair(state, playerId, myBuildings, player, aiState));
     actions.push(...handleHarvesterGathering(state, playerId, harvesters, aiState.harvestersUnderAttack, aiState, player.difficulty));
 
     if (!inCommitPush && !underEcoGoals) {
-        queueTankIfPossible(actions, state, playerId, myBuildings);
+        queueTankIfPossible(actions, state, playerId, myBuildings, aiState.enemyIntelligence.composition, myUnits);
     }
 
     const harvesterResult = updateHarvesterAI(

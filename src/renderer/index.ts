@@ -1051,7 +1051,8 @@ export class Renderer {
         let yOffset = 0;
         if (proj.arcHeight > 0) {
             const targetEntity = entities[proj.targetId];
-            const targetPos = targetEntity?.pos || proj.pos;
+            // Non-homing shots fly at their aim point, not where the target has moved to
+            const targetPos = (proj.archetype !== 'missile' && proj.targetPos) || targetEntity?.pos || proj.pos;
             const totalDist = proj.startPos.dist(targetPos);
             const traveled = proj.startPos.dist(proj.pos);
             const progress = totalDist > 0 ? traveled / totalDist : 0;

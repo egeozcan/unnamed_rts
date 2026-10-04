@@ -256,6 +256,39 @@ export class SpatialGrid {
     }
 
     /**
+     * Find the entity with the highest `score` among those within `maxRadius` (center distance) that
+     * pass `predicate`. Entities scoring <= 0 are ignored; ties resolve to the first in query order.
+     * `ignoredOwnersMask` works as in findNearest().
+     */
+    findBest(
+        x: number,
+        y: number,
+        maxRadius: number,
+        predicate: (e: Entity) => boolean,
+        score: (e: Entity, dist: number) => number,
+        ignoredOwnersMask: number = -1
+    ): { entity: Entity; score: number } | null {
+        let best: Entity | null = null;
+        let bestScore = 0;
+        const maxSq = maxRadius * maxRadius;
+
+        this.forEachCandidate(x, y, maxRadius, e => {
+            const dx = e.pos.x - x;
+            const dy = e.pos.y - y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq > maxSq) return;
+            if (!predicate(e)) return;
+            const s = score(e, Math.sqrt(distSq));
+            if (s > bestScore) {
+                bestScore = s;
+                best = e;
+            }
+        }, ignoredOwnersMask);
+
+        return best ? { entity: best, score: bestScore } : null;
+    }
+
+    /**
      * Find the nearest enemy unit to a position.
      */
     findNearestEnemy(x: number, y: number, maxRadius: number, playerId: number): Entity | null {

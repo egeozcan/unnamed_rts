@@ -620,7 +620,8 @@ export class Scene3D {
             const target = entities[proj.targetId];
             const startHeight = shooter ? getAltitude(shooter) + Math.min(getModelHeight(shooter) * 0.6, 14) : 10;
             const endHeight = target ? getAltitude(target) + Math.min(getModelHeight(target) * 0.5, 12) : 4;
-            const targetPos = target?.pos ?? proj.pos;
+            // Non-homing shots fly at their aim point, not where the target has moved to
+            const targetPos = (proj.archetype !== 'missile' && proj.targetPos) || target?.pos || proj.pos;
             const totalDist = proj.startPos.dist(targetPos);
             const progress = totalDist > 0 ? Math.min(1, proj.startPos.dist(proj.pos) / totalDist) : 0;
             const height = this.projectileHeight(proj, progress, startHeight, endHeight);

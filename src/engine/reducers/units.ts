@@ -506,7 +506,8 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                     nextEntities[id] = {
                         ...entity,
                         movement: { ...entity.movement, moveTarget: spreadPos || null, path: null },
-                        combat: { ...entity.combat, targetId: targetId }
+                        // An order, not an auto-pick: never swapped for a higher-priority target
+                        combat: { ...entity.combat, targetId: targetId, autoTargetId: null }
                     };
                 } else if (target && target.owner === entity.owner && target.key === 'service_depot') {
                     // Right click friendly service depot - go dock instead of attack

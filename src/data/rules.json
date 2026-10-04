@@ -26,8 +26,11 @@
         },
         "heavy_cannon": {
             "archetype": "artillery",
-            "interceptable": true,
-            "hp": 150
+            "interceptable": false
+        },
+        "shell": {
+            "archetype": "artillery",
+            "interceptable": false
         },
         "rocket": {
             "archetype": "rocket",
@@ -38,6 +41,10 @@
             "archetype": "missile",
             "interceptable": true,
             "hp": 100
+        },
+        "aa_missile": {
+            "archetype": "missile",
+            "interceptable": false
         },
         "air_missile": {
             "archetype": "missile",
@@ -226,12 +233,12 @@
             "rate": 60,
             "isDefense": true,
             "armor": "building",
-            "weaponType": "missile",
+            "weaponType": "aa_missile",
             "prerequisites": [
                 "conyard",
                 "barracks"
             ],
-            "description": "Anti-air defense. Essential against helicopters and harriers. Cannot target ground units.",
+            "description": "Anti-air defense. Long-range homing missiles shred helicopters and harriers. Cannot target ground units.",
             "interceptionAura": {
                 "radius": 200,
                 "dps": 150
@@ -255,7 +262,7 @@
                 "conyard",
                 "barracks"
             ],
-            "description": "Cheap anti-infantry defense. Fast firing but weak against armor. Good for base perimeters.",
+            "description": "Cheap anti-infantry defense. Fast firing, can also fire at aircraft, but weak against armor. Good for base perimeters.",
             "sightRange": 220
         },
         "obelisk": {
@@ -292,7 +299,7 @@
                 "factory"
             ],
             "maxCount": 1,
-            "description": "Unlocks advanced units and buildings. Grants access to Mammoth Tanks, Commandos, Artillery, and the Obelisk.",
+            "description": "Unlocks advanced units and buildings: Missile Tanks, Mammoth Tanks, Artillery, MLRS, Helicopters, Snipers, Commandos and the Obelisk.",
             "sightRange": 200
         },
         "airforce_command": {
@@ -356,7 +363,7 @@
             "name": "Rifleman",
             "type": "infantry",
             "hp": 80,
-            "cost": 100,
+            "cost": 120,
             "speed": 2,
             "range": 130,
             "damage": 8,
@@ -367,14 +374,14 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Basic infantry. Cheap and fast to train. Effective in groups against infantry, weak against armor.",
+            "description": "Cheap basic infantry. Beats Rocket soldiers and other specialists, and can plink at aircraft. Shredded by tanks, Flame Tanks and fast vehicles.",
             "sightRange": 200
         },
         "rocket": {
             "name": "Rocket",
             "type": "infantry",
             "hp": 100,
-            "cost": 300,
+            "cost": 350,
             "speed": 1.5,
             "range": 240,
             "damage": 35,
@@ -386,11 +393,7 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Anti-armor infantry. Fires rockets with splash damage. Effective vs vehicles and aircraft.",
-            "interceptionAura": {
-                "radius": 60,
-                "dps": 40
-            },
+            "description": "Anti-armor and anti-air infantry. Beats tanks, Missile Tanks and aircraft. Loses to Riflemen, anti-infantry units and fast light vehicles.",
             "sightRange": 240
         },
         "engineer": {
@@ -433,12 +436,12 @@
         "sniper": {
             "name": "Sniper",
             "type": "infantry",
-            "hp": 50,
-            "cost": 800,
-            "speed": 1.5,
+            "hp": 60,
+            "cost": 500,
+            "speed": 2,
             "range": 450,
             "damage": 90,
-            "rate": 150,
+            "rate": 90,
             "w": 15,
             "armor": "infantry",
             "weaponType": "sniper",
@@ -446,15 +449,15 @@
                 "barracks",
                 "tech"
             ],
-            "description": "Long-range specialist. Extreme range and damage, one-shots most infantry. Fragile and slow to fire.",
+            "description": "Long-range anti-infantry specialist. Picks off infantry from far away. Fragile; any vehicle or rifle rush runs it over.",
             "sightRange": 500
         },
         "flamer": {
             "name": "Flamethrower",
             "type": "infantry",
-            "hp": 100,
+            "hp": 120,
             "cost": 400,
-            "speed": 1.8,
+            "speed": 2.2,
             "range": 80,
             "damage": 20,
             "rate": 10,
@@ -465,7 +468,7 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Short-range area damage. Devastating vs grouped infantry and buildings. Very short range, vulnerable.",
+            "description": "Close-range anti-infantry. Burns Rocket soldiers and Missile Tanks that let it close in. Outranged by Riflemen, crushed by tanks.",
             "sightRange": 160
         },
         "grenadier": {
@@ -484,26 +487,26 @@
             "prerequisites": [
                 "barracks"
             ],
-            "description": "Splash damage infantry. Grenades deal area damage. Good vs infantry groups and light vehicles.",
+            "description": "Lobs grenades with splash. Good vs grouped infantry, Rocket soldiers and APCs. Weak vs tanks and aircraft.",
             "sightRange": 200
         },
         "commando": {
             "name": "Commando",
             "type": "infantry",
-            "hp": 150,
-            "cost": 1500,
+            "hp": 250,
+            "cost": 1000,
             "speed": 2.5,
-            "range": 200,
-            "damage": 60,
-            "rate": 25,
+            "range": 220,
+            "damage": 45,
+            "rate": 20,
             "w": 15,
             "armor": "infantry",
-            "weaponType": "ap_bullet",
+            "weaponType": "sniper",
             "prerequisites": [
                 "barracks",
                 "tech"
             ],
-            "description": "Elite soldier. Fast, tough, armor-piercing rounds. Expensive but extremely effective vs all targets.",
+            "description": "Elite infantry hunter. Tough, fast and kills any infantry in one or two shots. Barely scratches vehicles: tanks and Rangers beat it.",
             "sightRange": 280
         },
         "harvester": {
@@ -530,10 +533,10 @@
             "name": "Ranger",
             "type": "vehicle",
             "hp": 180,
-            "cost": 500,
+            "cost": 450,
             "speed": 4.5,
             "range": 160,
-            "damage": 18,
+            "damage": 20,
             "rate": 15,
             "w": 22,
             "armor": "light",
@@ -542,14 +545,14 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Fast scout vehicle. Very fast with drive-by attacks. Great for harassing and early scouting.",
+            "description": "Fast raider. Drive-by machine gun shreds infantry, artillery and harvesters, and can fire at aircraft. Loses to APCs and any tank.",
             "sightRange": 320
         },
         "apc": {
             "name": "APC",
             "type": "vehicle",
             "hp": 300,
-            "cost": 700,
+            "cost": 600,
             "speed": 3.5,
             "range": 120,
             "damage": 12,
@@ -562,7 +565,7 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Fast armored transport. Good speed and armor-piercing gun. Can fire while moving.",
+            "description": "Armored transport with an armor-piercing gun. Hunts infantry, Rangers and siege units, and doubles as mobile anti-air. Loses to tanks.",
             "sightRange": 240
         },
         "light": {
@@ -581,14 +584,14 @@
                 "factory"
             ],
             "canAttackWhileMoving": true,
-            "description": "Balanced main battle tank. Good mix of speed, armor and firepower. Can fire while moving.",
+            "description": "Fast main battle tank. Beats infantry, light vehicles, Flame Tanks and Missile Tanks. Loses to Heavy/Mammoth tanks, Rocket soldiers and aircraft.",
             "sightRange": 240
         },
         "heavy": {
             "name": "Heavy Tank",
             "type": "vehicle",
             "hp": 700,
-            "cost": 1600,
+            "cost": 1400,
             "speed": 2.0,
             "range": 230,
             "damage": 90,
@@ -599,17 +602,17 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Heavy assault tank. Strong armor and powerful cannon. Slower but hits much harder than Light Tank.",
+            "description": "Heavy assault tank. Out-fights Light Tanks and crushes infantry. Countered by Missile Tanks, Rocket soldiers and aircraft.",
             "sightRange": 260
         },
         "flame_tank": {
             "name": "Flame Tank",
             "type": "vehicle",
             "hp": 450,
-            "cost": 1100,
+            "cost": 900,
             "speed": 2.2,
             "range": 100,
-            "damage": 35,
+            "damage": 30,
             "rate": 15,
             "w": 30,
             "splash": 50,
@@ -618,16 +621,16 @@
             "prerequisites": [
                 "factory"
             ],
-            "description": "Anti-infantry vehicle. Sprays flames dealing heavy splash damage. Excellent vs infantry blobs.",
+            "description": "Anti-infantry vehicle. Splash flames wipe out infantry blobs and light vehicles. Weak armor-piercing: real tanks beat it.",
             "sightRange": 200
         },
         "stealth": {
-            "name": "Stealth Tank",
+            "name": "Missile Tank",
             "type": "vehicle",
-            "hp": 350,
-            "cost": 1400,
+            "hp": 400,
+            "cost": 1200,
             "speed": 3.2,
-            "range": 180,
+            "range": 230,
             "damage": 55,
             "rate": 50,
             "w": 28,
@@ -637,38 +640,38 @@
                 "factory",
                 "tech"
             ],
-            "description": "Fast missile tank. Good speed and damage. Requires Tech Center.",
+            "description": "Tank destroyer. Homing missiles wreck Heavy and Mammoth tanks and can hit aircraft. Light Tanks, Rocket soldiers and anti-infantry fire beat it. Requires Tech Center.",
             "sightRange": 280
         },
         "artillery": {
             "name": "Artillery",
             "type": "vehicle",
-            "hp": 200,
-            "cost": 1200,
+            "hp": 250,
+            "cost": 900,
             "speed": 1.2,
             "range": 550,
-            "damage": 130,
-            "rate": 200,
+            "damage": 100,
+            "rate": 120,
             "w": 30,
-            "splash": 60,
+            "splash": 90,
             "armor": "light",
-            "weaponType": "heavy_cannon",
+            "weaponType": "shell",
             "prerequisites": [
                 "factory",
                 "tech"
             ],
-            "description": "Long-range siege unit. Massive range and damage with splash. Paper-thin armor, keep protected.",
+            "description": "Long-range siege gun. Shells devastate infantry and buildings from 550 range, but do little to vehicles. Fragile: raiders and tanks overrun it.",
             "sightRange": 400
         },
         "mlrs": {
             "name": "MLRS",
             "type": "vehicle",
             "hp": 250,
-            "cost": 1800,
+            "cost": 1400,
             "speed": 1.5,
             "range": 500,
-            "damage": 100,
-            "rate": 180,
+            "damage": 120,
+            "rate": 150,
             "w": 30,
             "splash": 80,
             "armor": "light",
@@ -677,18 +680,14 @@
                 "factory",
                 "tech"
             ],
-            "description": "Rocket artillery. Very long range with large splash radius. Fragile, best used behind tank lines.",
-            "interceptionAura": {
-                "radius": 120,
-                "dps": 80
-            },
+            "description": "Long-range rocket artillery. Homing missiles punish slow armor and aircraft from far away. Fragile: infantry and fast raiders overrun it.",
             "sightRange": 380
         },
         "mammoth": {
             "name": "Mammoth Tank",
             "type": "vehicle",
-            "hp": 1200,
-            "cost": 2500,
+            "hp": 1500,
+            "cost": 2200,
             "speed": 1.4,
             "range": 250,
             "damage": 120,
@@ -700,7 +699,7 @@
                 "factory",
                 "tech"
             ],
-            "description": "Ultimate tank. Massive HP, devastating firepower. Slow and very expensive, but nearly unstoppable.",
+            "description": "Super-heavy tank. Huge HP; beats every other tank head-on and holds vs infantry. Slow and expensive; Missile Tanks, Rocket soldiers and aircraft kill it.",
             "sightRange": 280
         },
         "heli": {
@@ -709,38 +708,38 @@
             "hp": 250,
             "cost": 1500,
             "speed": 6,
-            "range": 300,
+            "range": 200,
             "damage": 45,
             "rate": 25,
             "w": 20,
             "fly": true,
-            "armor": "light",
+            "armor": "air",
             "weaponType": "rocket",
             "prerequisites": [
                 "tech"
             ],
-            "description": "Attack helicopter. Good speed and sustained rocket fire. Vulnerable to anti-air but flexible.",
+            "description": "Attack helicopter. Hunts tanks, siege and specialist infantry that cannot shoot up. Shot down by Rocket soldiers, Riflemen, APCs, Missile Tanks, MLRS and SAMs.",
             "sightRange": 320
         },
         "harrier": {
             "name": "Harrier",
             "type": "air",
             "hp": 200,
-            "cost": 1200,
+            "cost": 1400,
             "speed": 8,
             "range": 250,
             "damage": 120,
             "rate": 60,
             "w": 25,
             "fly": true,
-            "armor": "light",
+            "armor": "air",
             "weaponType": "air_missile",
             "ammo": 1,
             "prerequisites": [
                 "airforce_command"
             ],
             "canAttackWhileMoving": true,
-            "description": "Strike fighter. Very fast, high damage pass. Must return to Air-Force Command to reload after each attack.",
+            "description": "Strike fighter. One devastating anti-armor pass, then returns to Air-Force Command to reload. Vulnerable to Rocket soldiers, Riflemen, APCs and SAMs.",
             "sightRange": 320
         },
         "mcv": {
@@ -820,71 +819,99 @@
         "medium": {},
         "heavy": {},
         "building": {},
-        "hijacker": {}
+        "hijacker": {},
+        "air": {}
     },
     "damageModifiers": {
         "bullet": {
             "none": 1.0,
             "infantry": 1.0,
             "light": 0.3,
-            "medium": 0.15,
-            "heavy": 0.08,
-            "building": 0.15,
-            "hijacker": 2.5
+            "medium": 0.06,
+            "heavy": 0.04,
+            "building": 0.1,
+            "hijacker": 2.5,
+            "air": 0.15
         },
         "ap_bullet": {
             "none": 1.0,
-            "infantry": 0.6,
+            "infantry": 0.8,
             "light": 1.25,
-            "medium": 0.8,
-            "heavy": 0.4,
+            "medium": 0.5,
+            "heavy": 0.25,
             "building": 0.4,
-            "hijacker": 2.0
+            "hijacker": 2.0,
+            "air": 0.5
         },
         "cannon": {
             "none": 1.0,
-            "infantry": 0.2,
+            "infantry": 0.6,
             "light": 1.0,
             "medium": 1.0,
-            "heavy": 0.6,
+            "heavy": 0.5,
             "building": 1.0,
-            "hijacker": 0.2
+            "hijacker": 0.2,
+            "air": 1.0
         },
         "heavy_cannon": {
             "none": 1.0,
-            "infantry": 0.1,
-            "light": 0.6,
+            "infantry": 0.4,
+            "light": 0.75,
             "medium": 1.0,
             "heavy": 1.25,
             "building": 1.5,
-            "hijacker": 0.15
+            "hijacker": 0.15,
+            "air": 0.6
+        },
+        "shell": {
+            "none": 1.0,
+            "infantry": 1.5,
+            "light": 0.3,
+            "medium": 0.3,
+            "heavy": 0.25,
+            "building": 1.25,
+            "hijacker": 1.5,
+            "air": 0
         },
         "rocket": {
             "none": 1.0,
             "infantry": 0.4,
-            "light": 1.0,
-            "medium": 1.0,
+            "light": 0.6,
+            "medium": 0.85,
             "heavy": 1.0,
             "building": 1.0,
-            "hijacker": 0.25
+            "hijacker": 0.25,
+            "air": 1.0
         },
         "missile": {
             "none": 1.0,
             "infantry": 0.15,
             "light": 0.6,
             "medium": 1.0,
-            "heavy": 1.5,
-            "building": 1.25,
-            "hijacker": 0.2
+            "heavy": 2.2,
+            "building": 1.0,
+            "hijacker": 0.2,
+            "air": 1.0
+        },
+        "aa_missile": {
+            "none": 1.0,
+            "infantry": 0,
+            "light": 0,
+            "medium": 0,
+            "heavy": 0,
+            "building": 0,
+            "hijacker": 0,
+            "air": 1.0
         },
         "flame": {
             "none": 1.0,
             "infantry": 1.75,
-            "light": 1.25,
-            "medium": 0.5,
-            "heavy": 0.35,
+            "light": 1.0,
+            "medium": 0.15,
+            "heavy": 0.07,
             "building": 0.6,
-            "hijacker": 1.5
+            "hijacker": 1.5,
+            "air": 1.25
         },
         "sniper": {
             "none": 1.0,
@@ -893,7 +920,8 @@
             "medium": 0.15,
             "heavy": 0.05,
             "building": 0.05,
-            "hijacker": 3.0
+            "hijacker": 3.0,
+            "air": 0.3
         },
         "laser": {
             "none": 1.0,
@@ -902,16 +930,18 @@
             "medium": 1.0,
             "heavy": 1.0,
             "building": 1.0,
-            "hijacker": 0.8
+            "hijacker": 0.8,
+            "air": 1.0
         },
         "grenade": {
             "none": 1.0,
             "infantry": 1.5,
             "light": 1.0,
-            "medium": 0.5,
-            "heavy": 0.3,
+            "medium": 0.2,
+            "heavy": 0.1,
             "building": 0.9,
-            "hijacker": 1.2
+            "hijacker": 1.2,
+            "air": 1.0
         },
         "heal": {
             "none": 1.0,
@@ -920,16 +950,18 @@
             "medium": 1.0,
             "heavy": 1.0,
             "building": 1.0,
-            "hijacker": 1.0
+            "hijacker": 1.0,
+            "air": 1.0
         },
         "air_missile": {
             "none": 1.0,
-            "infantry": 0.3,
-            "light": 1.5,
+            "infantry": 0.1,
+            "light": 1.0,
             "medium": 1.25,
-            "heavy": 1.0,
+            "heavy": 1.25,
             "building": 1.5,
-            "hijacker": 0.2
+            "hijacker": 0.1,
+            "air": 1.5
         },
         "explosion": {
             "none": 1.0,
@@ -938,17 +970,18 @@
             "medium": 1.0,
             "heavy": 0.75,
             "building": 1.5,
-            "hijacker": 0.8
+            "hijacker": 0.8,
+            "air": 1.25
         }
     },
     "weaponTargeting": {
         "bullet": {
             "canTargetGround": true,
-            "canTargetAir": false
+            "canTargetAir": true
         },
         "ap_bullet": {
             "canTargetGround": true,
-            "canTargetAir": false
+            "canTargetAir": true
         },
         "cannon": {
             "canTargetGround": true,
@@ -958,11 +991,19 @@
             "canTargetGround": true,
             "canTargetAir": false
         },
+        "shell": {
+            "canTargetGround": true,
+            "canTargetAir": false
+        },
         "rocket": {
             "canTargetGround": true,
             "canTargetAir": true
         },
         "missile": {
+            "canTargetGround": true,
+            "canTargetAir": true
+        },
+        "aa_missile": {
             "canTargetGround": false,
             "canTargetAir": true
         },

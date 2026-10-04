@@ -260,11 +260,11 @@ describe('AI Prerequisites', () => {
             let state = createTestState(entities);
 
             // Set credits to trigger fallback (personality-based credit buffer):
-            // - Light tank costs 800, Rifle costs 100
-            // - With 850 credits:
-            //   - Rusher (buffer=200, threshold=600): can afford infantry, can't afford vehicle ✓
-            //   - Balanced (buffer=400, threshold=800): can afford infantry, can't afford vehicle ✓
-            //   - Turtle (buffer=600, threshold=1000): below threshold, won't build anything
+            // - Cheapest vehicle (Ranger) costs 450, Rifle costs 120
+            // - With 600 credits:
+            //   - Rusher (buffer=200, 400 spendable): can afford infantry, can't afford vehicle ✓
+            //   - Balanced (buffer=400, 200 spendable): can afford infantry, can't afford vehicle ✓
+            //   - Turtle (buffer=600): nothing spendable, won't build anything
             // The key test is: IF units are built, they should be infantry (not vehicles)
             state = {
                 ...state,
@@ -272,7 +272,7 @@ describe('AI Prerequisites', () => {
                     ...state.players,
                     1: {
                         ...state.players[1],
-                        credits: 850,
+                        credits: 600,
                         queues: {
                             building: { current: null, progress: 0, invested: 0 },
                             infantry: { current: null, progress: 0, invested: 0 },

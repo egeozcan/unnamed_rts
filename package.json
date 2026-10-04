@@ -16,6 +16,7 @@
     "ai:tournament": "npx -y tsx src/scripts/tournament.ts",
     "ai:bench": "npx -y tsx src/scripts/simulate_ai.ts --benchmark",
     "perf:profile": "npx -y tsx src/scripts/profile_sim.ts",
+    "balance:sim": "npx -y tsx src/scripts/balance_sim.ts",
     "debug": "npx tsx src/scripts/debug/index.ts",
     "docs:dev": "vitepress dev docs/site",
     "docs:build": "vitepress build docs/site",

@@ -14,7 +14,8 @@ describe('Missile Logic', () => {
 
         const proj = createProjectile(sam, target);
 
-        expect(proj.weaponType).toBe('missile');
+        expect(proj.weaponType).toBe('aa_missile');
+        expect(proj.archetype).toBe('missile');
         expect(proj.speed).toBe(28); // Standard bullets are 18, rockets 9
     });
 

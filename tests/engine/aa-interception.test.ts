@@ -152,44 +152,21 @@ describe('AA Interception', () => {
         expect(result.dead).toBe(true);
     });
 
-    it('should intercept rocket soldier projectiles with weaker aura', () => {
-        // Rocket soldier has interceptionAura: { radius: 60, dps: 40 }
+    it('should not intercept with rocket soldiers or MLRS (only SAM sites have an aura)', () => {
         const rocketSoldier = createTestCombatUnit({ id: 'rocket', key: 'rocket', x: 0, y: 0, owner: 1 });
+        const mlrs = createTestCombatUnit({ id: 'mlrs', key: 'mlrs', x: 0, y: 40, owner: 1 });
         const attacker = createTestCombatUnit({ id: 'attacker', x: 200, y: 0, owner: 0 });
-        const state = createTestState({ [rocketSoldier.id]: rocketSoldier, [attacker.id]: attacker });
+        const state = createTestState({ [rocketSoldier.id]: rocketSoldier, [mlrs.id]: mlrs, [attacker.id]: attacker });
 
-        // Projectile within rocket soldier's aura (radius 60)
         const projectile = createTestProjectile({
-            pos: new Vector(30, 0), // 30 units away, within 60 radius
+            pos: new Vector(30, 0),
             hp: 50,
             maxHp: 50
         });
 
         const result = applyInterception(state, projectile);
 
-        // Rocket soldier DPS is 40, per tick = 40/60 = 0.666
-        expect(result.hp).toBeLessThan(50);
-        expect(result.hp).toBeCloseTo(50 - 40/60, 1);
-    });
-
-    it('should intercept with MLRS interception aura', () => {
-        // MLRS has interceptionAura: { radius: 120, dps: 80 }
-        const mlrs = createTestCombatUnit({ id: 'mlrs', key: 'mlrs', x: 0, y: 0, owner: 1 });
-        const attacker = createTestCombatUnit({ id: 'attacker', x: 200, y: 0, owner: 0 });
-        const state = createTestState({ [mlrs.id]: mlrs, [attacker.id]: attacker });
-
-        // Projectile within MLRS aura (radius 120)
-        const projectile = createTestProjectile({
-            pos: new Vector(60, 0), // 60 units away, within 120 radius
-            hp: 100,
-            maxHp: 100
-        });
-
-        const result = applyInterception(state, projectile);
-
-        // MLRS DPS is 80, per tick = 80/60 = 1.333
-        expect(result.hp).toBeLessThan(100);
-        expect(result.hp).toBeCloseTo(100 - 80/60, 1);
+        expect(result.hp).toBe(50);
     });
 
     it('should not intercept from dead AA units', () => {
