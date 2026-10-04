@@ -7,6 +7,13 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  */
 export type Paint = number | 'team' | 'teamDark' | 'teamLight';
 
+/** Per-vertex weight of the per-instance team colour in owner-independent geometry (Shape.realizeTeamless). */
+export const TEAM_MIX_ATTRIBUTE = 'teamMix';
+/** 'teamDark' is the team colour scaled by this. */
+const TEAM_DARK = 0.55;
+/** 'teamLight' is the team colour lerped this far toward white. */
+const TEAM_LIGHT_WHITE = 0.35;
+
 interface Primitive {
     geometry: THREE.BufferGeometry;
     paint: Paint;
@@ -162,22 +169,42 @@ export class Shape {
 
     /** Merge all primitives into one flat-shaded, vertex-coloured geometry for the given team colour. */
     realize(team: THREE.Color): THREE.BufferGeometry {
-        const teamDark = team.clone().multiplyScalar(0.55);
-        const teamLight = team.clone().lerp(new THREE.Color(1, 1, 1), 0.35);
+        const teamDark = team.clone().multiplyScalar(TEAM_DARK);
+        const teamLight = team.clone().lerp(new THREE.Color(1, 1, 1), TEAM_LIGHT_WHITE);
         const scratch = new THREE.Color();
+        return this.merge(paint => {
+            if (paint === 'team') return team;
+            if (paint === 'teamDark') return teamDark;
+            if (paint === 'teamLight') return teamLight;
+            return scratch.setHex(paint);
+        }, null);
+    }
 
+    /**
+     * Owner-independent geometry: one copy serves every player. Each vertex's colour is
+     * `color + teamMix * teamColour`, with the team colour supplied per instance by the shader (see
+     * TEAM_MIX_ATTRIBUTE). Fixed paints have teamMix 0; 'team' is color 0 / teamMix 1, 'teamDark'
+     * 0 / 0.55 and 'teamLight' (the team colour lerped 35% toward white) 0.35 / 0.65: the same
+     * colours `realize` bakes in.
+     */
+    realizeTeamless(): THREE.BufferGeometry {
+        const black = new THREE.Color(0, 0, 0);
+        const light = new THREE.Color(TEAM_LIGHT_WHITE, TEAM_LIGHT_WHITE, TEAM_LIGHT_WHITE);
+        const scratch = new THREE.Color();
+        return this.merge(
+            paint => paint === 'teamLight' ? light : typeof paint === 'string' ? black : scratch.setHex(paint),
+            paint => paint === 'team' ? 1 : paint === 'teamDark' ? TEAM_DARK : paint === 'teamLight' ? 1 - TEAM_LIGHT_WHITE : 0
+        );
+    }
+
+    private merge(colorOf: (paint: Paint) => THREE.Color, teamMixOf: ((paint: Paint) => number) | null): THREE.BufferGeometry {
         const parts = this.primitives.map(({ geometry, paint }) => {
             const flat = geometry.index ? geometry.toNonIndexed() : geometry.clone();
             flat.deleteAttribute('uv');
             flat.deleteAttribute('normal');
             flat.computeVertexNormals(); // non-indexed => per-face (flat) normals
 
-            let color: THREE.Color;
-            if (paint === 'team') color = team;
-            else if (paint === 'teamDark') color = teamDark;
-            else if (paint === 'teamLight') color = teamLight;
-            else color = scratch.setHex(paint);
-
+            const color = colorOf(paint);
             const vertexCount = flat.getAttribute('position').count;
             const colors = new Float32Array(vertexCount * 3);
             for (let v = 0; v < vertexCount; v++) {
@@ -186,6 +213,10 @@ export class Shape {
                 colors[v * 3 + 2] = color.b;
             }
             flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            if (teamMixOf) {
+                const mix = new Float32Array(vertexCount).fill(teamMixOf(paint));
+                flat.setAttribute(TEAM_MIX_ATTRIBUTE, new THREE.BufferAttribute(mix, 1));
+            }
             return flat;
         });
 
