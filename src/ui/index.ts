@@ -7,7 +7,7 @@ import { getSpatialGrid } from '../engine/spatial.js';
 import { pickEntityAt, isHiddenByFog } from '../engine/picking.js';
 import { isEnemy } from '../engine/teams.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
-import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../engine/transport.js';
+import { getTransportCapacity, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../engine/transport.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
 import { getCameo } from './cameos.js';
 
@@ -48,6 +48,7 @@ export function initUI(
         const buildList = document.getElementById('sidebar-tabs');
         buildList?.addEventListener('scroll', updateScrollAffordance, { passive: true });
         window.addEventListener('resize', updateScrollAffordance);
+        if (buildList) observeScrollAffordance(buildList);
 
         const sellBtn = document.getElementById('sell-btn');
         if (sellBtn) {
@@ -383,12 +384,18 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
         `;
     }
 
-    tooltip.innerHTML = `
+    const html = `
         <div class="tooltip-title"><span>${data.name}</span><span class="tooltip-cost">$${data.cost}</span></div>
         <div class="tooltip-stats">${stats}</div>
         ${description ? `<div class="tooltip-desc">${description}</div>` : ''}
         ${restrictionsHtml}
     `;
+    // updateButtons() refreshes the hovered tooltip on every UI pass: when nothing changed (same
+    // button, same content, still shown) skip the rewrite and the measure/position reflow.
+    if (html === lastTooltipHtml && btn === lastTooltipBtn && tooltip.style.display === 'block') return;
+    lastTooltipHtml = html;
+    lastTooltipBtn = btn;
+    tooltip.innerHTML = html;
 
     // Measure while invisible, then place it clear of the sidebar buttons and inside the viewport
     tooltip.style.visibility = 'hidden';
@@ -411,10 +418,14 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
     tooltip.style.visibility = '';
 }
 
+let lastTooltipHtml = '';
+let lastTooltipBtn: HTMLElement | null = null;
+
 // Button under the pointer, so its tooltip (busy %, pads, limits) refreshes with production
 let hoveredBuildBtn: { btn: HTMLElement; key: string; category: string } | null = null;
 
 function hideTooltip() {
+    lastTooltipBtn = null;
     if (globalTooltip) {
         globalTooltip.style.display = 'none';
     }
@@ -743,7 +754,8 @@ export function updateButtons(
         if (tab.classList.contains('tab-busy') !== busy) tab.classList.toggle('tab-busy', busy);
     });
 
-    updateScrollAffordance();
+    // Reading scrollHeight forces layout: rely on the ResizeObserver when there is one
+    if (!scrollAffordanceObserved) updateScrollAffordance();
 
     if (hoveredBuildBtn) {
         if (hoveredBuildBtn.btn.isConnected) {
@@ -759,6 +771,39 @@ export function updateButtons(
 export function formatBuildStatus(progress: number, outOfFunds: boolean): string {
     const pct = Math.max(0, Math.min(99, Math.floor(progress)));
     return outOfFunds ? `NO FUNDS ${pct}%` : `${pct}%`;
+}
+
+// Passenger counts per transport, rebuilt once per entities snapshot (same rule as
+// getTransportPassengers, but one world scan instead of one per lookup)
+let passengerCountsEntities: Record<string, Entity> | null = null;
+const passengerCounts = new Map<string, number>();
+
+function getPassengerCount(entities: Record<string, Entity>, transportId: string): number {
+    if (entities !== passengerCountsEntities) {
+        passengerCounts.clear();
+        for (const id in entities) {
+            const entity = entities[id];
+            if (entity.type !== 'UNIT' || entity.dead) continue;
+            const carrier = entity.movement?.transportId;
+            if (carrier == null) continue;
+            passengerCounts.set(carrier, (passengerCounts.get(carrier) ?? 0) + 1);
+        }
+        passengerCountsEntities = entities;
+    }
+    return passengerCounts.get(transportId) ?? 0;
+}
+
+// When a ResizeObserver watches the build list, the scroll affordance updates itself on resize
+let scrollAffordanceObserved = false;
+
+function observeScrollAffordance(list: HTMLElement) {
+    if (typeof ResizeObserver === 'undefined') return;
+    // The list's own box changes when the panels below it show/hide; the grids change as buttons
+    // come and go or the tab switches. Either can move content above/below the fold.
+    const observer = new ResizeObserver(() => updateScrollAffordance());
+    observer.observe(list);
+    for (const child of Array.from(list.children)) observer.observe(child);
+    scrollAffordanceObserved = true;
 }
 
 /** Fade + "more" hint at the bottom of the build list while items are hidden below the fold. */
@@ -1591,7 +1636,7 @@ export function updateCommandBar(state: GameState) {
     const combatUnits = selectedUnits.filter(isArmedUnit);
     const hasCombatUnits = combatUnits.length > 0;
     const hasLoadedTransportSelected = selectedUnits.some(entity =>
-        isGarrisonableTransport(entity) && getTransportPassengers(state.entities, entity.id).length > 0
+        isGarrisonableTransport(entity) && getPassengerCount(state.entities, entity.id) > 0
     );
 
     const stanceSection = commandBar.querySelector('.stance-section');
@@ -1724,7 +1769,7 @@ export function buildSelectionSummaryHtml(state: GameState): string {
                 extras.push(`Cargo ${Math.floor(e.harvester.cargo)}${capacity ? '/' + capacity : ''}`);
             }
             if (isAirUnit(e)) extras.push(`Ammo ${e.airUnit.ammo}/${e.airUnit.maxAmmo}`);
-            if (isGarrisonableTransport(e)) extras.push(`Passengers ${getTransportPassengers(state.entities, e.id).length}`);
+            if (isGarrisonableTransport(e)) extras.push(`Passengers ${getPassengerCount(state.entities, e.id)}`);
             if ((humanId === null || e.owner === humanId) && isArmedUnit(e)) {
                 extras.push(`Stance: ${STANCE_LABELS[e.combat?.stance || 'aggressive'] || e.combat?.stance}`);
             }
@@ -1765,7 +1810,7 @@ function updateSelectionPanel(state: GameState) {
     if (!hasChanged(panel, html)) return;
     panel.innerHTML = html;
     panel.classList.toggle('hidden', html === '');
-    updateScrollAffordance();
+    if (!scrollAffordanceObserved) updateScrollAffordance();
 }
 
 // All action cursor CSS class names
@@ -1971,7 +2016,7 @@ export function updateActionCursor(
             return;
         }
         if (isGarrisonableTransport(hoveredEntity) && !state.selection.includes(hoveredEntity.id) &&
-            getTransportPassengers(state.entities, hoveredEntity.id).length < getTransportCapacity(hoveredEntity) &&
+            getPassengerCount(state.entities, hoveredEntity.id) < getTransportCapacity(hoveredEntity) &&
             state.selection.some(id => { const e = state.entities[id]; return !!e && isInfantryUnit(e); })) {
             setCursor('deploy');
             return;

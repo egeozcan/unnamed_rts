@@ -2363,7 +2363,8 @@ canvas#gameCanvas.attack-move-mode {
     align-items: center;
     justify-content: center;
     z-index: 200;
-    backdrop-filter: blur(5px);
+    /* No backdrop-filter: blurring the full-screen game canvas every frame is costly and the
+       92%-opaque backdrop already hides the (frozen) world underneath */
 }
 
 .birds-eye-header {

@@ -16,6 +16,15 @@ const pickLift3D = (entity: Entity): number => (getAltitude(entity) + getModelHe
 import { type GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
 
 const TRAIL_BANDS = 6;
+
+/** Units/buildings whose turret is drawn separately from the hull. */
+const TURRET_ENTITY_KEYS: ReadonlySet<string> = new Set(['light', 'heavy', 'mammoth', 'artillery', 'flame_tank', 'turret', 'sam_site', 'pillbox', 'jeep']);
+/** Production buildings that show a rally point when selected. */
+const RALLY_POINT_BUILDINGS: ReadonlySet<string> = new Set(['barracks', 'factory']);
+/** World-pixel margin around the view for projectile culling (trails and arc lift extend past pos). */
+const PROJECTILE_CULL_MARGIN = 150;
+
+const byY = (a: Entity, b: Entity) => a.pos.y - b.pos.y;
 const trailStyleCache = new Map<number, string>();
 
 /** rgba() white at `opacity`, quantised to 1% steps so the strings can be cached. */
@@ -82,6 +91,7 @@ export class Renderer {
     private canvas: HTMLCanvasElement;
     private readonly selectionSet = new Set<string>();
     private readonly screenCulledEntities: Entity[] = [];
+    private readonly hoverCandidates: Entity[] = [];
     private readonly passengerCountByTransport = new Map<string, number>();
     private fogEdgeGradients: {
         ctx: CanvasRenderingContext2D;
@@ -295,8 +305,11 @@ export class Renderer {
         const fogGridW = fogGrid ? Math.ceil(state.config.width / TILE_SIZE) : 0;
 
         // OPTIMIZATION: Early culling - filter out entities outside screen bounds before sorting.
-        for (const e of visibleEntities) {
-            if (e.dead) continue;
+        for (const cand of visibleEntities) {
+            // The spatial grid is built mid-tick, so its entity objects can be a step behind
+            // (or removed since): draw the current version from state.
+            const e = entities[cand.id];
+            if (!e || e.dead) continue;
 
             // Fog of war — skip entities on unrevealed tiles
             if (fogGrid) {
@@ -318,8 +331,9 @@ export class Renderer {
             }
         }
 
-        // Sort only visible entities by Y for proper layering
-        const sortedEntities = screenCulledEntities.sort((a, b) => a.pos.y - b.pos.y);
+        // In 3D, layering comes from the depth buffer: the scene doesn't need the Y-sort, so only the
+        // overlay subsets that can overlap are sorted below. 2D draws back to front, so sort all.
+        const sortedEntities = use3D ? screenCulledEntities : screenCulledEntities.sort(byY);
 
         // What's under the cursor - same picking as clicks and the cursor (engine/picking.ts)
         this.updateHover(mousePos, effectiveCamera, zoom, fogGrid, fogGridW);
@@ -370,12 +384,21 @@ export class Renderer {
             }
         }
 
+        // Placement validity runs the full placement check: compute it once per frame for both the
+        // 3D ghost and the 2D preview.
+        const showPlacement = state.mode !== 'demo' && !!placingBuilding && mousePos.x < canvasWidth;
+        const placementX = mousePos.x / zoom + effectiveCamera.x;
+        const placementY = mousePos.y / zoom + effectiveCamera.y;
+        const placementValid = showPlacement && this.isValidBuildLocation(placementX, placementY, localPlayerId ?? 0);
+
         if (use3D) {
+            // Overlay layering (HP bars, rings) still goes back to front
+            unitBuildingEntities.sort(byY);
+            if (this.oreBarsVisible) resourceEntities.sort(byY);
+
             let placement: PlacementGhost | null = null;
-            if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
-                const x = mousePos.x / zoom + effectiveCamera.x;
-                const y = mousePos.y / zoom + effectiveCamera.y;
-                placement = { key: placingBuilding, x, y, valid: this.isValidBuildLocation(x, y, localPlayerId ?? 0) };
+            if (showPlacement && placingBuilding) {
+                placement = { key: placingBuilding, x: placementX, y: placementY, valid: placementValid };
             }
             this.scene3d!.render({
                 state,
@@ -418,11 +441,10 @@ export class Renderer {
         }
 
         // Draw rally points for selected production buildings (barracks/factory only)
-        const RALLY_POINT_BUILDINGS = ['barracks', 'factory'];
         for (const id of selection) {
             const entity = entities[id];
             if (entity && entity.type === 'BUILDING' && !entity.dead) {
-                if (RALLY_POINT_BUILDINGS.includes(entity.key) && entity.building.rallyPoint) {
+                if (RALLY_POINT_BUILDINGS.has(entity.key) && entity.building.rallyPoint) {
                     this.drawRallyPoint(entity, entity.building.rallyPoint, effectiveCamera, zoom);
                 }
             }
@@ -456,14 +478,28 @@ export class Renderer {
                 this.drawParticle(particle, effectiveCamera, zoom);
             }
         } else {
-            // Draw projectiles
+            // Draw projectiles (culled to the view; the margin covers trails and the arc lift)
+            const projLeft = cameraX - PROJECTILE_CULL_MARGIN;
+            const projRight = cameraX + canvasWidth / zoom + PROJECTILE_CULL_MARGIN;
+            const projTop = cameraY - PROJECTILE_CULL_MARGIN;
+            const projBottom = cameraY + canvasHeight / zoom + PROJECTILE_CULL_MARGIN;
             for (const proj of projectiles) {
                 if (proj.dead) continue;
+                const p = proj.pos;
+                if (p.x < projLeft || p.x > projRight || p.y < projTop || p.y - proj.arcHeight > projBottom) continue;
                 this.drawProjectile(proj, effectiveCamera, zoom, entities);
             }
 
-            // Draw particles
+            // Draw particles (2px dots / short floating text): cull with a ~100 screen-px margin so
+            // text anchored just off-screen still shows
+            const partMargin = 100 / zoom;
+            const partLeft = cameraX - partMargin;
+            const partRight = cameraX + canvasWidth / zoom + partMargin;
+            const partTop = cameraY - partMargin;
+            const partBottom = cameraY + canvasHeight / zoom + partMargin;
             for (const particle of particles) {
+                const p = particle.pos;
+                if (p.x < partLeft || p.x > partRight || p.y < partTop || p.y > partBottom) continue;
                 this.drawParticle(particle, effectiveCamera, zoom);
             }
 
@@ -479,8 +515,8 @@ export class Renderer {
         }
 
         // Building placement preview
-        if (state.mode !== 'demo' && placingBuilding && mousePos.x < canvasWidth) {
-            this.drawPlacementPreview(placingBuilding, mousePos, effectiveCamera, zoom, entities, localPlayerId, use3D);
+        if (showPlacement && placingBuilding) {
+            this.drawPlacementPreview(placingBuilding, placementX, placementY, placementValid, effectiveCamera, zoom, entities, localPlayerId, use3D);
         }
 
 
@@ -817,8 +853,7 @@ export class Renderer {
             }
 
             // Draw turret barrel overlay for units/buildings with turrets
-            const turretEntities = ['light', 'heavy', 'mammoth', 'artillery', 'flame_tank', 'turret', 'sam_site', 'pillbox', 'jeep'];
-            if (turretEntities.includes(entity.key) && entity.combat) {
+            if (TURRET_ENTITY_KEYS.has(entity.key) && entity.combat) {
                 ctx.save();
                 // Undo body rotation first, then apply turret angle
                 ctx.rotate(-rotation);
@@ -1315,7 +1350,9 @@ export class Renderer {
 
     private drawPlacementPreview(
         buildingKey: string,
-        mousePos: { x: number; y: number },
+        mx: number,
+        my: number,
+        valid: boolean,
         camera: { x: number; y: number },
         zoom: number,
         entities: Record<string, Entity>,
@@ -1323,27 +1360,26 @@ export class Renderer {
         footprintOnly = false
     ) {
         const ctx = this.ctx;
-        const mx = (mousePos.x / zoom) + camera.x;
-        const my = (mousePos.y / zoom) + camera.y;
-
         const playerId = localPlayerId ?? 0;
-        const valid = this.isValidBuildLocation(mx, my, playerId);
         const b = RULES.buildings[buildingKey];
         if (!b) return;
 
         // Draw build radius indicators around the buildings that let you build nearby
-        // (own and allied, except defenses - same rule as getPlacementError)
+        // (own and allied, except defenses - same rule as getPlacementError).
+        // One path, one stroke: the circles share a style and stroking each separately was a draw call apiece.
         ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath();
+        const radius = BUILD_RADIUS * zoom;
         for (const id in entities) {
             const e = entities[id];
             if (this.frameState && extendsBuildRange(this.frameState, e, playerId)) {
                 const s = this.worldToScreen(e.pos, camera, zoom);
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, BUILD_RADIUS * zoom, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.moveTo(s.x + radius, s.y);
+                ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
             }
         }
+        ctx.stroke();
 
         // Draw ghost building
         const sc = {
@@ -1500,7 +1536,14 @@ export class Renderer {
 
         const worldX = camera.x + mousePos.x / zoom;
         const worldY = camera.y + mousePos.y / zoom;
-        const candidates = getSpatialGrid().queryRadius(worldX, worldY, HOVER_QUERY_RADIUS);
+        // Re-resolve against state: the spatial grid is built mid-tick and can hold stale/removed entities
+        const entities = this.frameState?.entities;
+        const candidates = this.hoverCandidates;
+        candidates.length = 0;
+        for (const cand of getSpatialGrid().queryRadius(worldX, worldY, HOVER_QUERY_RADIUS)) {
+            const current = entities ? entities[cand.id] : cand;
+            if (current && !current.dead) candidates.push(current);
+        }
         const visible = (entity: Entity) =>
             !fogGrid || fogGrid[Math.floor(entity.pos.y / TILE_SIZE) * fogGridW + Math.floor(entity.pos.x / TILE_SIZE)] !== 0;
 

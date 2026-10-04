@@ -126,6 +126,14 @@ describe('shouldRunCadencedUpdate', () => {
 
         expect(updates).toBeLessThanOrEqual(24);
     });
+
+    it('throttles on time alone when ticks are frozen', () => {
+        const frozen = { currentTick: 50, lastTick: 50, lastTimeMs: 1000, minTickDelta: 2, minTimeDeltaMs: 66, ticksFrozen: true };
+        expect(shouldRunCadencedUpdate({ ...frozen, currentTimeMs: 1030 })).toBe(false);
+        expect(shouldRunCadencedUpdate({ ...frozen, currentTimeMs: 1066 })).toBe(true);
+        // Without the flag a stalled tick never refreshes
+        expect(shouldRunCadencedUpdate({ ...frozen, ticksFrozen: false, currentTimeMs: 5000 })).toBe(false);
+    });
 });
 
 afterEach(() => {
