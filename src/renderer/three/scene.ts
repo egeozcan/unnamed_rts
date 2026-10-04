@@ -5,6 +5,7 @@ import { isAirUnit } from '../../engine/entity-helpers.js';
 import { isBuilding, isUnit } from '../../engine/type-guards.js';
 import { getModelDef, type ModelDef, type ModelPart, ROCK_VARIANTS } from './models.js';
 import { AdaptiveResolution } from './resolution.js';
+import { fxRandom } from '../fx-random.js';
 import { TEAM_MIX_ATTRIBUTE } from './shape.js';
 import { AIR_ALTITUDE, AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight } from './projection.js';
 import { applyViewCamera, CAMERA_DISTANCE } from './camera.js';
@@ -560,11 +561,12 @@ export class Scene3D {
 
         // Effects run on game ticks, so they freeze with the game and speed up with it
         if (state.tick < this.lastTick || this.lastTick < 0) this.resetEffects(state.tick);
-        const dt = Math.min(MAX_FRAME_TICKS, state.tick - this.lastTick);
+        const elapsed = state.tick - this.lastTick;
+        const dt = Math.min(MAX_FRAME_TICKS, elapsed);
         this.lastTick = state.tick;
         this.frameNo++;
         this.updateVisibility(frame);
-        this.stepEffects(dt);
+        this.ageEffects(elapsed);
         this.processEvents(frame);
         this.processDelayedBlasts(state.tick);
         this.smokeBudget = ambientBudget(this.smoke);
@@ -1499,7 +1501,7 @@ export class Scene3D {
 
     private sparks(x: number, y: number, z: number, n: number, speed: number, r = 1, g = 0.85, b = 0.45): void {
         for (let i = 0; i < n; i++) {
-            const a = Math.random() * Math.PI * 2, s = speed * rand(0.5, 1.5);
+            const a = fxRandom() * Math.PI * 2, s = speed * rand(0.5, 1.5);
             this.fire.spawn({
                 x, y, z, vx: Math.cos(a) * s, vy: rand(0.5, 1.6) * speed, vz: Math.sin(a) * s, gravity: 0.1, life: rand(8, 18),
                 size: rand(0.9, 1.6), endSize: 0.5, r, g, b, r1: 1, g1: 0.35, b1: 0.05, bounce: true,
@@ -1528,7 +1530,7 @@ export class Scene3D {
         this.fire.spawn({ x, y: y + size * 0.2, z, life: 5, size: size * 2.4, endSize: size * 2.8, r: 1, g: 0.95, b: 0.8, r1: 1, g1: 0.6, b1: 0.2, alpha: 0.9 });
         const fireballs = 3 + Math.round(size / 3);
         for (let i = 0; i < fireballs; i++) {
-            const a = Math.random() * Math.PI * 2, out = rand(0.1, 0.55) * k;
+            const a = fxRandom() * Math.PI * 2, out = rand(0.1, 0.55) * k;
             this.fire.spawn({
                 x: x + rand(-0.25, 0.25) * size, y: y + rand(0, 0.35) * size, z: z + rand(-0.25, 0.25) * size,
                 vx: Math.cos(a) * out, vy: rand(0.15, 0.6) * k, vz: Math.sin(a) * out, drag: 0.06,
@@ -1539,7 +1541,7 @@ export class Scene3D {
         this.sparks(x, y + 2, z, 4 + Math.round(size / 2), 1.6 * Math.sqrt(k));
         const plumes = 2 + Math.round(size / 3);
         for (let i = 0; i < plumes; i++) {
-            const a = Math.random() * Math.PI * 2, out = rand(0.05, 0.3) * k;
+            const a = fxRandom() * Math.PI * 2, out = rand(0.05, 0.3) * k;
             this.smokePuff(x + rand(-0.3, 0.3) * size, y + rand(0.1, 0.5) * size, z + rand(-0.3, 0.3) * size,
                 size * 0.55, size * rand(1.5, 2.1), rand(90, 200), 0.62, rand(0.14, 0.24), Math.cos(a) * out, Math.sin(a) * out, rand(0.15, 0.35) * Math.sqrt(k));
         }
@@ -1550,7 +1552,7 @@ export class Scene3D {
             this.shockwaves.spawn({ x, y: 0.4, z, life: 12, size: size * 0.8, endSize: size * 4.5, r: 1, g: 0.8, b: 0.55, r1: 0.5, g1: 0.25, b1: 0.05, alpha: 0.7 });
         }
         for (let i = 0; i < Math.round(size / 2.5); i++) {
-            const a = Math.random() * Math.PI * 2, out = rand(0.3, 1) * k;
+            const a = fxRandom() * Math.PI * 2, out = rand(0.3, 1) * k;
             this.smoke.spawn({
                 x, y: 1, z, vx: Math.cos(a) * out, vy: rand(1.2, 2.6) * Math.sqrt(k), vz: Math.sin(a) * out, gravity: 0.1, bounce: false,
                 life: rand(28, 45), size: rand(1.4, 2.6), endSize: rand(1, 2), r: 0.3, g: 0.24, b: 0.17, alpha: 0.9,
@@ -1750,7 +1752,7 @@ export class Scene3D {
                     shot.lastZ = z;
                 }
                 for (let i = 1; i <= steps; i++) {
-                    const t = (i - Math.random()) / steps;
+                    const t = (i - fxRandom()) / steps;
                     if (rocket) {
                         const big = proj.archetype === 'missile' ? 1.3 : 1;
                         this.smokePuff(ox + dx * t + rand(-0.8, 0.8), oy + dy * t, oz + dz * t + rand(-0.8, 0.8),
@@ -1797,6 +1799,19 @@ export class Scene3D {
         this.delayed = [];
         this.lastTick = tick;
         this.lastEventTick = tick;
+    }
+
+    /**
+     * Age effects through every elapsed tick, in bounded steps: after a gap without drawing
+     * (bird's-eye view, the 2D view) effects must not resume where they were left.
+     */
+    private ageEffects(elapsed: number): void {
+        let remaining = Math.min(elapsed, SCORCH_TICKS + 1);
+        while (remaining > 0) {
+            const step = Math.min(MAX_FRAME_TICKS, remaining);
+            this.stepEffects(step);
+            remaining -= step;
+        }
     }
 
     private stepEffects(dt: number): void {
@@ -1909,12 +1924,12 @@ const LASER_GLOW = new THREE.Color(0.85, 0.08, 0.04);
 const DEBRIS_COLORS = [new THREE.Color(0x2d3034), new THREE.Color(0x585c63), new THREE.Color(0x1d1e20), new THREE.Color(0x878375)];
 
 function rand(min: number, max: number): number {
-    return min + Math.random() * (max - min);
+    return min + fxRandom() * (max - min);
 }
 
 /** Whole number of spawns for an expected (fractional) count, so low rates still fire now and then. */
 function count(expected: number): number {
-    return Math.floor(expected + Math.random());
+    return Math.floor(expected + fxRandom());
 }
 
 /** Rate multiplier for ambient emitters into a particle layer: thins out as the layer fills. */

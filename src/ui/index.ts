@@ -390,20 +390,21 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
         ${description ? `<div class="tooltip-desc">${description}</div>` : ''}
         ${restrictionsHtml}
     `;
-    // updateButtons() refreshes the hovered tooltip on every UI pass: when nothing changed (same
-    // button, same content, still shown) skip the rewrite and the measure/position reflow.
-    if (html === lastTooltipHtml && btn === lastTooltipBtn && tooltip.style.display === 'block') return;
-    lastTooltipHtml = html;
-    lastTooltipBtn = btn;
-    tooltip.innerHTML = html;
-
-    // Measure while invisible, then place it clear of the sidebar buttons and inside the viewport
-    tooltip.style.visibility = 'hidden';
-    tooltip.style.display = 'block';
-    tooltip.style.left = '0px';
-    tooltip.style.top = '0px';
-    const tipW = tooltip.offsetWidth || 220;
-    const tipH = tooltip.offsetHeight || 120;
+    // updateButtons() refreshes the hovered tooltip on every UI pass: when the content is unchanged
+    // skip the rewrite and the size measurement, but still reposition (the sidebar may have scrolled).
+    if (html !== lastTooltipHtml || tooltip.style.display !== 'block') {
+        lastTooltipHtml = html;
+        tooltip.innerHTML = html;
+        // Measure while invisible, then place it clear of the sidebar buttons and inside the viewport
+        tooltip.style.visibility = 'hidden';
+        tooltip.style.display = 'block';
+        tooltip.style.left = '0px';
+        tooltip.style.top = '0px';
+        lastTooltipW = tooltip.offsetWidth || 220;
+        lastTooltipH = tooltip.offsetHeight || 120;
+    }
+    const tipW = lastTooltipW;
+    const tipH = lastTooltipH;
     const sidebar = document.getElementById('sidebar');
     const pos = computeTooltipPosition(
         btn.getBoundingClientRect(),
@@ -413,19 +414,21 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
         window.innerWidth,
         window.innerHeight
     );
-    tooltip.style.left = `${pos.left}px`;
-    tooltip.style.top = `${pos.top}px`;
-    tooltip.style.visibility = '';
+    const left = `${pos.left}px`, top = `${pos.top}px`;
+    if (tooltip.style.left !== left) tooltip.style.left = left;
+    if (tooltip.style.top !== top) tooltip.style.top = top;
+    if (tooltip.style.visibility !== '') tooltip.style.visibility = '';
 }
 
 let lastTooltipHtml = '';
-let lastTooltipBtn: HTMLElement | null = null;
+let lastTooltipW = 220;
+let lastTooltipH = 120;
 
 // Button under the pointer, so its tooltip (busy %, pads, limits) refreshes with production
 let hoveredBuildBtn: { btn: HTMLElement; key: string; category: string } | null = null;
 
 function hideTooltip() {
-    lastTooltipBtn = null;
+    lastTooltipHtml = '';
     if (globalTooltip) {
         globalTooltip.style.display = 'none';
     }

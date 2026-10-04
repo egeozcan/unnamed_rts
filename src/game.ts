@@ -1644,7 +1644,8 @@ function gameLoop(timestamp: number = 0) {
     // Ticks don't advance (game over, debug freeze): throttle the cadenced UI on time alone
     const ticksFrozen = skipSim || currentState.debugMode;
     announceGameEvents(preSimState, currentState);
-    if (currentState.tick < lastDefeatCheckTick || currentState.tick - lastDefeatCheckTick >= DEFEAT_CHECK_TICK_INTERVAL) {
+    // While ticks are frozen the state can still be replaced (debug state loads): check every frame
+    if (ticksFrozen || currentState.tick < lastDefeatCheckTick || currentState.tick - lastDefeatCheckTick >= DEFEAT_CHECK_TICK_INTERVAL) {
         lastDefeatCheckTick = currentState.tick;
         checkHumanDefeat();
     }

@@ -8,6 +8,7 @@ import { isAirUnit } from '../engine/entity-helpers.js';
 import { getTransportCapacity, isTransportedUnit } from '../engine/transport.js';
 import { getPlacementError } from '../engine/reducers/buildings.js';
 import { isAlly } from '../engine/teams.js';
+import { fxRandom } from './fx-random.js';
 import type { Scene3D, PlacementGhost } from './three/scene.js';
 import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, HEIGHT_TO_SCREEN, getAltitude, getModelHeight, heightToScreenLift } from './three/projection.js';
 
@@ -265,8 +266,8 @@ export class Renderer {
         let effectiveCameraX = camera.x;
         let effectiveCameraY = camera.y;
         if (camera.shakeIntensity && camera.shakeDuration && camera.shakeDuration > 0) {
-            effectiveCameraX += (Math.random() - 0.5) * camera.shakeIntensity;
-            effectiveCameraY += (Math.random() - 0.5) * camera.shakeIntensity;
+            effectiveCameraX += (fxRandom() - 0.5) * camera.shakeIntensity;
+            effectiveCameraY += (fxRandom() - 0.5) * camera.shakeIntensity;
         }
         const effectiveCamera = { x: effectiveCameraX, y: effectiveCameraY };
 

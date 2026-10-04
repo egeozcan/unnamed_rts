@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fxRandom } from '../fx-random.js';
 import { CAMERA_TILT_RAD } from './projection.js';
 
 /**
@@ -145,7 +146,7 @@ export class ParticleLayer {
         let i = this.count;
         if (i >= this.capacity) {
             // Full: recycle a random slot rather than dropping the newest effect
-            i = Math.floor(Math.random() * this.capacity);
+            i = Math.floor(fxRandom() * this.capacity);
         } else {
             this.count++;
         }
@@ -158,7 +159,7 @@ export class ParticleLayer {
         d[o + F.R1] = p.r1 ?? p.r; d[o + F.G1] = p.g1 ?? p.g; d[o + F.B1] = p.b1 ?? p.b;
         d[o + F.ALPHA] = p.alpha ?? 1; d[o + F.FADE_IN] = p.fadeIn ?? 0;
         d[o + F.GRAVITY] = p.gravity ?? 0; d[o + F.DRAG] = p.drag ?? 0;
-        d[o + F.ROT] = p.rotation ?? Math.random() * Math.PI * 2; d[o + F.SPIN] = p.spin ?? 0;
+        d[o + F.ROT] = p.rotation ?? fxRandom() * Math.PI * 2; d[o + F.SPIN] = p.spin ?? 0;
         this.bounce[i] = p.bounce ? 1 : 0;
     }
 
@@ -292,14 +293,14 @@ export class DebrisLayer {
 
     spawn(x: number, y: number, z: number, speed: number, size: number, color: THREE.Color, life: number): void {
         if (this.chunks.length >= this.capacity) this.chunks.shift();
-        const angle = Math.random() * Math.PI * 2;
-        const out = speed * (0.4 + Math.random() * 0.6);
+        const angle = fxRandom() * Math.PI * 2;
+        const out = speed * (0.4 + fxRandom() * 0.6);
         this.chunks.push({
             x, y, z,
-            vx: Math.cos(angle) * out, vy: speed * (0.8 + Math.random() * 0.9), vz: Math.sin(angle) * out,
-            ax: Math.random() - 0.5, ay: Math.random() - 0.5, az: Math.random() - 0.5,
-            spin: (Math.random() - 0.5) * 0.6, angle: 0,
-            size: size * (0.6 + Math.random() * 0.8), age: 0, life: life * (0.7 + Math.random() * 0.6),
+            vx: Math.cos(angle) * out, vy: speed * (0.8 + fxRandom() * 0.9), vz: Math.sin(angle) * out,
+            ax: fxRandom() - 0.5, ay: fxRandom() - 0.5, az: fxRandom() - 0.5,
+            spin: (fxRandom() - 0.5) * 0.6, angle: 0,
+            size: size * (0.6 + fxRandom() * 0.8), age: 0, life: life * (0.7 + fxRandom() * 0.6),
             color, resting: false,
         });
     }
