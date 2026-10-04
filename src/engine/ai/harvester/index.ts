@@ -23,7 +23,8 @@ import {
     type ResourceEntity,
     type Action
 } from '../../types.js';
-import { createEntityCache, type EntityCache, getEnemiesOf } from '../../perf.js';
+import { createEntityCache, type EntityCache } from '../../perf.js';
+import { getEnemiesOfMemo } from '../tick_memo.js';
 import {
     type HarvesterAIState,
     HARVESTER_AI_CONSTANTS
@@ -176,6 +177,17 @@ export function updateHarvesterAI(
         (u): u is HarvesterUnit => u.type === 'UNIT' && u.key === 'harvester' && !u.dead
     );
 
+    // Fast path: when no interval fires and no harvester is stuck, nothing below
+    // can change state or emit actions, so skip the clone and the list building.
+    const dangerMapDue = tick % DANGER_MAP_UPDATE_INTERVAL === 0;
+    const desperationDue = tick % DESPERATION_UPDATE_INTERVAL === 0;
+    const coordinatorDue = tick % COORDINATOR_UPDATE_INTERVAL === 0;
+    const escortDue = tick % ESCORT_UPDATE_INTERVAL === 0;
+    if (!dangerMapDue && !desperationDue && !coordinatorDue && !escortDue &&
+        !playerHarvesters.some(detectStuckHarvester)) {
+        return { harvesterAI, actions: [] };
+    }
+
     // Get player's combat units
     const playerCombatUnits = playerUnits.filter(
         (u): u is CombatUnit =>
@@ -198,19 +210,18 @@ export function updateHarvesterAI(
     );
 
     // Get enemy units
-    const enemies = getEnemiesOf(cache, playerId, state).filter(e => e.type === 'UNIT' && !e.dead);
+    const enemies = getEnemiesOfMemo(cache, playerId, state).filter(e => e.type === 'UNIT' && !e.dead);
 
     // Get player state for desperation calculation
     const player = state.players[playerId];
 
-    // Clone state for immutable updates
     const newState = cloneHarvesterAIState(harvesterAI);
 
     // Track if any updates were made
     let stateChanged = false;
 
     // 1. Update danger map (if interval)
-    if (tick % DANGER_MAP_UPDATE_INTERVAL === 0) {
+    if (dangerMapDue) {
         updateDangerMap(
             newState,
             playerId,
@@ -223,7 +234,7 @@ export function updateHarvesterAI(
     }
 
     // 2. Update desperation (if interval)
-    if (tick % DESPERATION_UPDATE_INTERVAL === 0) {
+    if (desperationDue) {
         if (player) {
             // Count harvesters and refineries for desperation calculation
             const harvesterCount = playerHarvesters.length;
@@ -247,7 +258,7 @@ export function updateHarvesterAI(
     }
 
     // 3. Update coordinator (if interval)
-    if (tick % COORDINATOR_UPDATE_INTERVAL === 0) {
+    if (coordinatorDue) {
         // Assign roles
         assignHarvesterRoles(
             newState,
@@ -276,7 +287,7 @@ export function updateHarvesterAI(
     }
 
     // 4. Update escorts (if interval)
-    if (tick % ESCORT_UPDATE_INTERVAL === 0) {
+    if (escortDue) {
         // Release escorts from safe zones first
         releaseEscort(newState, allOre);
 

@@ -1,5 +1,6 @@
 import { type Action, type Entity, type GameState, isActionType } from '../../../types.js';
-import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getEnemiesOfMemo } from '../../tick_memo.js';
 import { RULES } from '../../../../data/schemas/index.js';
 import { type AIImplementation, type AIImplementationDifficulty } from '../../contracts.js';
 import { computeAuroraTitanSnapshotAiActions } from './titan_core_snapshot.js';
@@ -585,7 +586,7 @@ export function computeAuroraSovereignAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
     const combatUnits = myUnits.filter(isCombatUnit);
 
     // Delegate core behavior to vendored Titan snapshot.

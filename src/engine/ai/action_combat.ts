@@ -27,6 +27,8 @@ import { findCaptureOpportunities } from './planning.js';
 import { isAirUnit } from '../entity-helpers.js';
 import { isDemoTruck } from '../type-guards.js';
 import { type EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
+import { getOwnedUnits } from './tick_memo.js';
+import { OrderedEntityGrid } from './ordered_grid.js';
 import { getHarvesterRole } from './harvester/coordinator.js';
 import { recordHarvesterDeath } from './harvester/danger_map.js';
 import { getDesperationBehavior } from './harvester/desperation.js';
@@ -1066,6 +1068,10 @@ export function handleScouting(
     return actions;
 }
 
+/** handleMicro switches from a linear scan to a grid above this many unit/enemy pairs */
+const MICRO_GRID_THRESHOLD = 1024;
+const MICRO_GRID_CELL_SIZE = 200;
+
 export function handleMicro(
     _state: GameState,
     combatUnits: Entity[],
@@ -1098,15 +1104,34 @@ export function handleMicro(
     // DESPERATION MODE: Check if service depot exists
     // If no depot, damaged units should attack instead of retreating (no oscillation)
     const hasServiceDepot = buildings.some(b => b.key === 'service_depot' && !b.dead);
+    const enemyUnits = enemies.filter(e => e.type === 'UNIT');
+    if (enemyUnits.length === 0) return actions;
+
+    // Large armies: bucket enemy units once so each unit only visits nearby cells.
+    // The grid returns candidates in enemy-list order, so results are identical.
+    const enemyGrid = combatUnits.length * enemyUnits.length > MICRO_GRID_THRESHOLD
+        ? new OrderedEntityGrid(enemyUnits, MICRO_GRID_CELL_SIZE)
+        : null;
+    const candidates: Entity[] = [];
 
     for (const unit of combatUnits) {
         const u = unit as UnitEntity;
         const unitData = RULES.units?.[unit.key] || {};
         const unitRange = unitData.range || 100;
 
-        const nearbyEnemies = enemies.filter(e =>
-            e.type === 'UNIT' && e.pos.dist(unit.pos) < unitRange * 1.5
-        );
+        const r = unitRange * 1.5;
+        const ux = unit.pos.x, uy = unit.pos.y;
+        let boxed: readonly Entity[] = enemyUnits;
+        if (enemyGrid) {
+            candidates.length = 0;
+            boxed = enemyGrid.queryBox(ux, uy, r, candidates);
+        }
+        const nearbyEnemies: Entity[] = [];
+        for (const e of boxed) {
+            const dx = e.pos.x - ux; if (dx >= r || dx <= -r) continue;
+            const dy = e.pos.y - uy; if (dy >= r || dy <= -r) continue;
+            if (e.pos.dist(unit.pos) < r) nearbyEnemies.push(e);
+        }
         if (nearbyEnemies.length === 0) continue;
 
         const hpRatio = unit.hp / unit.maxHp;
@@ -1536,8 +1561,7 @@ export function handleAirStrikes(
 
     // Find all docked harriers with ammo
     const dockedHarriers: AirUnit[] = [];
-    for (const id in state.entities) {
-        const entity = state.entities[id];
+    for (const entity of getOwnedUnits(state, playerId)) {
         if (entity.owner === playerId && !entity.dead && isAirUnit(entity)) {
             if (entity.airUnit.state === 'docked' && entity.airUnit.ammo > 0) {
                 dockedHarriers.push(entity);
@@ -1553,6 +1577,9 @@ export function handleAirStrikes(
     const buildingPriorities = ['conyard', 'factory', 'refinery', 'airforce_command', 'barracks', 'power', 'sam_site', 'turret'];
     // High-value targets for the harrier's anti-armor missiles (weak vs infantry, cannot hit air)
     const unitPriorities = ['harvester', 'mcv', 'mammoth', 'heavy', 'stealth', 'mlrs', 'artillery', 'light', 'flame_tank'];
+
+    // Anti-air sites among the enemies (hoisted out of the per-target loop)
+    const enemySamSites = enemies.filter(e => e.type === 'BUILDING' && e.key === 'sam_site');
 
     // Find best target for air strike
     let bestTarget: Entity | null = null;
@@ -1587,11 +1614,7 @@ export function handleAirStrikes(
         else if (hpRatio < 0.5) score += 50;
 
         // Avoid targets with anti-air defenses nearby
-        const hasNearbyAA = enemies.some(e =>
-            e.type === 'BUILDING' &&
-            (e.key === 'sam_site') &&
-            e.pos.dist(enemy.pos) < 300
-        );
+        const hasNearbyAA = enemySamSites.some(e => e.pos.dist(enemy.pos) < 300);
         if (hasNearbyAA) score -= 80; // Reduced penalty to still allow attacks
 
         // Prefer targets near enemy base location if known
@@ -1655,8 +1678,7 @@ export function handleDemoTruckAssault(
 
     // Find all idle demo trucks (not attacking, not dead)
     const idleDemoTrucks: Entity[] = [];
-    for (const id in state.entities) {
-        const entity = state.entities[id];
+    for (const entity of getOwnedUnits(state, playerId)) {
         if (entity.owner === playerId && !entity.dead && isDemoTruck(entity)) {
             // Check if not already attacking (no detonation target set)
             if (!entity.demoTruck.detonationTargetId && !entity.demoTruck.detonationTargetPos) {
@@ -1714,7 +1736,12 @@ export function handleDemoTruckAssault(
         // Cluster bonus - demo trucks deal splash damage
         // Count enemies near this target
         let nearbyEnemies = 0;
+        const ex = enemy.pos.x, ey = enemy.pos.y;
         for (const other of enemies) {
+            const dx = other.pos.x - ex;
+            if (dx >= 100 || dx <= -100) continue;
+            const dy = other.pos.y - ey;
+            if (dy >= 100 || dy <= -100) continue;
             if (other.id !== enemy.id && other.pos.dist(enemy.pos) < 100) {
                 nearbyEnemies++;
             }
@@ -1911,8 +1938,7 @@ export function handleHijackerAssault(
 
     // Find idle hijackers (owned, alive, no current target)
     const idleHijackers: Entity[] = [];
-    for (const id in state.entities) {
-        const entity = state.entities[id];
+    for (const entity of getOwnedUnits(state, playerId)) {
         if (entity.owner === playerId && !entity.dead &&
             entity.type === 'UNIT' && entity.key === 'hijacker') {
             const unit = entity as UnitEntity;

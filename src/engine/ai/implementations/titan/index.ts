@@ -1,5 +1,6 @@
 import { type GameState, type Action, type Entity, type Vector, isActionType } from '../../../types.js';
-import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getEnemiesOfMemo } from '../../tick_memo.js';
 import {
     getAIState,
     resetAIState,
@@ -535,7 +536,7 @@ export function computeTitanAiActions(state: GameState, playerId: number, shared
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
 
     // Check for elimination
     const hasMCV = myUnits.some(u => u.key === 'mcv');

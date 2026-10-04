@@ -1,5 +1,6 @@
 import { type Action, type Entity, type GameState, isActionType } from '../../../types.js';
-import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getEnemiesOfMemo } from '../../tick_memo.js';
 import { type AIImplementation, type AIImplementationDifficulty } from '../../contracts.js';
 import { computeClassicAiActions } from '../classic/index.js';
 import { checkPrerequisites } from '../../utils.js';
@@ -557,7 +558,7 @@ export function computeSaboteurCircusAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
     const baseCenter = findBaseCenter(myBuildings);
 
     // Keep this implementation deterministic while still reusing classic AI internals.

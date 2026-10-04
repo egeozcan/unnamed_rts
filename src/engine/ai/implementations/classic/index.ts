@@ -1,6 +1,7 @@
 import { type GameState, type Action, type PlayerState, type Vector } from '../../../types.js';
 import { isEnemy } from '../../../teams.js';
-import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getEnemiesOfMemo } from '../../tick_memo.js';
 import {
     getAIState,
     resetAIState,
@@ -478,7 +479,7 @@ export function computeClassicAiActions(state: GameState, playerId: number, shar
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
 
     // Check for elimination (no buildings AND no MCV)
     const hasMCV = myUnits.some(u => u.key === 'mcv');

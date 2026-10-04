@@ -1,5 +1,6 @@
 import { type GameState, type Entity, type EntityId, type Vector } from '../types.js';
 import { RULES } from '../../data/schemas/index.js';
+import { getAIEntityIndex, getOwnedUnits, getOwnedEntities } from './tick_memo.js';
 
 // ===== AI CONSTANTS =====
 // Consolidated configuration object for all AI behavior constants
@@ -221,7 +222,7 @@ export function getRefineries(buildings: Entity[]): Entity[] {
  * Check if player has any combat units (excludes harvesters and MCVs)
  */
 export function hasCombatUnits(state: GameState, playerId: number): boolean {
-    return Object.values(state.entities).some(e =>
+    return getOwnedUnits(state, playerId).some(e =>
         e.owner === playerId &&
         e.type === 'UNIT' &&
         e.key !== 'harvester' &&
@@ -233,13 +234,13 @@ export function hasCombatUnits(state: GameState, playerId: number): boolean {
 // ===== RESOURCE UTILITIES =====
 
 export function getAllOre(state: GameState): Entity[] {
-    return Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+    return getAIEntityIndex(state).aliveOre.slice();
 }
 
 // ===== WELL UTILITIES =====
 
 export function getAllWells(state: GameState): Entity[] {
-    return Object.values(state.entities).filter(e => e.type === 'WELL' && !e.dead);
+    return getAIEntityIndex(state).aliveWells.slice();
 }
 
 /**
@@ -254,7 +255,7 @@ export function getAccessibleWells(wells: Entity[], buildings: Entity[], maxDist
  * Check if a well already has an induction rig deployed on it
  */
 export function isWellOccupied(wellId: EntityId, state: GameState): boolean {
-    return Object.values(state.entities).some(e =>
+    return getAIEntityIndex(state).buildings.some(e =>
         e.type === 'BUILDING' &&
         e.key === 'induction_rig_deployed' &&
         !e.dead &&
@@ -266,8 +267,13 @@ export function isWellOccupied(wellId: EntityId, state: GameState): boolean {
  * Get wells that don't have an induction rig deployed on them
  */
 export function getUnoccupiedWells(state: GameState): Entity[] {
-    const wells = getAllWells(state);
-    return wells.filter(w => !isWellOccupied(w.id, state));
+    const occupied = new Set<EntityId>();
+    for (const e of getAIEntityIndex(state).buildings) {
+        if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed' && !e.dead && e.inductionRig?.wellId !== undefined) {
+            occupied.add(e.inductionRig.wellId);
+        }
+    }
+    return getAIEntityIndex(state).aliveWells.filter(w => !occupied.has(w.id));
 }
 
 /**
@@ -302,7 +308,7 @@ export function findNearestAccessibleUnoccupiedWell(
  * Get all induction rigs (mobile units) owned by a player
  */
 export function getInductionRigs(state: GameState, playerId: number): Entity[] {
-    return Object.values(state.entities).filter(e =>
+    return getOwnedUnits(state, playerId).filter(e =>
         e.type === 'UNIT' &&
         e.key === 'induction_rig' &&
         e.owner === playerId &&
@@ -314,7 +320,7 @@ export function getInductionRigs(state: GameState, playerId: number): Entity[] {
  * Get all deployed induction rigs (buildings) owned by a player
  */
 export function getDeployedInductionRigs(state: GameState, playerId: number): Entity[] {
-    return Object.values(state.entities).filter(e =>
+    return getOwnedEntities(state, playerId).filter(e =>
         e.type === 'BUILDING' &&
         e.key === 'induction_rig_deployed' &&
         e.owner === playerId &&
@@ -459,18 +465,17 @@ export function isValidPlacement(
         b: y + h / 2 + margin
     };
 
-    const entities = Object.values(state.entities);
-    for (const e of entities) {
-        if (e.dead) continue;
-        if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK' || e.type === 'WELL') {
-            const eRect = {
-                l: e.pos.x - e.w / 2,
-                r: e.pos.x + e.w / 2,
-                t: e.pos.y - e.h / 2,
-                b: e.pos.y + e.h / 2
-            };
-            if (rectOverlap(myRect, eRect)) return false;
-        }
+    // Only living buildings/resources/rocks/wells can block placement
+    // (memoized per tick: placement retries call this many times per frame)
+    const obstacles = getAIEntityIndex(state).placementObstacles;
+    for (const e of obstacles) {
+        const eRect = {
+            l: e.pos.x - e.w / 2,
+            r: e.pos.x + e.w / 2,
+            t: e.pos.y - e.h / 2,
+            b: e.pos.y + e.h / 2
+        };
+        if (rectOverlap(myRect, eRect)) return false;
 
         if (e.key === 'refinery' && e.type === 'BUILDING') {
             const dockRect = {
@@ -491,17 +496,14 @@ export function isValidPlacement(
             b: y + 100
         };
 
-        for (const e of entities) {
-            if (e.dead) continue;
-            if (e.type === 'BUILDING' || e.type === 'RESOURCE' || e.type === 'ROCK' || e.type === 'WELL') {
-                const eRect = {
-                    l: e.pos.x - e.w / 2,
-                    r: e.pos.x + e.w / 2,
-                    t: e.pos.y - e.h / 2,
-                    b: e.pos.y + e.h / 2
-                };
-                if (rectOverlap(myDockRect, eRect)) return false;
-            }
+        for (const e of obstacles) {
+            const eRect = {
+                l: e.pos.x - e.w / 2,
+                r: e.pos.x + e.w / 2,
+                t: e.pos.y - e.h / 2,
+                b: e.pos.y + e.h / 2
+            };
+            if (rectOverlap(myDockRect, eRect)) return false;
         }
     }
 
@@ -566,7 +568,7 @@ export function isRefineryUseful(refinery: Entity, state: GameState): boolean {
 
     // Check if refinery is near a friendly conyard (expansion base support)
     // This prevents selling refineries built for expansion bases
-    const friendlyConyards = Object.values(state.entities).filter(e =>
+    const friendlyConyards = getOwnedEntities(state, refinery.owner).filter(e =>
         e.type === 'BUILDING' && e.key === 'conyard' && e.owner === refinery.owner && !e.dead
     );
     for (const conyard of friendlyConyards) {
@@ -576,8 +578,7 @@ export function isRefineryUseful(refinery: Entity, state: GameState): boolean {
     }
 
     // Check if refinery is near ore
-    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-    for (const ore of allOre) {
+    for (const ore of getAIEntityIndex(state).aliveOre) {
         if (refinery.pos.dist(ore.pos) < USEFUL_ORE_DISTANCE) {
             return true;
         }

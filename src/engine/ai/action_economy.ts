@@ -1,5 +1,6 @@
 import { type GameState, type Action, type Entity, type PlayerState, type BuildingEntity, Vector, type UnitEntity, type HarvesterUnit, type ResourceEntity } from '../types.js';
 import { type EntityCache } from '../perf.js';
+import { getAIEntityIndex, getOwnedEntities, getOwnedUnits } from './tick_memo.js';
 import { RULES, type AIPersonality } from '../../data/schemas/index.js';
 import { type AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
@@ -991,7 +992,7 @@ export function handleEmergencySell(
     const hasConyard = hasProductionBuildingFor('building', buildings);
 
     // Check for "Stalemate / Fire Sale" condition
-    const harvesters = Object.values(_state.entities).filter(e =>
+    const harvesters = getOwnedEntities(_state, playerId).filter(e =>
         e.owner === playerId && e.key === 'harvester' && !e.dead
     );
     const hasIncome = harvesters.length > 0 && hasRefinery;
@@ -1007,7 +1008,7 @@ export function handleEmergencySell(
 
     // ===== ARMY AND THREAT ASSESSMENT =====
     // Count our combat units (excluding harvesters and MCVs)
-    const combatUnits = Object.values(_state.entities).filter(e =>
+    const combatUnits = getOwnedUnits(_state, playerId).filter(e =>
         e.owner === playerId &&
         e.type === 'UNIT' &&
         e.key !== 'harvester' &&
@@ -1210,7 +1211,7 @@ export function handleLastResortSell(
     if (aiState.threatsNearBase.length === 0) return actions;
 
     // 3. No combat units (no army)
-    const combatUnits = Object.values(state.entities).filter(e =>
+    const combatUnits = getOwnedUnits(state, playerId).filter(e =>
         e.owner === playerId &&
         e.type === 'UNIT' &&
         e.key !== 'harvester' &&
@@ -1220,7 +1221,7 @@ export function handleLastResortSell(
     if (combatUnits.length > 0) return actions;
 
     // 4. No income (no harvesters OR no refinery)
-    const harvesters = Object.values(state.entities).filter(e =>
+    const harvesters = getOwnedEntities(state, playerId).filter(e =>
         e.owner === playerId && e.key === 'harvester' && !e.dead
     );
     const hasRefinery = buildings.some(b => b.key === 'refinery' && !b.dead);
@@ -1298,7 +1299,7 @@ export function handleAllInSell(
     // Phase 3: Sell EVERYTHING (self-elimination) - but ONLY if we have no combat units left
     if (ticksInAllIn >= ALL_IN_PHASE3_TICKS) {
         // Check if we still have combat units - if so, don't self-eliminate!
-        const hasCombatUnits = Object.values(state.entities).some(e =>
+        const hasCombatUnits = getOwnedUnits(state, playerId).some(e =>
             e.owner === playerId && e.type === 'UNIT' &&
             e.key !== 'harvester' && e.key !== 'mcv' && !e.dead
         );
@@ -1389,7 +1390,9 @@ export function handleBuildingPlacement(
     }
 
     // Check if there's distant ore worth expanding towards
-    const resources = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
+    const entityIndex = getAIEntityIndex(state);
+    const resources = entityIndex.aliveOre;
+    const allRefineriesAlive = entityIndex.aliveRefineries;
     let distantOreTarget: Vector | null = null;
     const BUILD_RADIUS = 400;
 
@@ -1405,12 +1408,12 @@ export function handleBuildingPlacement(
             }
         }
 
-        // Check if any refinery already claims this ore
-        const hasNearbyRefinery = Object.values(state.entities).some(e =>
-            e.type === 'BUILDING' && e.key === 'refinery' && !e.dead && e.pos.dist(ore.pos) < 200
-        );
+        if (inRange) continue;
 
-        if (!inRange && !hasNearbyRefinery && ore.pos.dist(center) < 1500) {
+        // Check if any refinery already claims this ore
+        const hasNearbyRefinery = allRefineriesAlive.some(e => e.pos.dist(ore.pos) < 200);
+
+        if (!hasNearbyRefinery && ore.pos.dist(center) < 1500) {
             if (!distantOreTarget || ore.pos.dist(center) < distantOreTarget.dist(center)) {
                 distantOreTarget = ore.pos;
             }
@@ -1447,13 +1450,7 @@ export function handleBuildingPlacement(
 
             if (minDistToBuilding > MAX_ORE_DISTANCE) continue;
 
-            const allEntities = Object.values(state.entities);
-            const hasRefinery = allEntities.some(b =>
-                b.type === 'BUILDING' &&
-                b.key === 'refinery' &&
-                !b.dead &&
-                b.pos.dist(ore.pos) < 200
-            );
+            const hasRefinery = allRefineriesAlive.some(b => b.pos.dist(ore.pos) < 200);
 
             let effectiveDist = minDistToBuilding;
             if (hasRefinery) effectiveDist += 5000; // Strongly avoid already-claimed ore
@@ -1828,7 +1825,8 @@ export function handleMCVOperations(
                 return false;
             }
 
-            for (const e of Object.values(state.entities)) {
+            // Living buildings/rocks/resources/wells only (the MCV itself is a unit)
+            for (const e of getAIEntityIndex(state).placementObstacles) {
                 if (e.dead || e.id === mcv.id) continue;
                 if (e.type === 'BUILDING' || e.type === 'ROCK' || e.type === 'RESOURCE' || e.type === 'WELL') {
                     const combinedRadius = CONYARD_RADIUS + e.radius;
@@ -1953,7 +1951,7 @@ export function handleHarvesterGathering(
 
             // Recovery logic: Find ore to gather
             // This also fixes manualMode if it was set
-            const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead) as ResourceEntity[];
+            const allOre = getAIEntityIndex(state).aliveOre as ResourceEntity[];
 
             let bestOre: Entity | null = null;
 

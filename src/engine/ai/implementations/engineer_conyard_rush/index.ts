@@ -1,6 +1,7 @@
 import { type Action, type Entity, type EntityId, type GameState, isActionType, type PlayerState, type UnitEntity, Vector } from '../../../types.js';
-import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
-import { getTransportCapacity, getTransportPassengers, isTransportedUnit } from '../../../transport.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getAIEntityIndex, getEnemiesOfMemo, getOwnedUnits, getTransportPassengersMemo } from '../../tick_memo.js';
+import { getTransportCapacity, isTransportedUnit } from '../../../transport.js';
 import { type AIImplementation } from '../../contracts.js';
 import { checkPrerequisites } from '../../utils.js';
 import { AuroraSovereignAIImplementation, computeAuroraSovereignAiActions } from '../aurora_sovereign/index.js';
@@ -485,6 +486,27 @@ function isEnemyThreat(entity: Entity, target: Entity, actingPlayerId: number): 
     return false;
 }
 
+/** Per-tick memo of enemy threat counts around a target, keyed by acting player and target id. */
+const threatCountMemo = new WeakMap<object, Map<string, number>>();
+
+function countEnemyThreats(state: GameState, target: Entity, actingPlayerId: number): number {
+    let memo = threatCountMemo.get(state.entities);
+    if (!memo) {
+        memo = new Map();
+        threatCountMemo.set(state.entities, memo);
+    }
+    const key = `${actingPlayerId}:${target.id}`;
+    let count = memo.get(key);
+    if (count === undefined) {
+        count = 0;
+        for (const entity of getAIEntityIndex(state).all) {
+            if (isEnemyThreat(entity, target, actingPlayerId)) count++;
+        }
+        memo.set(key, count);
+    }
+    return count;
+}
+
 function scoreConyardTarget(
     unit: UnitEntity,
     target: Entity,
@@ -494,9 +516,7 @@ function scoreConyardTarget(
     isLoadedApc: boolean
 ): number {
     const distance = unit.pos.dist(target.pos);
-    const threatCount = Object.values(state.entities).filter(entity =>
-        isEnemyThreat(entity, target, unit.owner)
-    ).length;
+    const threatCount = countEnemyThreats(state, target, unit.owner);
     const claimPenalty = claimedTargets.has(target.id) ? CLAIMED_TARGET_PENALTY : 0;
     const hpPenalty = target.hp / Math.max(1, target.maxHp) * 250;
     const threatPenalty = threatCount * (isLoadedApc ? APC_THREAT_PENALTY : ENGINEER_THREAT_PENALTY);
@@ -949,7 +969,7 @@ function getEngineerRushActions(
     const seatsByApc = new Map<EntityId, number>();
     const passengersByApc = new Map<EntityId, UnitEntity[]>();
     for (const apc of sortedApcs) {
-        const passengers = getTransportPassengers(state.entities, apc.id)
+        const passengers = getTransportPassengersMemo(state, apc.id)
             .filter(passenger => passenger.owner === apc.owner && !passenger.dead)
             .sort((a, b) => a.id.localeCompare(b.id));
         passengersByApc.set(apc.id, passengers);
@@ -1191,7 +1211,7 @@ function updateCaptureTracking(
 ): Action[] {
     const actions: Action[] = [];
     const currentEngineerIds = new Set(
-        Object.values(state.entities)
+        getOwnedUnits(state, playerId)
             .filter(entity => entity.type === 'UNIT' && entity.owner === playerId && entity.key === 'engineer' && !entity.dead)
             .map(entity => entity.id)
     );
@@ -1234,10 +1254,13 @@ function updateCaptureTracking(
                 }
 
                 const hpRatio = building.hp / Math.max(1, building.maxHp);
-                const nearbyThreatCount = Object.values(state.entities).filter(entity =>
-                    isEnemyThreat(entity, building, playerId) &&
-                    entity.pos.dist(building.pos) <= STAGING_BARRACKS_DANGER_RADIUS
-                ).length;
+                let nearbyThreatCount = 0;
+                for (const entity of getAIEntityIndex(state).all) {
+                    if (isEnemyThreat(entity, building, playerId) &&
+                        entity.pos.dist(building.pos) <= STAGING_BARRACKS_DANGER_RADIUS) {
+                        nearbyThreatCount++;
+                    }
+                }
                 const reinforcementCount = runtimeState.stagingReinforcementEngineerIds.size;
                 const shouldLiquidateEarly = hpRatio <= 0.25 ||
                     (reinforcementCount >= 1 && (hpRatio <= 0.55 || nearbyThreatCount >= 2));
@@ -1562,7 +1585,7 @@ export function computeEngineerConyardRushAiActions(
     const cache = sharedCache ?? createEntityCache(state.entities);
     const myBuildings = getBuildingsForOwner(cache, playerId);
     const myUnits = getUnitsForOwner(cache, playerId);
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
     let runtimeState = getEngineerConyardRushRuntimeState(playerId);
     if (runtimeState.initialized && state.tick < runtimeState.lastObservedTick) {
         resetEngineerConyardRushRuntimeState(playerId);
@@ -1612,9 +1635,9 @@ export function computeEngineerConyardRushAiActions(
         }
     }
 
+    // Includes engineers riding in APCs (getOwnedUnits keeps transported infantry)
     let allEngineerCount = 0;
-    for (const id in state.entities) {
-        const entity = state.entities[id];
+    for (const entity of getOwnedUnits(state, playerId)) {
         if (entity.type === 'UNIT' && entity.owner === playerId && entity.key === 'engineer' && !entity.dead) {
             allEngineerCount += 1;
         }
