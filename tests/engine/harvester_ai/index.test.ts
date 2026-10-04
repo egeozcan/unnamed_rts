@@ -206,8 +206,9 @@ describe('Harvester AI Orchestrator', () => {
             expect(result.harvesterAI.dangerMapLastUpdate).toBe(30);
         });
 
-        it('should not update danger map on non-interval ticks', () => {
-            const state = createTestGameState({ tick: 45 }); // Not divisible by 30
+        it('should not update danger map before the interval has elapsed', () => {
+            harvesterAI.intervalLastRun = { dangerMap: 30, desperation: 30, coordinator: 30, escort: 30 };
+            const state = createTestGameState({ tick: 45 }); // Only 15 ticks since the last run
             addPlayerWithHarvester(state, 1);
             addEnemy(state, 2, 300, 300);
 
@@ -234,9 +235,10 @@ describe('Harvester AI Orchestrator', () => {
             expect(result.harvesterAI.desperationScore).not.toBe(30);
         });
 
-        it('should not update desperation on non-interval ticks', () => {
+        it('should not update desperation before the interval has elapsed', () => {
             harvesterAI.desperationScore = 42; // Set specific value
-            const state = createTestGameState({ tick: 45 }); // Not divisible by 60
+            harvesterAI.intervalLastRun = { dangerMap: 0, desperation: 0, coordinator: 0, escort: 0 };
+            const state = createTestGameState({ tick: 45 }); // Only 45 of 60 ticks elapsed
             addPlayerWithHarvester(state, 1);
             addRefinery(state, 1, 200, 200);
 
@@ -282,6 +284,27 @@ describe('Harvester AI Orchestrator', () => {
             // Escort system should have been processed
             // (may or may not have assignments depending on criteria)
             expect(result.harvesterAI.escortAssignments).toBeDefined();
+        });
+
+        it('should keep updating for players whose staggered AI ticks are never multiples of 30', () => {
+            // AI implementations only run harvester AI when tick % 3 === playerId % 3,
+            // so player 1 sees ticks 1, 4, 7, ... and never a tick divisible by 30.
+            let ai = harvesterAI;
+            const dangerRuns: number[] = [];
+            const coordinatorRoles: number[] = [];
+            for (let tick = 1; tick <= 200; tick += 3) {
+                const state = createTestGameState({ tick });
+                addPlayerWithHarvester(state, 1);
+                addRefinery(state, 1, 200, 200);
+                addEnemy(state, 2, 300, 300);
+                const before = ai.dangerMapLastUpdate;
+                ai = updateHarvesterAI(ai, 1, state, 'hard').harvesterAI;
+                if (ai.dangerMapLastUpdate !== before) dangerRuns.push(tick);
+                coordinatorRoles.push(ai.harvesterRoles.size);
+            }
+            // First call runs everything, then every 30 elapsed ticks
+            expect(dangerRuns).toEqual([1, 31, 61, 91, 121, 151, 181]);
+            expect(coordinatorRoles[0]).toBe(1);
         });
 
         it('should run stuck resolver every tick', () => {

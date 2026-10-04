@@ -27,6 +27,7 @@ import { createEntityCache, type EntityCache } from '../../perf.js';
 import { getEnemiesOfMemo } from '../tick_memo.js';
 import {
     type HarvesterAIState,
+    type HarvesterIntervalLastRun,
     HARVESTER_AI_CONSTANTS
 } from './types.js';
 import { updateDangerMap } from './danger_map.js';
@@ -136,8 +137,21 @@ function cloneHarvesterAIState(state: HarvesterAIState): HarvesterAIState {
         escortAssignments: new Map(state.escortAssignments),
         blacklistedOre: new Map(state.blacklistedOre),
         stuckStates: new Map(state.stuckStates),
-        harvesterDeaths: [...state.harvesterDeaths]
+        harvesterDeaths: [...state.harvesterDeaths],
+        intervalLastRun: state.intervalLastRun
     };
+}
+
+const NEVER_RUN: Readonly<HarvesterIntervalLastRun> = {
+    dangerMap: -Infinity,
+    desperation: -Infinity,
+    coordinator: -Infinity,
+    escort: -Infinity
+};
+
+/** Due when at least `interval` ticks passed since the last run (or time went backwards) */
+function isIntervalDue(tick: number, lastRun: number, interval: number): boolean {
+    return tick < lastRun || tick - lastRun >= interval;
 }
 
 /**
@@ -177,12 +191,16 @@ export function updateHarvesterAI(
         (u): u is HarvesterUnit => u.type === 'UNIT' && u.key === 'harvester' && !u.dead
     );
 
+    // Elapsed-time intervals: this only runs on the player's staggered AI ticks,
+    // so `tick % N === 0` would never fire for players with playerId % 3 !== 0.
+    const lastRun = harvesterAI.intervalLastRun ?? NEVER_RUN;
+    const dangerMapDue = isIntervalDue(tick, lastRun.dangerMap, DANGER_MAP_UPDATE_INTERVAL);
+    const desperationDue = isIntervalDue(tick, lastRun.desperation, DESPERATION_UPDATE_INTERVAL);
+    const coordinatorDue = isIntervalDue(tick, lastRun.coordinator, COORDINATOR_UPDATE_INTERVAL);
+    const escortDue = isIntervalDue(tick, lastRun.escort, ESCORT_UPDATE_INTERVAL);
+
     // Fast path: when no interval fires and no harvester is stuck, nothing below
     // can change state or emit actions, so skip the clone and the list building.
-    const dangerMapDue = tick % DANGER_MAP_UPDATE_INTERVAL === 0;
-    const desperationDue = tick % DESPERATION_UPDATE_INTERVAL === 0;
-    const coordinatorDue = tick % COORDINATOR_UPDATE_INTERVAL === 0;
-    const escortDue = tick % ESCORT_UPDATE_INTERVAL === 0;
     if (!dangerMapDue && !desperationDue && !coordinatorDue && !escortDue &&
         !playerHarvesters.some(detectStuckHarvester)) {
         return { harvesterAI, actions: [] };
@@ -217,6 +235,9 @@ export function updateHarvesterAI(
 
     const newState = cloneHarvesterAIState(harvesterAI);
 
+    const runs: HarvesterIntervalLastRun = { ...lastRun };
+    newState.intervalLastRun = runs;
+
     // Track if any updates were made
     let stateChanged = false;
 
@@ -230,6 +251,7 @@ export function updateHarvesterAI(
             tick,
             difficulty
         );
+        runs.dangerMap = tick;
         stateChanged = true;
     }
 
@@ -253,6 +275,7 @@ export function updateHarvesterAI(
                 tick,
                 difficulty
             );
+            runs.desperation = tick;
             stateChanged = true;
         }
     }
@@ -283,6 +306,7 @@ export function updateHarvesterAI(
             difficulty
         );
 
+        runs.coordinator = tick;
         stateChanged = true;
     }
 
@@ -301,6 +325,7 @@ export function updateHarvesterAI(
             difficulty
         );
 
+        runs.escort = tick;
         stateChanged = true;
     }
 
