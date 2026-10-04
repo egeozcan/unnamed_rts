@@ -278,9 +278,11 @@ export function findSafestOre(
         // Calculate distance score (normalized by 100 for reasonable scaling)
         const distance = harvester.pos.dist(ore.pos);
         const distanceScore = (distance / 100) * DISTANCE_WEIGHT;
+        // Danger is >= 0, so this ore cannot beat the current best (strict <)
+        if (distanceScore >= bestScore && effectiveDangerWeight >= 0) continue;
 
         // Calculate path danger score
-        const pathDanger = getPathDanger(harvesterAI, harvester.pos, ore.pos);
+        const pathDanger = harvesterAI.dangerMap.size === 0 ? 0 : getPathDanger(harvesterAI, harvester.pos, ore.pos);
         const dangerScore = pathDanger * effectiveDangerWeight;
 
         const totalScore = distanceScore + dangerScore;

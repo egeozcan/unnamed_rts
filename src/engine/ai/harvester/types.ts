@@ -56,6 +56,19 @@ export interface HarvesterAIState {
 
     // Death memory
     harvesterDeaths: HarvesterDeathRecord[];
+
+    // Tick each interval subsystem last ran (missing / -Infinity = never).
+    // updateHarvesterAI only runs on a player's staggered AI ticks
+    // (tick % 3 === playerId % 3), so intervals must be elapsed-time based:
+    // a `tick % N === 0` check never fires for players with playerId % 3 !== 0.
+    intervalLastRun?: HarvesterIntervalLastRun;
+}
+
+export interface HarvesterIntervalLastRun {
+    dangerMap: number;
+    desperation: number;
+    coordinator: number;
+    escort: number;
 }
 
 // Constants for the harvester AI system

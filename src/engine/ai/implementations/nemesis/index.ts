@@ -1,5 +1,6 @@
 import { type Action, type Entity, type EntityId, type GameState, type UnitEntity, Vector } from '../../../types.js';
-import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { getEnemiesOfMemo } from '../../tick_memo.js';
 import { isTransportedUnit } from '../../../transport.js';
 import { RULES } from '../../../../data/schemas/index.js';
 import { type AIImplementation } from '../../contracts.js';
@@ -544,7 +545,7 @@ export function computeNemesisAiActions(state: GameState, playerId: number, shar
     const myUnits = getUnitsForOwner(cache, playerId) as UnitEntity[];
     if (myBuildings.length === 0 && !myUnits.some(u => u.key === 'mcv')) return [];
 
-    const enemies = getEnemiesOf(cache, playerId, state);
+    const enemies = getEnemiesOfMemo(cache, playerId, state);
     const ctx: Ctx = {
         state,
         playerId,

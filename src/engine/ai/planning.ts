@@ -2,6 +2,7 @@ import { type GameState, type Entity, type EntityId, type Vector, type Harvester
 import { RULES, type AIPersonality } from '../../data/schemas/index.js';
 import { type AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
+import { getAIEntityIndex, getOwnedUnits } from './tick_memo.js';
 import {
     AI_CONSTANTS,
     BASE_DEFENSE_RADIUS,
@@ -62,13 +63,13 @@ export function detectThreats(
 
         if (enemy.pos.dist(baseCenter) < scaledBaseDefenseRadius) {
             threatsNearBase.push(enemy.id);
+            continue;
         }
         // Also check if enemies are near any building
         for (const building of myBuildings) {
             if (enemy.pos.dist(building.pos) < scaledThreatDetectionRadius) {
-                if (!threatsNearBase.includes(enemy.id)) {
-                    threatsNearBase.push(enemy.id);
-                }
+                threatsNearBase.push(enemy.id);
+                break;
             }
         }
     }
@@ -78,6 +79,7 @@ export function detectThreats(
     // 1. It was damaged recently (within last 120 ticks / 2 seconds), OR
     // 2. An enemy unit is within 200 units
     const RECENT_DAMAGE_THRESHOLD = 120; // 2 seconds
+    let enemyUnits: Entity[] | null = null;
 
     for (const harv of harvesters) {
         const harvUnit = harv as HarvesterUnit;
@@ -90,8 +92,9 @@ export function detectThreats(
             harvestersUnderAttack.push(harv.id);
         } else {
             // Check for nearby threats
-            for (const enemy of enemies) {
-                if (enemy.type === 'UNIT' && enemy.pos.dist(harv.pos) < 200) {
+            enemyUnits ??= enemies.filter(e => e.type === 'UNIT');
+            for (const enemy of enemyUnits) {
+                if (enemy.pos.dist(harv.pos) < 200) {
                     harvestersUnderAttack.push(harv.id);
                     break;
                 }
@@ -411,7 +414,7 @@ export function calculateEconomyScore(
     myBuildings: Entity[]
 ): number {
     // Count harvesters
-    const harvesters = Object.values(state.entities).filter(e =>
+    const harvesters = getOwnedUnits(state, playerId).filter(e =>
         e.owner === playerId && e.type === 'UNIT' && e.key === 'harvester' && !e.dead
     );
 
@@ -420,8 +423,7 @@ export function calculateEconomyScore(
 
     // Count nearby ore (within 600 units of any refinery)
     let accessibleOre = 0;
-    const allOre = Object.values(state.entities).filter(e => e.type === 'RESOURCE' && !e.dead);
-    for (const ore of allOre) {
+    for (const ore of getAIEntityIndex(state).aliveOre) {
         for (const ref of refineries) {
             if (ore.pos.dist(ref.pos) < 600) {
                 accessibleOre++;
@@ -519,9 +521,7 @@ export function findDistantOre(
     _playerId: number,
     myBuildings: Entity[]
 ): Vector | null {
-    const allOre = Object.values(state.entities).filter(e =>
-        e.type === 'RESOURCE' && !e.dead && e.hp > 200
-    );
+    const allOre = getAIEntityIndex(state).aliveOre.filter(e => e.hp > 200);
     const nonDefenseBuildings = myBuildings.filter(b => {
         const data = RULES.buildings[b.key];
         return !data?.isDefense;
