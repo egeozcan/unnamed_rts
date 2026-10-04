@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, HarvesterUnit, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type HarvesterUnit, type BuildingKey } from '../../src/engine/types';
 import { refreshCollisionGrid } from '../../src/engine/utils';
 import {
     createTestHarvester,

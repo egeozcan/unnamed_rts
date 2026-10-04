@@ -9,11 +9,11 @@ import {
     recordHarvesterDeath
 } from '../../../src/engine/ai/harvester/danger_map.js';
 import {
-    HarvesterAIState,
+    type HarvesterAIState,
     createInitialHarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
-import { Vector, Entity, ResourceEntity } from '../../../src/engine/types.js';
+import { Vector, type Entity, type ResourceEntity } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestCombatUnit,

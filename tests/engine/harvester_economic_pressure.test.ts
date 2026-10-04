@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, isActionType, HarvesterUnit, CombatUnit, BuildingKey, UnitKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, isActionType, type HarvesterUnit, type CombatUnit, type BuildingKey, type UnitKey } from '../../src/engine/types';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource, addEntityToState } from '../../src/engine/test-utils';
 import { computeAiActions, resetAIState } from '../../src/engine/ai/index.js';
 

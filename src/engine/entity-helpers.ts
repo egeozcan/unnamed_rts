@@ -1,20 +1,20 @@
 import {
     Vector,
-    EntityId,
-    Entity,
-    UnitEntity,
-    BuildingEntity,
-    HarvesterUnit,
-    AirUnit,
-    DemoTruckUnit,
-    MovementComponent,
-    CombatComponent,
-    HarvesterComponent,
-    BuildingStateComponent,
-    WellComponent,
-    AirUnitComponent,
-    AirBaseComponent,
-    DemoTruckComponent
+    type EntityId,
+    type Entity,
+    type UnitEntity,
+    type BuildingEntity,
+    type HarvesterUnit,
+    type AirUnit,
+    type DemoTruckUnit,
+    type MovementComponent,
+    type CombatComponent,
+    type HarvesterComponent,
+    type BuildingStateComponent,
+    type WellComponent,
+    type AirUnitComponent,
+    type AirBaseComponent,
+    type DemoTruckComponent
 } from './types.js';
 
 // ============ COMPONENT DEFAULTS ============

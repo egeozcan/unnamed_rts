@@ -1,12 +1,12 @@
-import { Action, Entity, GameState, isActionType } from '../../../types.js';
-import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
-import { AIImplementation, AIImplementationDifficulty } from '../../contracts.js';
+import { type Action, type Entity, type GameState, isActionType } from '../../../types.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { type AIImplementation, type AIImplementationDifficulty } from '../../contracts.js';
 import { computeClassicAiActions } from '../classic/index.js';
 import { checkPrerequisites } from '../../utils.js';
 import { findBaseCenter, getAIState, resetAIState, setPersonalityForPlayer } from '../../state.js';
 import { handleDemoTruckAssault, handleEngineerCapture, handleHijackerAssault } from '../../action_combat.js';
 import { RULES } from '../../../../data/schemas/index.js';
-import { getSaboteurCircusRuntimeState, resetSaboteurCircusRuntimeState, SaboteurStuntMode } from './state.js';
+import { getSaboteurCircusRuntimeState, resetSaboteurCircusRuntimeState, type SaboteurStuntMode } from './state.js';
 
 type CommandLikeAction = Extract<Action, { type: 'COMMAND_ATTACK' | 'COMMAND_MOVE' | 'COMMAND_ATTACK_MOVE' | 'SET_RALLY_POINT' | 'SET_STANCE' }>;
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer.js';
 import { createTestWell, createTestResource, createTestBuilding, createTestCombatUnit, addEntityToState, addEntitiesToState, resetTestEntityCounter } from '../../src/engine/test-utils.js';
-import { GameState, WellEntity } from '../../src/engine/types.js';
+import { type GameState, type WellEntity } from '../../src/engine/types.js';
 
 describe('Ore Wells', () => {
     let baseState: GameState;
@@ -71,7 +71,7 @@ describe('Ore Wells', () => {
             const ore1 = createTestResource({ x: 550, y: 500, hp: 200, maxHp: 1000 });
             const ore2 = createTestResource({ x: 450, y: 500, hp: 200, maxHp: 1000 });
 
-            let state = addEntitiesToState(baseState, [well, ore1, ore2]);
+            const state = addEntitiesToState(baseState, [well, ore1, ore2]);
             const nextState = update(state, { type: 'TICK' });
 
             const nextOre1 = nextState.entities[ore1.id];

@@ -1,7 +1,7 @@
-import { Action, Entity, EntityId, GameState, isActionType, PlayerState, UnitEntity, Vector } from '../../../types.js';
-import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { type Action, type Entity, type EntityId, type GameState, isActionType, type PlayerState, type UnitEntity, Vector } from '../../../types.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { getTransportCapacity, getTransportPassengers, isTransportedUnit } from '../../../transport.js';
-import { AIImplementation } from '../../contracts.js';
+import { type AIImplementation } from '../../contracts.js';
 import { checkPrerequisites } from '../../utils.js';
 import { AuroraSovereignAIImplementation, computeAuroraSovereignAiActions } from '../aurora_sovereign/index.js';
 import { getEngineerConyardRushRuntimeState, resetEngineerConyardRushRuntimeState } from './state.js';
@@ -136,6 +136,7 @@ export function sanitizeEngineerConyardRushActions(actions: Action[], state: Gam
             case 'COMMAND_ATTACK_MOVE':
             case 'COMMAND_UNGARRISON':
             case 'SET_STANCE':
+            case 'COMMAND_STOP':
                 return allOwnedUnits(state, action.payload.unitIds, playerId);
             case 'COMMAND_ATTACK':
                 return allOwnedUnits(state, action.payload.unitIds, playerId);
@@ -150,7 +151,8 @@ export function sanitizeEngineerConyardRushActions(actions: Action[], state: Gam
                 return action.payload.playerId === playerId &&
                     isOwnedBuilding(state, action.payload.buildingId, playerId);
             case 'DEPLOY_MCV':
-            case 'DEPLOY_INDUCTION_RIG': {
+            case 'DEPLOY_INDUCTION_RIG':
+            case 'COMMAND_DEPLOY_RIG': {
                 const unit = state.entities[action.payload.unitId];
                 return Boolean(unit && unit.type === 'UNIT' && unit.owner === playerId && !unit.dead);
             }
@@ -166,6 +168,7 @@ export function sanitizeEngineerConyardRushActions(actions: Action[], state: Gam
             case 'TOGGLE_MINIMAP':
             case 'TOGGLE_BIRDS_EYE':
             case 'TOGGLE_ATTACK_MOVE_MODE':
+            case 'INSPECT_ENTITY':
                 return false;
         }
     });

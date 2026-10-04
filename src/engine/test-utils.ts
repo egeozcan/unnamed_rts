@@ -1,18 +1,18 @@
 import {
     Vector,
-    EntityId,
-    Entity,
-    BuildingEntity,
-    ResourceEntity,
-    RockEntity,
-    WellEntity,
-    HarvesterUnit,
-    CombatUnit,
-    AirUnit,
-    DemoTruckUnit,
-    UnitKey,
-    BuildingKey,
-    GameState
+    type EntityId,
+    type Entity,
+    type BuildingEntity,
+    type ResourceEntity,
+    type RockEntity,
+    type WellEntity,
+    type HarvesterUnit,
+    type CombatUnit,
+    type AirUnit,
+    type DemoTruckUnit,
+    type UnitKey,
+    type BuildingKey,
+    type GameState
 } from './types.js';
 import {
     createDefaultMovement,

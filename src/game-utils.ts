@@ -3,7 +3,7 @@
  * These are separated from game.ts to enable unit testing without DOM dependencies.
  */
 
-import { GameState, Vector, EntityId, Entity, ResourceEntity, RockEntity, WellEntity, SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, HarvesterUnit } from './engine/types.js';
+import { type GameState, Vector, type EntityId, type Entity, type ResourceEntity, type RockEntity, type WellEntity, type SkirmishConfig, MAP_SIZES, DENSITY_SETTINGS, WELL_DENSITY_SETTINGS, type HarvesterUnit } from './engine/types.js';
 import { isHarvester } from './engine/type-guards.js';
 import { createDefaultWellComponent } from './engine/entity-helpers.js';
 import { RULES } from './data/schemas/index.js';
@@ -83,7 +83,7 @@ export function reconstructVectors(state: GameState): GameState {
  * Calculate power production and consumption for a specific player.
  */
 export function calculatePower(pid: number, entities: Record<EntityId, Entity>): { in: number; out: number } {
-    let p = { in: 0, out: 0 };
+    const p = { in: 0, out: 0 };
     for (const id in entities) {
         const e = entities[id];
         if (e.owner === pid && !e.dead) {
@@ -576,7 +576,7 @@ export function saveRematchConfig(storage: Pick<Storage, 'setItem'> | null, conf
  */
 export function takeRematchConfig(storage: Pick<Storage, 'getItem' | 'removeItem'> | null): SkirmishConfig | null {
     if (!storage) return null;
-    let raw: string | null = null;
+    let raw: string | null;
     try {
         raw = storage.getItem(REMATCH_STORAGE_KEY);
         storage.removeItem(REMATCH_STORAGE_KEY);

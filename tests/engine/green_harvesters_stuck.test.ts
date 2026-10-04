@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, HarvesterUnit, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type HarvesterUnit, type BuildingKey } from '../../src/engine/types';
 import { refreshCollisionGrid } from '../../src/engine/utils';
 import {
     createTestHarvester,
@@ -183,7 +183,7 @@ describe('Green Harvesters Stuck', () => {
         // Track if any harvester reaches the dock or makes significant progress
         let anyReachedDock = false;
         let noProgressTicks = 0;
-        let lastPositions = { ...initialPositions };
+        const lastPositions = { ...initialPositions };
 
         // Run for 300 ticks - enough for at least one to reach the dock
         for (let i = 0; i < 300; i++) {
@@ -362,7 +362,7 @@ describe('Green Harvesters Stuck', () => {
 
         let unloadCount = 0;
         let noProgressTicks = 0;
-        let lastPositions = { ...initialPositions };
+        const lastPositions = { ...initialPositions };
 
         // Run for 400 ticks
         for (let i = 0; i < 400; i++) {
@@ -499,7 +499,7 @@ describe('Green Harvesters Stuck', () => {
 
         let anyReachedDock = false;
         let noProgressTicks = 0;
-        let lastPositions = { ...initialPositions };
+        const lastPositions = { ...initialPositions };
 
         // Run for 200 ticks
         for (let i = 0; i < 200; i++) {

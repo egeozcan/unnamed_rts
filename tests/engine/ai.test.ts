@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, isActionType, UnitKey, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, isActionType, type UnitKey, type BuildingKey } from '../../src/engine/types';
 import {
     createTestHarvester,
     createTestCombatUnit,
@@ -1067,7 +1067,7 @@ describe('AI System', () => {
             // Enemy base (far away)
             entities['enemy_cy'] = createEntity('enemy_cy', 0, 'BUILDING', 'conyard', 2500, 2500);
 
-            let state = createTestState(entities);
+            const state = createTestState(entities);
 
             // Force past cooldown
             const aiState = getAIState(1);

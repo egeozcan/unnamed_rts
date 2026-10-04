@@ -15,17 +15,17 @@
  */
 
 import {
-    GameState,
-    EntityId,
-    HarvesterUnit,
-    CombatUnit,
-    BuildingEntity,
-    ResourceEntity,
-    Action
+    type GameState,
+    type EntityId,
+    type HarvesterUnit,
+    type CombatUnit,
+    type BuildingEntity,
+    type ResourceEntity,
+    type Action
 } from '../../types.js';
-import { createEntityCache, EntityCache, getEnemiesOf } from '../../perf.js';
+import { createEntityCache, type EntityCache, getEnemiesOf } from '../../perf.js';
 import {
-    HarvesterAIState,
+    type HarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from './types.js';
 import { updateDangerMap } from './danger_map.js';
@@ -36,7 +36,7 @@ import {
     manageRefineryQueue
 } from './coordinator.js';
 import { updateEscortAssignments, releaseEscort } from './escort.js';
-import { detectStuckHarvester, resolveStuckHarvester, StuckResolution } from './stuck_resolver.js';
+import { detectStuckHarvester, resolveStuckHarvester, type StuckResolution } from './stuck_resolver.js';
 
 const {
     DANGER_MAP_UPDATE_INTERVAL,

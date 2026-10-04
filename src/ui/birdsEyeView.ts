@@ -1,4 +1,4 @@
-import { Entity, GameState, GameMode, PLAYER_COLORS, PlayerState, EntityId } from '../engine/types.js';
+import { type Entity, type GameState, type GameMode, PLAYER_COLORS, type PlayerState, type EntityId } from '../engine/types.js';
 import { RULES } from '../data/schemas/index.js';
 import { getAIState } from '../engine/ai/index.js';
 
@@ -144,6 +144,10 @@ function computePlayerStats(entities: Record<EntityId, Entity>, players: Record<
                 break;
             case 'building_defense':
                 s.defenses++;
+                break;
+            case 'resource':
+            case 'rock':
+            case 'well':
                 break;
         }
     }

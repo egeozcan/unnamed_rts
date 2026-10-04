@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    CliArgs,
+    type CliArgs,
     parseArgs,
     buildFilterConfig,
     printHelp

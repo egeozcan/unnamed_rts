@@ -5,7 +5,7 @@
  * for the debug collector.
  */
 
-import { FilterConfig, createDefaultFilterConfig } from './collector.js';
+import { type FilterConfig, createDefaultFilterConfig } from './collector.js';
 
 // ============================================================================
 // Type Definitions

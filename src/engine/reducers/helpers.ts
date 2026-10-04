@@ -1,13 +1,13 @@
 import {
-    GameState, Entity, EntityId, PlayerState, Vector, PLAYER_COLORS,
-    UnitKey, BuildingKey, Projectile, ProjectileArchetype
+    type GameState, type Entity, type EntityId, type PlayerState, Vector, PLAYER_COLORS,
+    type UnitKey, type BuildingKey, type Projectile, type ProjectileArchetype
 } from '../types';
-import { RULES, Building, Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
+import { RULES, type Building, type Unit, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createDefaultMovement, createDefaultCombat, createDefaultHarvester, createDefaultBuildingState, createDefaultAirUnit, createDefaultAirBase, createDefaultDemoTruck } from '../entity-helpers';
 import { type EntityCache } from '../perf';
 
 // Power calculation cache - keyed by tick to auto-invalidate
-let powerCache: Map<number, { in: number, out: number }> = new Map();
+const powerCache: Map<number, { in: number, out: number }> = new Map();
 let powerCacheTick = -1;
 
 /**
@@ -59,7 +59,7 @@ export function canBuild(key: string, category: string, playerId: number, entiti
     const maxCount = unitData?.maxCount || buildingData?.maxCount;
     if (maxCount !== undefined) {
         // Count existing entities of this type
-        let existingCount = 0;
+        let existingCount: number;
         if (isEntityCache) {
             const cache = entities as EntityCache;
             const buildings = cache.buildingsByOwner.get(playerId) || [];
@@ -120,7 +120,7 @@ export function calculatePower(playerId: number, entities: Record<EntityId, Enti
         }
     }
 
-    let p = { in: 0, out: 0 };
+    const p = { in: 0, out: 0 };
 
     // Support both EntityCache and entities record
     if ('buildingsByOwner' in entities) {

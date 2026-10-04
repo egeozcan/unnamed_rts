@@ -1,4 +1,4 @@
-import { GameState, Entity, Projectile, Particle, Vector, BUILD_RADIUS, PLAYER_COLORS, CommandIndicator, TILE_SIZE } from '../engine/types.js';
+import { type GameState, type Entity, type Projectile, type Particle, type Vector, BUILD_RADIUS, PLAYER_COLORS, type CommandIndicator, TILE_SIZE } from '../engine/types.js';
 import { getAssetBitmap, initGraphics } from './assets.js';
 import { RULES } from '../data/schemas/index.js';
 import { getSpatialGrid } from '../engine/spatial.js';
@@ -13,7 +13,7 @@ import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, HEIGHT_TO_SCREEN, getAltitude
 
 /** World units a 3D model's top is drawn above its ground position (for picking). */
 const pickLift3D = (entity: Entity): number => (getAltitude(entity) + getModelHeight(entity)) * HEIGHT_TO_SCREEN;
-import { GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
+import { type GraphicsMode, isWebGLAvailable, loadGraphicsMode, saveGraphicsMode } from './graphics-mode.js';
 
 const TRAIL_BANDS = 6;
 const trailStyleCache = new Map<number, string>();

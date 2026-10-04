@@ -1,4 +1,4 @@
-import { GameState, Entity, EntityId, Vector } from '../types.js';
+import { type GameState, type Entity, type EntityId, type Vector } from '../types.js';
 import { RULES } from '../../data/schemas/index.js';
 
 // ===== AI CONSTANTS =====

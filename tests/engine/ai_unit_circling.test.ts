@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, UnitEntity } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type UnitEntity } from '../../src/engine/types';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
 
 const { getAIState } = _testUtils;
@@ -208,7 +208,6 @@ describe('AI Unit Circling Bug', () => {
         aiState.strategy = 'buildup';
 
         // Run multiple AI ticks and count move commands
-        let totalMoveCommands = 0;
         let totalUnitsCommanded = 0;
 
         for (let tick = 0; tick < 10; tick++) {
@@ -217,7 +216,6 @@ describe('AI Unit Circling Bug', () => {
             const actions = computeAiActions(state, 1);
 
             const moveCommands = actions.filter(a => a.type === 'COMMAND_MOVE');
-            totalMoveCommands += moveCommands.length;
             for (const cmd of moveCommands) {
                 totalUnitsCommanded += cmd.payload.unitIds.length;
             }

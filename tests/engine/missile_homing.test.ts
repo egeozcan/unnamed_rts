@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector } from '../../src/engine/types';
+import { type GameState, Vector } from '../../src/engine/types';
 import { updateProjectile } from '../../src/engine/reducers/game_loop';
 import { createProjectile } from '../../src/engine/reducers/helpers';
 import { createEntity } from '../../src/engine/reducers/helpers';
@@ -27,7 +27,7 @@ describe('Missile Logic', () => {
         const target = createEntity(100, 0, 2, 'UNIT', 'harrier', state);
 
         // Create projectile moving East
-        let proj = createProjectile(sam, target);
+        const proj = createProjectile(sam, target);
         expect(proj.vel.x).toBeGreaterThan(0);
         expect(proj.vel.y).toBe(0); // target is directly east
 
@@ -60,7 +60,7 @@ describe('Missile Logic', () => {
         const target = createEntity(100, 0, 2, 'UNIT', 'light', state);
 
         // Create projectile moving East
-        let proj = createProjectile(turret, target);
+        const proj = createProjectile(turret, target);
         expect(proj.weaponType).toBe('cannon');
         const initialVel = proj.vel; // Should be (18, 0)
 

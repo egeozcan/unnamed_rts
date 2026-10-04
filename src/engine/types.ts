@@ -1,16 +1,16 @@
 import {
-    MovementComponent,
-    CombatComponent,
-    HarvesterComponent,
-    EngineerComponent,
-    HijackerComponent,
-    BuildingStateComponent,
-    WellComponent,
-    AirUnitComponent,
-    AirBaseComponent,
-    InductionRigComponent,
-    DemoTruckComponent,
-    AttackStance
+    type MovementComponent,
+    type CombatComponent,
+    type HarvesterComponent,
+    type EngineerComponent,
+    type HijackerComponent,
+    type BuildingStateComponent,
+    type WellComponent,
+    type AirUnitComponent,
+    type AirBaseComponent,
+    type InductionRigComponent,
+    type DemoTruckComponent,
+    type AttackStance
 } from './components.js';
 
 export type PlayerId = string;

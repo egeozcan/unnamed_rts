@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, GameState, Entity, EntityId, Projectile, ProjectileArchetype } from '../../src/engine/types';
+import { Vector, type GameState, type Entity, type EntityId, type Projectile, type ProjectileArchetype } from '../../src/engine/types';
 import { applySplashDamage, updateProjectile } from '../../src/engine/reducers/game_loop';
 import { getBuildTicks, BUILDING_BUILD_TICKS } from '../../src/engine/reducers/helpers';
 import { INITIAL_STATE, createPlayerState, update } from '../../src/engine/reducer';

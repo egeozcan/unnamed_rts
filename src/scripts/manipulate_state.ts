@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { GameState, Vector, EntityId } from '../engine/types';
+import { type GameState, Vector, type EntityId } from '../engine/types';
 import { tick, update } from '../engine/reducer';
 import { computeAiActions, resetAIState } from '../engine/ai/index';
 

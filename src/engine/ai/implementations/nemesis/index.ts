@@ -1,12 +1,12 @@
-import { Action, Entity, EntityId, GameState, UnitEntity, Vector } from '../../../types.js';
-import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { type Action, type Entity, type EntityId, type GameState, type UnitEntity, Vector } from '../../../types.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { isTransportedUnit } from '../../../transport.js';
 import { RULES } from '../../../../data/schemas/index.js';
-import { AIImplementation } from '../../contracts.js';
+import { type AIImplementation } from '../../contracts.js';
 import { isValidPlacement } from '../../utils.js';
 import { resetAIState } from '../../state.js';
 import { AuroraSovereignAIImplementation, computeAuroraSovereignAiActions } from '../aurora_sovereign/index.js';
-import { getNemesisRuntimeState, NemesisRuntimeState, resetNemesisRuntimeState } from './state.js';
+import { getNemesisRuntimeState, type NemesisRuntimeState, resetNemesisRuntimeState } from './state.js';
 
 // ============================================================================
 // Nemesis AI - air cavalry

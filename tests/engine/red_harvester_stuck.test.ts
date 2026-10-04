@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, HarvesterUnit } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type HarvesterUnit } from '../../src/engine/types';
 import { refreshCollisionGrid } from '../../src/engine/utils';
 import {
     createTestHarvester,
@@ -337,7 +337,7 @@ describe('Red Harvester Stuck at Dock', () => {
         const dock2 = new Vector(2728, 2822 + 60); // ref2 dock at (2728, 2882)
 
         // Track stuck state
-        let initialStates = {
+        const initialStates = {
             h_3750: { pos: state.entities['h_3750'].pos, cargo: 500 },
             h_4379: { pos: state.entities['h_4379'].pos, cargo: 500 },
             harv_p1: { pos: state.entities['harv_p1'].pos, cargo: 500 },

@@ -1,4 +1,4 @@
-import { Vector, EntityId } from './types.js';
+import { type Vector, type EntityId } from './types.js';
 
 // ============ ATTACK STANCE ============
 // Attack stance for combat units

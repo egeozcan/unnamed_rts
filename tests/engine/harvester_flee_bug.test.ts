@@ -3,8 +3,8 @@ import { handleHarvesterSafety } from '../../src/engine/ai/action_combat';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, addEntityToState } from '../../src/engine/test-utils';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createEmptyComposition } from '../../src/engine/ai/counters';
-import { GameState, Vector, HarvesterUnit } from '../../src/engine/types';
-import { AIPlayerState } from '../../src/engine/ai/types';
+import { type GameState, Vector, type HarvesterUnit } from '../../src/engine/types';
+import { type AIPlayerState } from '../../src/engine/ai/types';
 import { createInitialHarvesterAIState } from '../../src/engine/ai/harvester/types';
 
 describe('Harvester Flee Bug', () => {

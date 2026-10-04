@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestCombatUnit, resetTestEntityCounter } from '../../src/engine/test-utils';
 import { createPlayerState, INITIAL_STATE, tick } from '../../src/engine/reducer';
-import { GameState } from '../../src/engine/types';
+import { type GameState } from '../../src/engine/types';
 
 beforeEach(() => resetTestEntityCounter());
 

@@ -1,4 +1,4 @@
-import { Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, Particle, BuildingKey, UnitKey } from './types.js';
+import { type Entity, Vector, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, type Particle, type BuildingKey, type UnitKey } from './types.js';
 import { RULES, isUnitData } from '../data/schemas/index.js';
 import { pathfindingWorker } from './pathfinding-worker-manager.js';
 import { isTransportedUnit } from './transport.js';

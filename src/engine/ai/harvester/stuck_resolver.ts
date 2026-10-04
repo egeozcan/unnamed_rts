@@ -1,8 +1,8 @@
-import { Entity, EntityId, Vector, HarvesterUnit } from '../../types.js';
+import { type Entity, type EntityId, Vector, type HarvesterUnit } from '../../types.js';
 import {
     HARVESTER_AI_CONSTANTS,
-    HarvesterAIState,
-    StuckLevel
+    type HarvesterAIState,
+    type StuckLevel
 } from './types.js';
 
 const {

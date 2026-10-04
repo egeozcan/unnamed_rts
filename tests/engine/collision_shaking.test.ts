@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer.js';
-import { GameState, Vector, CombatUnit } from '../../src/engine/types.js';
+import { type GameState, Vector, type CombatUnit } from '../../src/engine/types.js';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils.js';
 
 describe('Collision Resolution - Unit Shaking', () => {
@@ -103,13 +103,10 @@ describe('Collision Resolution - Unit Shaking', () => {
                 if (positions.length < 3) continue;
 
                 let directionChanges = 0;
-                let totalMovement = 0;
 
                 for (let i = 2; i < positions.length; i++) {
                     const prev = positions[i - 1].sub(positions[i - 2]);
                     const curr = positions[i].sub(positions[i - 1]);
-
-                    totalMovement += curr.mag();
 
                     // Check if direction changed significantly (dot product negative = opposite direction)
                     const dot = prev.x * curr.x + prev.y * curr.y;

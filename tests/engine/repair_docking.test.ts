@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeEach } from 'vitest';
-import { GameState } from '../../src/engine/types';
+import { type GameState } from '../../src/engine/types';
 import { update } from '../../src/engine/reducer';
 import { createEntity } from '../../src/engine/utils';
 import { getSpatialGrid } from '../../src/engine/spatial';

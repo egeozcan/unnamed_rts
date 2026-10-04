@@ -1,5 +1,5 @@
 import {
-    Action, EntityId, GameState, PLAYER_COLORS, Vector
+    type Action, type EntityId, type GameState, PLAYER_COLORS, Vector
 } from './types';
 import { isDemoTruck } from './type-guards';
 import { isEnemy } from './teams';

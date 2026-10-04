@@ -1,5 +1,5 @@
-import { Action, GameState } from '../types.js';
-import { EntityCache } from '../perf.js';
+import { type Action, type GameState } from '../types.js';
+import { type EntityCache } from '../perf.js';
 import { getAIImplementation, DEFAULT_AI_IMPLEMENTATION_ID } from './registry.js';
 
 const warnedUnknownImplementationIds = new Set<string>();

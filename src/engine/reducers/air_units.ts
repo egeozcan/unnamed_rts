@@ -10,7 +10,7 @@
  */
 
 import {
-    Entity, EntityId, BuildingEntity, AirUnit, Vector, Projectile, GameState
+    type Entity, type EntityId, type BuildingEntity, type AirUnit, Vector, type Projectile, type GameState
 } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';
@@ -105,7 +105,7 @@ export function updateAirUnitState(
             }
             break;
 
-        case 'returning':
+        case 'returning': {
             // Head back to home base
             const homeBase = entity.airUnit.homeBaseId
                 ? allEntities[entity.airUnit.homeBaseId] as BuildingEntity
@@ -156,6 +156,7 @@ export function updateAirUnitState(
                 nextEntity = findNewHomeBase(nextEntity, allEntities);
             }
             break;
+        }
     }
 
     return { entity: nextEntity, projectile, modifiedEntities };

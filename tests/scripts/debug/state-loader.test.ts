@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Vector, GameState } from '../../../src/engine/types.js';
+import { Vector, type GameState } from '../../../src/engine/types.js';
 import {
     rehydrateVectors,
     loadState,

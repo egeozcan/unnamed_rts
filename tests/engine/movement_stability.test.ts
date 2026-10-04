@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector, UnitEntity } from '../../src/engine/types';
+import { type GameState, type Vector, type UnitEntity } from '../../src/engine/types';
 import { tick } from '../../src/engine/reducers/game_loop';
 import { createEntity } from '../../src/engine/reducers/helpers';
 import { commandMove } from '../../src/engine/reducers/units';

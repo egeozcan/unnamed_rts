@@ -1,6 +1,6 @@
-import { GameState, Action } from '../../../types.js';
+import { type GameState, type Action } from '../../../types.js';
 import { RULES } from '../../../../data/schemas/index.js';
-import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     findBaseCenter,
@@ -315,7 +315,7 @@ export function computeGeniusAiActions(state: GameState, playerId: number, share
     }
 
     // DEFENSIVE ESCORT FOR MCVs
-    const movingMCVs = myUnits.filter(u => u.key === 'mcv' && (u as any).movement?.moveTarget);
+    const movingMCVs = myUnits.filter(u => u.key === 'mcv' && u.movement.moveTarget);
     if (movingMCVs.length > 0 && armySize > 5) {
         const escort = combatUnits.slice(0, 3);
         actions.push({

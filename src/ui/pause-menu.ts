@@ -1,4 +1,4 @@
-import { getWheelMode, setWheelMode, WheelMode } from '../input/index.js';
+import { getWheelMode, setWheelMode, type WheelMode } from '../input/index.js';
 
 let pauseOverlay: HTMLDivElement | null = null;
 let helpPanel: HTMLDivElement | null = null;

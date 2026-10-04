@@ -1,5 +1,5 @@
-import { GameState, Action } from '../types.js';
-import { EntityCache } from '../perf.js';
+import { type GameState, type Action } from '../types.js';
+import { type EntityCache } from '../perf.js';
 
 // Public AI module exports
 export * from './types.js';

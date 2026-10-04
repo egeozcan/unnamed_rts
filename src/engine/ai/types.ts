@@ -1,7 +1,7 @@
-import { EntityId, Vector } from '../types.js';
-import { PersonalityName } from '../../data/schemas/index.js';
-import { HarvesterAIState } from './harvester/types.js';
-import { DominantArmor, EnemyComposition } from './counters.js';
+import { type EntityId, type Vector } from '../types.js';
+import { type PersonalityName } from '../../data/schemas/index.js';
+import { type HarvesterAIState } from './harvester/types.js';
+import { type DominantArmor, type EnemyComposition } from './counters.js';
 
 // AI Strategy Types
 export type AIStrategy = 'buildup' | 'attack' | 'defend' | 'harass' | 'all_in';

@@ -1,4 +1,4 @@
-import { Entity, EntityId, TILE_SIZE } from './types.js';
+import { type Entity, type EntityId, TILE_SIZE } from './types.js';
 import { isTransportedUnit } from './transport.js';
 
 /** Extra world-pixel slack around units so small infantry stay clickable. */

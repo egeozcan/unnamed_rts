@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Vector, Entity, BUILD_RADIUS, PLAYER_COLORS, HarvesterUnit } from '../../src/engine/types';
+import { Vector, type Entity, BUILD_RADIUS, PLAYER_COLORS, type HarvesterUnit } from '../../src/engine/types';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource, createTestRock } from '../../src/engine/test-utils';
 
 describe('Renderer Logic', () => {

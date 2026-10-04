@@ -3,7 +3,7 @@
  * Provides military and economy scores for visual comparison of player strength.
  */
 
-import { GameState, PLAYER_COLORS } from './types.js';
+import { type GameState, PLAYER_COLORS } from './types.js';
 import { RULES } from '../data/schemas/index.js';
 import { isUnit, isBuilding } from './type-guards.js';
 

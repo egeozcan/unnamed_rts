@@ -1,4 +1,4 @@
-import { Entity, EntityId, UnitEntity } from './types.js';
+import { type Entity, type EntityId, type UnitEntity } from './types.js';
 import { RULES, isUnitData } from '../data/schemas/index.js';
 
 type TransportStatusEntity = {

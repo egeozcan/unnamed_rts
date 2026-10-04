@@ -10,15 +10,15 @@
 
 import * as readline from 'node:readline';
 import fs from 'node:fs';
-import { GameState } from '../../engine/types.js';
-import { DebugCollector, createDefaultFilterConfig, FilterConfig } from './collector.js';
+import { type GameState } from '../../engine/types.js';
+import { type DebugCollector, createDefaultFilterConfig, type FilterConfig } from './collector.js';
 // DebugEvents is connected in index.ts; we just use the collector here
 import { loadState, saveState } from './state-loader.js';
-import { parseTrigger, evaluateTrigger, Trigger } from './triggers.js';
+import { parseTrigger, evaluateTrigger, type Trigger } from './triggers.js';
 import { update } from '../../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../../engine/ai/index.js';
 import { formatStatus, formatUnit, formatFind, formatGroups, formatEvents } from './formatters.js';
-import { CliArgs } from './cli.js';
+import { type CliArgs } from './cli.js';
 
 // ============================================================================
 // Types

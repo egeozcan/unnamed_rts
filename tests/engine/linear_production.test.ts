@@ -1,7 +1,7 @@
 import { RULES } from '../../src/data/schemas/index';
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, BuildingKey } from '../../src/engine/types';
+import { type GameState, type Entity, type EntityId, type BuildingKey } from '../../src/engine/types';
 import { createTestBuilding } from '../../src/engine/test-utils';
 
 function createEntity(

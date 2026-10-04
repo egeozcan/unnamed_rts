@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
 import { createFogGrid, updateFogOfWar } from '../../src/engine/reducers/fog';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
-import { GameState, Vector, TILE_SIZE } from '../../src/engine/types';
+import { type GameState, Vector, TILE_SIZE } from '../../src/engine/types';
 
 describe('Fog of War', () => {
     // ---- INITIAL_STATE ----

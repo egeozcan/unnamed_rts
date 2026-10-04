@@ -13,8 +13,8 @@
  * - Hard: Full proactive escort system
  */
 
-import { EntityId, HarvesterUnit, CombatUnit, ResourceEntity } from '../../types.js';
-import { HarvesterAIState, HARVESTER_AI_CONSTANTS } from './types.js';
+import { type EntityId, type HarvesterUnit, type CombatUnit, type ResourceEntity } from '../../types.js';
+import { type HarvesterAIState, HARVESTER_AI_CONSTANTS } from './types.js';
 import { getZoneDanger } from './danger_map.js';
 
 const {

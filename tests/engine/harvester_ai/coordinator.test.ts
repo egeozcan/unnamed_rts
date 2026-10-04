@@ -7,11 +7,11 @@ import {
     getRoleMaxDanger
 } from '../../../src/engine/ai/harvester/coordinator.js';
 import {
-    HarvesterAIState,
+    type HarvesterAIState,
     createInitialHarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
-import { HarvesterUnit, BuildingEntity, ResourceEntity } from '../../../src/engine/types.js';
+import { type HarvesterUnit, type BuildingEntity, type ResourceEntity } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestResource,

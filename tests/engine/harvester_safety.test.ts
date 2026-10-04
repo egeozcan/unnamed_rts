@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, HarvesterUnit } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type HarvesterUnit } from '../../src/engine/types';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource, addEntityToState } from '../../src/engine/test-utils';
 import { computeAiActions, resetAIState } from '../../src/engine/ai/index.js';
 
@@ -126,15 +126,6 @@ describe('Oscillating Harvester Bug', () => {
                     hasMove: harvUnit.movement.moveTarget !== null,
                     hasDock: harvUnit.harvester.baseTargetId !== null
                 });
-            }
-        }
-
-        // Detect oscillation: Check if the harvester is rapidly switching between
-        // having moveTarget and not having it (indicating conflicting commands)
-        let moveTargetSwitches = 0;
-        for (let i = 1; i < positions.length; i++) {
-            if (positions[i].hasMove !== positions[i - 1].hasMove) {
-                moveTargetSwitches++;
             }
         }
 

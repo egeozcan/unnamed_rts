@@ -1,6 +1,6 @@
-import { GameState, Entity, EntityId, Vector } from '../types.js';
-import { RULES, AI_CONFIG, PersonalityName } from '../../data/schemas/index.js';
-import { AIPlayerState } from './types.js';
+import { type GameState, type Entity, type EntityId, Vector } from '../types.js';
+import { RULES, AI_CONFIG, type PersonalityName } from '../../data/schemas/index.js';
+import { type AIPlayerState } from './types.js';
 import { VENGEANCE_DECAY, VENGEANCE_PER_HIT } from './utils.js';
 import { isUnit } from '../type-guards.js';
 import { createInitialHarvesterAIState } from './harvester/types.js';

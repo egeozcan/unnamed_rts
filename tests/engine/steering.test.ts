@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createEntity } from '../../src/engine/reducer';
-import { GameState, Vector, UnitEntity } from '../../src/engine/types';
+import { type GameState, Vector, type UnitEntity } from '../../src/engine/types';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
 
 describe('Unit Steering & Smoothing', () => {
@@ -90,7 +90,7 @@ describe('Unit Steering & Smoothing', () => {
         state = update(state, { type: 'COMMAND_MOVE', payload: { unitIds: units, x: 500, y: 150 } });
 
         let totalDirectionChanges = 0;
-        let prevDirs: Record<string, Vector> = {};
+        const prevDirs: Record<string, Vector> = {};
 
         for (let i = 0; i < 100; i++) {
             state = update(state, { type: 'TICK' });

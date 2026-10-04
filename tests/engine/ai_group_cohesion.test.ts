@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type UnitKey, type BuildingKey } from '../../src/engine/types';
 import {
     createTestHarvester,
     createTestCombatUnit,
@@ -640,7 +640,7 @@ describe('AI Smart Combat Targeting', () => {
         entities['unit2'] = unit2;
         entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500); // Base center
 
-        let state = createTestState(entities);
+        const state = createTestState(entities);
         // Ensure player exists
         if (!state.players[1]) {
             state.players[1] = {
@@ -694,7 +694,7 @@ describe('AI Smart Combat Targeting', () => {
         entities['conyard'] = createEntity('conyard', 1, 'BUILDING', 'conyard', 500, 500);
         entities['enemy1'] = createEntity('enemy1', 0, 'UNIT', 'rifle', 2000, 2000);
 
-        let state = createTestState(entities);
+        const state = createTestState(entities);
         // Ensure player exists
         if (!state.players[1]) {
             state.players[1] = {

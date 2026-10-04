@@ -1,5 +1,5 @@
-import { GameState, Action, Entity, Vector, isActionType } from '../../../types.js';
-import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { type GameState, type Action, type Entity, type Vector, isActionType } from '../../../types.js';
+import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     findBaseCenter,
@@ -44,8 +44,8 @@ import {
     handleHijackerAssault
 } from '../../action_combat.js';
 import { updateHarvesterAI } from '../../harvester/index.js';
-import { AIPersonality, RULES } from '../../../../data/schemas/index.js';
-import { EnemyComposition, rankCounterUnits } from '../../counters.js';
+import { type AIPersonality, RULES } from '../../../../data/schemas/index.js';
+import { type EnemyComposition, rankCounterUnits } from '../../counters.js';
 
 // ============================================================================
 // Hydra AI - Adaptive multi-pronged strategy

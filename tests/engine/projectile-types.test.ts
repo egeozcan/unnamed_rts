@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Vector, Projectile } from '../../src/engine/types';
+import { Vector, type Projectile } from '../../src/engine/types';
 import { RULES } from '../../src/data/schemas/index';
 import { createProjectile } from '../../src/engine/reducers/helpers';
 import { createTestCombatUnit, createTestBuilding, createTestHarrier } from '../../src/engine/test-utils';

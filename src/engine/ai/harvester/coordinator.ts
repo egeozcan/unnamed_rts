@@ -16,10 +16,10 @@
  * - Hard: Full coordination with optimal thresholds
  */
 
-import { EntityId, HarvesterUnit, BuildingEntity, ResourceEntity } from '../../types.js';
+import { type EntityId, type HarvesterUnit, type BuildingEntity, type ResourceEntity } from '../../types.js';
 import {
-    HarvesterAIState,
-    HarvesterRole,
+    type HarvesterAIState,
+    type HarvesterRole,
     HARVESTER_AI_CONSTANTS
 } from './types.js';
 

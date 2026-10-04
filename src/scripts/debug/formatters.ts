@@ -9,7 +9,7 @@
  * - Debug events
  */
 
-import { GameState, UnitEntity } from '../../engine/types.js';
+import { type GameState, type UnitEntity } from '../../engine/types.js';
 import { getAIState } from '../../engine/ai/state.js';
 import { DEFAULT_AI_IMPLEMENTATION_ID } from '../../engine/ai/registry.js';
 import { isUnit, isHarvester } from '../../engine/type-guards.js';

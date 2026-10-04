@@ -1,4 +1,4 @@
-import { Entity } from '../types.js';
+import { type Entity } from '../types.js';
 import { RULES } from '../../data/schemas/index.js';
 
 // ===== COUNTER KNOWLEDGE =====

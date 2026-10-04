@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-    HarvesterRole,
-    DangerZone,
-    HarvesterAIState,
-    HarvesterDeathRecord,
-    StuckLevel,
-    HarvesterStuckState,
+    type HarvesterRole,
+    type DangerZone,
+    type HarvesterAIState,
+    type HarvesterDeathRecord,
+    type StuckLevel,
+    type HarvesterStuckState,
     HARVESTER_AI_CONSTANTS,
     createInitialHarvesterAIState
 } from '../../../src/engine/ai/harvester/types';

@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, BuildingEntity, HarvesterUnit, ResourceEntity, WellEntity, Vector, Projectile, MapConfig, BUILD_RADIUS
+    type GameState, type EntityId, type Entity, type BuildingEntity, type HarvesterUnit, type ResourceEntity, type WellEntity, Vector, type Projectile, type MapConfig, BUILD_RADIUS
 } from '../types';
 import { RULES, isBuildingData, isUnitData } from '../../data/schemas/index';
 import { createEntity, getRuleData, createProjectile, killPlayerEntities } from './helpers';
@@ -99,7 +99,7 @@ export function placeBuilding(state: GameState, payload: { key: string; x: numbe
 
     const building = createEntity(x, y, playerId, 'BUILDING', key, state);
 
-    let extraEntities: Record<EntityId, Entity> = {};
+    const extraEntities: Record<EntityId, Entity> = {};
     if (key === 'refinery') {
         const harv = createEntity(x, y + 50, playerId, 'UNIT', 'harvester', state) as HarvesterUnit;
         // Harvesters spawned by refineries should auto-harvest immediately

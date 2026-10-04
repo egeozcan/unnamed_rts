@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Vector, Entity, EntityId, BuildingKey } from '../../src/engine/types';
+import { Vector, type Entity, type EntityId, type BuildingKey } from '../../src/engine/types';
 import { createTestRock, createTestBuilding } from '../../src/engine/test-utils';
 
 // Helper to create a rock entity

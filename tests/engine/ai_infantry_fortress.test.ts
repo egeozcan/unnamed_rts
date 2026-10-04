@@ -3,7 +3,7 @@ import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
 import { computeAiActionsForPlayer } from '../../src/engine/ai/controller.js';
 import { getAIImplementation, getAIImplementationOptions } from '../../src/engine/ai/registry.js';
 import { getAIState, resetAIState } from '../../src/engine/ai/state.js';
-import { Entity, EntityId, GameState, UnitKey, BuildingKey, isActionType } from '../../src/engine/types.js';
+import { type Entity, type EntityId, type GameState, type UnitKey, type BuildingKey, isActionType } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester, createTestResource, createTestDemoTruck } from '../../src/engine/test-utils.js';
 
 const INFANTRY_FORTRESS_ID = 'infantry_fortress';

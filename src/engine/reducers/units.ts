@@ -1,5 +1,5 @@
 import {
-    GameState, EntityId, Entity, Vector, UnitEntity, HarvesterUnit, CombatUnit, DemoTruckUnit, Projectile, BuildingEntity, AttackStance, TILE_SIZE
+    type GameState, type EntityId, type Entity, Vector, type UnitEntity, type HarvesterUnit, type CombatUnit, type DemoTruckUnit, type Projectile, type BuildingEntity, type AttackStance, TILE_SIZE
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile, createEntity } from './helpers';
@@ -86,7 +86,7 @@ export function commandMove(state: GameState, payload: { unitIds: EntityId[]; x:
         }
     }
 
-    let nextEntities = { ...state.entities };
+    const nextEntities = { ...state.entities };
     for (const unit of movableUnits) {
         const formationTarget = assignedPositions.get(unit.id) || target;
 
@@ -192,7 +192,7 @@ export function commandStop(state: GameState, payload: { unitIds: EntityId[] }):
 
 export function commandUngarrison(state: GameState, payload: { unitIds: EntityId[] }): GameState {
     const { unitIds } = payload;
-    let nextEntities = { ...state.entities };
+    const nextEntities = { ...state.entities };
     let changed = false;
 
     for (const id of unitIds) {
@@ -397,7 +397,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
         }
     }
 
-    let nextEntities = { ...state.entities };
+    const nextEntities = { ...state.entities };
     const fallbackMoveIds: EntityId[] = [];
     for (const id of expandedUnitIds) {
         const entity = nextEntities[id];
@@ -517,7 +517,7 @@ export function commandAttack(state: GameState, payload: { unitIds: EntityId[]; 
                             ...entity,
                             movement: { ...entity.movement, moveTarget: target.pos, path: null, repairTargetId: target.id },
                             combat: { ...entity.combat, targetId: null }
-                        } as any;
+                        };
                     }
                 } else if (target) {
                     // Neutral (ore, rocks, wells), allied, or own target with no special interaction:
@@ -1072,7 +1072,7 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
         }
     }
 
-    let nextEntities = { ...state.entities };
+    const nextEntities = { ...state.entities };
     for (const unit of movableUnits) {
         const formationTarget = assignedPositions.get(unit.id) || target;
 
@@ -1100,7 +1100,7 @@ export function commandAttackMove(state: GameState, payload: { unitIds: EntityId
 export function setStance(state: GameState, payload: { unitIds: EntityId[]; stance: AttackStance }): GameState {
     const { unitIds, stance } = payload;
 
-    let nextEntities = { ...state.entities };
+    const nextEntities = { ...state.entities };
 
     for (const id of unitIds) {
         const entity = nextEntities[id];

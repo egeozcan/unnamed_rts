@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { commandMove } from '../../src/engine/reducers/units';
 import { moveToward } from '../../src/engine/reducers/movement';
 import { INITIAL_STATE } from '../../src/engine/reducer';
-import { Entity, UnitEntity, Vector, EntityId } from '../../src/engine/types';
+import { type Entity, type UnitEntity, Vector, type EntityId } from '../../src/engine/types';
 import { createTestCombatUnit } from '../../src/engine/test-utils';
 
 describe('Formation Stability', () => {

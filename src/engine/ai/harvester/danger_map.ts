@@ -13,10 +13,10 @@
  * - Hard: Full calculation with attack and death memory
  */
 
-import { Vector, Entity } from '../../types.js';
+import { type Vector, type Entity } from '../../types.js';
 import {
-    HarvesterAIState,
-    DangerZone,
+    type HarvesterAIState,
+    type DangerZone,
     HARVESTER_AI_CONSTANTS
 } from './types.js';
 

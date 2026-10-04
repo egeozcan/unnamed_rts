@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { BuildingKey, GameState } from '../../src/engine/types';
+import { type BuildingKey, type GameState } from '../../src/engine/types';
 import { isValidPlacement } from '../../src/engine/ai/utils';
 import { addEntitiesToState, createTestBuilding, createTestWell } from '../../src/engine/test-utils';
 

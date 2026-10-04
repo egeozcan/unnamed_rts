@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE } from '../../src/engine/reducer';
 import { createFogGrid, updateFogOfWar } from '../../src/engine/reducers/fog';
 import { createTestCombatUnit } from '../../src/engine/test-utils';
-import { GameState } from '../../src/engine/types';
+import { type GameState } from '../../src/engine/types';
 
 /**
  * updateFogOfWar remembers, per grid, the tile each entity last revealed from and skips it while it

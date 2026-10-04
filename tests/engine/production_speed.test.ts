@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, EntityId, Entity } from '../../src/engine/types';
+import { type GameState, type EntityId, type Entity } from '../../src/engine/types';
 import { createTestBuilding } from '../../src/engine/test-utils';
 
 function createTestState(entities: Record<EntityId, Entity>, credits: number = 5000): GameState {

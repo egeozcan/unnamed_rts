@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, UnitEntity } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type UnitEntity } from '../../src/engine/types';
 import { createEntity } from '../../src/engine/utils';
 
 describe('Movement & Pathfinding', () => {

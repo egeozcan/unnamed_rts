@@ -1,5 +1,5 @@
-import { GameState, Action, Entity, UnitEntity, Vector, EntityId, isActionType } from '../../../types.js';
-import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { type GameState, type Action, type Entity, type UnitEntity, type Vector, type EntityId, isActionType } from '../../../types.js';
+import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -45,9 +45,9 @@ import {
     handleHijackerAssault
 } from '../../action_combat.js';
 import { updateHarvesterAI } from '../../harvester/index.js';
-import { AIImplementation } from '../../contracts.js';
-import { AIPersonality, RULES, isUnitData } from '../../../../data/schemas/index.js';
-import { EnemyComposition, applyCounterWeights, pickDefenseBuilding, rankCounterUnits } from '../../counters.js';
+import { type AIImplementation } from '../../contracts.js';
+import { type AIPersonality, RULES, isUnitData } from '../../../../data/schemas/index.js';
+import { type EnemyComposition, applyCounterWeights, pickDefenseBuilding, rankCounterUnits } from '../../counters.js';
 
 type Phase = 'fortify' | 'expansion' | 'assault';
 

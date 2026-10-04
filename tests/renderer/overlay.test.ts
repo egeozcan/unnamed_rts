@@ -7,7 +7,7 @@ import { rasterBucket, getAssetBitmap, initGraphics } from '../../src/renderer/a
 import { INITIAL_STATE } from '../../src/engine/reducer';
 import { createPlayerState } from '../../src/engine/reducers/helpers';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils';
-import { GameState } from '../../src/engine/types';
+import { type GameState } from '../../src/engine/types';
 
 function stateWithTeams(): GameState {
     return {

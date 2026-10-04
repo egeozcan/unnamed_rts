@@ -3,7 +3,7 @@ import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
 import { getAIImplementation, getAIImplementationOptions } from '../../src/engine/ai/registry.js';
 import { computeNemesisAiActions, sanitizeNemesisActions } from '../../src/engine/ai/implementations/nemesis/index.js';
 import { getNemesisRuntimeState } from '../../src/engine/ai/implementations/nemesis/state.js';
-import { Action, BuildingKey, Entity, EntityId, GameState, UnitKey } from '../../src/engine/types.js';
+import { type Action, type BuildingKey, type Entity, type EntityId, type GameState, type UnitKey } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester } from '../../src/engine/test-utils.js';
 import { RULES } from '../../src/data/schemas/index.js';
 

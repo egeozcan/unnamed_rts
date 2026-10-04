@@ -1,5 +1,5 @@
 import { DEFAULT_AI_IMPLEMENTATION_ID } from '../engine/ai/index.js';
-import { PlayerType } from '../engine/types.js';
+import { type PlayerType } from '../engine/types.js';
 
 type MapSize = 'small' | 'medium' | 'large' | 'huge';
 type Density = 'low' | 'medium' | 'high';

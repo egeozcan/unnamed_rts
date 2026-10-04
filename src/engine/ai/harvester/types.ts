@@ -1,4 +1,4 @@
-import { EntityId, Vector } from '../../types.js';
+import { type EntityId, type Vector } from '../../types.js';
 
 // Harvester roles determine risk tolerance
 export type HarvesterRole = 'safe' | 'standard' | 'risk-taker' | 'opportunist';

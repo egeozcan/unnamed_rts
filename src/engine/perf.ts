@@ -5,7 +5,7 @@
  * repeated Object.values() and filter() calls in hot paths.
  */
 
-import { Entity, EntityId, GameState } from './types.js';
+import { type Entity, type EntityId, type GameState } from './types.js';
 import { isEnemy } from './teams.js';
 import { isTransportedUnit } from './transport.js';
 

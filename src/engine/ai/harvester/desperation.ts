@@ -18,7 +18,7 @@
  * - Hard: Full calculation
  */
 
-import { PlayerState } from '../../types.js';
+import { type PlayerState } from '../../types.js';
 import { HARVESTER_AI_CONSTANTS } from './types.js';
 
 const {

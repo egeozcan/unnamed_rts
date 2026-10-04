@@ -1,6 +1,6 @@
 
 import { INITIAL_STATE, update } from '../../src/engine/reducer.js';
-import { GameState, Vector } from '../../src/engine/types.js';
+import { type GameState, Vector } from '../../src/engine/types.js';
 import { describe, beforeEach, test, expect } from 'vitest';
 
 describe('MCV Deployment', () => {

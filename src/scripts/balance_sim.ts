@@ -14,11 +14,11 @@
  *   npm run balance:sim -- --comps comps.json --budget 6000 --out comps_matrix.json
  * Run with --help for every flag.
  */
-import { fork, ChildProcess } from 'child_process';
+import { fork, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import { fileURLToPath } from 'url';
-import { Action, AirUnit, BuildingEntity, Entity, EntityId, GameState, PlayerState, Vector } from '../engine/types.js';
+import { type Action, type AirUnit, type BuildingEntity, type Entity, type EntityId, type GameState, type PlayerState, Vector } from '../engine/types.js';
 import { INITIAL_STATE, update, createPlayerState, tick, createEntity } from '../engine/reducer.js';
 import { RULES, isUnitData } from '../data/schemas/index.js';
 import { mulberry32, withSeededRandom } from './sim_runner.js';
@@ -210,12 +210,9 @@ function buildSide(
             const id = `${prefix}_${u.key}_${idx++}`;
             const hp = Math.max(1, Math.round(ent.maxHp * u.hpFrac));
             const facingRot = side.facing === 1 ? 0 : Math.PI;
-            entities[id] = {
-                ...ent,
-                id,
-                hp,
-                movement: ent.type === 'UNIT' ? { ...ent.movement, rotation: facingRot } : (ent as any).movement
-            } as Entity;
+            entities[id] = ent.type === 'UNIT'
+                ? { ...ent, id, hp, movement: { ...ent.movement, rotation: facingRot } }
+                : { ...ent, id, hp };
             keyById[id] = u.key;
         }
         depth += spacing;

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, Entity, EntityId, GameState, CombatUnit } from '../../src/engine/types';
+import { Vector, type Entity, type EntityId, type GameState, type CombatUnit } from '../../src/engine/types';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { updateCombatUnitBehavior } from '../../src/engine/reducers/combat';
 import { handleMicro } from '../../src/engine/ai/action_combat';
-import { AIPersonality } from '../../src/data/schemas/index';
+import { type AIPersonality } from '../../src/data/schemas/index';
 import { rebuildSpatialGrid } from '../../src/engine/spatial';
 import {
     createTestCombatUnit,

@@ -1,6 +1,6 @@
-import { GameState, Action, Entity, UnitEntity, Vector, HarvesterUnit, EntityId, AirUnit } from '../types.js';
-import { RULES, AIPersonality, isUnitData } from '../../data/schemas/index.js';
-import { AIPlayerState, OffensiveGroup } from './types.js';
+import { type GameState, type Action, type Entity, type UnitEntity, Vector, type HarvesterUnit, type EntityId, type AirUnit } from '../types.js';
+import { RULES, type AIPersonality, isUnitData } from '../../data/schemas/index.js';
+import { type AIPlayerState, type OffensiveGroup } from './types.js';
 import { DebugEvents } from '../debug/events.js';
 import {
     ATTACK_GROUP_MIN_SIZE,
@@ -26,11 +26,11 @@ import { getGroupCenter } from './state.js';
 import { findCaptureOpportunities } from './planning.js';
 import { isAirUnit } from '../entity-helpers.js';
 import { isDemoTruck } from '../type-guards.js';
-import { EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
+import { type EntityCache, getUnitsForOwner, getBuildingsForOwner } from '../perf.js';
 import { getHarvesterRole } from './harvester/coordinator.js';
 import { recordHarvesterDeath } from './harvester/danger_map.js';
 import { getDesperationBehavior } from './harvester/desperation.js';
-import { HarvesterRole } from './harvester/types.js';
+import { type HarvesterRole } from './harvester/types.js';
 
 export function handleAttack(
     state: GameState,

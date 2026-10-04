@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { Entity, GameState, PLAYER_COLORS, Projectile, TILE_SIZE } from '../../engine/types.js';
+import { type Entity, type GameState, PLAYER_COLORS, type Projectile, TILE_SIZE } from '../../engine/types.js';
 import { RULES } from '../../data/schemas/index.js';
 import { isAirUnit } from '../../engine/entity-helpers.js';
 import { isBuilding, isUnit } from '../../engine/type-guards.js';
-import { getModelDef, ModelDef, ROCK_VARIANTS } from './models.js';
+import { getModelDef, type ModelDef, ROCK_VARIANTS } from './models.js';
 import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight } from './projection.js';
 import { applyViewCamera, CAMERA_DISTANCE } from './camera.js';
 
@@ -497,6 +497,9 @@ export class Scene3D {
             case 'UNIT':
                 // Sim angles are measured with +y pointing south; three.js yaw turns the other way
                 yaw = -entity.movement.rotation;
+                break;
+            case 'BUILDING':
+                // Buildings are drawn unrotated at their authored size
                 break;
         }
 

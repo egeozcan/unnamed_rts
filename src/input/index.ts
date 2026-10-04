@@ -1,4 +1,4 @@
-import { Vector, AttackStance } from '../engine/types.js';
+import { Vector, type AttackStance } from '../engine/types.js';
 
 interface Mouse {
     x: number;
@@ -39,7 +39,7 @@ export interface InputState {
     pinchRatio: number;
 }
 
-let inputState: InputState = {
+const inputState: InputState = {
     mouse: { x: 0, y: 0, wx: 0, wy: 0 },
     rawMouse: { x: 0, y: 0 },
     keys: {},

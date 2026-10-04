@@ -1,14 +1,14 @@
 import {
-    Entity,
-    UnitEntity,
-    BuildingEntity,
-    ResourceEntity,
-    RockEntity,
-    WellEntity,
-    CombatUnit,
-    HarvesterUnit,
-    DemoTruckUnit,
-    CombatComponent
+    type Entity,
+    type UnitEntity,
+    type BuildingEntity,
+    type ResourceEntity,
+    type RockEntity,
+    type WellEntity,
+    type CombatUnit,
+    type HarvesterUnit,
+    type DemoTruckUnit,
+    type CombatComponent
 } from './types.js';
 
 // ============ ENTITY TYPE GUARDS ============

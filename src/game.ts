@@ -1,5 +1,5 @@
 import { INITIAL_STATE, update, createPlayerState } from './engine/reducer.js';
-import { GameState, Vector, EntityId, Entity, SkirmishConfig, PlayerType, PLAYER_COLORS, Action, BuildingEntity, HarvesterUnit, CombatUnit, AirUnit, PlayerState } from './engine/types.js';
+import { type GameState, Vector, type EntityId, type Entity, type SkirmishConfig, type PlayerType, PLAYER_COLORS, type Action, type BuildingEntity, type HarvesterUnit, type CombatUnit, type AirUnit, type PlayerState } from './engine/types.js';
 import { initPathfindingWorker } from './engine/utils.js';
 import { rebuildSpatialGrid } from './engine/spatial.js';
 
@@ -18,7 +18,7 @@ import { initScoreboard, updateScoreboard } from './ui/scoreboard.js';
 import { shouldRunCadencedUpdate } from './ui/cadence.js';
 import { initBirdsEye, renderBirdsEye, setBirdsEyeClickHandler, setBirdsEyeCloseHandler } from './ui/birdsEyeView.js';
 import { initPauseMenu, showPauseMenu, hidePauseMenu, isHelpVisible, showHelp, closeHelp } from './ui/pause-menu.js';
-import { initInput, clampCamera, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getMinZoom, getWheelMode, setWheelMode, WheelMode } from './input/index.js';
+import { initInput, clampCamera, getInputState, getDragSelection, getMiddleMouseScrollOrigin, handleCameraInput, handleZoomInput, getMinZoom, getWheelMode, setWheelMode, type WheelMode } from './input/index.js';
 import { computeAiActions, getAIImplementationOptions, resetAIState, resetAIImplementations, DEFAULT_AI_IMPLEMENTATION_ID } from './engine/ai/index.js';
 import { RULES, isUnitData } from './data/schemas/index.js';
 import { isUnit, isBuilding, isHarvester, isInductionRig, isWell } from './engine/type-guards.js';
@@ -737,7 +737,7 @@ function startGameWithConfig(config: SkirmishConfig) {
 
     // Build game state
     const isObserverMode = humanPlayerId === null;
-    let state: GameState = {
+    const state: GameState = {
         ...INITIAL_STATE,
         running: true,
         mode: isObserverMode ? 'demo' : 'game',
@@ -1586,7 +1586,7 @@ function gameLoop(timestamp: number = 0) {
     }
     lastFrameTime = timestamp - (elapsed >= FRAME_TIME ? elapsed % FRAME_TIME : 0);
 
-    let skipSim = !currentState.running;
+    const skipSim = !currentState.running;
     if (skipSim) {
         checkWinCondition();
         // Skip early return to allow panning and viewing the map after game ends
@@ -1824,8 +1824,8 @@ function gameLoop(timestamp: number = 0) {
     animationFrameId = requestAnimationFrame(gameLoop);
 }
 
-function calculatePower(pid: number, entities: Record<EntityId, any>) {
-    let p = { in: 0, out: 0 };
+function calculatePower(pid: number, entities: Record<EntityId, Entity>) {
+    const p = { in: 0, out: 0 };
     for (const id in entities) {
         const e = entities[id];
         if (e.owner === pid && !e.dead) {

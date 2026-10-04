@@ -8,7 +8,7 @@ import {
     HARVESTER_AI_CONSTANTS,
     createInitialHarvesterAIState
 } from '../../../src/engine/ai/harvester/types.js';
-import { Vector, HarvesterUnit } from '../../../src/engine/types.js';
+import { Vector, type HarvesterUnit } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestBuilding,

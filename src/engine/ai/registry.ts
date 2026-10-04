@@ -1,4 +1,4 @@
-import { AIImplementation, AIImplementationOption } from './contracts.js';
+import { type AIImplementation, type AIImplementationOption } from './contracts.js';
 import { classicAIImplementation } from './implementations/classic/index.js';
 import { ecoTankAllInAIImplementation } from './implementations/eco_tank_all_in/index.js';
 import { infantryFortressAIImplementation } from './implementations/infantry_fortress/index.js';

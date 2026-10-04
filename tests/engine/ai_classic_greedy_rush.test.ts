@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
-import { GameState, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types.js';
+import { type GameState, type Entity, type EntityId, type UnitKey, type BuildingKey } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester } from '../../src/engine/test-utils.js';
 
 const { getAIState, setPersonalityForPlayer } = _testUtils;

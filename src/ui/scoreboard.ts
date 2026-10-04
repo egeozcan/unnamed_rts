@@ -1,5 +1,5 @@
-import { GameState } from '../engine/types.js';
-import { calculatePlayerScores, PlayerScore } from '../engine/scores.js';
+import { type GameState } from '../engine/types.js';
+import { calculatePlayerScores, type PlayerScore } from '../engine/scores.js';
 import { DEFAULT_AI_IMPLEMENTATION_ID, getAIImplementation } from '../engine/ai/index.js';
 import { shouldRunCadencedUpdate } from './cadence.js';
 

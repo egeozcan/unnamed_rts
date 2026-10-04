@@ -1,0 +1,8 @@
+#!/bin/sh
+# Block commits unless type check and lint are green.
+# Enabled via `git config core.hooksPath .githooks` (done by `npm install`).
+set -e
+echo "pre-commit: typecheck"
+npm run --silent typecheck
+echo "pre-commit: lint"
+npm run --silent lint

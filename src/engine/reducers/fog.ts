@@ -1,4 +1,4 @@
-import { GameState, TILE_SIZE } from '../types';
+import { type GameState, TILE_SIZE } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { isAlly } from '../teams';
 import { isTransportedUnit } from '../transport';

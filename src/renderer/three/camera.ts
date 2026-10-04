@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { CAMERA_TILT_RAD } from './projection.js';
 
 /** Distance from the camera to the point of the ground at the centre of the screen. */

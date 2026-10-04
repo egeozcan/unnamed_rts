@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
 import { computeAiActionsForPlayer } from '../../src/engine/ai/controller.js';
 import { getAIImplementation, getAIImplementationOptions } from '../../src/engine/ai/registry.js';
-import { Action, BuildingKey, Entity, EntityId, GameState, UnitKey, isActionType } from '../../src/engine/types.js';
+import { type Action, type BuildingKey, type Entity, type EntityId, type GameState, type UnitKey, isActionType } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester, createTestResource } from '../../src/engine/test-utils.js';
 
 const ENGINEER_CONYARD_RUSH_ID = 'engineer_conyard_rush';

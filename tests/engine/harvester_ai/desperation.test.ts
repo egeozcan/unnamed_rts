@@ -3,7 +3,7 @@ import {
     calculateDesperationScore,
     getDesperationBehavior
 } from '../../../src/engine/ai/harvester/desperation.js';
-import { PlayerState } from '../../../src/engine/types.js';
+import { type PlayerState } from '../../../src/engine/types.js';
 import { HARVESTER_AI_CONSTANTS } from '../../../src/engine/ai/harvester/types.js';
 
 const { EARLY_GAME_TICKS } = HARVESTER_AI_CONSTANTS;

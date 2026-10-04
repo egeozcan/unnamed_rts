@@ -7,7 +7,7 @@ import {
     formatEvent,
     formatEvents
 } from '../../../src/scripts/debug/formatters.js';
-import { GameState, Vector } from '../../../src/engine/types.js';
+import { type GameState, Vector } from '../../../src/engine/types.js';
 import { INITIAL_STATE, createPlayerState } from '../../../src/engine/reducer.js';
 import {
     createTestCombatUnit,

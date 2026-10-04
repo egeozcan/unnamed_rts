@@ -4,7 +4,7 @@ import { computeAiActionsForPlayer } from '../../src/engine/ai/controller.js';
 import { getAIImplementation, getAIImplementationOptions } from '../../src/engine/ai/registry.js';
 import { getAIState } from '../../src/engine/ai/state.js';
 import { getSentinelOpportunistRuntimeState } from '../../src/engine/ai/implementations/sentinel_opportunist/state.js';
-import { Entity, EntityId, GameState, BuildingKey, UnitKey, isActionType } from '../../src/engine/types.js';
+import { type Entity, type EntityId, type GameState, type BuildingKey, type UnitKey, isActionType } from '../../src/engine/types.js';
 import {
     createTestBuilding,
     createTestCombatUnit,

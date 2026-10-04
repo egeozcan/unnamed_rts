@@ -84,7 +84,12 @@ async function main() {
     const effectiveSeed = config.seed ?? Math.floor(Math.random() * 1000000);
 
     const tasks: (() => Promise<void>)[] = [];
-    const results: any[] = [];
+    const results: {
+        p0_ai: string;
+        p1_ai: string;
+        gameCounter: number;
+        result: { winner: number | null; scores?: Record<number, number>; ticks: number };
+    }[] = [];
     const failures: string[] = [];
 
     for (const [ai1, ai2] of pairs) {

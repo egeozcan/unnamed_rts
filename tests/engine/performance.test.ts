@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, PlayerState } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type PlayerState } from '../../src/engine/types';
 import { findPath, refreshCollisionGrid, setPathCacheTick } from '../../src/engine/utils';
 import { rebuildSpatialGrid, getSpatialGrid } from '../../src/engine/spatial';
 import {

@@ -1,5 +1,5 @@
-import { Action, GameState } from '../types.js';
-import { EntityCache } from '../perf.js';
+import { type Action, type GameState } from '../types.js';
+import { type EntityCache } from '../perf.js';
 
 export type AIImplementationDifficulty = 'dummy' | 'easy' | 'medium' | 'hard';
 

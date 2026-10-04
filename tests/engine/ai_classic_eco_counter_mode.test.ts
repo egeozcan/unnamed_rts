@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { computeClassicAiActions } from '../../src/engine/ai/implementations/classic/index.js';
 import { resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
-import { GameState, Entity, EntityId, UnitKey, BuildingKey, isActionType } from '../../src/engine/types.js';
+import { type GameState, type Entity, type EntityId, type UnitKey, type BuildingKey, isActionType } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester } from '../../src/engine/test-utils.js';
 
 const { getAIState } = _testUtils;

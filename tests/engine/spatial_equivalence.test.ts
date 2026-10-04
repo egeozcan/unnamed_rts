@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Vector, Entity } from '../../src/engine/types.js';
+import { Vector, type Entity } from '../../src/engine/types.js';
 import { SpatialGrid, ownerBit } from '../../src/engine/spatial.js';
 
 /**

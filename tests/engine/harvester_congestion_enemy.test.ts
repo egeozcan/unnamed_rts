@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, HarvesterUnit, Vector } from '../../src/engine/types';
+import { type GameState, type Entity, type EntityId, type HarvesterUnit, Vector } from '../../src/engine/types';
 import { createTestHarvester, createTestResource } from '../../src/engine/test-utils';
 
 function createTestState(): GameState {

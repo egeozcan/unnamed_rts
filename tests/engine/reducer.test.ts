@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, BuildingKey, Entity } from '../../src/engine/types';
+import { type GameState, type BuildingKey, type Entity } from '../../src/engine/types';
 import { createTestBuilding, createTestCombatUnit, addEntityToState, addEntitiesToState } from '../../src/engine/test-utils';
 
 // Helper to get fresh state to avoid shared mutation across tests
@@ -70,7 +70,7 @@ describe('Reducer', () => {
     });
 
     it('should PLACE_BUILDING and create entity', () => {
-        let state = {
+        const state = {
             ...getInitialState(),
             running: true,
             placingBuilding: 'power',
@@ -94,7 +94,7 @@ describe('Reducer', () => {
 
     it('should CANCEL_BUILD and refund', () => {
         const baseState = getInitialState();
-        let state = {
+        const state = {
             ...baseState,
             running: true,
             players: {
@@ -121,7 +121,7 @@ describe('Reducer', () => {
         const baseState = getInitialState();
         // Player 0 has no buildings and no MCVs (eliminated)
         // But has production in queues (this shouldn't happen normally, but edge case)
-        let state = {
+        const state = {
             ...baseState,
             running: true,
             players: {
@@ -210,7 +210,7 @@ describe('Reducer', () => {
     });
 
     it('should NOT allow building production without conyard', () => {
-        let state = getInitialState();
+        const state = getInitialState();
         // No buildings at all
 
         const action = { type: 'START_BUILD', payload: { category: 'building', key: 'power', playerId: 0 } } as const;

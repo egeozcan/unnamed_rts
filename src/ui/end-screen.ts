@@ -2,7 +2,7 @@
  * End-of-match results: the panel shown over the battlefield when the game is won/lost (or the
  * human was eliminated) - game time, per-player scores and who won.
  */
-import { GameState } from '../engine/types.js';
+import { type GameState } from '../engine/types.js';
 import { calculatePlayerScores } from '../engine/scores.js';
 import { formatGameTime } from '../game-utils.js';
 import { escapeHtml, getPlayerAILabel } from './scoreboard.js';

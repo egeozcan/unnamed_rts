@@ -1,11 +1,11 @@
-import { Action, Entity, GameState, isActionType } from '../../../types.js';
-import { createEntityCache, EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
+import { type Action, type Entity, type GameState, isActionType } from '../../../types.js';
+import { createEntityCache, type EntityCache, getBuildingsForOwner, getEnemiesOf, getUnitsForOwner } from '../../../perf.js';
 import { RULES } from '../../../../data/schemas/index.js';
-import { AIImplementation, AIImplementationDifficulty } from '../../contracts.js';
+import { type AIImplementation, type AIImplementationDifficulty } from '../../contracts.js';
 import { computeAuroraTitanSnapshotAiActions } from './titan_core_snapshot.js';
 import { checkPrerequisites, hasProductionBuildingFor } from '../../utils.js';
 import { getAIState, resetAIState } from '../../state.js';
-import { EnemyComposition, isArmyUnitKey, rankCounterUnits } from '../../counters.js';
+import { type EnemyComposition, isArmyUnitKey, rankCounterUnits } from '../../counters.js';
 
 type RuntimeState = {
     lastRallyTick: number;

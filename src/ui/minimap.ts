@@ -1,4 +1,4 @@
-import { Entity, EntityId, PLAYER_COLORS } from '../engine/types.js';
+import { type Entity, type EntityId, PLAYER_COLORS } from '../engine/types.js';
 import { isTransportedUnit } from '../engine/transport.js';
 
 let minimapCtx: CanvasRenderingContext2D | null = null;

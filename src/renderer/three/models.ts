@@ -1,6 +1,6 @@
 import { RULES } from '../../data/schemas/index.js';
 import { AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS } from './projection.js';
-import { Shape, Paint } from './shape.js';
+import { Shape, type Paint } from './shape.js';
 
 /**
  * How a model part is posed each frame:

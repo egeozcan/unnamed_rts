@@ -1,5 +1,5 @@
 import {
-    EntityId, Entity, Projectile, CombatUnit, AttackStance, Vector, GameState
+    type EntityId, type Entity, type Projectile, type CombatUnit, type AttackStance, Vector, type GameState
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, createProjectile } from './helpers';

@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector, isActionType } from '../../src/engine/types';
+import { type GameState, Vector, isActionType } from '../../src/engine/types';
 import { computeAiActions } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE } from '../../src/engine/reducer';
 

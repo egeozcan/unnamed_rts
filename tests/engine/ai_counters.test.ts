@@ -15,7 +15,7 @@ import { handleEconomy } from '../../src/engine/ai/action_economy.js';
 import { resetAIState, getAIState, updateEnemyIntelligence } from '../../src/engine/ai/state.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer.js';
 import { AI_CONFIG, RULES } from '../../src/data/schemas/index.js';
-import { BuildingKey, Entity, GameState, UnitKey, isActionType } from '../../src/engine/types.js';
+import { type BuildingKey, type Entity, type GameState, type UnitKey, isActionType } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarrier } from '../../src/engine/test-utils.js';
 
 const ENEMY = 0;

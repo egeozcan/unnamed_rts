@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, isActionType, UnitKey, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, isActionType, type UnitKey, type BuildingKey } from '../../src/engine/types';
 import {
     createTestHarvester,
     createTestCombatUnit,
@@ -239,7 +239,7 @@ describe('AI Overhaul Tests', () => {
             entities['far_enemy'] = createEntity('far_enemy', 0, 'BUILDING', 'conyard', 2500, 2500, { hp: 3000, maxHp: 3000 });
 
             // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
-            let state = createTestState(entities, 601);
+            const state = createTestState(entities, 601);
 
             // Set personality to 'balanced' which has min_attack_group_size=5
             setPersonalityForPlayer(1, 'balanced');
@@ -291,7 +291,7 @@ describe('AI Overhaul Tests', () => {
             entities['low_hp'] = createEntity('low_hp', 0, 'UNIT', 'tank', 1100, 1050, { hp: 15, maxHp: 100 });
 
             // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
-            let state = createTestState(entities, 601);
+            const state = createTestState(entities, 601);
 
             // Set personality to 'balanced' which has min_attack_group_size=5
             setPersonalityForPlayer(1, 'balanced');
@@ -342,7 +342,7 @@ describe('AI Overhaul Tests', () => {
             entities['enemy2'] = createEntity('enemy2', 0, 'UNIT', 'tank', 1100, 900);
 
             // Use tick 601 so player 1 runs full AI compute (tick % 3 === 1)
-            let state = createTestState(entities, 601);
+            const state = createTestState(entities, 601);
 
             const aiState = getAIState(1);
             aiState.personality = 'rusher'; // Set consistent personality for test

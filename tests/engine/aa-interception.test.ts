@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, Projectile, GameState, Entity, EntityId } from '../../src/engine/types';
+import { Vector, type Projectile, type GameState, type Entity, type EntityId } from '../../src/engine/types';
 import { applyInterception } from '../../src/engine/reducers/game_loop';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestCombatUnit, createTestBuilding, resetTestEntityCounter } from '../../src/engine/test-utils';

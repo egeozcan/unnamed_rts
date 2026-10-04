@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type UnitKey, type BuildingKey } from '../../src/engine/types';
 import {
     createTestHarvester,
     createTestCombatUnit,
@@ -179,7 +179,7 @@ describe('AI Combat Decisiveness', () => {
             entities['damaged1'] = createEntity('damaged1', 1, 'UNIT', 'light', 550, 550, { hp: 200, maxHp: 400 });
             entities['damaged2'] = createEntity('damaged2', 1, 'UNIT', 'light', 560, 550, { hp: 180, maxHp: 400 });
 
-            let state = createTestState(entities);
+            const state = createTestState(entities);
             // Give player enough credits (depot cost + 500 buffer)
             state.players[1] = {
                 ...createPlayerState(1, false, 'medium'),

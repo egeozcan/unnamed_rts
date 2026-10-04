@@ -1,6 +1,6 @@
 import {
-    GameState, EntityId, Entity, Projectile, Particle, UnitEntity, Vector, HarvesterUnit,
-    ExplosionEvent
+    type GameState, type EntityId, type Entity, type Projectile, type Particle, type UnitEntity, Vector, type HarvesterUnit,
+    type ExplosionEvent
 } from '../types';
 import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
@@ -47,7 +47,7 @@ export function tick(state: GameState): GameState {
             entitiesOwned = true;
         }
     };
-    let nextPlayers = { ...state.players };
+    const nextPlayers = { ...state.players };
 
     // PERFORMANCE: Create entity cache once per tick for optimized lookups
     const entityCache = createEntityCache(state.entities);
@@ -130,9 +130,9 @@ export function tick(state: GameState): GameState {
     }
 
     // Projectile Updates
-    let nextProjectiles: Projectile[] = [];
-    let damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
-    let splashEvents: { projectile: Projectile; hitPos: Vector; includePrimaryTarget: boolean }[] = [];
+    const nextProjectiles: Projectile[] = [];
+    const damageEvents: { targetId: EntityId; amount: number; attackerId: EntityId }[] = [];
+    const splashEvents: { projectile: Projectile; hitPos: Vector; includePrimaryTarget: boolean }[] = [];
     // Temporary state for interception checks (uses updatedEntities from this tick)
     const interceptionState = { ...state, entities: updatedEntities };
 
@@ -643,9 +643,9 @@ export function updateEntities(
     hasDemoTruck: boolean
 } {
     let nextEntities = { ...state.entities };
-    let newProjectiles: Projectile[] = [];
-    let newParticles: Particle[] = [];
-    let creditsEarned: Record<number, number> = {};
+    const newProjectiles: Projectile[] = [];
+    const newParticles: Particle[] = [];
+    const creditsEarned: Record<number, number> = {};
     let hasDemoTruck = false;
 
     // Refresh collision grid for pathfinding (passing map config for dynamic grid sizing)
@@ -1261,7 +1261,7 @@ export function updateProjectile(proj: Projectile, entities: Record<EntityId, En
     }
 
     const nextPos = proj.pos.add(currentVel);
-    let nextProj = { ...proj, pos: nextPos, vel: currentVel };
+    const nextProj = { ...proj, pos: nextPos, vel: currentVel };
     let damageEvent = undefined;
 
     // Kill projectiles that go out of bounds (with margin for edge cases)
@@ -1362,7 +1362,7 @@ export function applySplashDamage(
     const primaryTarget = state.entities[projectile.targetId];
     const airLevel = options.airLevel ?? (primaryTarget ? isFlyingEntity(primaryTarget) : false);
 
-    let entities = { ...state.entities };
+    const entities = { ...state.entities };
 
     // Find all entities that could be affected
     for (const id in entities) {
@@ -1434,7 +1434,7 @@ function processExplosions(
     const explosionQueue: ExplosionEvent[] = [];
     const explodedIds = new Set<EntityId>();
     let particles: Particle[] = [];
-    let updatedEntities = { ...entities };
+    const updatedEntities = { ...entities };
 
     // Find all demo trucks that just died this tick and haven't detonated
     for (const id in updatedEntities) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, GameState, Entity, EntityId } from '../../src/engine/types';
+import { Vector, type GameState, type Entity, type EntityId } from '../../src/engine/types';
 import { applySplashDamage } from '../../src/engine/reducers/game_loop';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestCombatUnit, createTestBuilding, resetTestEntityCounter } from '../../src/engine/test-utils';
@@ -65,7 +65,7 @@ describe('Splash Damage', () => {
     it('should apply full damage at center', () => {
         // Use 'nearby' id (not 'target') so this entity receives splash damage
         const nearby = createTestCombatUnit({ id: 'nearby', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [nearby.id]: nearby });
+        const state = createTestState({ [nearby.id]: nearby });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -84,7 +84,7 @@ describe('Splash Damage', () => {
     it('should apply linear falloff damage at edge', () => {
         // Place unit at edge of splash radius (100 units away, splash radius 100)
         const edgeUnit = createTestCombatUnit({ id: 'edge', x: 200, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [edgeUnit.id]: edgeUnit });
+        const state = createTestState({ [edgeUnit.id]: edgeUnit });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -102,7 +102,7 @@ describe('Splash Damage', () => {
     it('should apply ~50% damage at half radius', () => {
         // Place unit at half splash radius (50 units away, splash radius 100)
         const halfUnit = createTestCombatUnit({ id: 'half', x: 150, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [halfUnit.id]: halfUnit });
+        const state = createTestState({ [halfUnit.id]: halfUnit });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -122,7 +122,7 @@ describe('Splash Damage', () => {
     it('should damage friendly units (friendly fire)', () => {
         const attacker = createTestCombatUnit({ id: 'attacker', x: 0, y: 0, owner: 0 });
         const friendly = createTestCombatUnit({ id: 'friendly', x: 100, y: 100, hp: 100, maxHp: 100, owner: 0 });
-        let state = createTestState({ [attacker.id]: attacker, [friendly.id]: friendly });
+        const state = createTestState({ [attacker.id]: attacker, [friendly.id]: friendly });
 
         const projectile = createTestProjectile({
             ownerId: 'attacker',
@@ -141,7 +141,7 @@ describe('Splash Damage', () => {
 
     it('should not apply splash when splash radius is 0', () => {
         const nearby = createTestCombatUnit({ id: 'nearby', x: 105, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [nearby.id]: nearby });
+        const state = createTestState({ [nearby.id]: nearby });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -160,7 +160,7 @@ describe('Splash Damage', () => {
 
     it('should damage buildings within splash radius', () => {
         const building = createTestBuilding({ id: 'bld', key: 'power', x: 120, y: 100, hp: 800, maxHp: 800, owner: 1 });
-        let state = createTestState({ [building.id]: building });
+        const state = createTestState({ [building.id]: building });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -177,7 +177,7 @@ describe('Splash Damage', () => {
 
     it('should not damage dead entities', () => {
         const deadUnit = createTestCombatUnit({ id: 'dead', x: 100, y: 100, hp: 0, maxHp: 100, owner: 1, dead: true });
-        let state = createTestState({ [deadUnit.id]: deadUnit });
+        const state = createTestState({ [deadUnit.id]: deadUnit });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -194,7 +194,7 @@ describe('Splash Damage', () => {
 
     it('should mark units as dead when hp reaches 0', () => {
         const weakUnit = createTestCombatUnit({ id: 'weak', x: 100, y: 100, hp: 10, maxHp: 100, owner: 1 });
-        let state = createTestState({ [weakUnit.id]: weakUnit });
+        const state = createTestState({ [weakUnit.id]: weakUnit });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -211,7 +211,7 @@ describe('Splash Damage', () => {
 
     it('should apply damage flash to units', () => {
         const nearby = createTestCombatUnit({ id: 'nearby', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [nearby.id]: nearby });
+        const state = createTestState({ [nearby.id]: nearby });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),
@@ -233,7 +233,7 @@ describe('Splash Damage', () => {
         const unit1 = createTestCombatUnit({ id: 'unit1', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
         const unit2 = createTestCombatUnit({ id: 'unit2', x: 120, y: 100, hp: 100, maxHp: 100, owner: 1 });
         const unit3 = createTestCombatUnit({ id: 'unit3', x: 100, y: 130, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({
+        const state = createTestState({
             [unit1.id]: unit1,
             [unit2.id]: unit2,
             [unit3.id]: unit3
@@ -258,7 +258,7 @@ describe('Splash Damage', () => {
         // Rockets should deal different damage to different armor types
         const lightTank = createTestCombatUnit({ id: 'light', key: 'light', x: 100, y: 100, hp: 300, maxHp: 300, owner: 1 });
         const heavyTank = createTestCombatUnit({ id: 'heavy', key: 'heavy', x: 130, y: 100, hp: 600, maxHp: 600, owner: 1 });
-        let state = createTestState({
+        const state = createTestState({
             [lightTank.id]: lightTank,
             [heavyTank.id]: heavyTank
         });
@@ -283,7 +283,7 @@ describe('Splash Damage', () => {
     it('should not apply splash damage to the primary target (they already took direct damage)', () => {
         // The primary target should be excluded from splash damage to avoid double-damage
         const primaryTarget = createTestCombatUnit({ id: 'primary', x: 100, y: 100, hp: 100, maxHp: 100, owner: 1 });
-        let state = createTestState({ [primaryTarget.id]: primaryTarget });
+        const state = createTestState({ [primaryTarget.id]: primaryTarget });
 
         const projectile = createTestProjectile({
             pos: new Vector(100, 100),

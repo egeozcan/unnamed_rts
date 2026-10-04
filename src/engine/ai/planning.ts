@@ -1,6 +1,6 @@
-import { GameState, Entity, EntityId, Vector, HarvesterUnit } from '../types.js';
-import { RULES, AIPersonality } from '../../data/schemas/index.js';
-import { AIPlayerState } from './types.js';
+import { type GameState, type Entity, type EntityId, type Vector, type HarvesterUnit } from '../types.js';
+import { RULES, type AIPersonality } from '../../data/schemas/index.js';
+import { type AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
 import {
     AI_CONSTANTS,

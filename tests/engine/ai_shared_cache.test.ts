@@ -4,7 +4,7 @@ import { computeAiActions } from '../../src/engine/ai/index.js';
 import { resetAIState } from '../../src/engine/ai/state.js';
 import { createEntityCache } from '../../src/engine/perf.js';
 import { createInitialHarvesterAIState, updateHarvesterAI } from '../../src/engine/ai/harvester/index.js';
-import { Entity, EntityId, GameState } from '../../src/engine/types.js';
+import { type Entity, type EntityId, type GameState } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit, createTestHarvester, createTestResource } from '../../src/engine/test-utils.js';
 
 function createClassicScenarioState(): GameState {

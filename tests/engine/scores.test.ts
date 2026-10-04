@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { calculatePlayerScores, clearScoreCache } from '../../src/engine/scores';
-import { GameState } from '../../src/engine/types';
+import { type GameState } from '../../src/engine/types';
 import {
     createTestBuilding,
     createTestCombatUnit,

@@ -5,7 +5,7 @@
  * This enables O(1) lookups for entities near a given position instead of O(n) searches.
  */
 
-import { Entity, EntityId } from './types.js';
+import { type Entity, type EntityId } from './types.js';
 import { isTransportedUnit } from './transport.js';
 
 // Cell size should be roughly the size of the largest query radius we commonly use

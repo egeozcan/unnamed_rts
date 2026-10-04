@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector, HarvesterUnit } from '../../src/engine/types';
+import { type GameState, Vector, type HarvesterUnit } from '../../src/engine/types';
 import { tick, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestHarvester, createTestBuilding } from '../../src/engine/test-utils';
 

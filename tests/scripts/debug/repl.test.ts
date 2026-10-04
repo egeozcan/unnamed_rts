@@ -7,12 +7,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { GameState } from '../../../src/engine/types.js';
+import { type GameState } from '../../../src/engine/types.js';
 import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import { DebugCollector } from '../../../src/scripts/debug/collector.js';
 import {
     parseCommand,
-    ReplContext
+    type ReplContext
 } from '../../../src/scripts/debug/repl.js';
 
 // ============================================================================

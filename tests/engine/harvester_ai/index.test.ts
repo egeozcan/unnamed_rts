@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { updateHarvesterAI } from '../../../src/engine/ai/harvester/index.js';
 import {
     createInitialHarvesterAIState,
-    HarvesterAIState
+    type HarvesterAIState
 } from '../../../src/engine/ai/harvester/types.js';
 import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import {
-    GameState,
-    HarvesterUnit,
-    CombatUnit,
-    BuildingEntity,
-    ResourceEntity,
-    PlayerState
+    type GameState,
+    type HarvesterUnit,
+    type CombatUnit,
+    type BuildingEntity,
+    type ResourceEntity,
+    type PlayerState
 } from '../../../src/engine/types.js';
 import {
     createTestHarvester,

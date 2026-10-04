@@ -5,7 +5,7 @@
  * to support conditional advancement of game simulation.
  */
 
-import { GameState } from '../../engine/types.js';
+import { type GameState } from '../../engine/types.js';
 import { getAIState } from '../../engine/ai/state.js';
 
 // ============================================================================

@@ -1,6 +1,6 @@
 import { RULES } from '../data/schemas/index.js';
-import { GameState, Entity, EntityId, Vector, AttackStance, UnitEntity } from '../engine/types.js';
-import { getAIState, AIPlayerState, AIStrategy, InvestmentPriority } from '../engine/ai/index.js';
+import { type GameState, type Entity, type EntityId, Vector, type AttackStance, type UnitEntity } from '../engine/types.js';
+import { getAIState, type AIPlayerState, type AIStrategy, type InvestmentPriority } from '../engine/ai/index.js';
 import { canBuild } from '../engine/reducer.js';
 import { createEntityCache } from '../engine/perf.js';
 import { getSpatialGrid } from '../engine/spatial.js';
@@ -1149,7 +1149,7 @@ function buildAIStateHTML(aiState: AIPlayerState, state: GameState, playerId: nu
         aiState.economyScore > 40 ? '#ff4' : '#f44';
 
     // Build vengeance info
-    let vengeanceHtml = '';
+    let vengeanceHtml: string;
     const vengeanceEntries = Object.entries(aiState.vengeanceScores);
     if (vengeanceEntries.length > 0) {
         const topVengeance = vengeanceEntries

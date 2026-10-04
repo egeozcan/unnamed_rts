@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer.js';
-import { GameState, Vector, Entity, EntityId, HarvesterUnit } from '../../src/engine/types.js';
+import { type GameState, Vector, type Entity, type EntityId, type HarvesterUnit } from '../../src/engine/types.js';
 import { createTestHarvester, createTestResource, createTestBuilding } from '../../src/engine/test-utils.js';
 
 describe('Harvester Circling Bug', () => {

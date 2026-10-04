@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, getAIState } from '../../src/engine/ai/index.js';
-import { GameState, Entity, EntityId, PlayerState, isActionType } from '../../src/engine/types';
+import { type GameState, type Entity, type EntityId, type PlayerState, isActionType } from '../../src/engine/types';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestBuilding, createTestResource } from '../../src/engine/test-utils';
 import { evaluateInvestmentPriority } from '../../src/engine/ai/planning';
@@ -75,7 +75,7 @@ describe('AI Production Building Priority', () => {
         };
 
         // Run AI for several ticks
-        let actions = computeAiActions(state, 1);
+        const actions = computeAiActions(state, 1);
 
         // Check what building AI wants to make
         const buildingActions = actions

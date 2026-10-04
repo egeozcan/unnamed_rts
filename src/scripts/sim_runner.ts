@@ -1,4 +1,4 @@
-import { GameState, Vector, PlayerState, BuildingEntity, HarvesterUnit, Action } from '../engine/types.js';
+import { type GameState, Vector, type PlayerState, type BuildingEntity, type HarvesterUnit, type Action, type SkirmishConfig } from '../engine/types.js';
 import { INITIAL_STATE, update, createPlayerState, tick } from '../engine/reducer.js';
 import { computeAiActions, resetAIState, resetAIImplementations } from '../engine/ai/index.js';
 import { createEntityCache } from '../engine/perf.js';
@@ -38,11 +38,11 @@ export function createGameState(
     resourceDensity: 'low' | 'medium' | 'high',
     rockDensity: 'low' | 'medium' | 'high'
 ): GameState {
-    const config = {
+    const config: SkirmishConfig = {
         players: [
-            { slot: 0, type: difficulty as string, color: '#4488ff', aiImplementationId: ai1Id },
-            { slot: 1, type: difficulty as string, color: '#ff4444', aiImplementationId: ai2Id },
-        ] as any,
+            { slot: 0, type: difficulty, color: '#4488ff', aiImplementationId: ai1Id },
+            { slot: 1, type: difficulty, color: '#ff4444', aiImplementationId: ai2Id },
+        ],
         mapSize,
         resourceDensity,
         rockDensity,

@@ -11,17 +11,17 @@
  * - Event collection and export
  */
 
-import { parseArgs, buildFilterConfig, CliArgs } from './cli.js';
+import { parseArgs, buildFilterConfig, type CliArgs } from './cli.js';
 import { loadState, saveState } from './state-loader.js';
 import { DebugCollector } from './collector.js';
-import { DebugEvents, DebugEvent } from '../../engine/debug/events.js';
-import { parseTrigger, evaluateTrigger, Trigger } from './triggers.js';
+import { DebugEvents, type DebugEvent } from '../../engine/debug/events.js';
+import { parseTrigger, evaluateTrigger, type Trigger } from './triggers.js';
 import { update } from '../../engine/reducer.js';
 import { computeAiActions, resetAIState } from '../../engine/ai/index.js';
 import { formatStatus, formatUnit, formatFind, formatGroups } from './formatters.js';
 import { startRepl } from './repl.js';
 import fs from 'node:fs';
-import { GameState } from '../../engine/types.js';
+import { type GameState } from '../../engine/types.js';
 
 // ============================================================================
 // Main Entry Point
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     // Connect collector to debug events
     // Cast is needed because DebugEvent from events.ts has generic data,
     // while collector expects the zod-typed DebugEvent with specific data shapes
-    DebugEvents.setCollector((event: DebugEvent) => collector.collect(event as any));
+    DebugEvents.setCollector((event: DebugEvent) => collector.collect(event as Parameters<typeof collector.collect>[0]));
 
     // Load state if provided
     let state: GameState | null = null;

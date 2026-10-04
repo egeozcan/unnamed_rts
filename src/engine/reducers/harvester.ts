@@ -1,5 +1,5 @@
 import {
-    EntityId, Entity, Vector, HarvesterUnit, Projectile
+    type EntityId, type Entity, Vector, type HarvesterUnit, type Projectile
 } from '../types';
 import { getRuleData, createProjectile } from './helpers';
 import { getSpatialGrid } from '../spatial';
@@ -358,7 +358,7 @@ function findResourceTarget(
     const MAX_HARVESTERS_PER_ORE = 2;
 
     // Use passed harvesterCounts if available, otherwise calculate locally
-    let harvestersPerOre: Record<string, number> = harvesterCounts || {};
+    const harvestersPerOre: Record<string, number> = harvesterCounts || {};
 
     if (!harvesterCounts) {
         for (const other of entityList) {

@@ -30,17 +30,9 @@ interface PathResult {
     path: { x: number; y: number }[] | null;
 }
 
-interface GridUpdate {
-    type: 'collision' | 'danger';
-    playerId?: number;
-    data: Uint8Array | number[];
-    gridW: number;
-    gridH: number;
-}
-
 // Worker state
 let collisionGrid: Uint8Array | null = null;
-let dangerGrids: Map<number, Uint8Array> = new Map();
+const dangerGrids: Map<number, Uint8Array> = new Map();
 let gridW = 0;
 let gridH = 0;
 
@@ -358,7 +350,7 @@ self.onmessage = (e: MessageEvent) => {
             gridH = data.gridH;
             break;
 
-        case 'updateDanger':
+        case 'updateDanger': {
             // Update danger grid for a specific player
             const playerId = data.playerId;
             if (data.data instanceof ArrayBuffer) {
@@ -367,14 +359,16 @@ self.onmessage = (e: MessageEvent) => {
                 dangerGrids.set(playerId, new Uint8Array(data.data));
             }
             break;
+        }
 
-        case 'findPath':
+        case 'findPath': {
             // Process path request
             const result = findPath(data as PathRequest);
             self.postMessage({ type: 'pathResult', data: result });
             break;
+        }
 
-        case 'findPathBatch':
+        case 'findPathBatch': {
             // Process multiple path requests
             const results: PathResult[] = [];
             for (const request of data.requests as PathRequest[]) {
@@ -382,6 +376,7 @@ self.onmessage = (e: MessageEvent) => {
             }
             self.postMessage({ type: 'pathResultBatch', data: results });
             break;
+        }
     }
 };
 

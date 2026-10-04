@@ -14,7 +14,12 @@ npm run build        # Type check + production build
 npm test             # Run all tests
 npm run test:watch   # Run tests in watch mode
 npm run test:coverage # Generate coverage report to ./coverage/
+npm run lint         # ESLint (typescript-eslint, type-aware) over src/ and tests/
+npm run lint:fix     # Auto-fix lint issues
+npm run typecheck    # Type check src/ and tests/ (build only checks src/)
 ```
+
+A pre-commit hook (`.githooks/pre-commit`, enabled by `npm install`) runs `typecheck` and `lint`; both must be green before committing.
 
 Single test file: `npx vitest run tests/engine/harvester.test.ts`
 

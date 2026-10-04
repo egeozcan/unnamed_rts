@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { parseTrigger, evaluateTrigger, Trigger } from '../../../src/scripts/debug/triggers.js';
-import { GameState } from '../../../src/engine/types.js';
+import { parseTrigger, evaluateTrigger, type Trigger } from '../../../src/scripts/debug/triggers.js';
+import { type GameState } from '../../../src/engine/types.js';
 import { resetAIState, getAIState } from '../../../src/engine/ai/state.js';
 import {
     createTestCombatUnit,

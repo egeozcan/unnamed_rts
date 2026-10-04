@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, Entity } from '../../src/engine/types.js';
+import { Vector, type Entity } from '../../src/engine/types.js';
 import { SpatialGrid, getSpatialGrid, rebuildSpatialGrid, queryEntitiesInRadius, findNearestEnemy, findNearestResource } from '../../src/engine/spatial.js';
 
 describe('SpatialGrid', () => {

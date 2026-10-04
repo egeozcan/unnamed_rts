@@ -12,17 +12,17 @@ import { computeAiActions } from '../../../src/engine/ai/index.js';
 import { getAIState, resetAIState } from '../../../src/engine/ai/state.js';
 import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import {
-    GameState,
+    type GameState,
     Vector,
-    HarvesterUnit,
-    CombatUnit,
-    BuildingEntity,
-    ResourceEntity,
-    PlayerState
+    type HarvesterUnit,
+    type CombatUnit,
+    type BuildingEntity,
+    type ResourceEntity,
+    type PlayerState
 } from '../../../src/engine/types.js';
 import {
-    HarvesterOptions,
-    CombatUnitOptions,
+    type HarvesterOptions,
+    type CombatUnitOptions,
     createTestHarvester,
     createTestCombatUnit,
     createTestBuilding,
@@ -953,12 +953,11 @@ describe('Harvester AI Integration Tests', () => {
 
             // Run AI at tick 0
             computeAiActions(state, 1);
-            let aiState = getAIState(1);
 
             // Run AI at tick 60 (coordinator update)
             state.tick = 60;
             computeAiActions(state, 1);
-            aiState = getAIState(1);
+            const aiState = getAIState(1);
 
             // State should have been updated
             expect(aiState.harvesterAI.harvesterRoles.size).toBeGreaterThanOrEqual(0);

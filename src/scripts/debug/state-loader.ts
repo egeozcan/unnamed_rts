@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { GameState, Vector } from '../../engine/types.js';
+import { type GameState, Vector } from '../../engine/types.js';
 
 /**
  * Check if a value is a plain object that should be converted to a Vector.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GameState } from '../../src/engine/types.js';
+import { type GameState } from '../../src/engine/types.js';
 import { update, INITIAL_STATE } from '../../src/engine/reducer.js';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils.js';
 

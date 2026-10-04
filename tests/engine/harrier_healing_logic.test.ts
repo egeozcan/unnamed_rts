@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, PlayerState, AirUnit, BuildingEntity } from '../../src/engine/types';
+import { type GameState, type PlayerState, type AirUnit, type BuildingEntity } from '../../src/engine/types';
 import { INITIAL_STATE } from '../../src/engine/reducer';
 import { updateAirBase } from '../../src/engine/reducers/air_units';
 import { createEntity } from '../../src/engine/reducers/helpers';

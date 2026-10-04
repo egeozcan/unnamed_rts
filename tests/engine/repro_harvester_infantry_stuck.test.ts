@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { Vector, Entity, EntityId, HarvesterUnit, CombatUnit } from '../../src/engine/types';
+import { Vector, type Entity, type EntityId, type HarvesterUnit, type CombatUnit } from '../../src/engine/types';
 import { createEntity } from '../../src/engine/utils';
 
 describe('Harvester and Infantry Stuck Reproduction', () => {

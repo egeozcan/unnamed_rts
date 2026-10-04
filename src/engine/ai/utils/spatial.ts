@@ -4,7 +4,7 @@
  * Distance calculations, area queries, and spatial helpers for AI decision-making.
  */
 
-import { Entity, Vector } from '../../types.js';
+import { type Entity, Vector } from '../../types.js';
 import { RULES } from '../../../data/schemas/index.js';
 import { AI_CONSTANTS } from '../utils.js';
 

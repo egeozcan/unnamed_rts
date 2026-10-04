@@ -6,10 +6,10 @@ import {
     formatBuildStatus,
     buildSelectionSummaryHtml,
     updateCommandBar,
-    TooltipRect
+    type TooltipRect
 } from '../../src/ui/index';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity } from '../../src/engine/types';
+import { type GameState, type Entity } from '../../src/engine/types';
 import {
     createTestBuilding,
     createTestAirforceCommand,

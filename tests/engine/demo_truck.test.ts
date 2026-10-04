@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, Vector, DemoTruckUnit, Action } from '../../src/engine/types';
+import { type GameState, type Entity, type EntityId, Vector, type DemoTruckUnit, type Action } from '../../src/engine/types';
 
 type AttackAction = Extract<Action, { type: 'COMMAND_ATTACK' }>;
 import {
@@ -642,8 +642,7 @@ describe('Demo Truck', () => {
             expect(result.entity.dead).toBe(true);
 
             // Verify through game loop that damage is applied
-            let state = createTestState(entities);
-            state = tick(state);
+            tick(createTestState(entities));
 
             // Enemy should have taken damage (truck was close enough to detonate)
             // Actually since detonationTargetId is set, the behavior will trigger detonation

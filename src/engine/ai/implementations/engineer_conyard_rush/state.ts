@@ -1,4 +1,4 @@
-import { EntityId } from '../../../types.js';
+import { type EntityId } from '../../../types.js';
 
 export interface EngineerConyardRushRuntimeState {
     initialized: boolean;

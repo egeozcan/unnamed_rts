@@ -1,6 +1,6 @@
-import { GameState, Action, PlayerState, Vector } from '../../../types.js';
+import { type GameState, type Action, type PlayerState, type Vector } from '../../../types.js';
 import { isEnemy } from '../../../teams.js';
-import { createEntityCache, EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
+import { createEntityCache, type EntityCache, getEnemiesOf, getBuildingsForOwner, getUnitsForOwner } from '../../../perf.js';
 import {
     getAIState,
     resetAIState,
@@ -47,7 +47,7 @@ import {
     handleEngineerCapture
 } from '../../action_combat.js';
 import { updateHarvesterAI } from '../../harvester/index.js';
-import { AIImplementation } from '../../contracts.js';
+import { type AIImplementation } from '../../contracts.js';
 import { RULES } from '../../../../data/schemas/index.js';
 
 const GREEDY_RUSH_MIN_TICK = 900; // 15 seconds

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, isActionType, Action } from '../../src/engine/types.js';
+import { type GameState, isActionType, type Action } from '../../src/engine/types.js';
 import { _testUtils as aiTestUtils, resetAIState } from '../../src/engine/ai/index.js';
 import { createTestBuilding } from '../../src/engine/test-utils';
 
@@ -8,7 +8,7 @@ const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE
 
 describe('Building Selling', () => {
     it('should sell undamaged building for 50% refund', () => {
-        let state = getInitialState();
+        const state = getInitialState();
         const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 800, maxHp: 800 });
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
@@ -22,7 +22,7 @@ describe('Building Selling', () => {
     });
 
     it('should sell damaged building for proportional refund', () => {
-        let state = getInitialState();
+        const state = getInitialState();
         const building = createTestBuilding({ id: 'b1', owner: 0, key: 'power', x: 100, y: 100, hp: 400, maxHp: 800 });
         state.entities['b1'] = building;
         state.players[0] = { ...state.players[0], credits: 1000 };
@@ -46,7 +46,7 @@ describe('Building Selling', () => {
     });
 
     it('should not sell building owned by another player', () => {
-        let state = getInitialState();
+        const state = getInitialState();
         state.entities['b1'] = createTestBuilding({ id: 'b1', owner: 1, key: 'power', x: 0, y: 0, hp: 800, maxHp: 800 });
         const initialCredits = state.players[0].credits;
 

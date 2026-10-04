@@ -1,5 +1,5 @@
 import {
-    Entity, Vector, UnitEntity, TILE_SIZE
+    type Entity, Vector, type UnitEntity, TILE_SIZE
 } from '../types';
 import { isUnitData } from '../../data/schemas/index';
 import { getRuleData } from './helpers';

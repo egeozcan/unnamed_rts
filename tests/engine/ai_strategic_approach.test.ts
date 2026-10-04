@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, UnitKey, BuildingKey } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type UnitKey, type BuildingKey } from '../../src/engine/types';
 import { findPath, refreshCollisionGrid, dangerGrids } from '../../src/engine/utils';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, createTestResource } from '../../src/engine/test-utils';
 

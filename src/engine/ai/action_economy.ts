@@ -1,7 +1,7 @@
-import { GameState, Action, Entity, PlayerState, BuildingEntity, Vector, UnitEntity, HarvesterUnit, ResourceEntity } from '../types.js';
-import { EntityCache } from '../perf.js';
-import { RULES, AIPersonality } from '../../data/schemas/index.js';
-import { AIPlayerState } from './types.js';
+import { type GameState, type Action, type Entity, type PlayerState, type BuildingEntity, Vector, type UnitEntity, type HarvesterUnit, type ResourceEntity } from '../types.js';
+import { type EntityCache } from '../perf.js';
+import { RULES, type AIPersonality } from '../../data/schemas/index.js';
+import { type AIPlayerState } from './types.js';
 import { DebugEvents } from '../debug/events.js';
 import { findSafestOre } from './harvester/danger_map.js';
 import { getHarvesterRole, getRoleMaxDanger } from './harvester/coordinator.js';
@@ -874,7 +874,6 @@ export function handleEconomy(
                 creditsRemaining > rigCreditThreshold) {
                 actions.push({ type: 'START_BUILD', payload: { category: 'vehicle', key: 'induction_rig', playerId } });
                 aiState.lastProductionType = 'vehicle';
-                creditsRemaining -= rigCost;
             }
         }
     }

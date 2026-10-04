@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestCombatUnit, createTestBuilding, resetTestEntityCounter } from '../../src/engine/test-utils';
-import { GameState, EntityId, Entity } from '../../src/engine/types';
+import { type GameState, type EntityId, type Entity } from '../../src/engine/types';
 
 /**
  * Integration tests for the projectile system.

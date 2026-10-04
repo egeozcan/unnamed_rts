@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer.js';
-import { GameState, Vector, UnitEntity, HarvesterUnit } from '../../src/engine/types.js';
+import { type GameState, Vector, type UnitEntity, type HarvesterUnit } from '../../src/engine/types.js';
 import { createTestCombatUnit, createTestBuilding, createTestHarvester, createTestResource } from '../../src/engine/test-utils.js';
 
 describe('Unit Control', () => {

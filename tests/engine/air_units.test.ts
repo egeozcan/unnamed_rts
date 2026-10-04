@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, AirUnit, BuildingEntity } from '../../src/engine/types';
+import { type GameState, type Entity, type EntityId, type AirUnit, type BuildingEntity } from '../../src/engine/types';
 import {
     createTestHarrier,
     createTestAirforceCommand,

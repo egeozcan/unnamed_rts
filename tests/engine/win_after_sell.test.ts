@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector, Action, Projectile } from '../../src/engine/types.js';
+import { type GameState, Vector, type Action, type Projectile } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils.js';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));

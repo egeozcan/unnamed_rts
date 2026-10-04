@@ -7,11 +7,11 @@ import {
     getEscortPatrolPosition
 } from '../../../src/engine/ai/harvester/escort.js';
 import {
-    HarvesterAIState,
+    type HarvesterAIState,
     createInitialHarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
-import { HarvesterUnit, CombatUnit } from '../../../src/engine/types.js';
+import { type HarvesterUnit, type CombatUnit } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestResource,

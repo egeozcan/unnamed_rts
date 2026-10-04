@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sameTeam, isAlly, isEnemy } from '../../src/engine/teams';
-import { GameState, PlayerState } from '../../src/engine/types';
+import { type GameState, type PlayerState } from '../../src/engine/types';
 
 function makeState(players: Record<number, Partial<PlayerState>>): GameState {
     const full: Record<number, PlayerState> = {};

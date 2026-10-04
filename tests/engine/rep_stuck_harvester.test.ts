@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update } from '../../src/engine/reducer';
-import { GameState, Vector, UnitEntity } from '../../src/engine/types';
+import { type GameState, Vector, type UnitEntity } from '../../src/engine/types';
 import { createEntity } from '../../src/engine/utils';
 
 describe('Unit Stuck Pathing Priority', () => {

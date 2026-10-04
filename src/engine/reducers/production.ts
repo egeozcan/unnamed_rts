@@ -1,4 +1,4 @@
-import { GameState, PlayerState, Entity, EntityId, Vector, BuildingEntity, AirUnit } from '../types';
+import { type GameState, type PlayerState, type Entity, type EntityId, Vector, type BuildingEntity, type AirUnit } from '../types';
 import { RULES } from '../../data/schemas/index';
 import { canBuild, calculatePower, getRuleData, createEntity, getBuildTicks } from './helpers';
 import { getDifficultyModifiers } from '../ai/utils';
@@ -8,8 +8,8 @@ import { DebugEvents } from '../debug/events';
 
 export function updateProduction(player: PlayerState, _entities: Record<EntityId, Entity>, state: GameState, cache: EntityCache): { player: PlayerState, createdEntities: Entity[], modifiedEntities: Record<EntityId, Entity> } {
     let nextPlayer = { ...player, queues: { ...player.queues } };
-    let createdEntities: Entity[] = [];
-    let modifiedEntities: Record<EntityId, Entity> = {};
+    const createdEntities: Entity[] = [];
+    const modifiedEntities: Record<EntityId, Entity> = {};
 
     // Check if player is eliminated (no buildings AND no MCV)
     // This matches the win condition check in tick()

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState } from '../../src/engine/ai';
-import { GameState, Entity, HarvesterUnit, Vector } from '../../src/engine/types';
+import { type GameState, type Entity, type HarvesterUnit, Vector } from '../../src/engine/types';
 import * as fs from 'fs';
 import * as path from 'path';
 

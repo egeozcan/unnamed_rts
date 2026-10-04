@@ -1,4 +1,4 @@
-import { DemoTruckUnit, Entity, EntityId, Vector } from '../types';
+import { type DemoTruckUnit, type Entity, type EntityId, Vector } from '../types';
 import { RULES } from '../../data/schemas/index';
 
 const DETONATION_RANGE = 40; // Distance at which truck detonates
@@ -21,7 +21,7 @@ export function updateDemoTruckBehavior(
 
     // Check for detonation target
     let targetPos: Vector | null = null;
-    let targetId: EntityId | null = truck.demoTruck.detonationTargetId;
+    const targetId: EntityId | null = truck.demoTruck.detonationTargetId;
 
     if (targetId) {
         const target = allEntities[targetId];

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES, DENSITY_SETTINGS, ResourceEntity, RockEntity } from '../../src/engine/types';
+import { type GameState, Vector, type Entity, type EntityId, type SkirmishConfig, PLAYER_COLORS, MAP_SIZES, DENSITY_SETTINGS, type ResourceEntity, type RockEntity } from '../../src/engine/types';
 import { createTestBuilding, createTestHarvester } from '../../src/engine/test-utils';
 
 // Helper to create a basic skirmish config
