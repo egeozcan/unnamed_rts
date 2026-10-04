@@ -99,6 +99,14 @@ const BIRDS_EYE_MIN_TICK_DELTA = 2;
 const BIRDS_EYE_MIN_TIME_DELTA_MS = 83;
 const DEBUG_UI_MIN_TICK_DELTA = 3;
 const DEBUG_UI_MIN_TIME_DELTA_MS = 100;
+// Elimination is a whole-world scan; a few ticks of latency before "Mission failed" is invisible
+const DEFEAT_CHECK_TICK_INTERVAL = 10;
+let lastDefeatCheckTick = -Infinity;
+// While paused, the battlefield is only redrawn when what it shows can have changed
+const PAUSED_REFRESH_MS = 500;
+let lastPausedRenderState: GameState | null = null;
+let lastPausedRenderKey = '';
+let lastPausedRenderMs = -Infinity;
 const FRAME_TIMING_WINDOW = 300;
 
 interface RollingTimingWindow {
@@ -656,6 +664,7 @@ function startGameWithConfig(config: SkirmishConfig) {
     lastAlertedNotification = null;
     wasLowPower = false;
     humanDefeatShown = false;
+    lastDefeatCheckTick = -Infinity;
     lastButtonsTick = -1;
     lastButtonsTimeMs = -Infinity;
 
@@ -1593,12 +1602,26 @@ function gameLoop(timestamp: number = 0) {
     }
 
     if (currentState.mode === 'paused' && !skipSim) {
-        // Still render but don't update
+        // Still render but don't update. The picture only changes with the inputs below, so redraw
+        // when one of them changes (plus a slow refresh for anything async, e.g. the 3D view loading).
         const input = getInputState();
-        renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
+        const drag = getDragSelection();
+        const scrollOrigin = getMiddleMouseScrollOrigin();
+        const size = renderer.getSize();
+        const pausedKey = `${input.mouse.x},${input.mouse.y}|${drag ? `${drag.x},${drag.y}` : ''}|${scrollOrigin ? `${scrollOrigin.x},${scrollOrigin.y}` : ''}|${size.width}x${size.height}|${renderer.getGraphicsMode()}|${window.devicePixelRatio}`;
+        if (currentState !== lastPausedRenderState || pausedKey !== lastPausedRenderKey
+            || timestamp - lastPausedRenderMs >= PAUSED_REFRESH_MS) {
+            if (!currentState.showBirdsEye) {
+                renderer.render(currentState, drag, { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, scrollOrigin);
+            }
+            lastPausedRenderState = currentState;
+            lastPausedRenderKey = pausedKey;
+            lastPausedRenderMs = timestamp;
+        }
         animationFrameId = requestAnimationFrame(gameLoop);
         return;
     }
+    lastPausedRenderState = null;
 
     const frameStartMs = performance.now();
     const simStartMs = frameStartMs;
@@ -1618,8 +1641,13 @@ function gameLoop(timestamp: number = 0) {
         }
     }
     const simMs = performance.now() - simStartMs;
+    // Ticks don't advance (game over, debug freeze): throttle the cadenced UI on time alone
+    const ticksFrozen = skipSim || currentState.debugMode;
     announceGameEvents(preSimState, currentState);
-    checkHumanDefeat();
+    if (currentState.tick < lastDefeatCheckTick || currentState.tick - lastDefeatCheckTick >= DEFEAT_CHECK_TICK_INTERVAL) {
+        lastDefeatCheckTick = currentState.tick;
+        checkHumanDefeat();
+    }
 
     // Reducer notifications (placement errors, deploy results...) also appear over the battlefield
     if (currentState.notification && currentState.notification !== lastAlertedNotification) {
@@ -1654,13 +1682,14 @@ function gameLoop(timestamp: number = 0) {
     }
     wasLowPower = isLowPower;
 
-    if (skipSim || shouldRunCadencedUpdate({
+    if (shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastButtonsTick,
         lastTimeMs: lastButtonsTimeMs,
         minTickDelta: BUTTONS_MIN_TICK_DELTA,
-        minTimeDeltaMs: BUTTONS_MIN_TIME_DELTA_MS
+        minTimeDeltaMs: BUTTONS_MIN_TIME_DELTA_MS,
+        ticksFrozen
     })) {
         updateButtonsUI();
         lastButtonsTick = currentState.tick;
@@ -1726,8 +1755,10 @@ function gameLoop(timestamp: number = 0) {
     );
     currentState = { ...currentState, camera: newCamera };
 
-    // Render
-    renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
+    // Render (skipped under the near-opaque bird's-eye overlay; it resumes the frame it closes)
+    if (!currentState.showBirdsEye) {
+        renderer.render(currentState, getDragSelection(), { x: input.mouse.x, y: input.mouse.y }, humanPlayerId, getMiddleMouseScrollOrigin());
+    }
 
     // Update action cursor (shows move, attack, harvest, capture, deploy, repair, no-entry based on context)
     if (humanPlayerId !== null) {
@@ -1741,13 +1772,14 @@ function gameLoop(timestamp: number = 0) {
     // Minimap
     const size = renderer.getSize();
     const lowPower = cachedPower.out < cachedPower.in;
-    if (skipSim || shouldRunCadencedUpdate({
+    if (shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastMinimapTick,
         lastTimeMs: lastMinimapTimeMs,
         minTickDelta: MINIMAP_MIN_TICK_DELTA,
-        minTimeDeltaMs: MINIMAP_MIN_TIME_DELTA_MS
+        minTimeDeltaMs: MINIMAP_MIN_TIME_DELTA_MS,
+        ticksFrozen
     })) {
         const fogGrid = humanPlayerId !== null ? currentState.fogOfWar?.[humanPlayerId] : undefined;
         const fogGridW = fogGrid ? Math.ceil(currentState.config.width / 40) : undefined;
@@ -1781,13 +1813,14 @@ function gameLoop(timestamp: number = 0) {
     // Bird's Eye View
     if (!currentState.showBirdsEye) {
         renderBirdsEye(currentState, size.width, size.height);
-    } else if (skipSim || shouldRunCadencedUpdate({
+    } else if (shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastBirdsEyeTick,
         lastTimeMs: lastBirdsEyeTimeMs,
         minTickDelta: BIRDS_EYE_MIN_TICK_DELTA,
-        minTimeDeltaMs: BIRDS_EYE_MIN_TIME_DELTA_MS
+        minTimeDeltaMs: BIRDS_EYE_MIN_TIME_DELTA_MS,
+        ticksFrozen
     })) {
         renderBirdsEye(currentState, size.width, size.height);
         lastBirdsEyeTick = currentState.tick;
@@ -1795,14 +1828,15 @@ function gameLoop(timestamp: number = 0) {
     }
 
     // Debug UI
-    if (currentState.debugMode && (skipSim || shouldRunCadencedUpdate({
+    if (currentState.debugMode && shouldRunCadencedUpdate({
         currentTick: currentState.tick,
         currentTimeMs: timestamp,
         lastTick: lastDebugUiTick,
         lastTimeMs: lastDebugUiTimeMs,
         minTickDelta: DEBUG_UI_MIN_TICK_DELTA,
-        minTimeDeltaMs: DEBUG_UI_MIN_TIME_DELTA_MS
-    }))) {
+        minTimeDeltaMs: DEBUG_UI_MIN_TIME_DELTA_MS,
+        ticksFrozen
+    })) {
         // The summary sorts four 300-sample windows, so only build it when the debug UI refreshes
         latestFrameTimingSummary = buildFrameTimingSummary();
         updateDebugUI(currentState, latestFrameTimingSummary);

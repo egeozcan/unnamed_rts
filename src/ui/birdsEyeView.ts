@@ -20,7 +20,7 @@ let listenersInitialized = false;
 type EntityCategory = 'infantry' | 'vehicle' | 'air' | 'building_base' | 'building_defense' | 'resource' | 'rock' | 'well';
 
 // Defense building keys
-const DEFENSE_KEYS = ['turret', 'sam_site', 'pillbox', 'obelisk'];
+const DEFENSE_KEYS: ReadonlySet<string> = new Set(['turret', 'sam_site', 'pillbox', 'obelisk']);
 
 function categorizeEntity(entity: Entity): EntityCategory {
     if (entity.type === 'RESOURCE') return 'resource';
@@ -36,7 +36,7 @@ function categorizeEntity(entity: Entity): EntityCategory {
     }
 
     if (entity.type === 'BUILDING') {
-        if (DEFENSE_KEYS.includes(entity.key)) return 'building_defense';
+        if (DEFENSE_KEYS.has(entity.key)) return 'building_defense';
         return 'building_base';
     }
 
@@ -245,8 +245,38 @@ function renderLegend(stats: Record<number, PlayerStats>, players: Record<number
     }
 
     html += '</div>';
-    legendEl.innerHTML = html;
+    // Rebuilding the legend DOM every refresh is costly; only touch it when its content changed
+    if (html !== lastLegendHtml || legendEl.innerHTML === '') {
+        legendEl.innerHTML = html;
+        lastLegendHtml = html;
+    }
 }
+
+let lastLegendHtml = '';
+let lastOverlayDisplay = '';
+let lastCanvasWidth = -1;
+let lastCanvasHeight = -1;
+
+function setOverlayDisplay(display: 'none' | 'flex') {
+    if (!birdsEyeOverlay) return;
+    // Re-check the live style too, in case something else changed it
+    if (display === lastOverlayDisplay && birdsEyeOverlay.style.display === display) return;
+    birdsEyeOverlay.style.display = display;
+    lastOverlayDisplay = display;
+}
+
+// Sort order: resources/rocks first, then buildings, then units
+const LAYER_ORDER: Record<EntityCategory, number> = {
+    resource: 0,
+    rock: 1,
+    well: 2,
+    building_base: 3,
+    building_defense: 4,
+    infantry: 5,
+    vehicle: 6,
+    air: 7,
+};
+const LAYER_COUNT = 8;
 
 export function initBirdsEye() {
     // Create overlay if it doesn't exist
@@ -337,7 +367,7 @@ export function setBirdsEyeCloseHandler(handler: () => void) {
 
 export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeight: number) {
     if (!state.showBirdsEye) {
-        if (birdsEyeOverlay) birdsEyeOverlay.style.display = 'none';
+        setOverlayDisplay('none');
         return;
     }
 
@@ -346,7 +376,7 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
         if (!birdsEyeCanvas || !birdsEyeCtx) return;
     }
 
-    birdsEyeOverlay!.style.display = 'flex';
+    setOverlayDisplay('flex');
 
     const tickEl = document.getElementById('birds-eye-tick');
     if (tickEl) {
@@ -376,10 +406,17 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
         viewWidth = availableHeight * mapAspect;
     }
 
-    birdsEyeCanvas.width = viewWidth;
-    birdsEyeCanvas.height = viewHeight;
-    birdsEyeCanvas.style.width = viewWidth + 'px';
-    birdsEyeCanvas.style.height = viewHeight + 'px';
+    // Resizing a canvas reallocates its bitmap and forces style recalc: only do it on change.
+    // (The canvas is fully repainted below, so skipping the implicit clear is fine.)
+    if (viewWidth !== lastCanvasWidth || viewHeight !== lastCanvasHeight
+        || birdsEyeCanvas.width !== Math.floor(viewWidth) || birdsEyeCanvas.height !== Math.floor(viewHeight)) {
+        birdsEyeCanvas.width = viewWidth;
+        birdsEyeCanvas.height = viewHeight;
+        birdsEyeCanvas.style.width = viewWidth + 'px';
+        birdsEyeCanvas.style.height = viewHeight + 'px';
+        lastCanvasWidth = viewWidth;
+        lastCanvasHeight = viewHeight;
+    }
 
     const ctx = birdsEyeCtx;
     const sx = viewWidth / currentMapWidth;
@@ -406,113 +443,109 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
         ctx.stroke();
     }
 
-    // Get entities and sort for proper layering
-    const entities = Object.values(state.entities).filter(e => !e.dead);
-
-    // Sort order: resources/rocks first, then buildings, then units
-    const layerOrder: Record<EntityCategory, number> = {
-        resource: 0,
-        rock: 1,
-        well: 2,
-        building_base: 3,
-        building_defense: 4,
-        infantry: 5,
-        vehicle: 6,
-        air: 7,
-    };
-
-    const sortedEntities = entities.sort((a, b) => {
-        return layerOrder[categorizeEntity(a)] - layerOrder[categorizeEntity(b)];
-    });
+    // Categorize each live entity once and bucket it by layer. Concatenating the buckets gives the
+    // same order as a stable sort by layer (insertion order within a layer is kept).
+    const buckets: Entity[][] = [];
+    const bucketCategories: EntityCategory[] = [];
+    for (let i = 0; i < LAYER_COUNT; i++) buckets.push([]);
+    for (const category of Object.keys(LAYER_ORDER) as EntityCategory[]) {
+        bucketCategories[LAYER_ORDER[category]] = category;
+    }
+    for (const id in state.entities) {
+        const e = state.entities[id];
+        if (e.dead) continue;
+        buckets[LAYER_ORDER[categorizeEntity(e)]].push(e);
+    }
 
     // Draw entities
     const time = Date.now();
-    for (const e of sortedEntities) {
-        const category = categorizeEntity(e);
+    for (let layer = 0; layer < LAYER_COUNT; layer++) {
+        const category = bucketCategories[layer];
         const config = SHAPE_CONFIG[category];
+        for (const e of buckets[layer]) {
+            // Check for induction rig - render with glow
+            if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed') {
+                const pulse = 0.5 + 0.5 * Math.sin(time / 300);
+                const x = e.pos.x * sx;
+                const y = e.pos.y * sy;
+                const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
+                const glowRadius = baseSize + pulse * 8;
 
-        // Check for induction rig - render with glow
-        if (e.type === 'BUILDING' && e.key === 'induction_rig_deployed') {
-            const pulse = 0.5 + 0.5 * Math.sin(time / 300);
-            const x = e.pos.x * sx;
-            const y = e.pos.y * sy;
-            const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
-            const glowRadius = baseSize + pulse * 8;
+                // Outer glow
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+                gradient.addColorStop(0, `rgba(0, 255, 200, ${0.9 * pulse})`);
+                gradient.addColorStop(0.4, `rgba(0, 220, 170, ${0.5 * pulse})`);
+                gradient.addColorStop(1, 'rgba(0, 150, 100, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+                ctx.fill();
 
-            // Outer glow
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
-            gradient.addColorStop(0, `rgba(0, 255, 200, ${0.9 * pulse})`);
-            gradient.addColorStop(0.4, `rgba(0, 220, 170, ${0.5 * pulse})`);
-            gradient.addColorStop(1, 'rgba(0, 150, 100, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-            ctx.fill();
+                // Core with player color tint
+                const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
+                    ? PLAYER_COLORS[e.owner]
+                    : '#00ffc8';
+                drawShape(ctx, x, y, baseSize, 'rect', '#00ffc8');
+                ctx.strokeStyle = playerColor;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x - baseSize / 2, y - baseSize / 2, baseSize, baseSize);
+                continue;
+            }
 
-            // Core with player color tint
-            const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
-                ? PLAYER_COLORS[e.owner]
-                : '#00ffc8';
-            drawShape(ctx, x, y, baseSize, 'rect', '#00ffc8');
-            ctx.strokeStyle = playerColor;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x - baseSize / 2, y - baseSize / 2, baseSize, baseSize);
-            continue;
+            // Check for demo truck - render with danger glow
+            if (e.type === 'UNIT' && e.key === 'demo_truck') {
+                const pulse = 0.5 + 0.5 * Math.sin(time / 150);
+                const x = e.pos.x * sx;
+                const y = e.pos.y * sy;
+                const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
+                const glowRadius = baseSize + pulse * 10;
+
+                // Outer danger glow (red/orange pulsing)
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+                gradient.addColorStop(0, `rgba(255, 100, 0, ${0.9 * pulse})`);
+                gradient.addColorStop(0.4, `rgba(255, 50, 0, ${0.5 * pulse})`);
+                gradient.addColorStop(1, 'rgba(200, 0, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Diamond shape core with player color
+                const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
+                    ? PLAYER_COLORS[e.owner]
+                    : '#ff6600';
+                drawShape(ctx, x, y, baseSize, 'diamond', playerColor);
+
+                // Warning stripes overlay
+                ctx.strokeStyle = '#ffff00';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, y - baseSize / 2);
+                ctx.lineTo(x + baseSize / 2, y);
+                ctx.lineTo(x, y + baseSize / 2);
+                ctx.lineTo(x - baseSize / 2, y);
+                ctx.closePath();
+                ctx.stroke();
+                continue;
+            }
+
+            let color: string;
+            if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {
+                color = PLAYER_COLORS[e.owner];
+            } else if (category === 'rock') {
+                color = '#555';
+            } else if (category === 'well') {
+                color = '#ffd700';
+            } else {
+                color = '#aa0'; // Resources
+            }
+
+            // Scale size based on canvas scale for visibility
+            const scaleFactor = Math.max(sx, sy);
+            const scaledSize = Math.max(config.size * scaleFactor, config.size * 0.8);
+
+            drawShape(ctx, e.pos.x * sx, e.pos.y * sy, scaledSize, config.shape, color);
         }
-
-        // Check for demo truck - render with danger glow
-        if (e.type === 'UNIT' && e.key === 'demo_truck') {
-            const pulse = 0.5 + 0.5 * Math.sin(time / 150);
-            const x = e.pos.x * sx;
-            const y = e.pos.y * sy;
-            const baseSize = Math.max(config.size * Math.max(sx, sy), config.size * 0.8);
-            const glowRadius = baseSize + pulse * 10;
-
-            // Outer danger glow (red/orange pulsing)
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
-            gradient.addColorStop(0, `rgba(255, 100, 0, ${0.9 * pulse})`);
-            gradient.addColorStop(0.4, `rgba(255, 50, 0, ${0.5 * pulse})`);
-            gradient.addColorStop(1, 'rgba(200, 0, 0, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Diamond shape core with player color
-            const playerColor = e.owner >= 0 && e.owner < PLAYER_COLORS.length
-                ? PLAYER_COLORS[e.owner]
-                : '#ff6600';
-            drawShape(ctx, x, y, baseSize, 'diamond', playerColor);
-
-            // Warning stripes overlay
-            ctx.strokeStyle = '#ffff00';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x, y - baseSize / 2);
-            ctx.lineTo(x + baseSize / 2, y);
-            ctx.lineTo(x, y + baseSize / 2);
-            ctx.lineTo(x - baseSize / 2, y);
-            ctx.closePath();
-            ctx.stroke();
-            continue;
-        }
-
-        let color: string;
-        if (e.owner >= 0 && e.owner < PLAYER_COLORS.length) {
-            color = PLAYER_COLORS[e.owner];
-        } else if (category === 'rock') {
-            color = '#555';
-        } else if (category === 'well') {
-            color = '#ffd700';
-        } else {
-            color = '#aa0'; // Resources
-        }
-
-        // Scale size based on canvas scale for visibility
-        const scaleFactor = Math.max(sx, sy);
-        const scaledSize = Math.max(config.size * scaleFactor, config.size * 0.8);
-
-        drawShape(ctx, e.pos.x * sx, e.pos.y * sy, scaledSize, config.shape, color);
     }
 
     // Draw current viewport rectangle
@@ -543,19 +576,19 @@ export function renderBirdsEye(state: GameState, canvasWidth: number, canvasHeig
         hoveredEntity = null;
         let closestDist = Infinity;
 
-        for (const e of sortedEntities) {
-            // Only show tooltips for units and buildings
-            if (e.type !== 'UNIT' && e.type !== 'BUILDING') continue;
-
-            const dist = Math.sqrt(Math.pow(e.pos.x - worldX, 2) + Math.pow(e.pos.y - worldY, 2));
-            const category = categorizeEntity(e);
-            const config = SHAPE_CONFIG[category];
+        for (let layer = 0; layer < LAYER_COUNT; layer++) {
+            const config = SHAPE_CONFIG[bucketCategories[layer]];
             // Use a reasonable hit radius based on entity size
             const hitRadius = Math.max(config.size * 2, 20);
+            for (const e of buckets[layer]) {
+                // Only show tooltips for units and buildings
+                if (e.type !== 'UNIT' && e.type !== 'BUILDING') continue;
 
-            if (dist < hitRadius && dist < closestDist) {
-                closestDist = dist;
-                hoveredEntity = e;
+                const dist = Math.sqrt(Math.pow(e.pos.x - worldX, 2) + Math.pow(e.pos.y - worldY, 2));
+                if (dist < hitRadius && dist < closestDist) {
+                    closestDist = dist;
+                    hoveredEntity = e;
+                }
             }
         }
 

@@ -5,6 +5,11 @@ export interface CadenceUpdateParams {
     lastTimeMs: number;
     minTickDelta: number;
     minTimeDeltaMs: number;
+    /**
+     * The simulation is not advancing (game over, debug freeze): ticks will not move, so throttle
+     * on time alone. Without this the caller would have to bypass the cadence and update every frame.
+     */
+    ticksFrozen?: boolean;
 }
 
 /**
@@ -18,7 +23,8 @@ export function shouldRunCadencedUpdate(params: CadenceUpdateParams): boolean {
         lastTick,
         lastTimeMs,
         minTickDelta,
-        minTimeDeltaMs
+        minTimeDeltaMs,
+        ticksFrozen
     } = params;
 
     // First run or reset state.
@@ -29,6 +35,10 @@ export function shouldRunCadencedUpdate(params: CadenceUpdateParams): boolean {
     // State loaded/restarted with an earlier tick; allow immediate recovery.
     if (currentTick < lastTick) {
         return true;
+    }
+
+    if (ticksFrozen) {
+        return (currentTimeMs - lastTimeMs) >= minTimeDeltaMs;
     }
 
     // No tick progress means no update.

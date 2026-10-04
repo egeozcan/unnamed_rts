@@ -87,11 +87,32 @@ function setupClickHandler(canvas: HTMLCanvasElement) {
     });
 }
 
+// Displayed (CSS px) size of each minimap canvas, kept current by a ResizeObserver so the per-refresh
+// render doesn't read layout (clientWidth / offsetParent force a synchronous reflow).
+const observedCanvasSizes = new WeakMap<Element, { w: number; h: number }>();
+let canvasResizeObserver: ResizeObserver | null = null;
+
+function observeCanvasSize(canvas: HTMLCanvasElement) {
+    if (typeof ResizeObserver === 'undefined') return;
+    canvasResizeObserver ??= new ResizeObserver(entries => {
+        for (const entry of entries) {
+            observedCanvasSizes.set(entry.target, { w: entry.contentRect.width, h: entry.contentRect.height });
+        }
+    });
+    canvasResizeObserver.observe(canvas);
+}
+
+/** CSS size of the canvas: the observed one, or measured until the observer has reported. */
+function getCanvasCssSize(canvas: HTMLCanvasElement): { w: number; h: number } {
+    return observedCanvasSizes.get(canvas) ?? { w: canvas.clientWidth, h: canvas.clientHeight };
+}
+
 /** Match the canvas bitmap to its displayed size so the minimap is sharp. */
 function syncCanvasSize(canvas: HTMLCanvasElement): number {
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-    const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    const css = getCanvasCssSize(canvas);
+    const w = Math.max(1, Math.round(css.w * dpr));
+    const h = Math.max(1, Math.round(css.h * dpr));
     if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -100,7 +121,68 @@ function syncCanvasSize(canvas: HTMLCanvasElement): number {
 }
 
 function isCanvasVisible(canvas: HTMLCanvasElement): boolean {
+    const observed = observedCanvasSizes.get(canvas);
+    // A display:none canvas (or ancestor) is observed as 0x0
+    if (observed) return observed.w > 0 && observed.h > 0;
     return canvas.offsetParent !== null && canvas.width > 0 && canvas.height > 0;
+}
+
+/**
+ * Fog of war as a 1px-per-tile image (black where unrevealed, transparent where revealed), so the
+ * minimap draws it with a single scaled drawImage instead of a fillRect per hidden tile. The image is
+ * only rewritten when the fog grid's contents change (the engine mutates it in place).
+ */
+let fogLayer: {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    image: ImageData;
+    snapshot: Uint8Array;
+    grid: Uint8Array;
+    w: number;
+    h: number;
+} | null = null;
+
+function getFogLayer(fogGrid: Uint8Array, gridW: number, gridH: number): HTMLCanvasElement | null {
+    if (!fogLayer || fogLayer.grid !== fogGrid || fogLayer.w !== gridW || fogLayer.h !== gridH) {
+        if (typeof document === 'undefined') return null;
+        const canvas = fogLayer?.canvas ?? document.createElement('canvas');
+        canvas.width = gridW;
+        canvas.height = gridH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        fogLayer = {
+            canvas,
+            ctx,
+            image: ctx.createImageData(gridW, gridH),
+            // 255 never occurs in the grid, so the first pass writes every pixel
+            snapshot: new Uint8Array(gridW * gridH).fill(255),
+            grid: fogGrid,
+            w: gridW,
+            h: gridH
+        };
+    }
+
+    if (syncFogPixels(fogGrid, fogLayer.snapshot, fogLayer.image.data)) {
+        fogLayer.ctx.putImageData(fogLayer.image, 0, 0);
+    }
+    return fogLayer.canvas;
+}
+
+/**
+ * Bring the fog image's alpha channel in line with the grid (opaque where unrevealed), touching only
+ * tiles that changed since `snapshot`. Returns whether any pixel changed.
+ */
+export function syncFogPixels(fogGrid: Uint8Array, snapshot: Uint8Array, data: Uint8ClampedArray): boolean {
+    let dirty = false;
+    for (let i = 0; i < snapshot.length; i++) {
+        const v = fogGrid[i] ?? 1;
+        if (v === snapshot[i]) continue;
+        snapshot[i] = v;
+        // RGB stays 0 (black); alpha hides unrevealed tiles
+        data[i * 4 + 3] = v === 0 ? 255 : 0;
+        dirty = true;
+    }
+    return dirty;
 }
 
 
@@ -121,9 +203,11 @@ export function initMinimap() {
     if (!listenersInitialized) {
         if (minimapCanvas) {
             setupClickHandler(minimapCanvas);
+            observeCanvasSize(minimapCanvas);
         }
         if (observerMinimapCanvas) {
             setupClickHandler(observerMinimapCanvas);
+            observeCanvasSize(observerMinimapCanvas);
         }
         listenersInitialized = true;
     }
@@ -259,11 +343,18 @@ function renderToContext(
     // Draw fog overlay on minimap
     if (fogGrid && fogGridW) {
         const fogGridH = Math.ceil(mapHeight / 40);
-        ctx.fillStyle = '#000';
-        for (let ty = 0; ty < fogGridH; ty++) {
-            for (let tx = 0; tx < fogGridW; tx++) {
-                if (fogGrid[ty * fogGridW + tx] === 0) {
-                    ctx.fillRect(tx * 40 * sx, ty * 40 * sy, 40 * sx + 1, 40 * sy + 1);
+        const fogImage = getFogLayer(fogGrid, fogGridW, fogGridH);
+        if (fogImage) {
+            // Nearest-neighbour scaling keeps the tile edges crisp (restored by ctx.restore below)
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(fogImage, 0, 0, fogGridW * 40 * sx, fogGridH * 40 * sy);
+        } else {
+            ctx.fillStyle = '#000';
+            for (let ty = 0; ty < fogGridH; ty++) {
+                for (let tx = 0; tx < fogGridW; tx++) {
+                    if (fogGrid[ty * fogGridW + tx] === 0) {
+                        ctx.fillRect(tx * 40 * sx, ty * 40 * sy, 40 * sx + 1, 40 * sy + 1);
+                    }
                 }
             }
         }
