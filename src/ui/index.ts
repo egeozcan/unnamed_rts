@@ -9,6 +9,7 @@ import { isEnemy } from '../engine/teams.js';
 import { isUnit, isHarvester, isEngineer, isInductionRig, isWell, isResource, isBuilding, isEnemyOf, isPlayerEntity } from '../engine/type-guards.js';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../engine/transport.js';
 import { isAirUnit } from '../engine/entity-helpers.js';
+import { getCameo } from './cameos.js';
 
 let gameState: GameState | null = null;
 let onBuildClick: ((category: string, key: string, count: number) => void) | null = null;
@@ -430,6 +431,21 @@ function createBtn(parent: HTMLElement, key: string, name: string, cost: number,
         <div class="btn-status"></div>
         <div class="queue-count"></div>
     `;
+
+    const cameo = getCameo(key);
+    if (cameo) {
+        btn.classList.add('has-cameo');
+        const portrait = document.createElement('img');
+        portrait.className = 'btn-cameo';
+        portrait.src = cameo;
+        portrait.alt = ''; // The visible name labels the item; the artwork is decorative.
+        portrait.draggable = false;
+        btn.prepend(portrait);
+        portrait.addEventListener('error', () => {
+            portrait.remove();
+            btn.classList.remove('has-cameo');
+        }, { once: true });
+    }
 
     // Show/hide tooltip on hover
     btn.addEventListener('mouseenter', () => {
