@@ -37,10 +37,10 @@ const FRAGMENT_SHADER = /* glsl */ `
 uniform sampler2D map;
 varying vec2 vUv;
 varying vec4 vColor;
+// No alpha discard: the layers are blended and never write depth, so a (near-)transparent fragment
+// leaves the target as it was anyway, and discard would only disable early-z on the GPU.
 void main() {
-    float a = vColor.a * texture2D(map, vUv).a;
-    if (a < 0.004) discard;
-    gl_FragColor = vec4(vColor.rgb, a);
+    gl_FragColor = vec4(vColor.rgb, vColor.a * texture2D(map, vUv).a);
 }`;
 
 export interface ParticleOptions {
@@ -91,6 +91,7 @@ export class ParticleLayer {
     private readonly iPos: THREE.InstancedBufferAttribute;
     private readonly iColor: THREE.InstancedBufferAttribute;
     private readonly iSizeRot: THREE.InstancedBufferAttribute;
+    private readonly attributes: readonly THREE.InstancedBufferAttribute[];
 
     constructor(
         scene: THREE.Scene,
@@ -111,6 +112,7 @@ export class ParticleLayer {
         this.geometry.setAttribute('iPos', this.iPos);
         this.geometry.setAttribute('iColor', this.iColor);
         this.geometry.setAttribute('iSizeRot', this.iSizeRot);
+        this.attributes = [this.iPos, this.iColor, this.iSizeRot];
         this.geometry.instanceCount = 0;
 
         const material = new THREE.ShaderMaterial({
@@ -228,7 +230,7 @@ export class ParticleLayer {
         this.geometry.instanceCount = n;
         this.mesh.visible = n > 0;
         if (n > 0) {
-            for (const attribute of [this.iPos, this.iColor, this.iSizeRot]) {
+            for (const attribute of this.attributes) {
                 attribute.clearUpdateRanges();
                 attribute.addUpdateRange(0, n * attribute.itemSize);
                 attribute.needsUpdate = true;

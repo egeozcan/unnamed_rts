@@ -4,6 +4,8 @@ import { RULES } from '../../data/schemas/index.js';
 import { isAirUnit } from '../../engine/entity-helpers.js';
 import { isBuilding, isUnit } from '../../engine/type-guards.js';
 import { getModelDef, type ModelDef, type ModelPart, ROCK_VARIANTS } from './models.js';
+import { AdaptiveResolution } from './resolution.js';
+import { TEAM_MIX_ATTRIBUTE } from './shape.js';
 import { AIR_ALTITUDE, AIRBASE_PAD_HEIGHT, AIRBASE_SLOT_OFFSETS, getAltitude, getModelHeight } from './projection.js';
 import { applyViewCamera, CAMERA_DISTANCE } from './camera.js';
 import {
@@ -118,8 +120,49 @@ interface DelayedBlast {
     size: number;
 }
 
+/** What the last drawn frame showed, to skip drawing identical frames (see Scene3D.diffFrame). */
+interface DrawnFrame {
+    tick: number;
+    entities: unknown;
+    projectiles: unknown;
+    events: unknown;
+    config: unknown;
+    fog: unknown;
+    fogGrid: unknown;
+    x: number;
+    y: number;
+    zoom: number;
+    width: number;
+    height: number;
+    pixelRatio: number;
+    player: number | null;
+    ghost: boolean;
+    ghostKey: string;
+    ghostX: number;
+    ghostY: number;
+    ghostValid: boolean;
+}
+
+interface ViewBounds {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+}
+
+/** The simulation moved on (tick, entities, projectiles, events). */
+const CHANGED_SIM = 1;
+/** The camera, zoom or view size changed. */
+const CHANGED_VIEW = 2;
+/** Fog of war, placement ghost, pixel ratio or local player changed. */
+const CHANGED_OTHER = 4;
+
 /** Where a projectile visually left its launcher (cached on first sight). */
 interface ShotVisual {
+    /** Identifies the shot (with its shooter): where it was fired from and at what. */
+    startX: number;
+    startY: number;
+    targetId: string;
     frame: number;
     /** Muzzle position minus the sim start position (fades out along the flight). */
     dx: number;
@@ -135,20 +178,56 @@ interface ShotVisual {
 // Instanced batching
 // ---------------------------------------------------------------------------------------------
 
+/** Per-instance team colour of owner-independent model geometry (see Shape.realizeTeamless). */
+const TEAM_ATTRIBUTE = 'instanceTeam';
+
+/** Replaces three's color_vertex chunk: the vertex colour gets the instance's team colour mixed in. */
+const TEAM_COLOR_VERTEX = /* glsl */ `
+vColor = vec4( 1.0 );
+vColor.rgb *= color + ${TEAM_MIX_ATTRIBUTE} * ${TEAM_ATTRIBUTE};
+#ifdef USE_INSTANCING_COLOR
+vColor.rgb *= instanceColor.rgb;
+#endif
+`;
+
 /**
- * One InstancedMesh per (model, owner, part). Instances are rewritten from scratch every frame,
- * mirroring the immediate-mode 2D renderer: no per-entity scene graph to keep in sync.
+ * Turns a vertex-coloured material into one for owner-independent model geometry: vertex colour =
+ * `color + teamMix * instanceTeam`, then the usual instance colour (flash / wreck tint) on top. With the
+ * team colour per instance, one InstancedMesh per (model, part) serves every player.
  */
-class InstanceBucket {
+function withTeamColor<T extends THREE.Material>(material: T): T {
+    material.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <color_pars_vertex>',
+                `#include <color_pars_vertex>\nattribute float ${TEAM_MIX_ATTRIBUTE};\nattribute vec3 ${TEAM_ATTRIBUTE};`)
+            .replace('#include <color_vertex>', TEAM_COLOR_VERTEX);
+    };
+    material.customProgramCacheKey = () => 'team-color';
+    return material;
+}
+
+/**
+ * One InstancedMesh per (model, part) — or per projectile kind. Instances are rewritten from scratch
+ * every frame, mirroring the immediate-mode 2D renderer: no per-entity scene graph to keep in sync.
+ *
+ * Only what actually changed is uploaded: the CPU-side arrays always mirror the GPU buffers, so each
+ * push compares against the value already there and the dirty instances' range is all that is sent.
+ * Parked aircraft, idle buildings, ore and rocks cost no upload at all while the camera holds still.
+ */
+export class InstanceBucket {
     mesh: THREE.InstancedMesh;
     private count = 0;
     private capacity: number;
+    private dirtyMin = Infinity;
+    private dirtyMax = -1;
+    private team: THREE.InstancedBufferAttribute | null = null;
 
     constructor(
         private readonly scene: THREE.Scene,
         private readonly geometry: THREE.BufferGeometry,
         private readonly material: THREE.Material,
         private readonly castShadow: boolean,
+        private readonly teamColored = false,
         capacity = 16
     ) {
         this.capacity = capacity;
@@ -165,6 +244,16 @@ class InstanceBucket {
         mesh.frustumCulled = false; // culled on the CPU before instances are written
         mesh.count = 0;
         this.scene.add(mesh);
+        if (this.teamColored) {
+            const team = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
+            if (this.team) {
+                team.array.set(this.team.array);
+                // Release the old attribute's GPU buffer before swapping it out
+                this.geometry.dispose();
+            }
+            this.team = team;
+            this.geometry.setAttribute(TEAM_ATTRIBUTE, team);
+        }
         return mesh;
     }
 
@@ -172,33 +261,48 @@ class InstanceBucket {
         this.count = 0;
     }
 
-    push(matrix: THREE.Matrix4, r = 1, g = 1, b = 1): void {
+    push(matrix: THREE.Matrix4, r = 1, g = 1, b = 1, team?: THREE.Color): void {
         if (this.count >= this.capacity) this.grow();
         const i = this.count++;
-        matrix.toArray(this.mesh.instanceMatrix.array, i * 16);
-        const colors = this.mesh.instanceColor!.array as Float32Array;
-        colors[i * 3] = r;
-        colors[i * 3 + 1] = g;
-        colors[i * 3 + 2] = b;
+        let dirty = false;
+
+        const elements = matrix.elements;
+        const matrices = this.mesh.instanceMatrix.array as Float32Array;
+        const o = i * 16;
+        for (let k = 0; k < 16; k++) {
+            const v = Math.fround(elements[k]);
+            if (matrices[o + k] !== v) {
+                matrices[o + k] = v;
+                dirty = true;
+            }
+        }
+        if (writeRgb(this.mesh.instanceColor!.array as Float32Array, i * 3, r, g, b)) dirty = true;
+        if (this.team && team && writeRgb(this.team.array as Float32Array, i * 3, team.r, team.g, team.b)) dirty = true;
+
+        if (dirty) {
+            if (i < this.dirtyMin) this.dirtyMin = i;
+            if (i > this.dirtyMax) this.dirtyMax = i;
+        }
     }
 
     finish(): void {
         this.mesh.count = this.count;
         this.mesh.visible = this.count > 0;
-        if (this.count > 0) {
-            this.mesh.instanceMatrix.clearUpdateRanges();
-            this.mesh.instanceMatrix.addUpdateRange(0, this.count * 16);
-            this.mesh.instanceMatrix.needsUpdate = true;
-            this.mesh.instanceColor!.clearUpdateRanges();
-            this.mesh.instanceColor!.addUpdateRange(0, this.count * 3);
-            this.mesh.instanceColor!.needsUpdate = true;
-        }
+        if (this.dirtyMax < 0) return;
+        const start = this.dirtyMin, n = this.dirtyMax - this.dirtyMin + 1;
+        // Ranges are cleared by three once uploaded; pending ones (not drawn yet) merge with these
+        markRange(this.mesh.instanceMatrix, start, n);
+        markRange(this.mesh.instanceColor!, start, n);
+        if (this.team) markRange(this.team, start, n);
+        this.dirtyMin = Infinity;
+        this.dirtyMax = -1;
     }
 
     private grow(): void {
         const old = this.mesh;
         this.capacity *= 2;
         this.mesh = this.createMesh(this.capacity);
+        // A fresh attribute is uploaded in full on first use, so the copy needs no dirty range
         (this.mesh.instanceMatrix.array as Float32Array).set(old.instanceMatrix.array);
         (this.mesh.instanceColor!.array as Float32Array).set(old.instanceColor!.array as Float32Array);
         this.scene.remove(old);
@@ -209,6 +313,21 @@ class InstanceBucket {
         this.scene.remove(this.mesh);
         this.mesh.dispose();
     }
+}
+
+/** Writes an RGB triple (as float32), reporting whether it differed from what was there. */
+function writeRgb(array: Float32Array, o: number, r: number, g: number, b: number): boolean {
+    const fr = Math.fround(r), fg = Math.fround(g), fb = Math.fround(b);
+    if (array[o] === fr && array[o + 1] === fg && array[o + 2] === fb) return false;
+    array[o] = fr;
+    array[o + 1] = fg;
+    array[o + 2] = fb;
+    return true;
+}
+
+function markRange(attribute: THREE.BufferAttribute, start: number, count: number): void {
+    attribute.addUpdateRange(start * attribute.itemSize, count * attribute.itemSize);
+    attribute.needsUpdate = true;
 }
 
 interface ModelBuckets {
@@ -230,9 +349,14 @@ export class Scene3D {
 
     private readonly litMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.12 });
     private readonly glowMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+    /** The same two materials for owner-independent model geometry, team colour per instance. */
+    private readonly teamLitMaterial = withTeamColor(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.12 }));
+    private readonly teamGlowMaterial = withTeamColor(new THREE.MeshBasicMaterial({ vertexColors: true }));
 
-    /** key -> owner slot (owner + 1) -> buckets per part */
-    private readonly models = new Map<string, (ModelBuckets | undefined)[]>();
+    /** model key -> buckets per part (shared by every owner) */
+    private readonly models = new Map<string, ModelBuckets>();
+    /** Team colour per owner slot (owner + 1; slot 0 is neutral). */
+    private readonly teamColors: THREE.Color[] = [];
     private readonly allBuckets: InstanceBucket[] = [];
     private readonly geometries: THREE.BufferGeometry[] = [];
 
@@ -259,14 +383,54 @@ export class Scene3D {
     private readonly debris: DebrisLayer;
     private readonly beams: BeamLayer;
     private readonly effectTextures: THREE.Texture[];
+    private readonly particleLayers: readonly ParticleLayer[];
+    /**
+     * Soft particle budget: ambient emitters (damage smoke and fire, burning wrecks, chimneys, exhaust)
+     * thin out as their layer fills up, leaving room for explosions and muzzle effects, which always
+     * spawn at full rate. Refreshed every frame.
+     */
+    private smokeBudget = 1;
+    private fireBudget = 1;
     private readonly visuals = new Map<string, EntityVisual>();
-    private readonly shots = new Map<string, ShotVisual>();
+    /** In-flight shots by shooter id (a shooter rarely has more than a handful in the air). */
+    private readonly shots = new Map<string, ShotVisual[]>();
     private wrecks: Wreck[] = [];
     private delayed: DelayedBlast[] = [];
     private frameNo = 0;
     private lastTick = -1;
     private lastEventTick = -1;
-    private visibility: (x: number, z: number) => boolean = () => true;
+
+    // Visibility test inputs, refreshed every frame (see isVisible)
+    private readonly visibleView: ViewBounds = { left: 0, right: 0, top: 0, bottom: 0 };
+    private readonly projectileView: ViewBounds = { left: 0, right: 0, top: 0, bottom: 0 };
+    private visibleFog: Uint8Array | undefined = undefined;
+    private visibleGridW = 0;
+    private visibleGridH = 0;
+    /** In (or near) the view and not hidden by the local player's fog of war. */
+    private readonly visibility = (x: number, z: number): boolean => {
+        const view = this.visibleView;
+        if (x < view.left || x > view.right || z < view.top || z > view.bottom) return false;
+        const fogGrid = this.visibleFog;
+        if (!fogGrid) return true;
+        const tx = Math.floor(x / TILE_SIZE), tz = Math.floor(z / TILE_SIZE);
+        if (tx < 0 || tz < 0 || tx >= this.visibleGridW || tz >= this.visibleGridH) return true;
+        return fogGrid[tz * this.visibleGridW + tx] !== 0;
+    };
+
+    // Frame skipping and adaptive resolution
+    private readonly resolution = new AdaptiveResolution();
+    private readonly drawn: DrawnFrame = {
+        tick: NaN, entities: null, projectiles: null, events: null, config: null, fog: null, fogGrid: null,
+        x: NaN, y: NaN, zoom: NaN, width: -1, height: -1, pixelRatio: -1, player: null,
+        ghost: false, ghostKey: '', ghostX: NaN, ghostY: NaN, ghostValid: false,
+    };
+    /** Set when the canvas was resized (which clears it): the next frame must be drawn. */
+    private forceDraw = true;
+    /** performance.now() of the last render() call and of the last frame actually drawn. */
+    private lastCallAt = -Infinity;
+    private lastDrawAt = -Infinity;
+    /** Whether the previous render() call drew (frame-time samples need two drawn frames in a row). */
+    private drewLastCall = false;
     /** Muzzle of each shooter's latest shot, picked up by its projectile when first drawn. */
     private readonly pendingMuzzles = new Map<string, { x: number; y: number; z: number; tick: number }>();
     private readonly pivotCache = new WeakMap<ModelDef, readonly [number, number, number] | null>();
@@ -299,11 +463,15 @@ export class Scene3D {
         this.canvas.id = 'gameCanvas3d';
         container.insertBefore(this.canvas, before);
 
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(scenePixelRatio());
+        // At 1.5x+ the extra pixels already smooth the edges: MSAA would multiply the fill cost for little gain
+        const pixelRatio = scenePixelRatio();
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: pixelRatio < 1.5, powerPreference: 'high-performance' });
+        this.renderer.setPixelRatio(this.resolution.pixelRatio(pixelRatio));
         this.renderer.setClearColor(0x14180f);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        // Redrawn only when casters or the view move (see render)
+        this.renderer.shadowMap.autoUpdate = false;
 
         this.sun.castShadow = true;
         this.sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
@@ -330,6 +498,7 @@ export class Scene3D {
         this.shockwaves = new ParticleLayer(this.scene, ring, { additive: true, flat: true, capacity: 100, renderOrder: 0 });
         this.smoke = new ParticleLayer(this.scene, puff, { additive: false, capacity: 5000, renderOrder: 2 });
         this.fire = new ParticleLayer(this.scene, glow, { additive: true, capacity: 4000, renderOrder: 3 });
+        this.particleLayers = [this.fire, this.smoke, this.scorches, this.groundGlow, this.shockwaves];
         this.debris = new DebrisLayer(this.scene, this.litMaterial);
         this.beams = new BeamLayer(this.scene);
 
@@ -343,24 +512,47 @@ export class Scene3D {
     }
 
     setSize(width: number, height: number): void {
+        this.applySize(width, height, this.resolution.pixelRatio(scenePixelRatio()));
+    }
+
+    private applySize(width: number, height: number, pixelRatio: number): void {
         // Browser zoom or moving the window to another monitor changes the DPR mid-game
-        const pixelRatio = scenePixelRatio();
         if (this.renderer.getPixelRatio() !== pixelRatio) this.renderer.setPixelRatio(pixelRatio);
         this.renderer.setSize(width, height, false);
         this.canvas.style.width = `${width}px`;
         this.canvas.style.height = `${height}px`;
+        this.forceDraw = true;
     }
 
     render(frame: Scene3DFrame): void {
         const { state, zoom, width, height, camera } = frame;
         if (width <= 0 || height <= 0) return;
 
-        const pixelRatio = scenePixelRatio();
+        const now = performance.now();
+        const pixelRatio = this.resolution.pixelRatio(scenePixelRatio());
         if (this.renderer.getPixelRatio() !== pixelRatio ||
             this.canvas.width !== Math.floor(width * pixelRatio) ||
             this.canvas.height !== Math.floor(height * pixelRatio)) {
-            this.setSize(width, height);
+            this.applySize(width, height, pixelRatio);
         }
+
+        // Nothing to draw when neither the game nor the view moved: effects, wrecks, blinking lights and
+        // spinning parts all advance with game ticks, so the previous frame is still exactly right. The
+        // canvas keeps showing it. Redraw anyway after a gap in render() calls (the 2D view was shown,
+        // the tab was hidden) and once a second as a safety net.
+        const changes = this.diffFrame(frame, pixelRatio);
+        const stale = now - this.lastCallAt > 100 || now - this.lastDrawAt > 1000;
+        this.lastCallAt = now;
+        if (changes === 0 && !this.forceDraw && !stale) {
+            this.drewLastCall = false;
+            return;
+        }
+        if (this.drewLastCall) this.resolution.sample(now - this.lastDrawAt);
+        this.drewLastCall = true;
+        this.lastDrawAt = now;
+        // The shadow map only depends on the casters and the shadow camera, which follows the view
+        this.renderer.shadowMap.needsUpdate = this.forceDraw || stale || (changes & (CHANGED_SIM | CHANGED_VIEW)) !== 0;
+        this.forceDraw = false;
 
         this.ensureGround(state.config.width, state.config.height);
         this.updateFog(frame);
@@ -371,10 +563,12 @@ export class Scene3D {
         const dt = Math.min(MAX_FRAME_TICKS, state.tick - this.lastTick);
         this.lastTick = state.tick;
         this.frameNo++;
-        this.visibility = this.makeVisibilityTest(frame);
+        this.updateVisibility(frame);
         this.stepEffects(dt);
         this.processEvents(frame);
         this.processDelayedBlasts(state.tick);
+        this.smokeBudget = ambientBudget(this.smoke);
+        this.fireBudget = ambientBudget(this.fire);
 
         for (const bucket of this.allBuckets) bucket.reset();
         for (const entity of frame.entities) this.addEntity(entity, state, dt);
@@ -389,13 +583,61 @@ export class Scene3D {
         this.renderer.render(this.scene, this.camera);
     }
 
+    /**
+     * What changed since the last drawn frame (CHANGED_* bits; 0 = nothing), recording the new values.
+     * The frame's entity list is rebuilt every frame by the caller, but it is derived from the state's
+     * entities, the camera, the view size and the fog grid, which are compared instead.
+     */
+    private diffFrame(frame: Scene3DFrame, pixelRatio: number): number {
+        const { state, camera, placement } = frame;
+        const d = this.drawn;
+        let changes = 0;
+        if (d.tick !== state.tick || d.entities !== state.entities || d.projectiles !== state.projectiles ||
+            d.events !== state.visualEvents || d.config !== state.config) {
+            changes |= CHANGED_SIM;
+            d.tick = state.tick;
+            d.entities = state.entities;
+            d.projectiles = state.projectiles;
+            d.events = state.visualEvents;
+            d.config = state.config;
+        }
+        if (d.x !== camera.x || d.y !== camera.y || d.zoom !== frame.zoom || d.width !== frame.width || d.height !== frame.height) {
+            changes |= CHANGED_VIEW;
+            d.x = camera.x;
+            d.y = camera.y;
+            d.zoom = frame.zoom;
+            d.width = frame.width;
+            d.height = frame.height;
+        }
+        // The fog grid is mutated in place, but the fog record is replaced whenever it changes
+        if (d.pixelRatio !== pixelRatio || d.fog !== state.fogOfWar || d.fogGrid !== frame.fogGrid || d.player !== frame.localPlayerId) {
+            changes |= CHANGED_OTHER;
+            d.pixelRatio = pixelRatio;
+            d.fog = state.fogOfWar;
+            d.fogGrid = frame.fogGrid;
+            d.player = frame.localPlayerId;
+        }
+        const ghost = placement !== null;
+        if (d.ghost !== ghost || (placement && (d.ghostKey !== placement.key || d.ghostX !== placement.x ||
+            d.ghostY !== placement.y || d.ghostValid !== placement.valid))) {
+            changes |= CHANGED_OTHER;
+            d.ghost = ghost;
+            d.ghostKey = placement?.key ?? '';
+            d.ghostX = placement?.x ?? NaN;
+            d.ghostY = placement?.y ?? NaN;
+            d.ghostValid = placement?.valid ?? false;
+        }
+        return changes;
+    }
+
     dispose(): void {
-        for (const layer of [this.fire, this.smoke, this.scorches, this.groundGlow, this.shockwaves]) layer.dispose(this.scene);
+        for (const layer of this.particleLayers) layer.dispose(this.scene);
         this.debris.dispose(this.scene);
         this.beams.dispose(this.scene);
         for (const texture of this.effectTextures) texture.dispose();
         for (const bucket of this.allBuckets) bucket.dispose();
         for (const geometry of this.geometries) geometry.dispose();
+        for (const material of [this.litMaterial, this.glowMaterial, this.teamLitMaterial, this.teamGlowMaterial]) material.dispose();
         this.groundTexture?.dispose();
         this.fogTexture?.dispose();
         this.renderer.dispose();
@@ -429,20 +671,24 @@ export class Scene3D {
         const margin = 80;
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         const corner = this.vPos;
-        for (const sx of [-1, 1]) {
-            for (const sz of [-1, 1]) {
-                for (const y of [0, MAX_CASTER_HEIGHT]) {
-                    corner.set(cx + sx * (halfW + margin), y, cz + sz * (halfH + margin));
-                    corner.applyMatrix4(shadowCamera.matrixWorldInverse);
-                    minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
-                    minY = Math.min(minY, corner.y); maxY = Math.max(maxY, corner.y);
-                }
-            }
+        for (let i = 0; i < 8; i++) {
+            const sx = i & 1 ? 1 : -1, sz = i & 2 ? 1 : -1, y = i & 4 ? MAX_CASTER_HEIGHT : 0;
+            corner.set(cx + sx * (halfW + margin), y, cz + sz * (halfH + margin));
+            corner.applyMatrix4(shadowCamera.matrixWorldInverse);
+            minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
+            minY = Math.min(minY, corner.y); maxY = Math.max(maxY, corner.y);
         }
-        shadowCamera.left = minX;
-        shadowCamera.right = maxX;
-        shadowCamera.bottom = minY;
-        shadowCamera.top = maxY;
+
+        // Snap the frustum to whole shadow texels of a grid fixed in the world (anchored at the world
+        // origin's light-space position), so shadow edges don't crawl and shimmer as the camera scrolls.
+        // One extra texel of size keeps the snapped frustum covering the fitted one.
+        const origin = corner.set(0, 0, 0).applyMatrix4(shadowCamera.matrixWorldInverse);
+        const texelX = (maxX - minX) / (SHADOW_MAP_SIZE - 1);
+        const texelY = (maxY - minY) / (SHADOW_MAP_SIZE - 1);
+        shadowCamera.left = origin.x + Math.floor((minX - origin.x) / texelX) * texelX;
+        shadowCamera.right = shadowCamera.left + texelX * SHADOW_MAP_SIZE;
+        shadowCamera.bottom = origin.y + Math.floor((minY - origin.y) / texelY) * texelY;
+        shadowCamera.top = shadowCamera.bottom + texelY * SHADOW_MAP_SIZE;
         shadowCamera.updateProjectionMatrix();
     }
 
@@ -554,36 +800,40 @@ export class Scene3D {
     // Entities
     // -----------------------------------------------------------------------------------------
 
-    private getModelBuckets(key: string, owner: number): ModelBuckets {
-        let byOwner = this.models.get(key);
-        if (!byOwner) {
-            byOwner = [];
-            this.models.set(key, byOwner);
-        }
-        const slot = owner + 1;
-        let entry = byOwner[slot];
+    private getModelBuckets(key: string): ModelBuckets {
+        let entry = this.models.get(key);
         if (!entry) {
             const def = getModelDef(key);
-            const team = new THREE.Color(owner >= 0 ? (PLAYER_COLORS[owner] ?? '#888888') : NEUTRAL_COLOR);
             const buckets = def.parts.map(part => {
-                const geometry = part.shape.realize(team);
+                const geometry = part.shape.realizeTeamless();
                 this.geometries.push(geometry);
                 const isGlow = part.material === 'glow';
-                const bucket = new InstanceBucket(this.scene, geometry, isGlow ? this.glowMaterial : this.litMaterial, !isGlow);
+                const bucket = new InstanceBucket(this.scene, geometry, isGlow ? this.teamGlowMaterial : this.teamLitMaterial, !isGlow, true);
                 this.allBuckets.push(bucket);
                 return bucket;
             });
             entry = { def, buckets };
-            byOwner[slot] = entry;
+            this.models.set(key, entry);
         }
         return entry;
     }
 
+    private teamColor(owner: number): THREE.Color {
+        const slot = owner + 1;
+        let color = this.teamColors[slot];
+        if (!color) {
+            color = new THREE.Color(owner >= 0 ? (PLAYER_COLORS[owner] ?? '#888888') : NEUTRAL_COLOR);
+            this.teamColors[slot] = color;
+        }
+        return color;
+    }
+
     /** Writes every part of a model for one instance. `bodyMatrix` places the model origin. */
     private pushModel(
-        entry: ModelBuckets, bodyMatrix: THREE.Matrix4, bodyYaw: number, aimYaw: number, spinPhase: number,
+        entry: ModelBuckets, owner: number, bodyMatrix: THREE.Matrix4, bodyYaw: number, aimYaw: number, spinPhase: number,
         tint: number, tintG = tint, tintB = tint, anim: PartAnim = STILL
     ): void {
+        const team = this.teamColor(owner);
         const { def, buckets } = entry;
         for (let i = 0; i < def.parts.length; i++) {
             const part = def.parts[i];
@@ -611,7 +861,7 @@ export class Scene3D {
                 this.mLocal.makeTranslation(-kick, 0, 0);
                 matrix = this.mOut.multiplyMatrices(bodyMatrix, this.mLocal);
             }
-            buckets[i].push(matrix, tint, tintG, tintB);
+            buckets[i].push(matrix, tint, tintG, tintB, team);
         }
     }
 
@@ -663,7 +913,7 @@ export class Scene3D {
         this.qRot.setFromAxisAngle(this.yAxis, yaw);
         this.vScale.setScalar(scale);
         this.mBody.compose(this.vPos, this.qRot, this.vScale);
-        this.pushModel(this.getModelBuckets(key, entity.owner), this.mBody, yaw, yaw, state.tick + (hash % 97), 1);
+        this.pushModel(this.getModelBuckets(key), entity.owner, this.mBody, yaw, yaw, state.tick + (hash % 97), 1);
     }
 
     /** Units and buildings: animated chassis, turrets, recoil, ammo, exhaust and damage smoke. */
@@ -675,7 +925,7 @@ export class Scene3D {
         const combat = entity.combat;
         const flash = (combat?.flash ?? 0) > 0 ? FLASH_TINT : 1;
         const altitude = getAltitude(entity);
-        const entry = this.getModelBuckets(entity.key, entity.owner);
+        const entry = this.getModelBuckets(entity.key);
 
         let yaw = 0;
         let aimYaw = 0;
@@ -702,7 +952,7 @@ export class Scene3D {
         anim.loaded = this.loadedSlots(entity, vs, tick);
         anim.tick = tick;
         anim.wreck = false;
-        this.pushModel(entry, this.mBody, yaw, aimYaw, tick + (this.hashId(entity.id) % 97), flash, flash, flash, anim);
+        this.pushModel(entry, entity.owner, this.mBody, yaw, aimYaw, tick + (this.hashId(entity.id) % 97), flash, flash, flash, anim);
 
         if (dt > 0) {
             this.emitFromModel(entry.def, vs, dt);
@@ -834,14 +1084,14 @@ export class Scene3D {
             this.qRot.setFromAxisAngle(this.yAxis, yaw);
             this.vScale.setScalar(0.75);
             this.mBody.compose(this.vPos, this.qRot, this.vScale);
-            const entry = this.getModelBuckets('harrier', harrier.owner);
+            const entry = this.getModelBuckets('harrier');
             const anim = this.anim;
             anim.recoil = 0;
             anim.loaded = (1 << harrier.airUnit.ammo) - 1;
             anim.tick = state.tick;
             anim.wreck = false;
-            if (reloading) this.pushModel(entry, this.mBody, yaw, yaw, 0, 1.6, 0.55, 0.55, anim);
-            else this.pushModel(entry, this.mBody, yaw, yaw, 0, 1, 1, 1, anim);
+            if (reloading) this.pushModel(entry, harrier.owner, this.mBody, yaw, yaw, 0, 1.6, 0.55, 0.55, anim);
+            else this.pushModel(entry, harrier.owner, this.mBody, yaw, yaw, 0, 1, 1, 1, anim);
         }
     }
 
@@ -900,8 +1150,11 @@ export class Scene3D {
         const { state } = frame;
         const events = state.visualEvents;
         if (events) {
-            for (const event of events) {
-                if (event.tick <= this.lastEventTick) continue;
+            // Events are appended in tick order and kept for a while: only the tail is new
+            let first = events.length;
+            while (first > 0 && events[first - 1].tick > this.lastEventTick) first--;
+            for (let i = first; i < events.length; i++) {
+                const event = events[i];
                 if (event.kind === 'fire') this.onFire(event, state);
                 else if (event.kind === 'impact') this.onImpact(event);
                 else if (event.kind === 'destroyed') this.onDestroyed(event, state.tick);
@@ -1107,12 +1360,17 @@ export class Scene3D {
     }
 
     private processDelayedBlasts(tick: number): void {
-        if (this.delayed.length === 0) return;
-        this.delayed = this.delayed.filter(blast => {
-            if (blast.at > tick) return true;
-            if (this.visibility(blast.x, blast.z)) this.explosion(blast.x, blast.y, blast.z, blast.size, blast.y < 10);
-            return false;
-        });
+        const delayed = this.delayed;
+        let kept = 0;
+        for (let i = 0; i < delayed.length; i++) {
+            const blast = delayed[i];
+            if (blast.at > tick) {
+                delayed[kept++] = blast;
+            } else if (this.visibility(blast.x, blast.z)) {
+                this.explosion(blast.x, blast.y, blast.z, blast.size, blast.y < 10);
+            }
+        }
+        delayed.length = kept;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -1150,18 +1408,18 @@ export class Scene3D {
             const scaleY = w.building ? 1 - 0.68 * Math.min(1, age / 45) : 1;
             this.composeBody(w.x, w.altitude - sink * w.height, w.z, w.yaw, w.pitch, w.roll, this.mBody, scaleY);
             const fade = 1 - sink * 0.5;
-            this.pushModel(this.getModelBuckets(w.key, w.owner), this.mBody, w.yaw, w.aimYaw, 0,
+            this.pushModel(this.getModelBuckets(w.key), w.owner, this.mBody, w.yaw, w.aimYaw, 0,
                 WRECK_TINT[0] * fade, WRECK_TINT[1] * fade, WRECK_TINT[2] * fade, anim);
 
             if (dt > 0) {
                 const heat = 1 - age / w.life;
                 const top = w.altitude + (w.building ? 10 : 7);
                 const spread = w.building ? w.radius * 0.6 : 3;
-                for (let n = count((w.building ? 0.45 : 0.16) * heat * dt); n > 0; n--) {
+                for (let n = count((w.building ? 0.45 : 0.16) * heat * dt * this.smokeBudget); n > 0; n--) {
                     this.smokePuff(w.x + rand(-spread, spread), top, w.z + rand(-spread, spread), 4, w.building ? 22 : 13, rand(120, 220), 0.5, 0.16, 0, 0, 0.3);
                 }
                 if (age < w.life * 0.45) {
-                    for (let n = count((w.building ? 0.4 : 0.18) * dt); n > 0; n--) {
+                    for (let n = count((w.building ? 0.4 : 0.18) * dt * this.fireBudget); n > 0; n--) {
                         this.fire.spawn({
                             x: w.x + rand(-spread, spread), y: top - 2, z: w.z + rand(-spread, spread), vy: rand(0.15, 0.4),
                             life: rand(12, 22), size: rand(2.5, 4.5), endSize: 1, r: 1, g: 0.7, b: 0.25, r1: 0.8, g1: 0.15, b1: 0.02, alpha: 0.85, fadeIn: 0.2,
@@ -1187,7 +1445,7 @@ export class Scene3D {
             } else {
                 rate = emitter.kind === 'steam' ? 0.07 : 0.05;
             }
-            for (let n = count(rate * dt); n > 0; n--) {
+            for (let n = count(rate * dt * this.smokeBudget); n > 0; n--) {
                 const p = this.vTmp.set(emitter.pos[0], emitter.pos[1], emitter.pos[2]).applyMatrix4(this.mBody);
                 if (emitter.kind === 'exhaust') this.smokePuff(p.x, p.y, p.z, 1.5, 5, rand(30, 50), 0.3, 0.35, 0, 0, 0.18);
                 else if (emitter.kind === 'steam') this.smokePuff(p.x, p.y, p.z, 5, 18, rand(140, 220), 0.38, 0.9, 0, 0, 0.35);
@@ -1205,12 +1463,12 @@ export class Scene3D {
         const spreadZ = building ? entity.h * 0.3 : 3;
         const top = altitude + getModelHeight(entity) * (building ? 0.6 : 0.8);
         const severity = (0.5 - ratio) * 2;
-        for (let n = count((building ? 0.5 : 0.22) * severity * dt); n > 0; n--) {
+        for (let n = count((building ? 0.5 : 0.22) * severity * dt * this.smokeBudget); n > 0; n--) {
             this.smokePuff(entity.pos.x + rand(-spreadX, spreadX), top, entity.pos.y + rand(-spreadZ, spreadZ),
                 3, building ? 16 : 10, rand(90, 160), 0.45, 0.18, 0, 0, 0.3);
         }
         if (ratio < 0.25) {
-            for (let n = count((building ? 0.35 : 0.2) * dt); n > 0; n--) {
+            for (let n = count((building ? 0.35 : 0.2) * dt * this.fireBudget); n > 0; n--) {
                 this.fire.spawn({
                     x: entity.pos.x + rand(-spreadX, spreadX), y: top - 1, z: entity.pos.y + rand(-spreadZ, spreadZ), vy: rand(0.12, 0.3),
                     life: rand(10, 18), size: rand(2, 4), endSize: 1, r: 1, g: 0.72, b: 0.28, r1: 0.85, g1: 0.18, b1: 0.02, alpha: 0.85, fadeIn: 0.2,
@@ -1315,7 +1573,7 @@ export class Scene3D {
             }
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             this.geometries.push(geometry);
-            const bucket = new InstanceBucket(this.scene, geometry, glow ? this.glowMaterial : this.litMaterial, !glow, 64);
+            const bucket = new InstanceBucket(this.scene, geometry, glow ? this.glowMaterial : this.litMaterial, !glow, false, 64);
             this.allBuckets.push(bucket);
             this.projectileBuckets.set(name, bucket);
         };
@@ -1339,7 +1597,7 @@ export class Scene3D {
     private addProjectiles(frame: Scene3DFrame, dt: number): void {
         const { state } = frame;
         const entities = state.entities;
-        const view = this.viewBounds(frame, 200);
+        const view = this.projectileView;
 
         let segmentCount = 0;
         for (const proj of state.projectiles) {
@@ -1408,12 +1666,21 @@ export class Scene3D {
         }
         const geometry = this.trails.geometry;
         geometry.setDrawRange(0, segment * 2);
-        (geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-        (geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+        if (segment > 0) {
+            // Only the segments drawn this frame are uploaded
+            markRange(geometry.getAttribute('position') as THREE.BufferAttribute, 0, segment * 2);
+            markRange(geometry.getAttribute('color') as THREE.BufferAttribute, 0, segment * 2);
+        }
         this.trails.visible = segment > 0;
 
-        for (const [key, shot] of this.shots) {
-            if (shot.frame !== this.frameNo) this.shots.delete(key);
+        // Forget shots that are no longer in flight (or no longer visible)
+        for (const [ownerId, list] of this.shots) {
+            let kept = 0;
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].frame === this.frameNo) list[kept++] = list[i];
+            }
+            if (kept === 0) this.shots.delete(ownerId);
+            else list.length = kept;
         }
         for (const [id, muzzle] of this.pendingMuzzles) {
             if (state.tick - muzzle.tick > 20) this.pendingMuzzles.delete(id);
@@ -1427,8 +1694,22 @@ export class Scene3D {
 
     /** Muzzle offset and loft of a projectile, worked out the first time it is drawn. */
     private shotVisual(proj: Projectile, target: Entity | undefined): ShotVisual {
-        const key = `${proj.ownerId}|${proj.startPos.x}|${proj.startPos.y}|${proj.targetId}`;
-        let shot = this.shots.get(key);
+        // A shot is identified by its shooter, where it was fired from and what at
+        const startX = proj.startPos.x, startY = proj.startPos.y;
+        let list = this.shots.get(proj.ownerId);
+        let shot: ShotVisual | undefined;
+        if (list) {
+            for (let i = 0; i < list.length; i++) {
+                const s = list[i];
+                if (s.startX === startX && s.startY === startY && s.targetId === proj.targetId) {
+                    shot = s;
+                    break;
+                }
+            }
+        } else {
+            list = [];
+            this.shots.set(proj.ownerId, list);
+        }
         if (!shot) {
             const muzzle = this.pendingMuzzles.get(proj.ownerId);
             this.pendingMuzzles.delete(proj.ownerId);
@@ -1437,6 +1718,7 @@ export class Scene3D {
             // Guided missiles and rockets loft over the battlefield toward ground targets
             const loft = !groundTarget ? 0 : proj.weaponType === 'missile' ? totalDist * 0.2 : proj.archetype === 'rocket' ? totalDist * 0.05 : 0;
             shot = {
+                startX, startY, targetId: proj.targetId,
                 frame: this.frameNo,
                 dx: muzzle ? muzzle.x - proj.startPos.x : 0,
                 dz: muzzle ? muzzle.z - proj.startPos.y : 0,
@@ -1444,7 +1726,7 @@ export class Scene3D {
                 loft,
                 lastX: NaN, lastY: NaN, lastZ: NaN,
             };
-            this.shots.set(key, shot);
+            list.push(shot);
         }
         shot.frame = this.frameNo;
         return shot;
@@ -1494,6 +1776,8 @@ export class Scene3D {
         this.trailPositions = new Float32Array(capacity * 6);
         this.trailColors = new Float32Array(capacity * 8);
         const geometry = this.trails.geometry;
+        // Free the old attributes' GPU buffers before they are replaced
+        geometry.dispose();
         geometry.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
         geometry.setAttribute('color', new THREE.BufferAttribute(this.trailColors, 4).setUsage(THREE.DynamicDrawUsage));
     }
@@ -1503,7 +1787,7 @@ export class Scene3D {
     // -----------------------------------------------------------------------------------------
 
     private resetEffects(tick: number): void {
-        for (const layer of [this.fire, this.smoke, this.scorches, this.groundGlow, this.shockwaves]) layer.clear();
+        for (const layer of this.particleLayers) layer.clear();
         this.debris.clear();
         this.beams.clear();
         this.visuals.clear();
@@ -1517,7 +1801,7 @@ export class Scene3D {
 
     private stepEffects(dt: number): void {
         if (dt <= 0) return;
-        for (const layer of [this.fire, this.smoke, this.scorches, this.groundGlow, this.shockwaves]) layer.update(dt);
+        for (const layer of this.particleLayers) layer.update(dt);
         this.debris.update(dt);
         this.beams.update(dt);
     }
@@ -1541,19 +1825,13 @@ export class Scene3D {
         }
     }
 
-    /** In (or near) the view and not hidden by the local player's fog of war. */
-    private makeVisibilityTest(frame: Scene3DFrame): (x: number, z: number) => boolean {
-        const view = this.viewBounds(frame, 150);
-        const fogGrid = frame.fogGrid;
-        const gridW = Math.ceil(frame.state.config.width / TILE_SIZE);
-        const gridH = Math.ceil(frame.state.config.height / TILE_SIZE);
-        return (x, z) => {
-            if (x < view.left || x > view.right || z < view.top || z > view.bottom) return false;
-            if (!fogGrid) return true;
-            const tx = Math.floor(x / TILE_SIZE), tz = Math.floor(z / TILE_SIZE);
-            if (tx < 0 || tz < 0 || tx >= gridW || tz >= gridH) return true;
-            return fogGrid[tz * gridW + tx] !== 0;
-        };
+    /** Refreshes the inputs of `visibility` (and the projectile view bounds) for this frame. */
+    private updateVisibility(frame: Scene3DFrame): void {
+        this.viewBounds(frame, 150, this.visibleView);
+        this.viewBounds(frame, 200, this.projectileView);
+        this.visibleFog = frame.fogGrid;
+        this.visibleGridW = Math.ceil(frame.state.config.width / TILE_SIZE);
+        this.visibleGridH = Math.ceil(frame.state.config.height / TILE_SIZE);
     }
 
     private parseColor(style: string): THREE.Color {
@@ -1565,16 +1843,14 @@ export class Scene3D {
         return color;
     }
 
-    private viewBounds(frame: Scene3DFrame, marginPx: number): { left: number; right: number; top: number; bottom: number } {
+    private viewBounds(frame: Scene3DFrame, marginPx: number, out: ViewBounds): void {
         const { camera, zoom, width, height } = frame;
         const margin = marginPx / zoom;
-        return {
-            left: camera.x - margin,
-            right: camera.x + width / zoom + margin,
-            top: camera.y - margin,
-            // Things south of the view can still poke up into it
-            bottom: camera.y + height / zoom + margin + 80,
-        };
+        out.left = camera.x - margin;
+        out.right = camera.x + width / zoom + margin;
+        out.top = camera.y - margin;
+        // Things south of the view can still poke up into it
+        out.bottom = camera.y + height / zoom + margin + 80;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -1639,6 +1915,11 @@ function rand(min: number, max: number): number {
 /** Whole number of spawns for an expected (fractional) count, so low rates still fire now and then. */
 function count(expected: number): number {
     return Math.floor(expected + Math.random());
+}
+
+/** Rate multiplier for ambient emitters into a particle layer: thins out as the layer fills. */
+function ambientBudget(layer: ParticleLayer): number {
+    return Math.max(0.25, 1 - layer.size / layer.capacity);
 }
 
 function clamp(value: number, limit: number): number {
