@@ -8,6 +8,7 @@ import { moveToward, trackMoveProgress, isMoveHopeless } from './movement';
 import { isAlly, isEnemy } from '../teams';
 import { isAimedAt } from '../inertia';
 import { getTransportCapacity, getTransportPassengers, isGarrisonableTransport, isInfantryUnit, isTransportedUnit } from '../transport';
+import type { StuckMover } from '../perf';
 
 // Maximum distance a unit will pursue a target when on defensive stance or attack-move
 const DEFENSIVE_PURSUIT_RANGE = 400;
@@ -68,7 +69,8 @@ export function updateCombatUnitBehavior(
     combatUnit: CombatUnit,
     allEntities: Record<EntityId, Entity>,
     entityList: Entity[],
-    state?: GameState
+    state?: GameState,
+    stuckMoversByOwner?: ReadonlyMap<number, readonly StuckMover[]>
 ): { entity: CombatUnit, projectile?: Projectile | null } {
 
     let nextEntity: CombatUnit = { ...combatUnit };
@@ -233,7 +235,7 @@ export function updateCombatUnitBehavior(
         };
     } else {
         // Unit is truly idle - check if we're blocking a moving ally and should scatter
-        const scatterResult = checkAndScatterForAlly(nextEntity, spatialGrid);
+        const scatterResult = checkAndScatterForAlly(nextEntity, spatialGrid, stuckMoversByOwner);
         if (scatterResult) {
             nextEntity = scatterResult;
         }
@@ -352,6 +354,8 @@ function isClearOfObstacles(p: Vector, radius: number, spatialGrid: ReturnType<t
     return clear;
 }
 
+const SCATTER_PREFILTER_DIST_SQ = 46 * 46;
+
 /**
  * Check if this idle unit is blocking a moving ally that is STUCK, and if so, scatter out of the way.
  * Only triggers when the moving ally is actually stuck - not just passing by.
@@ -359,11 +363,29 @@ function isClearOfObstacles(p: Vector, radius: number, spatialGrid: ReturnType<t
  */
 function checkAndScatterForAlly(
     unit: CombatUnit,
-    spatialGrid: ReturnType<typeof getSpatialGrid>
+    spatialGrid: ReturnType<typeof getSpatialGrid>,
+    stuckMoversByOwner?: ReadonlyMap<number, readonly StuckMover[]>
 ): CombatUnit | null {
     // Only scatter if truly idle - no movement target, no combat target
     if (unit.movement.moveTarget || unit.combat.targetId) {
         return null;
+    }
+
+    // Fast reject: only a stuck same-owner mover within 45px can make us scatter. The per-tick
+    // list is a superset of what the spatial query below can find (1px margin for rounding).
+    if (stuckMoversByOwner) {
+        const movers = stuckMoversByOwner.get(unit.owner);
+        if (!movers) return null;
+        const ux = unit.pos.x, uy = unit.pos.y;
+        let anyClose = false;
+        for (const m of movers) {
+            const dx = ux - m.x, dy = uy - m.y;
+            if (dx * dx + dy * dy <= SCATTER_PREFILTER_DIST_SQ) {
+                anyClose = true;
+                break;
+            }
+        }
+        if (!anyClose) return null;
     }
 
     // Find nearby moving allies (visitor form avoids allocating a candidate array per idle unit per tick)

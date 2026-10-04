@@ -191,3 +191,21 @@ export function getEnemiesOf(cache: EntityCache, playerId: number, state?: GameS
     }
     return enemies;
 }
+
+/** A ground unit with a move order that has been stuck for a while (see UnitTickContext). */
+export interface StuckMover {
+    readonly owner: number;
+    readonly x: number;
+    readonly y: number;
+}
+
+/**
+ * Per-tick facts computed once in updateEntities (from the same entity snapshot the spatial grid
+ * was built from) so per-unit logic can skip searches that cannot succeed.
+ */
+export interface UnitTickContext {
+    /** Owners that have at least one live refinery. */
+    readonly refineryOwners: ReadonlySet<number>;
+    /** Live, non-transported units with a moveTarget and stuckTimer >= 15, by owner. */
+    readonly stuckMoversByOwner: ReadonlyMap<number, readonly StuckMover[]>;
+}

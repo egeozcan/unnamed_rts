@@ -12,6 +12,7 @@ import { updateCombatUnitBehavior } from './combat';
 import { updateDemoTruckBehavior, setDetonationTarget } from './demo_truck';
 import { moveToward, trackMoveProgress, isMoveHopeless } from './movement';
 import { getSpatialGrid } from '../spatial';
+import type { UnitTickContext } from '../perf';
 
 // Re-export for backwards compatibility
 export { moveToward };
@@ -807,7 +808,8 @@ export function updateUnit(
     mapConfig: { width: number, height: number },
     currentTick: number,
     harvesterCounts?: Record<EntityId, number>,
-    state?: GameState
+    state?: GameState,
+    tickContext?: UnitTickContext
 ): { entity: UnitEntity, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
 
     let nextEntity = entity;
@@ -846,7 +848,8 @@ export function updateUnit(
             mapConfig,
             currentTick,
             harvesterCounts,
-            isPlayerOrder
+            isPlayerOrder,
+            tickContext?.refineryOwners
         );
 
         // Handle harvester attacking with explicit targetId (rare case - AI commanded attack)
@@ -1021,7 +1024,8 @@ export function updateUnit(
             nextEntity as CombatUnit,
             allEntities,
             entityList,
-            state
+            state,
+            tickContext?.stuckMoversByOwner
         );
         return { entity: result.entity, projectile: result.projectile, creditsEarned: 0, resourceDamage: null };
     }

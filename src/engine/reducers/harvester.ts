@@ -2,7 +2,7 @@ import {
     type EntityId, type Entity, Vector, type HarvesterUnit, type Projectile
 } from '../types';
 import { getRuleData, createProjectile } from './helpers';
-import { getSpatialGrid } from '../spatial';
+import { getSpatialGrid, ownerBit } from '../spatial';
 import { moveToward } from './movement';
 
 /**
@@ -18,7 +18,8 @@ export function updateHarvesterBehavior(
     mapConfig: { width: number, height: number },
     currentTick: number,
     harvesterCounts?: Record<EntityId, number>,
-    keepMoveOrderWhenFull = false
+    keepMoveOrderWhenFull = false,
+    refineryOwners?: ReadonlySet<number>
 ): { entity: HarvesterUnit, projectile?: Projectile | null, creditsEarned: number, resourceDamage?: { id: string, amount: number } | null } {
 
     let nextEntity: HarvesterUnit = { ...harvester };
@@ -66,7 +67,7 @@ export function updateHarvesterBehavior(
     }
     // 1. If full, return to refinery
     else if (nextEntity.harvester.cargo >= capacity) {
-        nextEntity = handleFullCargo(nextEntity, allEntities, entityList, mapConfig, spatialGrid);
+        nextEntity = handleFullCargo(nextEntity, allEntities, entityList, mapConfig, spatialGrid, refineryOwners);
         if (nextEntity.harvester.cargo === 0) {
             creditsEarned = 500;
             // Unloaded: back to automatic harvesting, even after a player's move order
@@ -77,7 +78,7 @@ export function updateHarvesterBehavior(
     }
     // 2. If valid resource target, go gather
     else {
-        const result = handleGathering(nextEntity, allEntities, entityList, currentTick, harvesterCounts, spatialGrid);
+        const result = handleGathering(nextEntity, allEntities, entityList, currentTick, harvesterCounts, spatialGrid, refineryOwners);
         nextEntity = result.entity;
         resourceDamage = result.resourceDamage;
         creditsEarned = result.creditsEarned;
@@ -94,25 +95,30 @@ function handleFullCargo(
     allEntities: Record<EntityId, Entity>,
     entityList: Entity[],
     mapConfig: { width: number, height: number },
-    spatialGrid: ReturnType<typeof getSpatialGrid>
+    spatialGrid: ReturnType<typeof getSpatialGrid>,
+    refineryOwners?: ReadonlySet<number>
 ): HarvesterUnit {
     let nextHarvester = {
         ...harvester,
         harvester: { ...harvester.harvester, resourceTargetId: null }
     };
 
-    if (!nextHarvester.harvester.baseTargetId) {
-        // Find nearest refinery using spatial query
+    // Skip the search entirely when the owner has no live refinery (it would scan the whole map)
+    if (!nextHarvester.harvester.baseTargetId && (!refineryOwners || refineryOwners.has(nextHarvester.owner))) {
+        // Find nearest refinery using spatial query (cells without our entities can't match)
         const searchRadius = 1500;
+        const otherOwnersMask = ~ownerBit(nextHarvester.owner);
         let bestRef = spatialGrid.findNearest(
             nextHarvester.pos.x, nextHarvester.pos.y, searchRadius,
-            (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead
+            (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead,
+            otherOwnersMask
         );
         // Fallback to wider search if nothing nearby
         if (!bestRef) {
             bestRef = spatialGrid.findNearest(
                 nextHarvester.pos.x, nextHarvester.pos.y, 5000,
-                (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead
+                (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead,
+                otherOwnersMask
             );
         }
         // Final fallback: search all entities if spatial query still fails
@@ -236,7 +242,8 @@ function handleGathering(
     entityList: Entity[],
     currentTick: number,
     harvesterCounts?: Record<EntityId, number>,
-    spatialGrid?: ReturnType<typeof getSpatialGrid>
+    spatialGrid?: ReturnType<typeof getSpatialGrid>,
+    refineryOwners?: ReadonlySet<number>
 ): { entity: HarvesterUnit, resourceDamage: { id: string, amount: number } | null, creditsEarned: number } {
 
     let nextHarvester = harvester;
@@ -300,9 +307,10 @@ function handleGathering(
         const hasSignificantCargo = nextHarvester.harvester.cargo > 50;
         const notCurrentlyMoving = !nextHarvester.movement.moveTarget;
         if (hasSignificantCargo && notCurrentlyMoving && !isManualMode && !nextHarvester.harvester.baseTargetId) {
-            const bestRef = grid.findNearest(
+            const bestRef = refineryOwners && !refineryOwners.has(nextHarvester.owner) ? null : grid.findNearest(
                 nextHarvester.pos.x, nextHarvester.pos.y, 5000,
-                (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead
+                (e) => e.owner === nextHarvester.owner && e.key === 'refinery' && !e.dead,
+                ~ownerBit(nextHarvester.owner)
             );
             if (bestRef) {
                 nextHarvester = {

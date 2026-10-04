@@ -6,7 +6,7 @@ import { RULES, isUnitData } from '../../data/schemas/index';
 import { getRuleData, killPlayerEntities } from './helpers';
 import { setPathCacheTick, refreshCollisionGrid, syncGridsToWorker, spawnExplosionParticles } from '../utils';
 import { rebuildSpatialGrid, getSpatialGrid } from '../spatial';
-import { createEntityCache } from '../perf';
+import { createEntityCache, type StuckMover, type UnitTickContext } from '../perf';
 import { updateProduction } from './production';
 import { updateWells, updateBuilding } from './buildings';
 import { updateUnit } from './units';
@@ -699,14 +699,31 @@ export function updateEntities(
 
     // Pre-calculate harvester counts per resource to avoid O(N^2) loop in updateUnit
     const harvesterCounts: Record<string, number> = {};
+    // Owners with a live refinery: full harvesters of other owners have nowhere to unload,
+    // so they can skip the (map-wide) refinery search.
+    const refineryOwners = new Set<number>();
+    // Stuck movers (what idle units scatter for), matching what the spatial grid would yield
+    const stuckMoversByOwner = new Map<number, StuckMover[]>();
     for (const ent of entityList) {
-        if (ent.type === 'UNIT' && ent.key === 'harvester' && !ent.dead) {
+        if (ent.dead) continue;
+        if (ent.key === 'refinery') refineryOwners.add(ent.owner);
+        if (ent.type === 'UNIT' && ent.movement.moveTarget && (ent.movement.stuckTimer || 0) >= 15 && !isTransportedUnit(ent)) {
+            let list = stuckMoversByOwner.get(ent.owner);
+            if (!list) {
+                list = [];
+                stuckMoversByOwner.set(ent.owner, list);
+            }
+            list.push({ owner: ent.owner, x: ent.pos.x, y: ent.pos.y });
+        }
+        if (ent.type === 'UNIT' && ent.key === 'harvester') {
             const h = ent as HarvesterUnit;
             if (h.harvester.resourceTargetId) {
                 harvesterCounts[h.harvester.resourceTargetId] = (harvesterCounts[h.harvester.resourceTargetId] || 0) + 1;
             }
         }
     }
+
+    const tickContext: UnitTickContext = { refineryOwners, stuckMoversByOwner };
 
     for (const id in nextEntities) {
         const entity = nextEntities[id];
@@ -753,7 +770,7 @@ export function updateEntities(
                     }
                 }
             } else {
-                const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts, state);
+                const res = updateUnit(entity, state.entities, entityList, state.config, state.tick, harvesterCounts, state, tickContext);
                 nextEntities[id] = res.entity;
                 if (res.projectile) newProjectiles.push(res.projectile);
                 if (res.creditsEarned > 0) {
