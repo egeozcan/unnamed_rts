@@ -423,6 +423,8 @@ function showTooltipForButton(btn: HTMLElement, key: string, category: string) {
 let lastTooltipHtml = '';
 let lastTooltipW = 220;
 let lastTooltipH = 120;
+// The tooltip wraps against the viewport width (max-width), so a resize invalidates its size
+if (typeof window !== 'undefined') window.addEventListener('resize', () => { lastTooltipHtml = ''; });
 
 // Button under the pointer, so its tooltip (busy %, pads, limits) refreshes with production
 let hoveredBuildBtn: { btn: HTMLElement; key: string; category: string } | null = null;
