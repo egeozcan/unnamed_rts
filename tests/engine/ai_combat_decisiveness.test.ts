@@ -58,7 +58,7 @@ function createEntity(
         });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
             targetId: overrides?.targetId, lastAttackerId: overrides?.lastAttackerId,
             moveTarget: overrides?.moveTarget
@@ -105,17 +105,21 @@ describe('AI Combat Decisiveness', () => {
                 target: null,
                 rallyPoint: new Vector(1500, 1500),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: state.tick,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);
 
             // Without a service depot, damaged units should attack, not retreat
             const attackAction = actions.find(a => a.type === 'COMMAND_ATTACK');
-            const retreatMoves = actions.filter(a =>
-                a.type === 'COMMAND_MOVE' &&
-                a.payload.unitIds.some((id: string) => id.startsWith('tank'))
-            );
 
             // Should have attack action
             expect(attackAction).toBeDefined();

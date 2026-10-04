@@ -1,6 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, PlayerState, EntityId, AirUnit } from '../../src/engine/types';
+import { GameState, PlayerState, AirUnit, BuildingEntity } from '../../src/engine/types';
+import { INITIAL_STATE } from '../../src/engine/reducer';
 import { updateAirBase } from '../../src/engine/reducers/air_units';
 import { createEntity } from '../../src/engine/reducers/helpers';
 
@@ -9,25 +10,19 @@ describe('Harrier Docked Logic', () => {
         const playerId = 1;
 
         const state: GameState = {
+            ...INITIAL_STATE,
             tick: 100,
             entities: {},
             players: {
                 [playerId]: { id: playerId } as PlayerState
             },
-            projectiles: [],
-            particles: [],
-            camera: { x: 0, y: 0 },
-            zoom: 1,
-            selection: [],
             mode: 'game',
             running: true,
-            winner: null,
-            notification: null,
-            config: { width: 1000, height: 1000, tickRate: 60 }
-        } as GameState;
+            config: { ...INITIAL_STATE.config, width: 1000, height: 1000 }
+        };
 
         // Create Air Force Command
-        const afc = createEntity(100, 100, playerId, 'BUILDING', 'airforce_command', state);
+        const afc = createEntity(100, 100, playerId, 'BUILDING', 'airforce_command', state) as BuildingEntity;
         state.entities[afc.id] = afc;
 
         // Create damaged Harrier and dock it
@@ -79,7 +74,7 @@ describe('Harrier Docked Logic', () => {
             entities: {} as any
         }; // simplified mock
 
-        const afc = createEntity(100, 100, playerId, 'BUILDING', 'airforce_command', state as any);
+        const afc = createEntity(100, 100, playerId, 'BUILDING', 'airforce_command', state as any) as BuildingEntity;
         const slots = [...afc.airBase!.slots];
 
         // Damaged AND empty ammo

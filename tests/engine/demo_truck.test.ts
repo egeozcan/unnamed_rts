@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, Vector, DemoTruckUnit } from '../../src/engine/types';
+import { GameState, Entity, EntityId, Vector, DemoTruckUnit, Action } from '../../src/engine/types';
+
+type AttackAction = Extract<Action, { type: 'COMMAND_ATTACK' }>;
 import {
     createTestDemoTruck,
     createTestBuilding,
@@ -779,8 +781,9 @@ describe('Demo Truck', () => {
             // Should issue attack command
             expect(actions.length).toBe(1);
             expect(actions[0].type).toBe('COMMAND_ATTACK');
-            expect(actions[0].payload.unitIds).toContain('truck1');
-            expect(actions[0].payload.targetId).toBe('enemy_conyard');
+            const attack = actions[0] as AttackAction;
+            expect(attack.payload.unitIds).toContain('truck1');
+            expect(attack.payload.targetId).toBe('enemy_conyard');
         });
 
         it('should not attack low-value targets', () => {
@@ -878,7 +881,7 @@ describe('Demo Truck', () => {
 
             // Should target one of the clustered buildings (cluster bonus)
             expect(actions.length).toBe(1);
-            const targetId = actions[0].payload.targetId;
+            const targetId = (actions[0] as AttackAction).payload.targetId;
             expect(['clustered1', 'clustered2', 'clustered3']).toContain(targetId);
         });
     });

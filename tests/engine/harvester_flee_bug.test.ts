@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { handleHarvesterSafety } from '../../src/engine/ai/action_combat';
 import { createTestHarvester, createTestCombatUnit, createTestBuilding, addEntityToState } from '../../src/engine/test-utils';
-import { INITIAL_STATE } from '../../src/engine/reducer';
+import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
+import { createEmptyComposition } from '../../src/engine/ai/counters';
 import { GameState, Vector, HarvesterUnit } from '../../src/engine/types';
 import { AIPlayerState } from '../../src/engine/ai/types';
 import { createInitialHarvesterAIState } from '../../src/engine/ai/harvester/types';
@@ -11,10 +12,13 @@ describe('Harvester Flee Bug', () => {
     let aiState: AIPlayerState;
 
     beforeEach(() => {
-        state = { ...INITIAL_STATE, tick: 100 };
-        state.players = {
-            1: { credits: 5000, power: 100, powerUsed: 50, queues: {} as any },
-            2: { credits: 5000, power: 100, powerUsed: 50, queues: {} as any }
+        state = {
+            ...INITIAL_STATE,
+            tick: 100,
+            players: {
+                1: { ...createPlayerState(1, true), credits: 5000 },
+                2: { ...createPlayerState(2, true), credits: 5000 }
+            }
         };
 
         aiState = {
@@ -41,7 +45,9 @@ describe('Harvester Flee Bug', () => {
                 lastUpdate: 0,
                 unitCounts: {},
                 buildingCounts: {},
-                dominantArmor: 'mixed'
+                dominantArmor: 'mixed',
+                boomScores: {},
+                composition: createEmptyComposition()
             },
             vengeanceScores: {},
             lastCombatTick: 0,
@@ -58,15 +64,13 @@ describe('Harvester Flee Bug', () => {
             id: 'harv1',
             owner: 1,
             x: 500,
-            y: 500
-        }) as HarvesterUnit;
-
-        // Harvester is moving to ore - this is the key condition that was causing the bug
-        harvester.movement.moveTarget = new Vector(600, 600);
-
-        // Harvester is being directly attacked
-        harvester.combat.lastAttackerId = 'enemy1';
-        harvester.combat.lastDamageTick = state.tick - 5; // Recently damaged
+            y: 500,
+            // Harvester is moving to ore - this is the key condition that was causing the bug
+            moveTarget: new Vector(600, 600),
+            // Harvester is being directly attacked
+            lastAttackerId: 'enemy1',
+            lastDamageTick: state.tick - 5 // Recently damaged
+        });
 
         state = addEntityToState(state, harvester);
 
@@ -124,15 +128,13 @@ describe('Harvester Flee Bug', () => {
             id: 'harv1',
             owner: 1,
             x: 500,
-            y: 500
-        }) as HarvesterUnit;
-
-        // Harvester is moving to ore
-        harvester.movement.moveTarget = new Vector(600, 600);
-
-        // NOT being attacked - no lastAttackerId, no recent damage
-        harvester.combat.lastAttackerId = null;
-        harvester.combat.lastDamageTick = undefined;
+            y: 500,
+            // Harvester is moving to ore
+            moveTarget: new Vector(600, 600),
+            // NOT being attacked - no lastAttackerId, no recent damage
+            lastAttackerId: null,
+            lastDamageTick: undefined
+        });
 
         state = addEntityToState(state, harvester);
 
@@ -173,10 +175,9 @@ describe('Harvester Flee Bug', () => {
             id: 'harv1',
             owner: 1,
             x: 500,
-            y: 500
-        }) as HarvesterUnit;
-
-        harvester.movement.moveTarget = new Vector(600, 600);
+            y: 500,
+            moveTarget: new Vector(600, 600)
+        });
 
         state = addEntityToState(state, harvester);
 

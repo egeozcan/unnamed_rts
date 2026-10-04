@@ -45,7 +45,8 @@ describe('Oscillating Harvester Bug', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 }
             }
         };

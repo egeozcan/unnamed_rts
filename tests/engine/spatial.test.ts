@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector } from '../../src/engine/types.js';
+import { Vector, Entity } from '../../src/engine/types.js';
 import { SpatialGrid, getSpatialGrid, rebuildSpatialGrid, queryEntitiesInRadius, findNearestEnemy, findNearestResource } from '../../src/engine/spatial.js';
 
 describe('SpatialGrid', () => {
     // Minimal entity for spatial grid testing - only needs pos, id, radius, dead, owner, type
-    const createTestEntity = (id: string, x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string = 'test', radius: number = 10): Partial<import('../../src/engine/types').Entity> & { id: string } => ({
+    const createTestEntity = (id: string, x: number, y: number, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string = 'test', radius: number = 10): Entity => ({
         id, owner, type, key, dead: false,
         pos: new Vector(x, y), prevPos: new Vector(x, y),
         hp: 100, maxHp: 100, w: 20, h: 20, radius
-    } as Partial<import('../../src/engine/types').Entity> & { id: string });
+    } as unknown as Entity);
 
     describe('SpatialGrid class', () => {
         let grid: SpatialGrid;

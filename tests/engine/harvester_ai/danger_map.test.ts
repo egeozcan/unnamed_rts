@@ -17,8 +17,7 @@ import { Vector, Entity, ResourceEntity } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestCombatUnit,
-    createTestResource,
-    createTestBuilding
+    createTestResource
 } from '../../../src/engine/test-utils.js';
 
 describe('Danger Map System', () => {
@@ -480,8 +479,6 @@ describe('Danger Map System', () => {
         });
 
         it('should adapt behavior based on difficulty', () => {
-            const harvester = createTestHarvester({ x: 500, y: 500, owner: 0 });
-            const nearOre = createTestResource({ id: 'near', x: 550, y: 550 });
             const enemy = createTestCombatUnit({ owner: 1, x: 560, y: 560 });
 
             // Easy difficulty - danger map not updated

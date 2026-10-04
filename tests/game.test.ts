@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { getStartingPositions, reconstructVectors, calculatePower, generateMap } from '../src/game-utils';
-import { Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES } from '../src/engine/types';
+import { Vector, Entity, EntityId, SkirmishConfig, PLAYER_COLORS, MAP_SIZES, GameState, UnitEntity } from '../src/engine/types';
 
 describe('Game Logic', () => {
     describe('getStartingPositions', () => {
@@ -103,7 +103,7 @@ describe('Game Logic', () => {
                 },
                 running: true,
                 tick: 0
-            } as Partial<import('../src/engine/types').GameState>;
+            } as unknown as GameState; // raw deserialized JSON
 
             const result = reconstructVectors(plainState);
 
@@ -111,7 +111,7 @@ describe('Game Logic', () => {
             expect(result.entities['e1'].pos).toBeInstanceOf(Vector);
             expect(result.entities['e1'].prevPos).toBeInstanceOf(Vector);
             // For units, movement vectors are inside movement component
-            const entity = result.entities['e1'] as import('../src/engine/types').UnitEntity;
+            const entity = result.entities['e1'] as UnitEntity;
             expect(entity.movement.vel).toBeInstanceOf(Vector);
             expect(entity.movement.moveTarget).toBeInstanceOf(Vector);
             expect(entity.movement.finalDest).toBeInstanceOf(Vector);
@@ -138,11 +138,11 @@ describe('Game Logic', () => {
                         }
                     }
                 }
-            } as Partial<import('../src/engine/types').GameState>;
+            } as unknown as GameState; // raw deserialized JSON
 
             const result = reconstructVectors(plainState);
 
-            const entity = result.entities['e1'] as import('../src/engine/types').UnitEntity;
+            const entity = result.entities['e1'] as UnitEntity;
             expect(entity.movement.moveTarget).toBeNull();
             expect(entity.movement.finalDest).toBeNull();
             expect(entity.movement.unstuckDir).toBeNull();
@@ -153,7 +153,7 @@ describe('Game Logic', () => {
             const plainState = {
                 camera: { x: 500, y: 750 },
                 entities: {}
-            } as Partial<import('../src/engine/types').GameState>;
+            } as unknown as GameState; // raw deserialized JSON
 
             const result = reconstructVectors(plainState);
 

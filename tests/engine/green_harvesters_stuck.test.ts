@@ -27,7 +27,7 @@ describe('Green Harvesters Stuck', () => {
         // Harvester e_1230_49145 has full cargo but is stuck trying to reach a flee target
         // It should give up on moveTarget and go to refinery instead
         // (an AI flee order: human players' orders are kept, see ux_input_rules.test.ts)
-        let state = {
+        let state: GameState = {
             ...INITIAL_STATE,
             players: { ...INITIAL_STATE.players, 0: { ...INITIAL_STATE.players[0], isAi: true } },
             running: true,
@@ -116,7 +116,7 @@ describe('Green Harvesters Stuck', () => {
         // - All with full cargo (500)
         // - All targeting the same refinery (dock at 3310, 1195)
         // - Their paths converge to the same waypoint (3380, 1060)
-        let state = {
+        let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             entities: {} as Record<EntityId, Entity>,
@@ -245,7 +245,7 @@ describe('Green Harvesters Stuck', () => {
     it('harvesters in counter-flow traffic jam should not deadlock', () => {
         // Reproduce the actual stuck scenario: harvesters heading TO dock collide
         // with harvesters heading AWAY from dock, all through the same waypoint
-        let state = {
+        let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             entities: {} as Record<EntityId, Entity>,
@@ -417,7 +417,7 @@ describe('Green Harvesters Stuck', () => {
     it('tightly clustered harvesters with near-zero avgVel should still make progress', () => {
         // Reproduce exact scenario from JSON: 4 harvesters in ~30 pixel area,
         // all with avgVel near-zero, identical paths, trying to reach same waypoint
-        let state = {
+        let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             entities: {} as Record<EntityId, Entity>,
@@ -551,7 +551,7 @@ describe('Green Harvesters Stuck', () => {
 
     it('harvesters competing for same dock should take turns and not deadlock', () => {
         // Simpler reproduction: 3 harvesters very close together, all going to same dock
-        let state = {
+        let state: GameState = {
             ...INITIAL_STATE,
             running: true,
             entities: {} as Record<EntityId, Entity>,

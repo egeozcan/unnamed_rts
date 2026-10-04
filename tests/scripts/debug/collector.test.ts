@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-    FilterConfig,
     createDefaultFilterConfig,
     DebugCollector
 } from '../../../src/scripts/debug/collector.js';
@@ -58,11 +57,9 @@ describe('createDefaultFilterConfig', () => {
 
 describe('DebugCollector', () => {
     let collector: DebugCollector;
-    let defaultConfig: FilterConfig;
 
     beforeEach(() => {
         collector = new DebugCollector();
-        defaultConfig = createDefaultFilterConfig();
     });
 
     // Helper to create test events
@@ -238,7 +235,7 @@ describe('DebugCollector', () => {
             collector.collect(createCommandEvent({ entityId: 'unit-2' }));
 
             expect(collector.getEvents()).toHaveLength(1);
-            expect(collector.getEvents()[0].entityId).toBe('unit-1');
+            expect((collector.getEvents()[0] as CommandEvent).entityId).toBe('unit-1');
         });
 
         it('collects events without entityId when whitelist is non-empty', () => {

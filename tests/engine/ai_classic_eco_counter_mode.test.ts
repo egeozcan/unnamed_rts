@@ -26,7 +26,7 @@ function createEntity(
     return createTestCombatUnit({
         id,
         owner,
-        key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+        key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
         x,
         y
     });
@@ -86,8 +86,7 @@ describe('Classic AI eco counter mode', () => {
     });
 
     it('forces early pressure when eco all-in has low defenses', () => {
-        const state = createState();
-        state.tick = 721;
+        const state = { ...createState(), tick: 721 };
         state.entities.ai_light_1 = createEntity('ai_light_1', 1, 'UNIT', 'light', 470, 420);
         state.entities.ai_light_2 = createEntity('ai_light_2', 1, 'UNIT', 'light', 520, 420);
 

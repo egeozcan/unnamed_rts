@@ -26,7 +26,8 @@ describe('MCV Deployment', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 }
             },
             entities: {
@@ -149,7 +150,7 @@ describe('MCV Deployment', () => {
                     h: 60,
                     radius: 30,
                     dead: false,
-                    building: { isRepairing: false, repairHpBuffer: 0, sellProgress: 0, isSelling: false, placedTick: 0 }
+                    building: { isRepairing: false, placedTick: 0 }
                 }
             }
         };

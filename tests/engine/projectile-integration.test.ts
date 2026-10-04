@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { update, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestCombatUnit, createTestBuilding, resetTestEntityCounter } from '../../src/engine/test-utils';
-import { GameState, Vector, EntityId, Entity } from '../../src/engine/types';
+import { GameState, EntityId, Entity } from '../../src/engine/types';
 
 /**
  * Integration tests for the projectile system.
@@ -198,27 +198,9 @@ describe('Projectile System Integration', () => {
                 [target.id]: target
             });
 
-            // Track if projectile was intercepted
-            let projectileIntercepted = false;
-            let projectileReachedTarget = false;
-
             // Run simulation
             for (let i = 0; i < 200; i++) {
-                const prevProjectiles = state.projectiles.length;
                 state = update(state, { type: 'TICK' });
-
-                // Check for projectile interception (projectile died while in flight)
-                for (const p of state.projectiles) {
-                    if (p.archetype === 'rocket' && p.hp <= 0) {
-                        projectileIntercepted = true;
-                    }
-                }
-
-                // Check if target took damage (projectile reached it)
-                const targetNow = state.entities['target'];
-                if (targetNow && targetNow.hp < 50) { // Rifle has low HP, would be damaged
-                    projectileReachedTarget = true;
-                }
             }
 
             // The rocket has HP 50. SAM DPS is 150 (2.5/tick).

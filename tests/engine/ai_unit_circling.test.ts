@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
-import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer';
+import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { GameState, Vector, Entity, EntityId, UnitEntity } from '../../src/engine/types';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils';
 

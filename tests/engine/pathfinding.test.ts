@@ -23,7 +23,7 @@ describe('Pathfinding Issues', () => {
                 owner,
                 x,
                 y,
-                key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>
+                key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier' | 'demo_truck'>
             });
             return addEntityToState(state, unit);
         }

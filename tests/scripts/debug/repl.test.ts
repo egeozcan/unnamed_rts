@@ -6,8 +6,9 @@
  * real game state files, not synthetic state fixtures.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GameState, Vector } from '../../../src/engine/types.js';
+import { describe, it, expect } from 'vitest';
+import { GameState } from '../../../src/engine/types.js';
+import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import { DebugCollector } from '../../../src/scripts/debug/collector.js';
 import {
     parseCommand,
@@ -19,52 +20,9 @@ import {
 // ============================================================================
 
 function createMinimalTestState(tick: number = 100): GameState {
-    // Create a minimal state for type checking purposes
     // Note: This state cannot be used with advanceState/advanceUntil
     // as those require a full valid game state
-    return {
-        running: true,
-        mode: 'game',
-        sellMode: false,
-        tick,
-        mapWidth: 1000,
-        mapHeight: 1000,
-        entities: {},
-        players: {
-            1: {
-                id: 1,
-                team: 1,
-                color: '#ff0000',
-                credits: 5000,
-                maxPower: 100,
-                usedPower: 50,
-                isAi: true,
-                difficulty: 'medium',
-                defeated: false,
-                buildingQueue: { current: null, progress: 0 },
-                infantryQueue: { current: null, progress: 0 },
-                vehicleQueue: { current: null, progress: 0 },
-                airQueue: { current: null, progress: 0 }
-            }
-        },
-        selectedIds: [],
-        rallyPoint: null,
-        winner: null,
-        camera: new Vector(0, 0),
-        paused: false,
-        projectiles: [],
-        particles: [],
-        explosions: [],
-        placingBuilding: null,
-        notification: null,
-        config: {
-            width: 1000,
-            height: 1000,
-            resourceDensity: 'medium',
-            rockDensity: 'medium'
-        },
-        debugMode: false
-    } as GameState;
+    return { ...INITIAL_STATE, tick };
 }
 
 // ============================================================================

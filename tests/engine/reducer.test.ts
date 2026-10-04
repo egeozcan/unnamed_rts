@@ -11,7 +11,7 @@ function createTestEntity(id: string, owner: number, type: 'BUILDING' | 'UNIT', 
     if (type === 'BUILDING') {
         return createTestBuilding({ id, owner, key: key as BuildingKey, x, y });
     } else {
-        return createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>, x, y });
+        return createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y });
     }
 }
 

@@ -6,11 +6,7 @@ import {
 import { PlayerState } from '../../../src/engine/types.js';
 import { HARVESTER_AI_CONSTANTS } from '../../../src/engine/ai/harvester/types.js';
 
-const {
-    CREDITS_DESPERATE_THRESHOLD,
-    HARVESTER_RATIO_DESPERATE,
-    EARLY_GAME_TICKS
-} = HARVESTER_AI_CONSTANTS;
+const { EARLY_GAME_TICKS } = HARVESTER_AI_CONSTANTS;
 
 /**
  * Create a minimal PlayerState for testing desperation calculator
@@ -25,12 +21,13 @@ function createTestPlayer(overrides: Partial<PlayerState> = {}): PlayerState {
         maxPower: 100,
         usedPower: 50,
         queues: {
-            building: { items: [], active: false, progress: 0, lastUpdate: 0 },
-            infantry: { items: [], active: false, progress: 0, lastUpdate: 0 },
-            vehicle: { items: [], active: false, progress: 0, lastUpdate: 0 },
-            air: { items: [], active: false, progress: 0, lastUpdate: 0 }
+            building: { current: null, progress: 0, invested: 0 },
+            infantry: { current: null, progress: 0, invested: 0 },
+            vehicle: { current: null, progress: 0, invested: 0 },
+            air: { current: null, progress: 0, invested: 0 }
         },
         readyToPlace: null,
+        team: null,
         ...overrides
     };
 }

@@ -11,7 +11,7 @@ import {
     createInitialHarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
-import { HarvesterUnit, CombatUnit, ResourceEntity } from '../../../src/engine/types.js';
+import { HarvesterUnit, CombatUnit } from '../../../src/engine/types.js';
 import {
     createTestHarvester,
     createTestResource,
@@ -19,12 +19,7 @@ import {
 } from '../../../src/engine/test-utils.js';
 import { getZoneKey } from '../../../src/engine/ai/harvester/danger_map.js';
 
-const {
-    ESCORT_ASSIGN_DANGER,
-    ESCORT_PRIORITY_DANGER,
-    ESCORT_RELEASE_DANGER,
-    ESCORT_PATROL_RADIUS
-} = HARVESTER_AI_CONSTANTS;
+const { ESCORT_PATROL_RADIUS } = HARVESTER_AI_CONSTANTS;
 
 describe('Escort System', () => {
     let harvesterAI: HarvesterAIState;

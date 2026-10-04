@@ -5,7 +5,6 @@ import {
     buildFilterConfig,
     printHelp
 } from '../../../src/scripts/debug/cli.js';
-import type { FilterConfig } from '../../../src/scripts/debug/collector.js';
 
 describe('parseArgs', () => {
     describe('default values', () => {

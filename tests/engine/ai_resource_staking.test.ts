@@ -14,7 +14,7 @@ function addEntity(state: GameState, entity: Partial<import('../../src/engine/ty
     return entity;
 }
 
-function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, x: number, y: number): Partial<import('../../src/engine/types').Entity> & { id: string } {
+function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESOURCE', key: string, x: number, y: number): Partial<import('../../src/engine/types').Entity> & { id: string; pos: Vector } {
     return {
         id,
         owner,
@@ -24,7 +24,7 @@ function makeEntity(id: string, owner: number, type: 'UNIT' | 'BUILDING' | 'RESO
         w: 40,
         h: 40,
         dead: false
-    } as Partial<import('../../src/engine/types').Entity> & { id: string };
+    } as Partial<import('../../src/engine/types').Entity> & { id: string; pos: Vector };
 }
 
 describe('AI Resource Staking', () => {

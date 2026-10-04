@@ -17,7 +17,7 @@ describe('Harvester Auto-Attack', () => {
     function spawnUnit(state: GameState, x: number, y: number, id: string, owner: number = 0, key: string = 'rifle'): GameState {
         const unit = key === 'harvester'
             ? createTestHarvester({ id, owner, x, y })
-            : createTestCombatUnit({ id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y });
+            : createTestCombatUnit({ id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y });
         return {
             ...state,
             entities: {
@@ -76,7 +76,8 @@ describe('Harvester Auto-Attack', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 },
                 1: {
                     id: 1,
@@ -92,7 +93,8 @@ describe('Harvester Auto-Attack', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 }
             }
         };

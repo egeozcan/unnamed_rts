@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeEach } from 'vitest';
-import { GameState, Vector, Entity } from '../../src/engine/types';
+import { GameState } from '../../src/engine/types';
 import { update } from '../../src/engine/reducer';
 import { createEntity } from '../../src/engine/utils';
 import { getSpatialGrid } from '../../src/engine/spatial';
@@ -38,7 +38,8 @@ describe('Service Depot Docking Repair', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 },
                 1: {
                     id: 1,
@@ -54,7 +55,8 @@ describe('Service Depot Docking Repair', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 }
             },
             winner: null,
@@ -97,8 +99,6 @@ describe('Service Depot Docking Repair', () => {
                 targetId: depot.id
             }
         });
-
-        const initialPos = new Vector(tank.pos.x, tank.pos.y);
 
         // Run for enough ticks for tank to reach the depot and dock
         for (let i = 0; i < 300; i++) {

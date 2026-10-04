@@ -7,9 +7,9 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState } from '../../src/engine/ai/index.js';
-import { GameState, Entity, EntityId, PlayerState, Vector } from '../../src/engine/types';
+import { GameState, Entity, EntityId, PlayerState } from '../../src/engine/types';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { createTestResource } from '../../src/engine/test-utils';
+import { createTestHarvester, createTestResource } from '../../src/engine/test-utils';
 
 // Helper to create test state
 function createTestState(entities: Record<EntityId, Entity>): GameState {
@@ -31,22 +31,7 @@ function createTestState(entities: Record<EntityId, Entity>): GameState {
 }
 
 function createHarvester(id: string, owner: number, x: number, y: number): Entity {
-    return {
-        id,
-        owner,
-        type: 'UNIT',
-        key: 'harvester',
-        pos: new Vector(x, y),
-        prevPos: new Vector(x, y),
-        hp: 200,
-        maxHp: 200,
-        w: 30,
-        h: 30,
-        radius: 15,
-        dead: false,
-        cargo: 0,
-        maxCargo: 500
-    } as Entity;
+    return createTestHarvester({ id, owner, x, y });
 }
 
 describe('AI Rebuild After Losing All Buildings', () => {

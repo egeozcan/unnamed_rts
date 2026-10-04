@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update } from '../../src/engine/reducer';
-import { GameState, Vector, Entity, EntityId } from '../../src/engine/types';
+import { GameState, Vector, Entity, EntityId, UnitEntity } from '../../src/engine/types';
 import { createEntity } from '../../src/engine/utils';
 
 describe('Movement & Pathfinding', () => {
@@ -227,7 +227,7 @@ describe('Movement & Pathfinding', () => {
         };
 
         // Spawn a unit at a position and simulate the problematic state
-        const unit = createEntity(500, 500, 1, 'UNIT', 'medium');
+        const unit = createEntity(500, 500, 1, 'UNIT', 'medium') as UnitEntity;
         state = {
             ...state,
             entities: {

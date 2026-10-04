@@ -104,19 +104,8 @@ describe('Player Scores', () => {
         };
 
         // Add a harvester with cargo (cost: 1400, cargo: 300)
-        const harvester = createTestHarvester({ id: 'harv1', owner: 0, x: 500, y: 500 });
+        const harvester = createTestHarvester({ id: 'harv1', owner: 0, x: 500, y: 500, cargo: 300 });
         state = addEntitiesToState(state, [harvester]);
-        // Add cargo
-        state = {
-            ...state,
-            entities: {
-                ...state.entities,
-                'harv1': {
-                    ...state.entities['harv1'],
-                    harvester: { ...(state.entities['harv1'] as any).harvester, cargo: 300 }
-                }
-            }
-        };
 
         clearScoreCache();
         const scores = calculatePlayerScores(state);

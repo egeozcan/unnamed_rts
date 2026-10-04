@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { INITIAL_STATE, createPlayerState, update } from '../../src/engine/reducer.js';
-import { EntityId, Entity, GameState, Vector, UnitEntity } from '../../src/engine/types.js';
+import { EntityId, Entity, GameState, UnitEntity } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils.js';
 import { getSpatialGrid } from '../../src/engine/spatial.js';
 

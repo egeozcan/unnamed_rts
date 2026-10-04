@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector, Entity, EntityId, UnitKey, BuildingKey, GameState, CombatUnit } from '../../src/engine/types';
+import { Vector, Entity, EntityId, GameState, CombatUnit } from '../../src/engine/types';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { updateCombatUnitBehavior } from '../../src/engine/reducers/combat';
 import { handleMicro } from '../../src/engine/ai/action_combat';
@@ -7,7 +7,6 @@ import { AIPersonality } from '../../src/data/schemas/index';
 import { rebuildSpatialGrid } from '../../src/engine/spatial';
 import {
     createTestCombatUnit,
-    createTestBuilding,
     resetTestEntityCounter
 } from '../../src/engine/test-utils';
 
@@ -23,8 +22,8 @@ describe('Attack While Moving', () => {
             tick: 100,
             entities,
             players: {
-                0: createPlayerState(0, 'human', 'easy'),
-                1: createPlayerState(1, 'ai', 'hard')
+                0: createPlayerState(0, false, 'easy'),
+                1: createPlayerState(1, true, 'hard')
             },
             config: { ...INITIAL_STATE.config, width: 3000, height: 3000 }
         };
@@ -210,13 +209,13 @@ describe('Attack While Moving', () => {
 
     describe('AI Kiting Behavior', () => {
         const testPersonality: AIPersonality = {
-            name: 'test',
-            description: 'Test personality',
-            aggression: 0.5,
-            economy_focus: 0.5,
-            expansion_tendency: 0.5,
-            harassment_tendency: 0.5,
+            aggression_bias: 1,
             retreat_threshold: 0.3,
+            attack_threshold: 1,
+            harass_threshold: 1,
+            rally_offset: 1,
+            build_order_priority: [],
+            unit_preferences: { infantry: [], vehicle: [] },
             kite_aggressiveness: 0.5
         };
 

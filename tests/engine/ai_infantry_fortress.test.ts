@@ -31,7 +31,7 @@ function createEntity(
     return createTestCombatUnit({
         id,
         owner,
-        key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+        key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
         x,
         y
     });
@@ -40,7 +40,7 @@ function createEntity(
 function createState(
     entities: Record<EntityId, Entity>,
     tick: number,
-    aiCredits: number,
+    _aiCredits: number,
     aiDifficulty: 'dummy' | 'easy' | 'medium' | 'hard' = 'hard'
 ): GameState {
     return {

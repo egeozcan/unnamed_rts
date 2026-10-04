@@ -86,7 +86,7 @@ function createEntity(
         return createTestCombatUnit({
             id,
             owner,
-            key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+            key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
             x, y,
             hp: overrides?.hp,
             maxHp: overrides?.maxHp,
@@ -190,7 +190,6 @@ describe('AI System', () => {
         });
 
         it('should return personality config via getPersonalityForPlayer', () => {
-            const aiState = getAIState(2);
             const personality = getPersonalityForPlayer(2);
             // Personality should have required fields
             expect(personality.aggression_bias).toBeDefined();
@@ -410,7 +409,15 @@ describe('AI System', () => {
                 target: null,
                 rallyPoint: new Vector(550, 550),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);
@@ -924,7 +931,15 @@ describe('AI System', () => {
                 target: null,
                 rallyPoint: new Vector(1000, 1000),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);

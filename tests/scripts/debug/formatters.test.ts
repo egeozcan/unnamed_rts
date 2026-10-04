@@ -13,10 +13,9 @@ import {
     createTestCombatUnit,
     createTestHarvester,
     createTestBuilding,
-    createTestResource,
     resetTestEntityCounter
 } from '../../../src/engine/test-utils.js';
-import { getAIState, resetAIState, setPersonalityForPlayer } from '../../../src/engine/ai/state.js';
+import { getAIState, resetAIState } from '../../../src/engine/ai/state.js';
 import type {
     DebugEvent,
     CommandEvent,

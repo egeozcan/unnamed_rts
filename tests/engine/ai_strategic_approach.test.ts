@@ -38,7 +38,7 @@ function createEntity(
         return createTestHarvester({ id, owner, x, y, hp: overrides?.hp, dead: overrides?.dead });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead
         });
     }
@@ -244,7 +244,15 @@ describe('AI Strategic Approach', () => {
                 target: null,
                 rallyPoint: new Vector(2450, 2450),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);
@@ -293,7 +301,15 @@ describe('AI Strategic Approach', () => {
                 target: null,
                 rallyPoint: new Vector(800, 500),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);

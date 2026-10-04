@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer.js';
-import { GameState, Vector, UnitEntity, CombatUnit } from '../../src/engine/types.js';
+import { GameState, Vector, CombatUnit } from '../../src/engine/types.js';
 import { createTestCombatUnit, createTestBuilding } from '../../src/engine/test-utils.js';
 
 describe('Collision Resolution - Unit Shaking', () => {
@@ -23,7 +23,7 @@ describe('Collision Resolution - Unit Shaking', () => {
         return createTestCombatUnit({
             id,
             owner,
-            key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier'>,
+            key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
             x: pos.x,
             y: pos.y
         });
@@ -311,9 +311,8 @@ describe('Collision Resolution - Unit Shaking', () => {
             const mover = state.entities['mover'] as CombatUnit;
 
             // Mover should have significant avgVel (actively moving)
-            const avgVelMag = Math.sqrt(
-                mover.movement.avgVel.x ** 2 + mover.movement.avgVel.y ** 2
-            );
+            const avgVel = mover.movement.avgVel!;
+            const avgVelMag = Math.sqrt(avgVel.x ** 2 + avgVel.y ** 2);
             expect(avgVelMag).toBeGreaterThan(0.5);
 
             // Mover should have an active path

@@ -600,7 +600,7 @@ describe('Engineer Conyard Rush AI', () => {
         const apcMoves = actions.filter(action =>
             isActionType(action, 'COMMAND_MOVE') && action.payload.unitIds.length === 1 && action.payload.unitIds[0] === 'ai_apc'
         );
-        const raidMove = apcMoves.at(-1);
+        const raidMove = apcMoves[apcMoves.length - 1];
         expect(raidMove).toBeDefined();
         if (raidMove && isActionType(raidMove, 'COMMAND_MOVE')) {
             expect(raidMove.payload.x).toBeGreaterThan(900);
@@ -660,7 +660,7 @@ describe('Engineer Conyard Rush AI', () => {
             action.payload.unitIds.length === 1 &&
             action.payload.unitIds[0] === 'ai_apc'
         );
-        expect(apcMoves.at(-1)).toEqual({
+        expect(apcMoves[apcMoves.length - 1]).toEqual({
             type: 'COMMAND_MOVE',
             payload: { unitIds: ['ai_apc'], x: 1000, y: 430 }
         });
@@ -691,7 +691,7 @@ describe('Engineer Conyard Rush AI', () => {
             action.payload.unitIds.length === 1 &&
             action.payload.unitIds[0] === 'ai_apc'
         );
-        expect(apcMoves.at(-1)).toEqual({
+        expect(apcMoves[apcMoves.length - 1]).toEqual({
             type: 'COMMAND_MOVE',
             payload: { unitIds: ['ai_apc'], x: 1400, y: 900 }
         });

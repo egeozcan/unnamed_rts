@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import rules from '../../src/data/rules.json';
+import type { Rules } from '../../src/data/schemas/rules.schema';
 
-const RULES = rules as any;
+const RULES = rules as unknown as Rules;
 
 /**
  * Unit Counter System Tests

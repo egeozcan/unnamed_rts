@@ -8,6 +8,7 @@ import {
     loadState,
     saveState
 } from '../../../src/scripts/debug/state-loader.js';
+import { createTestCombatUnit } from '../../../src/engine/test-utils.js';
 
 describe('rehydrateVectors', () => {
     describe('primitive values', () => {
@@ -273,9 +274,9 @@ describe('loadState and saveState', () => {
 
             const loaded = loadState(tempFile);
 
-            const unit = loaded.entities['unit-1'] as { movement?: { velocity: Vector } };
+            const unit = loaded.entities['unit-1'] as { movement?: { vel: Vector } };
             if (unit.movement) {
-                expect(unit.movement.velocity).toBeInstanceOf(Vector);
+                expect(unit.movement.vel).toBeInstanceOf(Vector);
             }
         });
 
@@ -351,40 +352,14 @@ function createMockState(overrides: Partial<GameState> = {}): GameState {
         camera: { x: 0, y: 0 },
         zoom: 1,
         entities: {
-            'unit-1': {
-                id: 'unit-1',
-                type: 'UNIT',
-                key: 'rifle',
-                owner: 1,
-                pos: new Vector(100, 200),
-                prevPos: new Vector(90, 190),
-                hp: 100,
-                maxHp: 100,
-                w: 20,
-                h: 20,
-                radius: 10,
-                dead: false,
-                movement: {
-                    velocity: new Vector(1, 0),
-                    maxSpeed: 2,
-                    rotation: 0,
-                    targetRotation: 0,
-                    rotationSpeed: 0.1,
-                    path: [],
-                    destination: null,
-                    stuck: false,
-                    stuckTicks: 0,
-                    intendedVelocity: new Vector(1, 0),
-                    lastRecalc: 0
-                },
-                combat: {
-                    targetId: null,
-                    cooldown: 0,
-                    turretAngle: 0,
-                    turretTargetAngle: 0,
-                    stance: 'aggressive'
-                }
-            }
+            'unit-1': (() => {
+                const unit = createTestCombatUnit({ id: 'unit-1', owner: 1, key: 'rifle', x: 100, y: 200 });
+                return {
+                    ...unit,
+                    prevPos: new Vector(90, 190),
+                    movement: { ...unit.movement, vel: new Vector(1, 0) }
+                };
+            })()
         },
         projectiles: [],
         particles: [],
@@ -394,6 +369,7 @@ function createMockState(overrides: Partial<GameState> = {}): GameState {
             1: {
                 id: 1,
                 isAi: false,
+                team: null,
                 difficulty: 'easy',
                 color: '#ff0000',
                 credits: 5000,
@@ -419,6 +395,7 @@ function createMockState(overrides: Partial<GameState> = {}): GameState {
         showMinimap: true,
         showBirdsEye: false,
         attackMoveMode: false,
+        fogOfWar: {},
         ...overrides
     };
 }
@@ -437,7 +414,13 @@ function createMockStateWithProjectiles(): GameState {
                 damage: 10,
                 splash: 0,
                 type: 'bullet',
-                dead: false
+                dead: false,
+                archetype: 'hitscan',
+                hp: 0,
+                maxHp: 0,
+                arcHeight: 0,
+                startPos: new Vector(50, 60),
+                trailPoints: []
             }
         ]
     };

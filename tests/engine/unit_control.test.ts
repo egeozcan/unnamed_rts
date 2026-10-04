@@ -21,7 +21,7 @@ describe('Unit Control', () => {
 
     // Helper to create units
     function createUnit(id: string, owner: number, pos: Vector, key: string = 'light') {
-        return createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>, x: pos.x, y: pos.y });
+        return createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x: pos.x, y: pos.y });
     }
 
     // Helper to create a building (needed to prevent game from ending due to win condition)

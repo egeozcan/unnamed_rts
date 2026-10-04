@@ -52,7 +52,7 @@ function createEntity(
         });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
             targetId: overrides?.targetId, lastAttackerId: overrides?.lastAttackerId,
             moveTarget: overrides?.moveTarget
@@ -139,7 +139,15 @@ describe('AI Attack Group Cohesion', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -278,7 +286,15 @@ describe('AI Attack Regroup', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -327,7 +343,15 @@ describe('AI Multi-Front Attack', () => {
             target: null,
             rallyPoint: new Vector(2000, 2000),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
         aiState.attackGroup = Array.from({ length: 12 }, (_, i) => `tank${i}`);
 
@@ -375,7 +399,15 @@ describe('AI Multi-Front Attack', () => {
             target: null,
             rallyPoint: new Vector(1800, 1800),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
         aiState.attackGroup = Array.from({ length: 12 }, (_, i) => `tank${i}`);
 
@@ -437,7 +469,15 @@ describe('AI Smart Combat Targeting', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -480,7 +520,15 @@ describe('AI Smart Combat Targeting', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -519,7 +567,15 @@ describe('AI Smart Combat Targeting', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -556,7 +612,15 @@ describe('AI Smart Combat Targeting', () => {
             target: null,
             rallyPoint: new Vector(1500, 1500),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         const actions = computeAiActions(state, 1);
@@ -596,7 +660,15 @@ describe('AI Smart Combat Targeting', () => {
             target: null,
             rallyPoint: new Vector(800, 800),
             status: 'attacking',
-            lastOrderTick: 0
+            lastOrderTick: 0,
+            lastHealthCheck: 0,
+            avgHealthPercent: 100,
+            moveTarget: null,
+            lastRegroupTick: 0,
+            engagedEnemies: [],
+            preEngageTarget: null,
+            needsReinforcements: false,
+            reinforcementIds: []
         }];
 
         // Run AI

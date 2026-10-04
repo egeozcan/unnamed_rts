@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { parseTrigger, evaluateTrigger, Trigger, TriggerOperator } from '../../../src/scripts/debug/triggers.js';
-import { GameState, Vector, Entity } from '../../../src/engine/types.js';
+import { parseTrigger, evaluateTrigger, Trigger } from '../../../src/scripts/debug/triggers.js';
+import { GameState } from '../../../src/engine/types.js';
 import { resetAIState, getAIState } from '../../../src/engine/ai/state.js';
 import {
     createTestCombatUnit,
@@ -39,6 +39,7 @@ function createTestState(overrides: Partial<GameState> = {}): GameState {
         showMinimap: true,
         showBirdsEye: false,
         attackMoveMode: false,
+        fogOfWar: {},
         ...overrides
     };
 }
@@ -47,6 +48,7 @@ function createTestPlayer(id: number, credits: number = 5000) {
     return {
         id,
         isAi: id !== 0,
+        team: null,
         difficulty: 'medium' as const,
         color: '#ff0000',
         credits,

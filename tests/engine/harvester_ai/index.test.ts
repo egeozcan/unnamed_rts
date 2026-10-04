@@ -2,14 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { updateHarvesterAI } from '../../../src/engine/ai/harvester/index.js';
 import {
     createInitialHarvesterAIState,
-    HARVESTER_AI_CONSTANTS,
     HarvesterAIState
 } from '../../../src/engine/ai/harvester/types.js';
 import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import {
     GameState,
-    Vector,
-    EntityId,
     HarvesterUnit,
     CombatUnit,
     BuildingEntity,
@@ -24,8 +21,11 @@ import {
 } from '../../../src/engine/test-utils.js';
 import { getZoneKey } from '../../../src/engine/ai/harvester/danger_map.js';
 
+// Tests build up state in place, so drop the readonly modifiers
+type MutableGameState = { -readonly [K in keyof GameState]: GameState[K] };
+
 // Helper to create a test game state with specific tick
-function createTestGameState(overrides: Partial<GameState> = {}): GameState {
+function createTestGameState(overrides: Partial<GameState> = {}): MutableGameState {
     return {
         ...INITIAL_STATE,
         running: true,
@@ -50,12 +50,13 @@ function createTestPlayer(playerId: number, overrides: Partial<PlayerState> = {}
             air: { current: null, progress: 0, invested: 0 }
         },
         readyToPlace: null,
+        team: null,
         ...overrides
     };
 }
 
 // Helper to add a player with a harvester to the state
-function addPlayerWithHarvester(state: GameState, playerId: number): HarvesterUnit {
+function addPlayerWithHarvester(state: MutableGameState, playerId: number): HarvesterUnit {
     const player = createTestPlayer(playerId);
     const harvester = createTestHarvester({
         id: `h${playerId}`,
@@ -77,7 +78,7 @@ function addPlayerWithHarvester(state: GameState, playerId: number): HarvesterUn
 }
 
 // Helper to add an enemy unit
-function addEnemy(state: GameState, enemyId: number, x: number, y: number): CombatUnit {
+function addEnemy(state: MutableGameState, enemyId: number, x: number, y: number): CombatUnit {
     if (!state.players[enemyId]) {
         state.players = {
             ...state.players,
@@ -99,7 +100,7 @@ function addEnemy(state: GameState, enemyId: number, x: number, y: number): Comb
 }
 
 // Helper to add a combat unit
-function addCombatUnit(state: GameState, playerId: number, x: number, y: number): CombatUnit {
+function addCombatUnit(state: MutableGameState, playerId: number, x: number, y: number): CombatUnit {
     const unit = createTestCombatUnit({
         id: `c${playerId}_${x}_${y}`,
         owner: playerId,
@@ -115,7 +116,7 @@ function addCombatUnit(state: GameState, playerId: number, x: number, y: number)
 }
 
 // Helper to add ore
-function addOre(state: GameState, x: number, y: number): ResourceEntity {
+function addOre(state: MutableGameState, x: number, y: number): ResourceEntity {
     const ore = createTestResource({
         id: `ore_${x}_${y}`,
         x,
@@ -129,7 +130,7 @@ function addOre(state: GameState, x: number, y: number): ResourceEntity {
 }
 
 // Helper to add a refinery
-function addRefinery(state: GameState, playerId: number, x: number, y: number): BuildingEntity {
+function addRefinery(state: MutableGameState, playerId: number, x: number, y: number): BuildingEntity {
     const refinery = createTestBuilding({
         id: `ref_${playerId}_${x}_${y}`,
         owner: playerId,
@@ -263,7 +264,7 @@ describe('Harvester AI Orchestrator', () => {
 
             // Add combat unit and dangerous ore
             addCombatUnit(state, 1, 100, 100);
-            const ore = addOre(state, 300, 300);
+            addOre(state, 300, 300);
 
             // Pre-populate a danger zone near the ore
             const zoneKey = getZoneKey(300, 300);
@@ -334,7 +335,7 @@ describe('Harvester AI Orchestrator', () => {
 
         it('should not generate actions for harvesters that are not stuck', () => {
             const state = createTestGameState({ tick: 100 });
-            const harvester = addPlayerWithHarvester(state, 1);
+            addPlayerWithHarvester(state, 1);
             addRefinery(state, 1, 200, 200);
 
             // Harvester is not stuck (default harvestAttemptTicks = 0)

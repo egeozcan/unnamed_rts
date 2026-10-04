@@ -28,7 +28,7 @@ function createEntity(
     return createTestCombatUnit({
         id,
         owner,
-        key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+        key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
         x,
         y
     });
@@ -37,7 +37,7 @@ function createEntity(
 function createState(
     entities: Record<EntityId, Entity>,
     tick: number,
-    aiCredits: number,
+    _aiCredits: number,
     aiDifficulty: 'dummy' | 'easy' | 'medium' | 'hard' = 'hard'
 ): GameState {
     return {
@@ -289,9 +289,9 @@ describe('Eco Tank All-In AI', () => {
 
         const actions = computeAiActionsForPlayer(state, 1);
 
-        const vehicleBuilds = actions.filter(action =>
-            isActionType(action, 'START_BUILD') && action.payload.category === 'vehicle'
-        );
+        const vehicleBuilds = actions
+            .filter(action => isActionType(action, 'START_BUILD'))
+            .filter(action => action.payload.category === 'vehicle');
 
         expect(vehicleBuilds.length).toBeGreaterThan(0);
         expect(vehicleBuilds.every(action =>

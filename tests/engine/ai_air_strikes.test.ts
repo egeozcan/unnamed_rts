@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { computeAiActions, resetAIState, _testUtils } from '../../src/engine/ai/index.js';
 import { handleAirStrikes } from '../../src/engine/ai/action_combat.js';
 import { INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
-import { GameState, Entity, EntityId, AirUnit, isActionType } from '../../src/engine/types';
+import { GameState, Entity, EntityId, isActionType } from '../../src/engine/types';
 import {
     createTestHarrier,
     createTestAirforceCommand,

@@ -8,7 +8,6 @@ import {
 } from '../../../src/engine/ai/harvester/coordinator.js';
 import {
     HarvesterAIState,
-    HarvesterRole,
     createInitialHarvesterAIState,
     HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
@@ -19,7 +18,7 @@ import {
     createTestBuilding
 } from '../../../src/engine/test-utils.js';
 
-const { MAX_HARVESTERS_PER_ORE, MAX_HARVESTERS_PER_REFINERY } = HARVESTER_AI_CONSTANTS;
+const { MAX_HARVESTERS_PER_ORE } = HARVESTER_AI_CONSTANTS;
 
 describe('Harvester Coordinator', () => {
     let harvesterAI: HarvesterAIState;

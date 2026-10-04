@@ -25,7 +25,7 @@ let nextId = 0;
 function unit(key: UnitKey, owner = ENEMY): Entity {
     nextId++;
     if (key === 'harrier') return createTestHarrier({ id: `u${nextId}`, owner, x: 1000 + nextId, y: 1000 });
-    return createTestCombatUnit({ id: `u${nextId}`, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x: 1000 + nextId, y: 1000 });
+    return createTestCombatUnit({ id: `u${nextId}`, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x: 1000 + nextId, y: 1000 });
 }
 
 function units(key: UnitKey, count: number, owner = ENEMY): Entity[] {
@@ -57,7 +57,7 @@ function valueKilledPerCredit(attacker: string, target: string): number {
     const t = unitData(target);
     const armor = t.fly ? 'air' : t.armor;
     const modifier = RULES.damageModifiers?.[a.weaponType!]?.[armor] ?? 1;
-    return a.damage * modifier / a.rate * 60 / a.cost * t.cost / t.hp;
+    return a.damage * modifier / a.rate! * 60 / a.cost * t.cost / t.hp;
 }
 
 describe('AI counter knowledge (counters.ts)', () => {

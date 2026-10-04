@@ -12,7 +12,7 @@ describe('Escape key', () => {
             onToggleDebug: vi.fn(),
             onToggleMinimap: vi.fn(),
             onToggleBirdsEye: vi.fn(),
-            onSetSpeed: vi.fn(),
+            onAdjustSpeed: vi.fn(),
             onCancel,
             getZoom: () => 1,
             getCamera: () => ({ x: 0, y: 0 })

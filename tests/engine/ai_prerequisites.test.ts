@@ -47,7 +47,7 @@ function createEntity(
         });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp
         });
     }
@@ -292,10 +292,6 @@ describe('AI Prerequisites', () => {
             // The AI should NOT build vehicles (too expensive for all personalities)
             const vehicleBuildActions = actions.filter(a =>
                 isActionType(a, 'START_BUILD') && a.payload.category === 'vehicle'
-            );
-
-            const infantryBuildActions = actions.filter(a =>
-                isActionType(a, 'START_BUILD') && a.payload.category === 'infantry'
             );
 
             // Key assertion: vehicles should NOT be built (too expensive)

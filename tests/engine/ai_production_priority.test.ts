@@ -78,9 +78,9 @@ describe('AI Production Building Priority', () => {
         let actions = computeAiActions(state, 1);
 
         // Check what building AI wants to make
-        const buildingActions = actions.filter(a =>
-            isActionType(a, 'START_BUILD') && a.payload.category === 'building'
-        );
+        const buildingActions = actions
+            .filter(a => isActionType(a, 'START_BUILD'))
+            .filter(a => a.payload.category === 'building');
 
         // The AI should prioritize barracks (for military production) over more refineries
         // since it already has one refinery but no production buildings
@@ -119,9 +119,9 @@ describe('AI Production Building Priority', () => {
 
         const actions = computeAiActions(state, 1);
 
-        const buildingActions = actions.filter(a =>
-            isActionType(a, 'START_BUILD') && a.payload.category === 'building'
-        );
+        const buildingActions = actions
+            .filter(a => isActionType(a, 'START_BUILD'))
+            .filter(a => a.payload.category === 'building');
 
         // Should prioritize factory over more refineries
         if (buildingActions.length > 0) {
@@ -236,16 +236,10 @@ describe('AI Production Building Priority', () => {
             }
         };
 
-        const actions = computeAiActions(state, 1);
+        computeAiActions(state, 1);
 
         // Check that AI doesn't try to build a refinery next to enemy's refinery
         // (the ore is already "claimed" by enemy refinery)
-        const refineryActions = actions.filter(a =>
-            isActionType(a, 'START_BUILD') &&
-            a.payload.category === 'building' &&
-            a.payload.key === 'refinery'
-        );
-
         // May still build a refinery elsewhere, but should prioritize military now
         // The key is that it shouldn't spam refineries just because ore exists
     });

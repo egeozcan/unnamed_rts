@@ -256,8 +256,21 @@ describe('Sentinel Opportunist AI', () => {
             enemy_heavy_4: createEntity('enemy_heavy_4', 0, 'UNIT', 'heavy', 1820, 1700)
         };
 
-        const state = createState(entities, 12100, 6000);
-        state.players[1].queues.infantry.current = 'hijacker';
+        const baseState = createState(entities, 12100, 6000);
+        const aiPlayer = baseState.players[1];
+        const state: GameState = {
+            ...baseState,
+            players: {
+                ...baseState.players,
+                1: {
+                    ...aiPlayer,
+                    queues: {
+                        ...aiPlayer.queues,
+                        infantry: { ...aiPlayer.queues.infantry, current: 'hijacker' }
+                    }
+                }
+            }
+        };
 
         const actions = computeAiActionsForPlayer(state, 1);
         expect(actions.some(action =>

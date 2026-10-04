@@ -8,7 +8,7 @@ describe('Units Die on Elimination', () => {
         createTestBuilding({ id, owner, key: key as import('../../src/engine/types').BuildingKey, x: owner * 500, y: 100 });
 
     const createUnit = (id: string, owner: number, key: string = 'light') =>
-        createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester'>, x: owner * 500 + 50, y: 150 });
+        createTestCombatUnit({ id, owner, key: key as Exclude<import('../../src/engine/types').UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x: owner * 500 + 50, y: 150 });
 
     const createMCV = (id: string, owner: number) =>
         createTestCombatUnit({ id, owner, key: 'mcv', x: owner * 500 + 50, y: 150 });

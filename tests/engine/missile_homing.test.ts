@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, Entity, Projectile, Vector } from '../../src/engine/types';
+import { GameState, Vector } from '../../src/engine/types';
 import { updateProjectile } from '../../src/engine/reducers/game_loop';
 import { createProjectile } from '../../src/engine/reducers/helpers';
 import { createEntity } from '../../src/engine/reducers/helpers';
@@ -32,10 +32,10 @@ describe('Missile Logic', () => {
         expect(proj.vel.y).toBe(0); // target is directly east
 
         // Move target to (0, 100) - directly South
-        target.pos = new Vector(0, 100); // Teleport target
+        const movedTarget = { ...target, pos: new Vector(0, 100) }; // Teleport target
         const entities = {
             [sam.id]: sam,
-            [target.id]: target
+            [target.id]: movedTarget
         };
 
         // Update projectile
@@ -65,10 +65,10 @@ describe('Missile Logic', () => {
         const initialVel = proj.vel; // Should be (18, 0)
 
         // Move target to (0, 100) - directly South
-        target.pos = new Vector(0, 100);
+        const movedTarget = { ...target, pos: new Vector(0, 100) };
         const entities = {
             [turret.id]: turret,
-            [target.id]: target
+            [target.id]: movedTarget
         };
 
         // Update projectile

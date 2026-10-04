@@ -41,6 +41,9 @@ function createMinimalState(overrides: Partial<GameState> = {}): GameState {
         config: { width: 2000, height: 2000, resourceDensity: 'medium', rockDensity: 'medium' },
         debugMode: false,
         showMinimap: false,
+        showBirdsEye: false,
+        attackMoveMode: false,
+        fogOfWar: {},
         ...overrides
     };
 }

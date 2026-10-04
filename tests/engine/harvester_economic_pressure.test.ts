@@ -15,7 +15,7 @@ describe('Harvester Economic Pressure', () => {
             const unit = createTestHarvester({ id, owner, x, y });
             return addEntityToState(state, unit);
         } else {
-            const unit = createTestCombatUnit({ id, owner, x, y, key: key as Exclude<UnitKey, 'harvester' | 'harrier'> });
+            const unit = createTestCombatUnit({ id, owner, x, y, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'> });
             return addEntityToState(state, unit);
         }
     }
@@ -44,6 +44,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 50, // VERY LOW credits - desperate economy
@@ -124,6 +125,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 2000,
@@ -203,6 +205,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 100, // Low credits
@@ -281,6 +284,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 2000, // Normal credits - will flee
@@ -341,7 +345,7 @@ describe('Harvester Economic Pressure', () => {
                         }
                     }
                 }
-            } as Record<EntityId, Entity>;
+            };
         }
 
         // Run AI
@@ -375,6 +379,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 2000,
@@ -441,6 +446,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 2000,
@@ -508,6 +514,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 2000,
@@ -593,6 +600,7 @@ describe('Harvester Economic Pressure', () => {
                 1: {
                     id: 1,
                     isAi: true,
+                    team: null,
                     difficulty: 'medium' as const,
                     color: '#ff4444',
                     credits: 250, // Under 300 - economic pressure

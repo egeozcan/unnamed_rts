@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { GameState, Vector } from '../../src/engine/types';
-import { HarvesterUnit } from '../../src/engine/entity_types';
-import { tick, INITIAL_STATE } from '../../src/engine/reducer';
+import { GameState, Vector, HarvesterUnit } from '../../src/engine/types';
+import { tick, INITIAL_STATE, createPlayerState } from '../../src/engine/reducer';
 import { createTestHarvester, createTestBuilding } from '../../src/engine/test-utils';
 
 function createTestState(): GameState {
@@ -10,14 +9,7 @@ function createTestState(): GameState {
 
     // Ensure player 2 exists for enemy detection
     if (!state.players[2]) {
-        state.players[2] = {
-            credits: 1000,
-            power: { produced: 100, consumed: 0 },
-            buildingQueue: [],
-            infantryQueue: [],
-            vehicleQueue: [],
-            airQueue: [],
-        };
+        state.players[2] = { ...createPlayerState(2, false), credits: 1000 };
     }
 
     // Player 1's conyard (needed for AI)

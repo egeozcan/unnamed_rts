@@ -29,7 +29,8 @@ describe('Movement Stability', () => {
                         vehicle: { current: null, progress: 0, invested: 0 },
                         air: { current: null, progress: 0, invested: 0 }
                     },
-                    readyToPlace: null
+                    readyToPlace: null,
+                    team: null
                 }
             },
             winner: null,

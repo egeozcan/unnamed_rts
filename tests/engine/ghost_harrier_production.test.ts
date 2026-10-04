@@ -1,36 +1,25 @@
 
 import { describe, it, expect } from 'vitest';
-import { GameState, PlayerState, EntityId, AirUnit, BuildingEntity } from '../../src/engine/types';
+import { GameState, EntityId, AirUnit, BuildingEntity } from '../../src/engine/types';
+import { INITIAL_STATE } from '../../src/engine/reducer';
 import { startBuild } from '../../src/engine/reducers/production';
-import { createEntity } from '../../src/engine/reducers/helpers';
+import { createEntity, createPlayerState } from '../../src/engine/reducers/helpers';
 
 describe('Production - Ghost Harrier Check', () => {
     it('should allow production when a ghost harrier exists but a real slot is available', () => {
         const playerId = 1;
 
         const state: GameState = {
+            ...INITIAL_STATE,
             tick: 100,
             entities: {},
             players: {
-                [playerId]: {
-                    id: playerId,
-                    credits: 5000,
-                    queues: {
-                        air: { current: null, progress: 0, invested: 0, queued: [] }
-                    }
-                } as PlayerState
+                [playerId]: { ...createPlayerState(playerId, false), credits: 5000 }
             },
-            projectiles: [],
-            particles: [],
-            camera: { x: 0, y: 0 },
-            zoom: 1,
-            selection: [],
             mode: 'game',
             running: true,
-            winner: null,
-            notification: null,
-            config: { width: 1000, height: 1000, tickRate: 60 }
-        } as GameState;
+            config: { ...INITIAL_STATE.config, width: 1000, height: 1000 }
+        };
 
         // Create Air Force Command
         const afc = createEntity(100, 100, playerId, 'BUILDING', 'airforce_command', state) as BuildingEntity;

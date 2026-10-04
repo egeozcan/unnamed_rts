@@ -21,6 +21,7 @@ describe('Unit Stuck Pathing Priority', () => {
                     maxPower: 100,
                     usedPower: 0,
                     readyToPlace: null,
+                    team: null,
                     queues: { building: { current: null, progress: 0, invested: 0 }, infantry: { current: null, progress: 0, invested: 0 }, vehicle: { current: null, progress: 0, invested: 0 }, air: { current: null, progress: 0, invested: 0 } }
                 }
             },
@@ -31,6 +32,8 @@ describe('Unit Stuck Pathing Priority', () => {
             zoom: 1,
             config: { width: 1000, height: 1000, resourceDensity: 'medium', rockDensity: 'medium' },
             showMinimap: false,
+            showBirdsEye: false,
+            attackMoveMode: false,
             debugMode: false,
             sellMode: false,
             repairMode: false,

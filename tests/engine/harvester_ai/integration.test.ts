@@ -14,7 +14,6 @@ import { INITIAL_STATE } from '../../../src/engine/reducer.js';
 import {
     GameState,
     Vector,
-    EntityId,
     HarvesterUnit,
     CombatUnit,
     BuildingEntity,
@@ -22,6 +21,8 @@ import {
     PlayerState
 } from '../../../src/engine/types.js';
 import {
+    HarvesterOptions,
+    CombatUnitOptions,
     createTestHarvester,
     createTestCombatUnit,
     createTestBuilding,
@@ -33,14 +34,15 @@ import { updateEscortAssignments, releaseEscort, getEscortForOreField } from '..
 import { detectStuckHarvester, resolveStuckHarvester } from '../../../src/engine/ai/harvester/stuck_resolver.js';
 import { assignHarvesterRoles, getHarvesterRole, getRoleMaxDanger } from '../../../src/engine/ai/harvester/coordinator.js';
 import {
-    HarvesterAIState,
-    HARVESTER_AI_CONSTANTS,
-    createInitialHarvesterAIState as createHarvesterAIState
+    HARVESTER_AI_CONSTANTS
 } from '../../../src/engine/ai/harvester/types.js';
 
 // ============ TEST HELPERS ============
 
-function createTestGameState(overrides: Partial<GameState> = {}): GameState {
+// Tests build up state in place, so drop the readonly modifiers
+type MutableGameState = { -readonly [K in keyof GameState]: GameState[K] };
+
+function createTestGameState(overrides: Partial<GameState> = {}): MutableGameState {
     return {
         ...INITIAL_STATE,
         running: true,
@@ -64,11 +66,12 @@ function createTestPlayer(playerId: number, overrides: Partial<PlayerState> = {}
             air: { current: null, progress: 0, invested: 0 }
         },
         readyToPlace: null,
+        team: null,
         ...overrides
     };
 }
 
-function addPlayer(state: GameState, playerId: number, overrides: Partial<PlayerState> = {}): PlayerState {
+function addPlayer(state: MutableGameState, playerId: number, overrides: Partial<PlayerState> = {}): PlayerState {
     const player = createTestPlayer(playerId, overrides);
     state.players = {
         ...state.players,
@@ -77,7 +80,7 @@ function addPlayer(state: GameState, playerId: number, overrides: Partial<Player
     return player;
 }
 
-function addHarvester(state: GameState, playerId: number, x: number, y: number, overrides: Partial<HarvesterUnit> = {}): HarvesterUnit {
+function addHarvester(state: MutableGameState, playerId: number, x: number, y: number, overrides: HarvesterOptions = {}): HarvesterUnit {
     const harvester = createTestHarvester({
         id: `harv_${playerId}_${x}_${y}`,
         owner: playerId,
@@ -92,14 +95,14 @@ function addHarvester(state: GameState, playerId: number, x: number, y: number, 
     return harvester;
 }
 
-function addEnemy(state: GameState, enemyId: number, x: number, y: number, key: string = 'heavy'): CombatUnit {
+function addEnemy(state: MutableGameState, enemyId: number, x: number, y: number, key: CombatUnitOptions['key'] = 'heavy'): CombatUnit {
     if (!state.players[enemyId]) {
         addPlayer(state, enemyId);
     }
     const enemy = createTestCombatUnit({
         id: `enemy_${enemyId}_${x}_${y}`,
         owner: enemyId,
-        key: key as any,
+        key,
         x,
         y
     });
@@ -110,11 +113,11 @@ function addEnemy(state: GameState, enemyId: number, x: number, y: number, key: 
     return enemy;
 }
 
-function addCombatUnit(state: GameState, playerId: number, x: number, y: number, key: string = 'heavy'): CombatUnit {
+function addCombatUnit(state: MutableGameState, playerId: number, x: number, y: number, key: CombatUnitOptions['key'] = 'heavy'): CombatUnit {
     const unit = createTestCombatUnit({
         id: `combat_${playerId}_${x}_${y}`,
         owner: playerId,
-        key: key as any,
+        key,
         x,
         y
     });
@@ -125,7 +128,7 @@ function addCombatUnit(state: GameState, playerId: number, x: number, y: number,
     return unit;
 }
 
-function addOre(state: GameState, x: number, y: number, hp: number = 1000): ResourceEntity {
+function addOre(state: MutableGameState, x: number, y: number, hp: number = 1000): ResourceEntity {
     const ore = createTestResource({
         id: `ore_${x}_${y}`,
         x,
@@ -139,7 +142,7 @@ function addOre(state: GameState, x: number, y: number, hp: number = 1000): Reso
     return ore;
 }
 
-function addRefinery(state: GameState, playerId: number, x: number, y: number): BuildingEntity {
+function addRefinery(state: MutableGameState, playerId: number, x: number, y: number): BuildingEntity {
     const refinery = createTestBuilding({
         id: `ref_${playerId}_${x}_${y}`,
         owner: playerId,
@@ -154,7 +157,7 @@ function addRefinery(state: GameState, playerId: number, x: number, y: number): 
     return refinery;
 }
 
-function addConyard(state: GameState, playerId: number, x: number, y: number): BuildingEntity {
+function addConyard(state: MutableGameState, playerId: number, x: number, y: number): BuildingEntity {
     const conyard = createTestBuilding({
         id: `conyard_${playerId}_${x}_${y}`,
         owner: playerId,
@@ -241,7 +244,7 @@ describe('Harvester AI Integration Tests', () => {
             const harvesterAI = createInitialHarvesterAIState();
 
             // Update danger map
-            const enemies = [enemy];
+            const enemies: CombatUnit[] = [enemy];
             updateDangerMap(harvesterAI, 1, enemies, [], state.tick, 'hard');
 
             // Verify danger exists at initial position
@@ -249,7 +252,7 @@ describe('Harvester AI Integration Tests', () => {
             expect(getZoneDanger(harvesterAI, 500, 500)).toBeGreaterThan(0);
 
             // Simulate enemy moving to new position
-            enemy.pos = new Vector(800, 800);
+            enemies[0] = { ...enemy, pos: new Vector(800, 800) };
             state.tick = 60;
 
             updateDangerMap(harvesterAI, 1, enemies, [], state.tick, 'hard');
@@ -679,7 +682,6 @@ describe('Harvester AI Integration Tests', () => {
             addRefinery(state, 1, 200, 200);
 
             const harvesterAI = createInitialHarvesterAIState();
-            const originalState = { ...harvesterAI };
 
             const result = updateHarvesterAI(harvesterAI, 1, state, 'easy');
 
@@ -798,7 +800,7 @@ describe('Harvester AI Integration Tests', () => {
             addPlayer(state, 1, { credits: 1000 });
             addPlayer(state, 2);
 
-            const harvester = addHarvester(state, 1, 100, 100);
+            addHarvester(state, 1, 100, 100);
             addRefinery(state, 1, 200, 200);
             addOre(state, 400, 400);
             addEnemy(state, 2, 600, 600);
@@ -845,8 +847,7 @@ describe('Harvester AI Integration Tests', () => {
             // which happens when tick % 30 === 0
             for (let tick = 0; tick <= 120; tick++) {
                 state.tick = tick;
-                const previousLastUpdate = harvesterAI.dangerMapLastUpdate;
-                const result = updateHarvesterAI(harvesterAI, 1, state, 'hard');
+                    const result = updateHarvesterAI(harvesterAI, 1, state, 'hard');
 
                 // Check if dangerMapLastUpdate was modified to the current tick
                 if (result.harvesterAI.dangerMapLastUpdate === tick && tick % 30 === 0) {
@@ -874,7 +875,7 @@ describe('Harvester AI Integration Tests', () => {
             const harvester = addHarvester(state, 1, 100, 100);
             addRefinery(state, 1, 200, 200);
             addOre(state, 400, 400);
-            const combatUnit = addCombatUnit(state, 1, 150, 150);
+            addCombatUnit(state, 1, 150, 150);
             addEnemy(state, 2, 500, 500);
 
             const harvesterAI = createInitialHarvesterAIState();
@@ -928,7 +929,7 @@ describe('Harvester AI Integration Tests', () => {
             resetAIState();
 
             // Run full AI loop
-            const actions = computeAiActions(state, 1);
+            computeAiActions(state, 1);
 
             // Get AI state to verify harvester AI was updated
             const aiState = getAIState(1);
@@ -945,7 +946,7 @@ describe('Harvester AI Integration Tests', () => {
 
             addConyard(state, 1, 100, 100);
             addRefinery(state, 1, 200, 200);
-            const harvester = addHarvester(state, 1, 150, 150);
+            addHarvester(state, 1, 150, 150);
             addOre(state, 400, 400);
 
             resetAIState();
@@ -953,7 +954,6 @@ describe('Harvester AI Integration Tests', () => {
             // Run AI at tick 0
             computeAiActions(state, 1);
             let aiState = getAIState(1);
-            const initialState = { ...aiState.harvesterAI };
 
             // Run AI at tick 60 (coordinator update)
             state.tick = 60;

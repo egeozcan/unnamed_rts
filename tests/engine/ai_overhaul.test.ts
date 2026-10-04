@@ -53,7 +53,7 @@ function createEntity(
         });
     } else {
         return createTestCombatUnit({
-            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier'>, x, y,
+            id, owner, key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>, x, y,
             hp: overrides?.hp, maxHp: overrides?.maxHp, dead: overrides?.dead,
             targetId: overrides?.targetId, lastAttackerId: overrides?.lastAttackerId,
             moveTarget: overrides?.moveTarget, finalDest: overrides?.finalDest
@@ -254,7 +254,15 @@ describe('AI Overhaul Tests', () => {
                 target: null,
                 rallyPoint: new Vector(1000, 1000),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);
@@ -297,7 +305,15 @@ describe('AI Overhaul Tests', () => {
                 target: null,
                 rallyPoint: new Vector(1000, 1000),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);
@@ -338,7 +354,15 @@ describe('AI Overhaul Tests', () => {
                 target: null,
                 rallyPoint: new Vector(1000, 1000),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
 
             const actions = computeAiActions(state, 1);

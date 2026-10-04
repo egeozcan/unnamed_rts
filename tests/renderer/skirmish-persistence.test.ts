@@ -82,6 +82,7 @@ describe('Skirmish menu persistence', () => {
 
     it('applies saved player type, AI implementation, and difficulty settings', () => {
         const storage = {
+            setItem: vi.fn(),
             getItem: vi.fn(() =>
                 JSON.stringify({
                     players: [
@@ -117,6 +118,7 @@ describe('Skirmish menu persistence', () => {
 
     it('falls back to default AI implementation for unknown saved implementation ids', () => {
         const storage = {
+            setItem: vi.fn(),
             getItem: vi.fn(() =>
                 JSON.stringify({
                     players: [
@@ -152,6 +154,7 @@ describe('Skirmish menu persistence', () => {
         (document.getElementById('fog-of-war') as HTMLSelectElement).value = 'off';
 
         const storage = {
+            getItem: vi.fn(() => null),
             setItem: vi.fn()
         };
 

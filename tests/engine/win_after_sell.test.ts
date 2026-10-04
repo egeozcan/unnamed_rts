@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { update, INITIAL_STATE } from '../../src/engine/reducer';
-import { GameState, Vector, Action } from '../../src/engine/types.js';
+import { GameState, Vector, Action, Projectile } from '../../src/engine/types.js';
 import { createTestBuilding, createTestCombatUnit } from '../../src/engine/test-utils.js';
 
 const getInitialState = (): GameState => JSON.parse(JSON.stringify(INITIAL_STATE));
@@ -67,9 +67,10 @@ describe('Win Condition - Sell Building', () => {
         const enemyBuilding = createTestBuilding({ id: 'e1', owner: 1, key: 'power', x: 2000, y: 2000 });
 
         // Player 1 has a projectile hitting Player 0's building
-        const projectile = {
+        const projectile: Projectile = {
             ownerId: 'e_unit', pos: new Vector(100, 100), vel: new Vector(0, 0),
-            targetId: 'b1', speed: 100, damage: 100, splash: 0, type: 'bullet', dead: false
+            targetId: 'b1', speed: 100, damage: 100, splash: 0, type: 'bullet', dead: false,
+            archetype: 'hitscan', hp: 0, maxHp: 0, arcHeight: 0, startPos: new Vector(100, 100), trailPoints: []
         };
 
         state = {

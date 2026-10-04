@@ -45,7 +45,7 @@ function createEntity(
         return createTestCombatUnit({
             id,
             owner,
-            key: key as Exclude<UnitKey, 'harvester' | 'harrier'>,
+            key: key as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
             x,
             y,
             hp: overrides?.hp,

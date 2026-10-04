@@ -42,7 +42,7 @@ function createTestEntity(overrides: TestEntityOverrides = {}): Entity {
     return createTestCombatUnit({
         id,
         owner: overrides.owner ?? 0,
-        key: (overrides.key ?? 'heavy') as Exclude<UnitKey, 'harvester' | 'harrier'>,
+        key: (overrides.key ?? 'heavy') as Exclude<UnitKey, 'harvester' | 'harrier' | 'demo_truck'>,
         x, y,
         hp: overrides.hp ?? 400,
         maxHp: overrides.maxHp ?? 400,
@@ -68,7 +68,8 @@ function createPlayer(id: number, overrides: Partial<PlayerState> = {}): PlayerS
             air: { current: null, progress: 0, invested: 0 }
         },
         readyToPlace: null,
-        ...overrides
+        ...overrides,
+        team: overrides.team ?? null
     };
 }
 
@@ -186,7 +187,9 @@ describe('AI Stranded Units', () => {
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
                 showMinimap: true,
-                showBirdsEye: false
+                showBirdsEye: false,
+                attackMoveMode: false,
+                fogOfWar: {}
             };
 
             // First, simulate that these units were previously in attack group
@@ -199,7 +202,15 @@ describe('AI Stranded Units', () => {
                 target: null,
                 rallyPoint: new Vector(2400, 2400),
                 status: 'attacking',
-                lastOrderTick: 0
+                lastOrderTick: 0,
+                lastHealthCheck: 0,
+                avgHealthPercent: 100,
+                moveTarget: null,
+                lastRegroupTick: 0,
+                engagedEnemies: [],
+                preEngageTarget: null,
+                needsReinforcements: false,
+                reinforcementIds: []
             }];
             aiState.strategy = 'attack'; // Previous strategy was attack
 
@@ -339,7 +350,9 @@ describe('AI Stranded Units', () => {
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
                 showMinimap: true,
-                showBirdsEye: false
+                showBirdsEye: false,
+                attackMoveMode: false,
+                fogOfWar: {}
             };
 
             // Setup AI state as if it was previously attacking
@@ -429,7 +442,9 @@ describe('AI Stranded Units', () => {
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
                 showMinimap: true,
-                showBirdsEye: false
+                showBirdsEye: false,
+                attackMoveMode: false,
+                fogOfWar: {}
             };
 
             // Setup: units were in attack group, but strategy is now buildup
@@ -511,7 +526,9 @@ describe('AI Stranded Units', () => {
                 config: { width: 3000, height: 3000, resourceDensity: 'medium', rockDensity: 'medium' },
                 debugMode: false,
                 showMinimap: true,
-                showBirdsEye: false
+                showBirdsEye: false,
+                attackMoveMode: false,
+                fogOfWar: {}
             };
 
             const aiState = getAIState(aiPlayerId);
