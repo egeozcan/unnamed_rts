@@ -18,6 +18,8 @@
     "perf:profile": "npx -y tsx src/scripts/profile_sim.ts",
     "balance:sim": "npx -y tsx src/scripts/balance_sim.ts",
     "debug": "npx tsx src/scripts/debug/index.ts",
+    "docs:render": "node src/scripts/docs/render_assets.mjs",
+    "docs:pages": "npx -y tsx src/scripts/docs/generate_pages.ts",
     "docs:dev": "vitepress dev docs/site",
     "docs:build": "vitepress build docs/site",
     "docs:preview": "vitepress preview docs/site",

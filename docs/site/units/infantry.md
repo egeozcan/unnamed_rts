@@ -1,174 +1,200 @@
-# Infantry
-
-Infantry are cheap, fast to train, and versatile. Build them at the **Barracks**.
-
-## Rifleman
-
-Basic infantry unit. Effective in groups against other infantry.
-
-| Stat | Value |
-|------|-------|
-| Cost | 100 |
-| HP | 60 |
-| Speed | 2.0 |
-| Damage | 6 |
-| Range | 130 |
-| Armor | Infantry |
-| Weapon | Bullet |
-
-**Role:** Cannon fodder, early defense, anti-infantry swarms.
-
-**Prerequisites:** Barracks
-
+---
+aside: false
+pageClass: rts-wide
 ---
 
-## Rocket Soldier
+# Infantry {#top}
 
-Anti-armor infantry with splash damage rockets.
+Infantry are the cheapest troops in the game, trained at the **Barracks**. They're the backbone of an early army, the only units that can capture buildings, and the best tool for picking off specialists, but every tank in the game is built to roll over them. Numbers on this page are read straight from the game's `rules.json`, so they're always current.
 
-| Stat | Value |
-|------|-------|
-| Cost | 300 |
-| HP | 70 |
-| Speed | 1.5 |
-| Damage | 35 |
-| Range | 220 |
-| Splash | 25 |
-| Armor | Infantry |
-| Weapon | Rocket |
+<nav class="rts-index" aria-label="Infantry index"><a class="rts-tile" href="#rifle"><img class="" src="/img/cameos/rifle.png" alt="rifle" loading="lazy"><b>Rifleman</b><span>120</span></a><a class="rts-tile" href="#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><b>Grenadier</b><span>250</span></a><a class="rts-tile" href="#rocket"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><b>Rocket</b><span>350</span></a><a class="rts-tile" href="#medic"><img class="" src="/img/cameos/medic.png" alt="medic" loading="lazy"><b>Medic</b><span>350</span></a><a class="rts-tile" href="#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><b>Flamethrower</b><span>400</span></a><a class="rts-tile" href="#engineer"><img class="" src="/img/cameos/engineer.png" alt="engineer" loading="lazy"><b>Engineer</b><span>500</span></a><a class="rts-tile" href="#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><b>Sniper</b><span>500</span></a><a class="rts-tile" href="#hijacker"><img class="" src="/img/cameos/hijacker.png" alt="hijacker" loading="lazy"><b>Hijacker</b><span>600</span></a><a class="rts-tile" href="#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><b>Commando</b><span>1000</span></a></nav>
 
-**Role:** Anti-vehicle, anti-air (rockets can target aircraft).
+<div class="rts-note">
+<b>How to read the charts.</b> <i>DPS</i> is damage per second at 60 ticks/s. The <i>damage vs armor</i> bars show the multiplier the unit's weapon gets against each armor class (×1 = full damage). Strengths and weaknesses are derived from those multipliers and from how each stat ranks among infantry.
+</div>
 
-**Special:** Has interception aura (60 radius, 40 DPS) that can shoot down incoming missiles.
+<div class="rts-table-wrap"><table class="rts-table">
+<thead><tr><th>Unit</th><th>Cost</th><th>HP</th><th>Speed</th><th>DPS</th><th>Range</th><th>Requires</th></tr></thead>
+<tbody><tr><td><a href="#rifle">Rifleman</a></td><td>120</td><td>80</td><td>2</td><td>19</td><td>130</td><td>Barracks</td></tr><tr><td><a href="#grenadier">Grenadier</a></td><td>250</td><td>85</td><td>1.8</td><td>34</td><td>180</td><td>Barracks</td></tr><tr><td><a href="#rocket">Rocket</a></td><td>350</td><td>100</td><td>1.5</td><td>32</td><td>240</td><td>Barracks</td></tr><tr><td><a href="#medic">Medic</a></td><td>350</td><td>60</td><td>2.2</td><td>–</td><td>80</td><td>Barracks</td></tr><tr><td><a href="#flamer">Flamethrower</a></td><td>400</td><td>120</td><td>2.2</td><td>120</td><td>80</td><td>Barracks</td></tr><tr><td><a href="#engineer">Engineer</a></td><td>500</td><td>60</td><td>2</td><td>–</td><td>–</td><td>Barracks</td></tr><tr><td><a href="#sniper">Sniper</a></td><td>500</td><td>60</td><td>2</td><td>60</td><td>450</td><td>Barracks + Tech Center</td></tr><tr><td><a href="#hijacker">Hijacker</a></td><td>600</td><td>60</td><td>2</td><td>–</td><td>–</td><td>Barracks</td></tr><tr><td><a href="#commando">Commando</a></td><td>1000</td><td>250</td><td>2.5</td><td>135</td><td>220</td><td>Barracks + Tech Center</td></tr></tbody>
+</table></div>
 
-**Prerequisites:** Barracks
+## Rifleman {#rifle}
 
----
+<section class="rts-card" aria-labelledby="rifle">
+<div class="rts-card-top">
+<p class="rts-tagline">Cheap basic infantry.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/rifle.png" alt="3D rifle" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/rifle.png" alt="2D rifle" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/rifle.png" alt="rifle" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>120</b></div><div class="rts-stat"><span>HP</span><b>80</b></div><div class="rts-stat"><span>Speed</span><b>2</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat" title="8 damage every 25 ticks"><span>DPS</span><b>19.2</b></div><div class="rts-stat"><span>Damage</span><b>8</b></div><div class="rts-stat"><span>Range</span><b>130</b></div><div class="rts-stat" title="25 ticks"><span>Reload</span><b>0.4s</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Bullets, 19.2 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 19.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 5.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:2.4%"></i></span><span class="rts-bar-value bad">×0.06 · 1.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:1.6%"></i></span><span class="rts-bar-value bad">×0.04 · 0.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="bad" style="width:4%"></i></span><span class="rts-bar-value bad">×0.1 · 1.9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 2.9 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Cheap (120)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.06)</li><li>Barely scratches <b>heavy vehicles</b> (×0.04)</li><li>Barely scratches <b>buildings</b> (×0.1)</li><li>Barely scratches <b>aircraft</b> (×0.15)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Beats Rocket soldiers and other specialists, and can plink at aircraft. Shredded by tanks, Flame Tanks and fast vehicles.</p>
+</section>
 
-## Engineer
+## Grenadier {#grenadier}
 
-Support unit that captures or repairs buildings.
+<section class="rts-card" aria-labelledby="grenadier">
+<div class="rts-card-top">
+<p class="rts-tagline">Lobs grenades with splash.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/grenadier.png" alt="3D grenadier" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/grenadier.png" alt="2D grenadier" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>250</b></div><div class="rts-stat"><span>HP</span><b>85</b></div><div class="rts-stat"><span>Speed</span><b>1.8</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat" title="40 damage every 70 ticks"><span>DPS</span><b>34.3</b></div><div class="rts-stat"><span>Damage</span><b>40</b></div><div class="rts-stat"><span>Range</span><b>180</b></div><div class="rts-stat" title="70 ticks"><span>Reload</span><b>1.2s</b></div><div class="rts-stat"><span>Splash</span><b>35</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Grenades, 34.3 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:60%"></i></span><span class="rts-bar-value good">×1.5 · 51.4 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 34.3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:8%"></i></span><span class="rts-bar-value bad">×0.2 · 6.9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:4%"></i></span><span class="rts-bar-value bad">×0.1 · 3.4 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:36%"></i></span><span class="rts-bar-value ok">×0.9 · 30.9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×1.5)</li><li>Splash damage (radius 35) punishes clumped units</li><li>Cheap (250)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>medium vehicles</b> (×0.2)</li><li>Barely scratches <b>heavy vehicles</b> (×0.1)</li><li><b>Cannot shoot aircraft</b></li><li>Slow (1.8)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Good vs grouped infantry, Rocket soldiers and APCs. Weak vs tanks and aircraft.</p>
+</section>
 
-| Stat | Value |
-|------|-------|
-| Cost | 500 |
-| HP | 50 |
-| Speed | 2.0 |
-| Armor | Infantry |
+## Rocket {#rocket}
 
-**Role:** Capture enemy buildings, repair friendly buildings.
+<section class="rts-card" aria-labelledby="rocket">
+<div class="rts-card-top">
+<p class="rts-tagline">Anti-armor and anti-air infantry.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/rocket.png" alt="3D rocket" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/rocket.png" alt="2D rocket" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>350</b></div><div class="rts-stat"><span>HP</span><b>100</b></div><div class="rts-stat"><span>Speed</span><b>1.5</b></div><div class="rts-stat"><span>Sight</span><b>240</b></div><div class="rts-stat" title="35 damage every 65 ticks"><span>DPS</span><b>32.3</b></div><div class="rts-stat"><span>Damage</span><b>35</b></div><div class="rts-stat"><span>Range</span><b>240</b></div><div class="rts-stat" title="65 ticks"><span>Reload</span><b>1.1s</b></div><div class="rts-stat"><span>Splash</span><b>25</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Rockets, 32.3 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="poor" style="width:16%"></i></span><span class="rts-bar-value poor">×0.4 · 12.9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 19.4 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:34%"></i></span><span class="rts-bar-value ok">×0.85 · 27.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 32.3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 32.3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 32.3 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Can shoot down <b>aircraft</b></li><li>Splash damage (radius 25) punishes clumped units</li><li>Long range (240)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Weak against <b>infantry</b> (×0.4)</li><li>Weak against <b>light vehicles</b> (×0.6)</li><li>Slow (1.5)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Beats tanks, Missile Tanks and aircraft. Loses to Riflemen, anti-infantry units and fast light vehicles.</p>
+</section>
 
-**Usage:**
-- Right-click enemy building → Capture (instant, consumes Engineer)
-- Right-click friendly building → Repair (instant, consumes Engineer)
+## Medic {#medic}
 
-**Prerequisites:** Barracks
+<section class="rts-card" aria-labelledby="medic">
+<div class="rts-card-top">
+<p class="rts-tagline">Healer unit.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/medic.png" alt="3D medic" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/medic.png" alt="2D medic" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/medic.png" alt="medic" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>350</b></div><div class="rts-stat"><span>HP</span><b>60</b></div><div class="rts-stat"><span>Speed</span><b>2.2</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat"><span>Heal</span><b>15 HP</b></div><div class="rts-stat"><span>Range</span><b>80</b></div><div class="rts-stat" title="50 ticks"><span>Pulse</span><b>0.8s</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
 
-::: tip
-Capturing an enemy Construction Yard can turn the tide of battle.
-:::
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Heals friendly infantry for <b>15 HP</b> per pulse</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Cannot attack: needs an escort</li><li>Fragile (60 HP)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Automatically heals nearby friendly infantry. Keep behind front lines for best results.</p>
+</section>
 
----
+## Flamethrower {#flamer}
 
-## Medic
+<section class="rts-card" aria-labelledby="flamer">
+<div class="rts-card-top">
+<p class="rts-tagline">Close-range anti-infantry.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/flamer.png" alt="3D flamer" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/flamer.png" alt="2D flamer" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>400</b></div><div class="rts-stat"><span>HP</span><b>120</b></div><div class="rts-stat"><span>Speed</span><b>2.2</b></div><div class="rts-stat"><span>Sight</span><b>160</b></div><div class="rts-stat" title="20 damage every 10 ticks"><span>DPS</span><b>120</b></div><div class="rts-stat"><span>Damage</span><b>20</b></div><div class="rts-stat"><span>Range</span><b>80</b></div><div class="rts-stat" title="10 ticks"><span>Reload</span><b>0.2s</b></div><div class="rts-stat"><span>Splash</span><b>30</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Flames, 120 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:70%"></i></span><span class="rts-bar-value good">×1.75 · 210 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 120 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 18 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:2.8000000000000003%"></i></span><span class="rts-bar-value bad">×0.07 · 8.4 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 72 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×1.75)</li><li>Splash damage (radius 30) punishes clumped units</li><li>Very high damage output (120 dps)</li><li>Tough for infantry (120 HP)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>medium vehicles</b> (×0.15)</li><li>Barely scratches <b>heavy vehicles</b> (×0.07)</li><li>Weak against <b>buildings</b> (×0.6)</li><li><b>Cannot shoot aircraft</b></li><li>Very short range (80): must close in to fight</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Burns Rocket soldiers and Missile Tanks that let it close in. Outranged by Riflemen, crushed by tanks.</p>
+</section>
 
-Healer that automatically restores HP to nearby friendly infantry.
+## Engineer {#engineer}
 
-| Stat | Value |
-|------|-------|
-| Cost | 350 |
-| HP | 45 |
-| Speed | 2.2 |
-| Heal | 15 HP/shot |
-| Range | 80 |
-| Armor | Infantry |
+<section class="rts-card" aria-labelledby="engineer">
+<div class="rts-card-top">
+<p class="rts-tagline">Support unit.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/engineer.png" alt="3D engineer" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/engineer.png" alt="2D engineer" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/engineer.png" alt="engineer" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>500</b></div><div class="rts-stat"><span>HP</span><b>60</b></div><div class="rts-stat"><span>Speed</span><b>2</b></div><div class="rts-stat"><span>Sight</span><b>160</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
 
-**Role:** Keep infantry squads alive longer.
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li><b>Captures</b> enemy buildings that are marked capturable</li><li><b>Repairs</b> friendly buildings</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Consumed on use, and unarmed</li><li>Fragile (60 HP)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Right-click enemy buildings to capture them. Right-click friendly buildings to repair.</p>
+</section>
 
-**Prerequisites:** Barracks
+## Sniper {#sniper}
 
----
+<section class="rts-card" aria-labelledby="sniper">
+<div class="rts-card-top">
+<p class="rts-tagline">Long-range anti-infantry specialist.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/sniper.png" alt="3D sniper" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/sniper.png" alt="2D sniper" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>500</b></div><div class="rts-stat"><span>HP</span><b>60</b></div><div class="rts-stat"><span>Speed</span><b>2</b></div><div class="rts-stat"><span>Sight</span><b>500</b></div><div class="rts-stat" title="90 damage every 90 ticks"><span>DPS</span><b>60</b></div><div class="rts-stat"><span>Damage</span><b>90</b></div><div class="rts-stat"><span>Range</span><b>450</b></div><div class="rts-stat" title="90 ticks"><span>Reload</span><b>1.5s</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Sniper rifle, 60 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:100%"></i></span><span class="rts-bar-value good">×4 · 240 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 18 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:2%"></i></span><span class="rts-bar-value bad">×0.05 · 3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="bad" style="width:2%"></i></span><span class="rts-bar-value bad">×0.05 · 3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×4)</li><li>Very high damage output (60 dps)</li><li><b>Extreme range</b> (450) outranges nearly everything</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.15)</li><li>Barely scratches <b>heavy vehicles</b> (×0.05)</li><li>Barely scratches <b>buildings</b> (×0.05)</li><li><b>Cannot shoot aircraft</b></li><li>Fragile (60 HP)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Picks off infantry from far away. Fragile; any vehicle or rifle rush runs it over.</p>
+</section>
 
-## Sniper
+## Hijacker {#hijacker}
 
-Long-range specialist that one-shots most infantry.
+<section class="rts-card" aria-labelledby="hijacker">
+<div class="rts-card-top">
+<p class="rts-tagline">Specialist infiltrator.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/hijacker.png" alt="3D hijacker" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/hijacker.png" alt="2D hijacker" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/hijacker.png" alt="hijacker" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>600</b></div><div class="rts-stat"><span>HP</span><b>60</b></div><div class="rts-stat"><span>Speed</span><b>2</b></div><div class="rts-stat"><span>Sight</span><b>160</b></div><div class="rts-stat"><span>Armor</span><b>Hijackers</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a></div>
 
-| Stat | Value |
-|------|-------|
-| Cost | 800 |
-| HP | 45 |
-| Speed | 1.5 |
-| Damage | 90 |
-| Range | 450 |
-| Armor | Infantry |
-| Weapon | Sniper |
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li><b>Steals enemy vehicles</b> outright</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Consumed on use, and unarmed</li><li>Fragile (60 HP)</li><li>Expensive (600)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Bullets</b> ×2.5 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>AP rounds</b> ×2 <span class="rts-muted">(APC)</span></li><li><b>Flames</b> ×1.5 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Heavy cannon</b> ×0.15 <span class="rts-muted">(Mammoth Tank)</span></li><li><b>Cannon</b> ×0.2 <span class="rts-muted">(Light Tank, Heavy Tank, Gun Turret)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles"><img class="" src="/img/cameos/jeep.png" alt="jeep" loading="lazy"><span>Ranger</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#commando"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><span>Commando</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Enters enemy vehicles to steal them. Weak vs infantry fire, resilient vs vehicles.</p>
+</section>
 
-**Role:** Counter enemy infantry from extreme range.
+## Commando {#commando}
 
-**Weakness:** Terrible against vehicles (0.05x damage to heavy armor).
+<section class="rts-card" aria-labelledby="commando">
+<div class="rts-card-top">
+<p class="rts-tagline">Elite infantry hunter.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/commando.png" alt="3D commando" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/commando.png" alt="2D commando" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/commando.png" alt="commando" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1000</b></div><div class="rts-stat"><span>HP</span><b>250</b></div><div class="rts-stat"><span>Speed</span><b>2.5</b></div><div class="rts-stat"><span>Sight</span><b>280</b></div><div class="rts-stat" title="45 damage every 20 ticks"><span>DPS</span><b>135</b></div><div class="rts-stat"><span>Damage</span><b>45</b></div><div class="rts-stat"><span>Range</span><b>220</b></div><div class="rts-stat" title="20 ticks"><span>Reload</span><b>0.3s</b></div><div class="rts-stat"><span>Armor</span><b>Infantry</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#barracks"><img class="" src="/img/cameos/barracks.png" alt="barracks" loading="lazy"><span>Barracks</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Sniper rifle, 135 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:100%"></i></span><span class="rts-bar-value good">×4 · 540 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 40.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 20.3 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:2%"></i></span><span class="rts-bar-value bad">×0.05 · 6.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="bad" style="width:2%"></i></span><span class="rts-bar-value bad">×0.05 · 6.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×4)</li><li>Very high damage output (135 dps)</li><li>Long range (220)</li><li>Tough for infantry (250 HP)</li><li>Fast (2.5)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.15)</li><li>Barely scratches <b>heavy vehicles</b> (×0.05)</li><li>Barely scratches <b>buildings</b> (×0.05)</li><li><b>Cannot shoot aircraft</b></li><li>Expensive (1000)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Sniper rifle</b> ×4 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×1.75 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li><li><b>Grenades</b> ×1.5 <span class="rts-muted">(Grenadier)</span></li><li><b>Artillery shells</b> ×1.5 <span class="rts-muted">(Artillery)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Air-to-ground missiles</b> ×0.1 <span class="rts-muted">(Harrier)</span></li><li><b>Missiles</b> ×0.15 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#sniper"><img class="" src="/img/cameos/sniper.png" alt="sniper" loading="lazy"><span>Sniper</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Tough, fast and kills any infantry in one or two shots. Barely scratches vehicles: tanks and Rangers beat it.</p>
+</section>
 
-**Prerequisites:** Barracks, Tech Center
-
----
-
-## Flamethrower
-
-Short-range area damage infantry.
-
-| Stat | Value |
-|------|-------|
-| Cost | 400 |
-| HP | 80 |
-| Speed | 1.8 |
-| Damage | 20 |
-| Range | 80 |
-| Splash | 30 |
-| Armor | Infantry |
-| Weapon | Flame |
-
-**Role:** Devastating against grouped infantry and buildings.
-
-**Weakness:** Very short range—vulnerable while closing distance.
-
-**Prerequisites:** Barracks
-
----
-
-## Grenadier
-
-Splash damage infantry with moderate range.
-
-| Stat | Value |
-|------|-------|
-| Cost | 250 |
-| HP | 65 |
-| Speed | 1.7 |
-| Damage | 40 |
-| Range | 180 |
-| Splash | 35 |
-| Armor | Infantry |
-| Weapon | Grenade |
-
-**Role:** Anti-infantry splash, light anti-vehicle.
-
-**Prerequisites:** Barracks
-
----
-
-## Commando
-
-Elite soldier with armor-piercing rounds.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1500 |
-| HP | 120 |
-| Speed | 2.5 |
-| Damage | 60 |
-| Range | 200 |
-| Armor | Infantry |
-| Weapon | AP Bullet |
-
-**Role:** Elite all-purpose infantry—fast, tough, effective against all targets.
-
-**Prerequisites:** Barracks, Tech Center
