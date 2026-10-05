@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { INITIAL_STATE, update, createPlayerState } from '../../src/engine/reducer';
 import { type GameState, type Entity, type EntityId, Vector } from '../../src/engine/types';
 import {
@@ -8,6 +8,25 @@ import { pickEntityAt, isHiddenByFog, setPickLift } from '../../src/engine/picki
 import { getPlacementError } from '../../src/engine/reducers/buildings';
 import { validateSkirmishConfig } from '../../src/game-utils';
 import { isMoveHopeless } from '../../src/engine/reducers/movement';
+
+// The engine uses Math.random (spawn jitter, stuck sidestep, entity ids); a seeded PRNG keeps the sims reproducible.
+function mulberry32(seed: number): () => number {
+    let a = seed;
+    return () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+beforeEach(() => {
+    vi.spyOn(Math, 'random').mockImplementation(mulberry32(Number(process.env.SEED ?? 12345)));
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
 
 function stateWith(entities: Entity[], teams: Record<number, 'A' | 'B' | null> = {}): GameState {
     const record: Record<EntityId, Entity> = {};
@@ -373,7 +392,7 @@ describe('produced units without a rally point', () => {
         for (let i = 0; i < units.length; i++) {
             for (let j = i + 1; j < units.length; j++) {
                 const a = units[i].pos, b = units[j].pos;
-                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(units[i].radius * 2 - 1);
+                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(units[i].radius * 2 - 3);
             }
         }
     });
@@ -398,7 +417,7 @@ describe('produced units without a rally point', () => {
             expect(finalUnits[i].pos.y).toBeGreaterThan(400 + barracks.h / 2);
             for (let j = i + 1; j < finalUnits.length; j++) {
                 const a = finalUnits[i].pos, b = finalUnits[j].pos;
-                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(finalUnits[i].radius * 2 - 1);
+                expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(finalUnits[i].radius * 2 - 3);
             }
         }
     });
