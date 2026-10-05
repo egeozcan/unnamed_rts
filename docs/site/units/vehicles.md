@@ -1,277 +1,280 @@
-# Vehicles
-
-Vehicles are your main combat force. Build them at the **War Factory**.
-
-## Harvester
-
-Resource gatherer—essential for your economy.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1400 |
-| HP | 1000 |
-| Speed | 1.5 |
-| Cargo | 500 |
-| Armor | Heavy |
-
-**Role:** Collect ore, fund your army.
-
-**Prerequisites:** Refinery, War Factory
-
-::: warning
-High-priority target. Escort with combat units.
-:::
-
+---
+aside: false
+pageClass: rts-wide
 ---
 
-## Ranger
+# Vehicles {#top}
+
+Vehicles are built at the **War Factory**. They range from fast raiders and transports through main battle tanks to long-range siege guns, plus the support vehicles (Harvester, MCV, Induction Rig) your economy and expansion depend on. Numbers on this page are read straight from the game's `rules.json`, so they're always current.
+
+<nav class="rts-index" aria-label="Vehicles index"><a class="rts-tile" href="#jeep"><img class="" src="/img/cameos/jeep.png" alt="jeep" loading="lazy"><b>Ranger</b><span>450</span></a><a class="rts-tile" href="#apc"><img class="" src="/img/cameos/apc.png" alt="apc" loading="lazy"><b>APC</b><span>600</span></a><a class="rts-tile" href="#light"><img class="" src="/img/cameos/light.png" alt="light" loading="lazy"><b>Light Tank</b><span>800</span></a><a class="rts-tile" href="#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><b>Flame Tank</b><span>900</span></a><a class="rts-tile" href="#artillery"><img class="" src="/img/cameos/artillery.png" alt="artillery" loading="lazy"><b>Artillery</b><span>900</span></a><a class="rts-tile" href="#demo_truck"><img class="" src="/img/cameos/demo_truck.png" alt="demo_truck" loading="lazy"><b>Demo Truck</b><span>1000</span></a><a class="rts-tile" href="#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><b>Missile Tank</b><span>1200</span></a><a class="rts-tile" href="#harvester"><img class="" src="/img/cameos/harvester.png" alt="harvester" loading="lazy"><b>Harvester</b><span>1400</span></a><a class="rts-tile" href="#heavy"><img class="" src="/img/cameos/heavy.png" alt="heavy" loading="lazy"><b>Heavy Tank</b><span>1400</span></a><a class="rts-tile" href="#mlrs"><img class="" src="/img/cameos/mlrs.png" alt="mlrs" loading="lazy"><b>MLRS</b><span>1400</span></a><a class="rts-tile" href="#induction_rig"><img class="" src="/img/cameos/induction_rig.png" alt="induction_rig" loading="lazy"><b>Induction Rig</b><span>1800</span></a><a class="rts-tile" href="#mammoth"><img class="" src="/img/cameos/mammoth.png" alt="mammoth" loading="lazy"><b>Mammoth Tank</b><span>2200</span></a><a class="rts-tile" href="#mcv"><img class="" src="/img/cameos/mcv.png" alt="mcv" loading="lazy"><b>MCV</b><span>3000</span></a></nav>
+
+<div class="rts-note">
+<b>How to read the charts.</b> <i>DPS</i> is damage per second at 60 ticks/s. The <i>damage vs armor</i> bars show the multiplier the unit's weapon gets against each armor class (×1 = full damage). Strengths and weaknesses are derived from those multipliers and from how each stat ranks among vehicles and aircraft.
+</div>
+
+<div class="rts-table-wrap"><table class="rts-table">
+<thead><tr><th>Unit</th><th>Cost</th><th>HP</th><th>Speed</th><th>DPS</th><th>Range</th><th>Requires</th></tr></thead>
+<tbody><tr><td><a href="#jeep">Ranger</a></td><td>450</td><td>180</td><td>4.5</td><td>80</td><td>160</td><td>War Factory</td></tr><tr><td><a href="#apc">APC</a></td><td>600</td><td>300</td><td>3.5</td><td>60</td><td>120</td><td>War Factory</td></tr><tr><td><a href="#light">Light Tank</a></td><td>800</td><td>400</td><td>2.8</td><td>49</td><td>210</td><td>War Factory</td></tr><tr><td><a href="#flame_tank">Flame Tank</a></td><td>900</td><td>450</td><td>2.2</td><td>120</td><td>100</td><td>War Factory</td></tr><tr><td><a href="#artillery">Artillery</a></td><td>900</td><td>250</td><td>1.2</td><td>50</td><td>550</td><td>War Factory + Tech Center</td></tr><tr><td><a href="#demo_truck">Demo Truck</a></td><td>1000</td><td>150</td><td>2.8</td><td>–</td><td>–</td><td>War Factory</td></tr><tr><td><a href="#stealth">Missile Tank</a></td><td>1200</td><td>400</td><td>3.2</td><td>66</td><td>230</td><td>War Factory + Tech Center</td></tr><tr><td><a href="#harvester">Harvester</a></td><td>1400</td><td>1000</td><td>1.5</td><td>16</td><td>60</td><td>Refinery + War Factory</td></tr><tr><td><a href="#heavy">Heavy Tank</a></td><td>1400</td><td>700</td><td>2</td><td>72</td><td>230</td><td>War Factory</td></tr><tr><td><a href="#mlrs">MLRS</a></td><td>1400</td><td>250</td><td>1.5</td><td>48</td><td>500</td><td>War Factory + Tech Center</td></tr><tr><td><a href="#induction_rig">Induction Rig</a></td><td>1800</td><td>600</td><td>0.8</td><td>–</td><td>–</td><td>War Factory + Refinery</td></tr><tr><td><a href="#mammoth">Mammoth Tank</a></td><td>2200</td><td>1500</td><td>1.4</td><td>80</td><td>250</td><td>War Factory + Tech Center</td></tr><tr><td><a href="#mcv">MCV</a></td><td>3000</td><td>2000</td><td>1</td><td>–</td><td>–</td><td>War Factory</td></tr></tbody>
+</table></div>
+
+## Ranger {#jeep}
+
+<section class="rts-card" aria-labelledby="jeep">
+<div class="rts-card-top">
+<p class="rts-tagline">Fast raider.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/jeep.png" alt="3D jeep" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/jeep.png" alt="2D jeep" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/jeep.png" alt="jeep" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>450</b></div><div class="rts-stat"><span>HP</span><b>180</b></div><div class="rts-stat"><span>Speed</span><b>4.5</b></div><div class="rts-stat"><span>Sight</span><b>320</b></div><div class="rts-stat" title="20 damage every 15 ticks"><span>DPS</span><b>80</b></div><div class="rts-stat"><span>Damage</span><b>20</b></div><div class="rts-stat"><span>Range</span><b>160</b></div><div class="rts-stat" title="15 ticks"><span>Reload</span><b>0.3s</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Bullets, 80 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 80 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 24 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:2.4%"></i></span><span class="rts-bar-value bad">×0.06 · 4.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:1.6%"></i></span><span class="rts-bar-value bad">×0.04 · 3.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="bad" style="width:4%"></i></span><span class="rts-bar-value bad">×0.1 · 8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 12 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Very high damage output (80 dps)</li><li>Fires while on the move</li><li>Fast (4.5)</li><li>Cheap (450)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.06)</li><li>Barely scratches <b>heavy vehicles</b> (×0.04)</li><li>Barely scratches <b>buildings</b> (×0.1)</li><li>Barely scratches <b>aircraft</b> (×0.15)</li><li>Fragile (180 HP)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Drive-by machine gun shreds infantry, artillery and harvesters, and can fire at aircraft. Loses to APCs and any tank.</p>
+</section>
+
+## APC {#apc}
+
+<section class="rts-card" aria-labelledby="apc">
+<div class="rts-card-top">
+<p class="rts-tagline">Armored transport with an armor-piercing gun.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/apc.png" alt="3D apc" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/apc.png" alt="2D apc" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/apc.png" alt="apc" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>600</b></div><div class="rts-stat"><span>HP</span><b>300</b></div><div class="rts-stat"><span>Speed</span><b>3.5</b></div><div class="rts-stat"><span>Sight</span><b>240</b></div><div class="rts-stat" title="12 damage every 12 ticks"><span>DPS</span><b>60</b></div><div class="rts-stat"><span>Damage</span><b>12</b></div><div class="rts-stat"><span>Range</span><b>120</b></div><div class="rts-stat" title="12 ticks"><span>Reload</span><b>0.2s</b></div><div class="rts-stat"><span>Carries</span><b>5</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(AP rounds, 60 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="ok" style="width:32%"></i></span><span class="rts-bar-value ok">×0.8 · 48 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="good" style="width:50%"></i></span><span class="rts-bar-value good">×1.25 · 75 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="poor" style="width:20%"></i></span><span class="rts-bar-value poor">×0.5 · 30 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:10%"></i></span><span class="rts-bar-value bad">×0.25 · 15 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="poor" style="width:16%"></i></span><span class="rts-bar-value poor">×0.4 · 24 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="poor" style="width:20%"></i></span><span class="rts-bar-value poor">×0.5 · 30 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Good against <b>light vehicles</b> (×1.25)</li><li>Very high damage output (60 dps)</li><li>Fires while on the move</li><li>Carries up to <b>5</b> infantry</li><li>Cheap (600)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Weak against <b>medium vehicles</b> (×0.5)</li><li>Barely scratches <b>heavy vehicles</b> (×0.25)</li><li>Weak against <b>buildings</b> (×0.4)</li><li>Weak against <b>aircraft</b> (×0.5)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Hunts infantry, Rangers and siege units, and doubles as mobile anti-air. Loses to tanks.</p>
+</section>
+
+## Light Tank {#light}
+
+<section class="rts-card" aria-labelledby="light">
+<div class="rts-card-top">
+<p class="rts-tagline">Fast main battle tank.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/light.png" alt="3D light" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/light.png" alt="2D light" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/light.png" alt="light" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>800</b></div><div class="rts-stat"><span>HP</span><b>400</b></div><div class="rts-stat"><span>Speed</span><b>2.8</b></div><div class="rts-stat"><span>Sight</span><b>240</b></div><div class="rts-stat" title="45 damage every 55 ticks"><span>DPS</span><b>49.1</b></div><div class="rts-stat"><span>Damage</span><b>45</b></div><div class="rts-stat"><span>Range</span><b>210</b></div><div class="rts-stat" title="55 ticks"><span>Reload</span><b>0.9s</b></div><div class="rts-stat"><span>Armor</span><b>Medium vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Cannon, 49.1 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 29.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 49.1 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 49.1 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="poor" style="width:20%"></i></span><span class="rts-bar-value poor">×0.5 · 24.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 49.1 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Fires while on the move</li><li>Cheap (800)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Weak against <b>infantry</b> (×0.6)</li><li>Weak against <b>heavy vehicles</b> (×0.5)</li><li><b>Cannot shoot aircraft</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.06 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.15 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.15 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#heavy"><img class="" src="/img/cameos/heavy.png" alt="heavy" loading="lazy"><span>Heavy Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Beats infantry, light vehicles, Flame Tanks and Missile Tanks. Loses to Heavy/Mammoth tanks, Rocket soldiers and aircraft.</p>
+</section>
+
+## Flame Tank {#flame_tank}
+
+<section class="rts-card" aria-labelledby="flame_tank">
+<div class="rts-card-top">
+<p class="rts-tagline">Anti-infantry vehicle.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/flame_tank.png" alt="3D flame_tank" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/flame_tank.png" alt="2D flame_tank" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>900</b></div><div class="rts-stat"><span>HP</span><b>450</b></div><div class="rts-stat"><span>Speed</span><b>2.2</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat" title="30 damage every 15 ticks"><span>DPS</span><b>120</b></div><div class="rts-stat"><span>Damage</span><b>30</b></div><div class="rts-stat"><span>Range</span><b>100</b></div><div class="rts-stat" title="15 ticks"><span>Reload</span><b>0.3s</b></div><div class="rts-stat"><span>Splash</span><b>50</b></div><div class="rts-stat"><span>Armor</span><b>Medium vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Flames, 120 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:70%"></i></span><span class="rts-bar-value good">×1.75 · 210 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 120 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 18 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:2.8000000000000003%"></i></span><span class="rts-bar-value bad">×0.07 · 8.4 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 72 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×1.75)</li><li>Splash damage (radius 50) punishes clumped units</li><li>Very high damage output (120 dps)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>medium vehicles</b> (×0.15)</li><li>Barely scratches <b>heavy vehicles</b> (×0.07)</li><li>Weak against <b>buildings</b> (×0.6)</li><li><b>Cannot shoot aircraft</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.06 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.15 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.15 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#light"><img class="" src="/img/cameos/light.png" alt="light" loading="lazy"><span>Light Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Splash flames wipe out infantry blobs and light vehicles. Weak armor-piercing: real tanks beat it.</p>
+</section>
+
+## Artillery {#artillery}
+
+<section class="rts-card" aria-labelledby="artillery">
+<div class="rts-card-top">
+<p class="rts-tagline">Long-range siege gun.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/artillery.png" alt="3D artillery" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/artillery.png" alt="2D artillery" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/artillery.png" alt="artillery" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>900</b></div><div class="rts-stat"><span>HP</span><b>250</b></div><div class="rts-stat"><span>Speed</span><b>1.2</b></div><div class="rts-stat"><span>Sight</span><b>400</b></div><div class="rts-stat" title="100 damage every 120 ticks"><span>DPS</span><b>50</b></div><div class="rts-stat"><span>Damage</span><b>100</b></div><div class="rts-stat"><span>Range</span><b>550</b></div><div class="rts-stat" title="120 ticks"><span>Reload</span><b>2s</b></div><div class="rts-stat"><span>Splash</span><b>90</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Artillery shells, 50 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:60%"></i></span><span class="rts-bar-value good">×1.5 · 75 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 15 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 15 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:10%"></i></span><span class="rts-bar-value bad">×0.25 · 12.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="good" style="width:50%"></i></span><span class="rts-bar-value good">×1.25 · 62.5 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×1.5)</li><li>Good against <b>buildings</b> (×1.25)</li><li>Splash damage (radius 90) punishes clumped units</li><li><b>Extreme range</b> (550) outranges nearly everything</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.3)</li><li>Barely scratches <b>heavy vehicles</b> (×0.25)</li><li><b>Cannot shoot aircraft</b></li><li>Slow (1.2)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Shells devastate infantry and buildings from 550 range, but do little to vehicles. Fragile: raiders and tanks overrun it.</p>
+</section>
+
+## Demo Truck {#demo_truck}
+
+<section class="rts-card" aria-labelledby="demo_truck">
+<div class="rts-card-top">
+<p class="rts-tagline">Suicide vehicle.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/demo_truck.png" alt="3D demo_truck" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/demo_truck.png" alt="2D demo_truck" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/demo_truck.png" alt="demo_truck" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1000</b></div><div class="rts-stat"><span>HP</span><b>150</b></div><div class="rts-stat"><span>Speed</span><b>2.8</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat"><span>Blast</span><b>600</b></div><div class="rts-stat"><span>Radius</span><b>150</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Explosion, 600 base damage, one blast)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="good" style="width:60%"></i></span><span class="rts-bar-value good">×1.5 · 900 dmg</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="good" style="width:50%"></i></span><span class="rts-bar-value good">×1.25 · 750 dmg</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 600 dmg</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="ok" style="width:30%"></i></span><span class="rts-bar-value ok">×0.75 · 450 dmg</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="good" style="width:60%"></i></span><span class="rts-bar-value good">×1.5 · 900 dmg</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="good" style="width:50%"></i></span><span class="rts-bar-value good">×1.25 · 750 dmg</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>infantry</b> (×1.5)</li><li>Good against <b>light vehicles</b> (×1.25)</li><li>Excellent against <b>buildings</b> (×1.5)</li><li>Good against <b>aircraft</b> (×1.25)</li><li>Detonates for <b>600</b> damage in a 150 radius; chain reactions possible</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Destroyed on use, and has no weapon of its own</li><li>Fragile (150 HP)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Detonates on impact or death, dealing massive area damage. Chain reactions possible.</p>
+</section>
+
+## Missile Tank {#stealth}
+
+<section class="rts-card" aria-labelledby="stealth">
+<div class="rts-card-top">
+<p class="rts-tagline">Tank destroyer.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/stealth.png" alt="3D stealth" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/stealth.png" alt="2D stealth" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1200</b></div><div class="rts-stat"><span>HP</span><b>400</b></div><div class="rts-stat"><span>Speed</span><b>3.2</b></div><div class="rts-stat"><span>Sight</span><b>280</b></div><div class="rts-stat" title="55 damage every 50 ticks"><span>DPS</span><b>66</b></div><div class="rts-stat"><span>Damage</span><b>55</b></div><div class="rts-stat"><span>Range</span><b>230</b></div><div class="rts-stat" title="50 ticks"><span>Reload</span><b>0.8s</b></div><div class="rts-stat"><span>Armor</span><b>Medium vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Missiles, 66 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 9.9 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 39.6 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 66 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="good" style="width:88.00000000000001%"></i></span><span class="rts-bar-value good">×2.2 · 145.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 66 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 66 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>heavy vehicles</b> (×2.2)</li><li>Can shoot down <b>aircraft</b></li><li>Very high damage output (66 dps)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>infantry</b> (×0.15)</li><li>Weak against <b>light vehicles</b> (×0.6)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.06 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.15 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.15 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#light"><img class="" src="/img/cameos/light.png" alt="light" loading="lazy"><span>Light Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#heavy"><img class="" src="/img/cameos/heavy.png" alt="heavy" loading="lazy"><span>Heavy Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Homing missiles wreck Heavy and Mammoth tanks and can hit aircraft. Light Tanks, Rocket soldiers and anti-infantry fire beat it. Requires Tech Center.</p>
+</section>
+
+## Harvester {#harvester}
+
+<section class="rts-card" aria-labelledby="harvester">
+<div class="rts-card-top">
+<p class="rts-tagline">Resource gatherer.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/harvester.png" alt="3D harvester" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/harvester.png" alt="2D harvester" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/harvester.png" alt="harvester" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1400</b></div><div class="rts-stat"><span>HP</span><b>1000</b></div><div class="rts-stat"><span>Speed</span><b>1.5</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat" title="8 damage every 30 ticks"><span>DPS</span><b>16</b></div><div class="rts-stat"><span>Damage</span><b>8</b></div><div class="rts-stat"><span>Range</span><b>60</b></div><div class="rts-stat" title="30 ticks"><span>Reload</span><b>0.5s</b></div><div class="rts-stat"><span>Cargo</span><b>500</b></div><div class="rts-stat"><span>Armor</span><b>Heavy vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#refinery"><img class="" src="/img/cameos/refinery.png" alt="refinery" loading="lazy"><span>Refinery</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Bullets, 16 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 16 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:12%"></i></span><span class="rts-bar-value poor">×0.3 · 4.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="bad" style="width:2.4%"></i></span><span class="rts-bar-value bad">×0.06 · 1 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="bad" style="width:1.6%"></i></span><span class="rts-bar-value bad">×0.04 · 0.6 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="bad" style="width:4%"></i></span><span class="rts-bar-value bad">×0.1 · 1.6 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 2.4 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Hauls <b>500</b> ore per trip</li><li>Tough for vehicles and aircraft (1000 HP)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>light vehicles</b> (×0.3)</li><li>Barely scratches <b>medium vehicles</b> (×0.06)</li><li>Barely scratches <b>heavy vehicles</b> (×0.04)</li><li>Barely scratches <b>buildings</b> (×0.1)</li><li>Barely scratches <b>aircraft</b> (×0.15)</li><li>Very short range (60): must close in to fight</li><li>Your whole income: losing it stalls the economy</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Missiles</b> ×2.2 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.04 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.05 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.07 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#rocket"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><span>Rocket</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Automatically collects ore and returns to Refinery. Right-click ore fields to redirect.</p>
+</section>
+
+## Heavy Tank {#heavy}
+
+<section class="rts-card" aria-labelledby="heavy">
+<div class="rts-card-top">
+<p class="rts-tagline">Heavy assault tank.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/heavy.png" alt="3D heavy" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/heavy.png" alt="2D heavy" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/heavy.png" alt="heavy" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1400</b></div><div class="rts-stat"><span>HP</span><b>700</b></div><div class="rts-stat"><span>Speed</span><b>2</b></div><div class="rts-stat"><span>Sight</span><b>260</b></div><div class="rts-stat" title="90 damage every 75 ticks"><span>DPS</span><b>72</b></div><div class="rts-stat"><span>Damage</span><b>90</b></div><div class="rts-stat"><span>Range</span><b>230</b></div><div class="rts-stat" title="75 ticks"><span>Reload</span><b>1.3s</b></div><div class="rts-stat"><span>Armor</span><b>Heavy vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Cannon, 72 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 43.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 72 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 72 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="poor" style="width:20%"></i></span><span class="rts-bar-value poor">×0.5 · 36 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 72 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Very high damage output (72 dps)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Weak against <b>infantry</b> (×0.6)</li><li>Weak against <b>heavy vehicles</b> (×0.5)</li><li><b>Cannot shoot aircraft</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Missiles</b> ×2.2 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.04 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.05 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.07 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#rocket"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><span>Rocket</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Out-fights Light Tanks and crushes infantry. Countered by Missile Tanks, Rocket soldiers and aircraft.</p>
+</section>
+
+## MLRS {#mlrs}
+
+<section class="rts-card" aria-labelledby="mlrs">
+<div class="rts-card-top">
+<p class="rts-tagline">Long-range rocket artillery.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/mlrs.png" alt="3D mlrs" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/mlrs.png" alt="2D mlrs" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/mlrs.png" alt="mlrs" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1400</b></div><div class="rts-stat"><span>HP</span><b>250</b></div><div class="rts-stat"><span>Speed</span><b>1.5</b></div><div class="rts-stat"><span>Sight</span><b>380</b></div><div class="rts-stat" title="120 damage every 150 ticks"><span>DPS</span><b>48</b></div><div class="rts-stat"><span>Damage</span><b>120</b></div><div class="rts-stat"><span>Range</span><b>500</b></div><div class="rts-stat" title="150 ticks"><span>Reload</span><b>2.5s</b></div><div class="rts-stat"><span>Splash</span><b>80</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Missiles, 48 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="bad" style="width:6%"></i></span><span class="rts-bar-value bad">×0.15 · 7.2 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="poor" style="width:24%"></i></span><span class="rts-bar-value poor">×0.6 · 28.8 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 48 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="good" style="width:88.00000000000001%"></i></span><span class="rts-bar-value good">×2.2 · 105.6 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 48 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 48 dps</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Excellent against <b>heavy vehicles</b> (×2.2)</li><li>Can shoot down <b>aircraft</b></li><li>Splash damage (radius 80) punishes clumped units</li><li><b>Extreme range</b> (500) outranges nearly everything</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Barely scratches <b>infantry</b> (×0.15)</li><li>Weak against <b>light vehicles</b> (×0.6)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Homing missiles punish slow armor and aircraft from far away. Fragile: infantry and fast raiders overrun it.</p>
+</section>
+
+## Induction Rig {#induction_rig}
+
+<section class="rts-card" aria-labelledby="induction_rig">
+<div class="rts-card-top">
+<p class="rts-tagline">Deploys on ore wells for infinite resources.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/induction_rig.png" alt="3D induction_rig" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/induction_rig.png" alt="2D induction_rig" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/induction_rig.png" alt="induction_rig" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>1800</b></div><div class="rts-stat"><span>HP</span><b>600</b></div><div class="rts-stat"><span>Speed</span><b>0.8</b></div><div class="rts-stat"><span>Sight</span><b>200</b></div><div class="rts-stat"><span>Armor</span><b>Light vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#refinery"><img class="" src="/img/cameos/refinery.png" alt="refinery" loading="lazy"><span>Refinery</span></a></div>
+
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Deploys onto an ore well for <b>infinite</b> income</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Cannot attack, and extremely slow</li><li>Slow (0.8)</li><li>Expensive (1800)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.3 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.3 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Artillery shells</b> ×0.3 <span class="rts-muted">(Artillery)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/infantry#flamer"><img class="" src="/img/cameos/flamer.png" alt="flamer" loading="lazy"><span>Flamethrower</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#grenadier"><img class="" src="/img/cameos/grenadier.png" alt="grenadier" loading="lazy"><span>Grenadier</span></a><a class="rts-chip" href="/unnamed_rts/units/vehicles#flame_tank"><img class="" src="/img/cameos/flame_tank.png" alt="flame_tank" loading="lazy"><span>Flame Tank</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Right-click on a golden well to deploy. Great for late-game economy.</p>
+</section>
+
+## Mammoth Tank {#mammoth}
+
+<section class="rts-card" aria-labelledby="mammoth">
+<div class="rts-card-top">
+<p class="rts-tagline">Super-heavy tank.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/mammoth.png" alt="3D mammoth" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/mammoth.png" alt="2D mammoth" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/mammoth.png" alt="mammoth" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>2200</b></div><div class="rts-stat"><span>HP</span><b>1500</b></div><div class="rts-stat"><span>Speed</span><b>1.4</b></div><div class="rts-stat"><span>Sight</span><b>280</b></div><div class="rts-stat" title="120 damage every 90 ticks"><span>DPS</span><b>80</b></div><div class="rts-stat"><span>Damage</span><b>120</b></div><div class="rts-stat"><span>Range</span><b>250</b></div><div class="rts-stat" title="90 ticks"><span>Reload</span><b>1.5s</b></div><div class="rts-stat"><span>Armor</span><b>Heavy vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a><a class="rts-chip" href="/unnamed_rts/buildings/#tech"><img class="" src="/img/cameos/tech.png" alt="tech" loading="lazy"><span>Tech Center</span></a></div>
+<div class="rts-panel"><h4>Damage vs armor <small>(Heavy cannon, 80 base dps)</small></h4><div class="rts-bar-row"><span class="rts-bar-label">Infantry</span><span class="rts-bar"><i class="poor" style="width:16%"></i></span><span class="rts-bar-value poor">×0.4 · 32 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Light vehicles</span><span class="rts-bar"><i class="ok" style="width:30%"></i></span><span class="rts-bar-value ok">×0.75 · 60 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Medium vehicles</span><span class="rts-bar"><i class="ok" style="width:40%"></i></span><span class="rts-bar-value ok">×1 · 80 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Heavy vehicles</span><span class="rts-bar"><i class="good" style="width:50%"></i></span><span class="rts-bar-value good">×1.25 · 100 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Buildings</span><span class="rts-bar"><i class="good" style="width:60%"></i></span><span class="rts-bar-value good">×1.5 · 120 dps</span></div><div class="rts-bar-row"><span class="rts-bar-label">Aircraft</span><span class="rts-bar"><i class="none" style="width:0%"></i></span><span class="rts-bar-value none">Cannot target</span></div></div>
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Good against <b>heavy vehicles</b> (×1.25)</li><li>Excellent against <b>buildings</b> (×1.5)</li><li>Very high damage output (80 dps)</li><li>Long range (250)</li><li>Tough for vehicles and aircraft (1500 HP)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Weak against <b>infantry</b> (×0.4)</li><li><b>Cannot shoot aircraft</b></li><li>Expensive (2200)</li><li>Needs a <b>Tech Center</b></li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Missiles</b> ×2.2 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.04 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.05 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.07 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#rocket"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><span>Rocket</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Huge HP; beats every other tank head-on and holds vs infantry. Slow and expensive; Missile Tanks, Rocket soldiers and aircraft kill it.</p>
+</section>
+
+## MCV {#mcv}
+
+<section class="rts-card" aria-labelledby="mcv">
+<div class="rts-card-top">
+<p class="rts-tagline">Mobile Construction Vehicle.</p>
+<a class="rts-back" href="#top">↑ Index</a>
+</div>
+<div class="rts-figs"><figure><img class="" src="/img/3d/mcv.png" alt="3D mcv" loading="lazy"><figcaption>3D view</figcaption></figure><figure><img class="flat" src="/img/2d/mcv.png" alt="2D mcv" loading="lazy"><figcaption>Classic 2D view</figcaption></figure><figure class="cameo"><img class="" src="/img/cameos/mcv.png" alt="mcv" loading="lazy"><figcaption>Build icon</figcaption></figure></div>
+<div class="rts-stats"><div class="rts-stat" title="Credits"><span>Cost</span><b>3000</b></div><div class="rts-stat"><span>HP</span><b>2000</b></div><div class="rts-stat"><span>Speed</span><b>1</b></div><div class="rts-stat"><span>Sight</span><b>280</b></div><div class="rts-stat"><span>Armor</span><b>Heavy vehicles</b></div></div>
+<div class="rts-unlock"><span>Requires</span><a class="rts-chip" href="/unnamed_rts/buildings/#factory"><img class="" src="/img/cameos/factory.png" alt="factory" loading="lazy"><span>War Factory</span></a></div>
+
+<div class="rts-two">
+<div class="rts-panel rts-pro"><h4>Strengths</h4><ul><li>Deploys into a <b>Construction Yard</b> anywhere you can build</li><li>Tough for vehicles and aircraft (2000 HP)</li></ul></div>
+<div class="rts-panel rts-con"><h4>Weaknesses</h4><ul><li>Cannot attack: losing it can cost you your base</li><li>Slow (1)</li><li>Expensive (3000)</li></ul></div>
+</div>
+<div class="rts-two"><div class="rts-panel rts-con"><h4>Dies fast to</h4><ul><li><b>Missiles</b> ×2.2 <span class="rts-muted">(Missile Tank, MLRS)</span></li></ul></div><div class="rts-panel rts-pro"><h4>Shrugs off</h4><ul><li><b>Bullets</b> ×0.04 <span class="rts-muted">(Rifleman, Harvester, Ranger…)</span></li><li><b>Sniper rifle</b> ×0.05 <span class="rts-muted">(Sniper, Commando)</span></li><li><b>Flames</b> ×0.07 <span class="rts-muted">(Flamethrower, Flame Tank)</span></li></ul></div></div>
+<div class="rts-counters"><span>Best-value counters</span><a class="rts-chip" href="/unnamed_rts/units/vehicles#stealth"><img class="" src="/img/cameos/stealth.png" alt="stealth" loading="lazy"><span>Missile Tank</span></a><a class="rts-chip" href="/unnamed_rts/units/aircraft#harrier"><img class="" src="/img/cameos/harrier.png" alt="harrier" loading="lazy"><span>Harrier</span></a><a class="rts-chip" href="/unnamed_rts/units/infantry#rocket"><img class="" src="/img/cameos/rocket.png" alt="rocket" loading="lazy"><span>Rocket</span></a></div>
+<p class="rts-brief"><b>Field notes:</b> Double-click or press Enter to deploy into a Construction Yard. Cannot attack.</p>
+</section>
 
-Fast scout with drive-by attacks.
-
-| Stat | Value |
-|------|-------|
-| Cost | 500 |
-| HP | 180 |
-| Speed | 4.5 |
-| Damage | 18 |
-| Range | 160 |
-| Armor | Light |
-| Weapon | Bullet |
-
-**Role:** Scouting, harassment, hunting harvesters.
-
-**Special:** Can attack while moving.
-
-**Prerequisites:** War Factory
-
----
-
-## APC
-
-Fast armored transport with armor-piercing gun.
-
-| Stat | Value |
-|------|-------|
-| Cost | 700 |
-| HP | 300 |
-| Speed | 3.5 |
-| Damage | 12 |
-| Range | 120 |
-| Armor | Light |
-| Weapon | AP Bullet |
-
-**Role:** Fast response, engineer transport, light combat.
-
-**Special:** Can attack while moving.
-
-**Prerequisites:** War Factory
-
----
-
-## Light Tank
-
-Balanced main battle tank.
-
-| Stat | Value |
-|------|-------|
-| Cost | 800 |
-| HP | 400 |
-| Speed | 2.8 |
-| Damage | 45 |
-| Range | 210 |
-| Armor | Medium |
-| Weapon | Cannon |
-
-**Role:** Core of your army—good all-round performance.
-
-**Special:** Can attack while moving.
-
-**Prerequisites:** War Factory
-
----
-
-## Heavy Tank
-
-Assault tank with strong armor and firepower.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1600 |
-| HP | 700 |
-| Speed | 2.0 |
-| Damage | 90 |
-| Range | 230 |
-| Armor | Heavy |
-| Weapon | Cannon |
-
-**Role:** Frontline assault, breaking enemy defenses.
-
-**Prerequisites:** War Factory
-
----
-
-## Flame Tank
-
-Anti-infantry specialist with area flames.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1100 |
-| HP | 450 |
-| Speed | 2.2 |
-| Damage | 35 |
-| Range | 100 |
-| Splash | 50 |
-| Armor | Medium |
-| Weapon | Flame |
-
-**Role:** Melting infantry blobs, building assault.
-
-**Prerequisites:** War Factory
-
----
-
-## Stealth Tank
-
-Fast missile tank.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1400 |
-| HP | 350 |
-| Speed | 3.2 |
-| Damage | 55 |
-| Range | 180 |
-| Armor | Medium |
-| Weapon | Missile |
-
-**Role:** Fast striker, flanking attacks.
-
-**Prerequisites:** War Factory, Tech Center
-
----
-
-## Artillery
-
-Long-range siege unit.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1200 |
-| HP | 200 |
-| Speed | 1.2 |
-| Damage | 130 |
-| Range | 550 |
-| Splash | 60 |
-| Armor | Light |
-| Weapon | Heavy Cannon |
-
-**Role:** Destroying buildings and defenses from afar.
-
-**Weakness:** Paper-thin armor—keep protected behind tank lines.
-
-**Note:** Artillery shells can be intercepted by SAM Sites.
-
-**Prerequisites:** War Factory, Tech Center
-
----
-
-## MLRS
-
-Rocket artillery with massive splash.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1800 |
-| HP | 250 |
-| Speed | 1.5 |
-| Damage | 100 |
-| Range | 500 |
-| Splash | 80 |
-| Armor | Light |
-| Weapon | Missile |
-
-**Role:** Area denial, softening defenses, anti-infantry.
-
-**Special:** Has interception aura (120 radius, 80 DPS)—can shoot down enemy missiles.
-
-**Prerequisites:** War Factory, Tech Center
-
----
-
-## Mammoth Tank
-
-The ultimate ground unit.
-
-| Stat | Value |
-|------|-------|
-| Cost | 2500 |
-| HP | 1200 |
-| Speed | 1.4 |
-| Damage | 120 |
-| Range | 250 |
-| Armor | Heavy |
-| Weapon | Heavy Cannon |
-
-**Role:** Unstoppable assault, crushing enemy bases.
-
-**Prerequisites:** War Factory, Tech Center
-
----
-
-## MCV (Mobile Construction Vehicle)
-
-Deploys into a Construction Yard.
-
-| Stat | Value |
-|------|-------|
-| Cost | 3000 |
-| HP | 2000 |
-| Speed | 1.0 |
-| Armor | Heavy |
-
-**Role:** Expand to new bases, rebuild after losing your Construction Yard.
-
-**Usage:** Double-click or press Enter to deploy.
-
-**Prerequisites:** War Factory
-
----
-
-## Induction Rig
-
-Deploys on ore wells for infinite resources.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1800 |
-| HP | 600 |
-| Speed | 0.8 |
-| Armor | Light |
-
-**Role:** Late-game infinite income source.
-
-**Usage:** Right-click an ore well when in range to deploy.
-
-**Prerequisites:** War Factory, Refinery
-
----
-
-## Demo Truck
-
-Suicide vehicle that explodes on impact.
-
-| Stat | Value |
-|------|-------|
-| Cost | 1500 |
-| HP | 150 |
-| Speed | 2.8 |
-| Explosion Damage | 600 |
-| Explosion Radius | 150 |
-| Armor | Light |
-
-**Role:** Base assault, destroying clusters of enemies.
-
-**Warning:** Explodes when destroyed—including by friendly fire.
-
-**Prerequisites:** War Factory

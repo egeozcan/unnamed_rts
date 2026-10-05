@@ -1,5 +1,5 @@
 /**
- * Generates docs/site/units/infantry.md and docs/site/buildings/index.md from rules.json, so the
+ * Generates docs/site/units/{infantry,vehicles,aircraft}.md and docs/site/buildings/index.md from rules.json, so the
  * numbers, strengths, weaknesses and counters can't drift from the game.
  *
  *   npm run docs:pages            (run `npm run docs:render` first for the images)
@@ -26,11 +26,16 @@ const CHART_ARMORS = ['infantry', 'light', 'medium', 'heavy', 'building', 'air']
 const WEAPON_LABEL: Record<string, string> = {
     bullet: 'Bullets', ap_bullet: 'AP rounds', sniper: 'Sniper rifle', laser: 'Laser', cannon: 'Cannon',
     heavy_cannon: 'Heavy cannon', shell: 'Artillery shells', rocket: 'Rockets', missile: 'Missiles',
-    aa_missile: 'AA missiles', air_missile: 'Air-to-ground missiles', grenade: 'Grenades', flame: 'Flames', heal: 'Healing',
+    aa_missile: 'AA missiles', air_missile: 'Air-to-ground missiles', grenade: 'Grenades', flame: 'Flames', heal: 'Healing', explosion: 'Explosion',
 };
 
 /** Fields the zod schema strips from rules.json but the game reads. */
 const rawBuildings = rulesJson.buildings as Record<string, { inductionEfficiency?: number }>;
+
+const rawUnits = rulesJson.units as Record<string, {
+    transportCapacity?: number; canAttackWhileMoving?: boolean; capacity?: number; ammo?: number; fly?: boolean;
+    explosionRadius?: number; explosionDamage?: number;
+}>;
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -49,9 +54,18 @@ interface Combat {
     canAir: boolean;
     canGround: boolean;
     cost: number;
+    /** One-off blast (Demo Truck) rather than a repeating weapon: `dps` holds the total damage. */
+    burst?: boolean;
 }
 
 function combatOf(key: string, item: Item): Combat | null {
+    const blast = rawUnits[key]?.explosionDamage;
+    if (blast) {
+        const table = RULES.damageModifiers.explosion as Record<string, number>;
+        const mods: Record<string, number> = {};
+        for (const armor of Object.keys(RULES.armorTypes)) mods[armor] = table[armor] ?? 1;
+        return { key, name: item.name, weapon: 'explosion', dps: blast, mods, canAir: true, canGround: true, cost: item.cost, burst: true };
+    }
     const weapon = item.weaponType;
     if (!weapon || !item.damage || item.damage <= 0 || !item.rate) return null;
     const table = RULES.damageModifiers[weapon] as Record<string, number> | undefined;
@@ -79,7 +93,7 @@ const nameOf = (k: string) => (RULES.units[k] ?? RULES.buildings[k])?.name ?? k;
 /** Units that can attack something the given armor class would be (excludes static defenses and healers). */
 function bestCounters(armor: string, selfKey: string, count = 3): Combat[] {
     return combatants
-        .filter(c => c.key !== selfKey && c.weapon !== 'heal' && !(RULES.buildings[c.key]?.isDefense))
+        .filter(c => c.key !== selfKey && c.weapon !== 'heal' && !c.burst && !(RULES.buildings[c.key]?.isDefense))
         .filter(c => (c.mods[armor] ?? 0) >= 1)
         .map(c => ({ c, value: (c.dps * (c.mods[armor] ?? 0)) / c.cost }))
         .sort((a, b) => b.value - a.value)
@@ -132,8 +146,8 @@ function pageFor(key: string): string {
     if (isBuildingKey(key)) return `${BASE}/buildings/#${key}`;
     const u = RULES.units[key];
     if (u?.type === 'infantry') return `${BASE}/units/infantry#${key}`;
-    if (u?.type === 'air') return `${BASE}/units/aircraft`;
-    return `${BASE}/units/vehicles`;
+    if (u?.type === 'air') return `${BASE}/units/aircraft#${key}`;
+    return `${BASE}/units/vehicles#${key}`;
 }
 
 // ---- shared card pieces --------------------------------------------------------------------
@@ -148,12 +162,12 @@ function damageChart(c: Combat): string {
         const eff = c.dps * m;
         const width = Math.min(100, (m / 2.5) * 100);
         const tone = m === 0 ? 'none' : m >= 1.25 ? 'good' : m >= 0.7 ? 'ok' : m >= 0.3 ? 'poor' : 'bad';
-        const label = m === 0 ? 'Cannot target' : `${mult(m)} · ${num(Math.round(eff * 10) / 10)} dps`;
+        const label = m === 0 ? 'Cannot target' : `${mult(m)} · ${num(Math.round(eff * 10) / 10)} ${c.burst ? 'dmg' : 'dps'}`;
         return `<div class="rts-bar-row"><span class="rts-bar-label">${ARMOR_LABEL[armor]}</span>`
             + `<span class="rts-bar"><i class="${tone}" style="width:${width}%"></i></span>`
             + `<span class="rts-bar-value ${tone}">${label}</span></div>`;
     });
-    return `<div class="rts-panel"><h4>Damage vs armor <small>(${esc(WEAPON_LABEL[c.weapon] ?? c.weapon)}, ${num(Math.round(c.dps * 10) / 10)} base dps)</small></h4>${rows.join('')}</div>`;
+    return `<div class="rts-panel"><h4>Damage vs armor <small>(${esc(WEAPON_LABEL[c.weapon] ?? c.weapon)}, ${num(Math.round(c.dps * 10) / 10)} base ${c.burst ? 'damage, one blast' : 'dps'})</small></h4>${rows.join('')}</div>`;
 }
 
 function list(title: string, tone: 'pro' | 'con', items: string[]): string {
@@ -194,7 +208,9 @@ function figures(key: string): string {
 
 // ---- infantry page -------------------------------------------------------------------------
 
-function infantryCard(key: string, u: Unit, all: [string, Unit][]): string {
+/** `poolLabel` names the class stats are ranked against, e.g. 'infantry' or 'a vehicle'. */
+function unitCard(key: string, u: Unit, all: [string, Unit][], poolLabel: string): string {
+    const raw = rawUnits[key] ?? {};
     const c = combatOf(key, u);
     const { lead, rest } = firstSentence(u.description ?? '');
     const pct = (sel: (x: Unit) => number) => percentile(all.map(([, x]) => sel(x)), sel(u));
@@ -209,13 +225,14 @@ function infantryCard(key: string, u: Unit, all: [string, Unit][]): string {
             if (m > 0 && m <= 0.3) cons.push(`Barely scratches <b>${ARMOR_LABEL[armor].toLowerCase()}</b> (${mult(m)})`);
             else if (m > 0.3 && m < 0.7) cons.push(`Weak against <b>${ARMOR_LABEL[armor].toLowerCase()}</b> (${mult(m)})`);
         }
-        if (!c.canAir) cons.push('<b>Cannot shoot aircraft</b>');
-        else if (c.mods.air >= 0.9) pros.push('Can shoot down <b>aircraft</b>');
+        if (!c.burst && !c.canAir) cons.push('<b>Cannot shoot aircraft</b>');
+        else if (!c.burst && c.mods.air >= 0.9) pros.push('Can shoot down <b>aircraft</b>');
         if (u.splash) pros.push(`Splash damage (radius ${u.splash}) punishes clumped units`);
-        if (c.dps >= 60) pros.push(`Very high damage output (${num(Math.round(c.dps))} dps)`);
-        if (u.range >= 400) pros.push(`<b>Extreme range</b> (${u.range}) outranges nearly everything`);
+        if (c.dps >= 60 && !c.burst && !raw.ammo) pros.push(`Very high damage output (${num(Math.round(c.dps))} dps)`);
+        if (c.burst) { /* range and fire rate don't apply to a one-off blast */ }
+        else if (u.range >= 400) pros.push(`<b>Extreme range</b> (${u.range}) outranges nearly everything`);
         else if (pct(x => x.range) >= 0.7) pros.push(`Long range (${u.range})`);
-        if (u.range <= 90 && c.weapon !== 'heal') cons.push(`Very short range (${u.range}): must close in to fight`);
+        if (!c.burst && u.range <= 90 && c.weapon !== 'heal') cons.push(`Very short range (${u.range}): must close in to fight`);
     }
     if (u.weaponType === 'heal') {
         pros.push(`Heals friendly infantry for <b>${Math.abs(u.damage)} HP</b> per pulse`);
@@ -227,7 +244,20 @@ function infantryCard(key: string, u: Unit, all: [string, Unit][]): string {
     if (u.canHijackVehicles) pros.push('<b>Steals enemy vehicles</b> outright');
     if (u.interceptionAura) pros.push(`Interception aura (radius ${u.interceptionAura.radius}) shoots down incoming missiles`);
 
-    if (pct(x => x.hp) >= 0.8) pros.push(`Tough for infantry (${u.hp} HP)`);
+    if (raw.fly) pros.push('<b>Flies</b>: ignores terrain and can only be hit by anti-air weapons');
+    if (raw.canAttackWhileMoving) pros.push('Fires while on the move');
+    if (raw.transportCapacity) pros.push(`Carries up to <b>${raw.transportCapacity}</b> infantry`);
+    if (raw.capacity) pros.push(`Hauls <b>${raw.capacity}</b> ore per trip`);
+    if (raw.ammo) { cons.push(`Only <b>${raw.ammo}</b> shot per sortie: must return to rearm`); }
+    if (raw.explosionDamage) {
+        pros.push(`Detonates for <b>${raw.explosionDamage}</b> damage in a ${raw.explosionRadius} radius; chain reactions possible`);
+        cons.push('Destroyed on use, and has no weapon of its own');
+    }
+    if (key === 'mcv') { pros.push('Deploys into a <b>Construction Yard</b> anywhere you can build'); cons.push('Cannot attack: losing it can cost you your base'); }
+    if (key === 'induction_rig') { pros.push('Deploys onto an ore well for <b>infinite</b> income'); cons.push('Cannot attack, and extremely slow'); }
+    if (key === 'harvester') cons.push('Your whole income: losing it stalls the economy');
+    if (!c && u.weaponType !== 'heal' && !raw.explosionDamage && !cons.some(x => x.includes('Cannot attack'))) cons.push('Unarmed');
+    if (pct(x => x.hp) >= 0.8) pros.push(`Tough for ${poolLabel} (${u.hp} HP)`);
     if (pct(x => x.hp) <= 0.2) cons.push(`Fragile (${u.hp} HP)`);
     if (pct(x => x.speed) >= 0.85) pros.push(`Fast (${num(u.speed)})`);
     if (pct(x => x.speed) <= 0.2) cons.push(`Slow (${num(u.speed)})`);
@@ -237,6 +267,11 @@ function infantryCard(key: string, u: Unit, all: [string, Unit][]): string {
 
     const m = armorMatchups(u.armor);
     const hard = m.weak.length ? list('Dies fast to', 'con', m.weak) : '';
+    if (u.armor === 'air') {
+        const immune = [...new Set(combatants.filter(x => !x.canAir && x.weapon !== 'heal').map(x => x.weapon))]
+            .map(w => `<b>${esc(WEAPON_LABEL[w] ?? w)}</b> <span class="rts-muted">(${combatants.filter(x => x.weapon === w).slice(0, 3).map(x => esc(x.name)).join(', ')})</span>`);
+        m.resist.unshift(...immune.slice(0, 4).map(i => `Can't be hit by ${i}`));
+    }
     const resists = m.resist.length ? list('Shrugs off', 'pro', m.resist) : '';
 
     const stats = [
@@ -244,17 +279,23 @@ function infantryCard(key: string, u: Unit, all: [string, Unit][]): string {
         statCell('HP', `${u.hp}`),
         statCell('Speed', num(u.speed)),
         statCell('Sight', `${u.sightRange}`),
-        ...(c ? [
+        ...(c && !c.burst ? [
             statCell('DPS', num(Math.round(c.dps * 10) / 10), `${u.damage} damage every ${u.rate} ticks`),
             statCell('Damage', `${u.damage}`),
             statCell('Range', `${u.range}`),
             statCell('Reload', `${num((u.rate ?? 0) / TICKS_PER_SECOND)}s`, `${u.rate} ticks`),
+        ] : raw.explosionDamage ? [
+            statCell('Blast', `${raw.explosionDamage}`),
+            statCell('Radius', `${raw.explosionRadius}`),
         ] : u.weaponType === 'heal' ? [
             statCell('Heal', `${Math.abs(u.damage)} HP`),
             statCell('Range', `${u.range}`),
             statCell('Pulse', `${num((u.rate ?? 0) / TICKS_PER_SECOND)}s`, `${u.rate} ticks`),
         ] : []),
         ...(u.splash ? [statCell('Splash', `${u.splash}`)] : []),
+        ...(raw.transportCapacity ? [statCell('Carries', `${raw.transportCapacity}`)] : []),
+        ...(raw.capacity ? [statCell('Cargo', `${raw.capacity}`)] : []),
+        ...(raw.ammo ? [statCell('Ammo', `${raw.ammo}`)] : []),
         statCell('Armor', ARMOR_LABEL[u.armor] ?? u.armor),
     ].join('');
 
@@ -280,8 +321,18 @@ ${rest ? `<p class="rts-brief"><b>Field notes:</b> ${esc(rest)}</p>` : ''}
 `;
 }
 
-function infantryPage(): string {
-    const all = Object.entries(RULES.units).filter(([, u]) => u.type === 'infantry');
+interface UnitPageSpec {
+    title: string;
+    file: string;
+    types: string[];
+    pool: string[];
+    poolLabel: string;
+    intro: string;
+}
+
+function unitPage(spec: UnitPageSpec): string {
+    const pool = Object.entries(RULES.units).filter(([, u]) => spec.pool.includes(u.type));
+    const all = Object.entries(RULES.units).filter(([, u]) => spec.types.includes(u.type));
     // Cheapest first reads as a tech ladder
     all.sort((a, b) => a[1].cost - b[1].cost);
 
@@ -289,7 +340,7 @@ function infantryPage(): string {
     const rows = all.map(([k, u]) => {
         const c = combatOf(k, u);
         return `<tr><td><a href="#${k}">${esc(u.name)}</a></td><td>${u.cost}</td><td>${u.hp}</td><td>${num(u.speed)}</td>`
-            + `<td>${c ? num(Math.round(c.dps)) : '–'}</td><td>${c || u.weaponType === 'heal' ? u.range : '–'}</td>`
+            + `<td>${c && !c.burst ? num(Math.round(c.dps)) : '–'}</td><td>${c && !c.burst || u.weaponType === 'heal' ? u.range : '–'}</td>`
             + `<td>${u.prerequisites.map(nameOf).join(' + ')}</td></tr>`;
     }).join('');
 
@@ -298,14 +349,14 @@ aside: false
 pageClass: rts-wide
 ---
 
-# Infantry {#top}
+# ${spec.title} {#top}
 
-Infantry are the cheapest troops in the game, trained at the **Barracks**. They're the backbone of an early army, the only units that can capture buildings, and the best tool for picking off specialists, but every tank in the game is built to roll over them. Numbers on this page are read straight from the game's \`rules.json\`, so they're always current.
+${spec.intro} Numbers on this page are read straight from the game's \`rules.json\`, so they're always current.
 
-<nav class="rts-index" aria-label="Infantry index">${index}</nav>
+<nav class="rts-index" aria-label="${spec.title} index">${index}</nav>
 
 <div class="rts-note">
-<b>How to read the charts.</b> <i>DPS</i> is damage per second at 60 ticks/s. The <i>damage vs armor</i> bars show the multiplier the unit's weapon gets against each armor class (×1 = full damage). Strengths and weaknesses are derived from those multipliers and from how each stat ranks among infantry.
+<b>How to read the charts.</b> <i>DPS</i> is damage per second at 60 ticks/s. The <i>damage vs armor</i> bars show the multiplier the unit's weapon gets against each armor class (×1 = full damage). Strengths and weaknesses are derived from those multipliers and from how each stat ranks among ${spec.poolLabel}.
 </div>
 
 <div class="rts-table-wrap"><table class="rts-table">
@@ -313,9 +364,24 @@ Infantry are the cheapest troops in the game, trained at the **Barracks**. They'
 <tbody>${rows}</tbody>
 </table></div>
 
-${all.map(([k, u]) => infantryCard(k, u, all)).join('\n')}
+${all.map(([k, u]) => unitCard(k, u, pool, spec.poolLabel)).join('\n')}
 `;
 }
+
+const UNIT_PAGES: UnitPageSpec[] = [
+    {
+        title: 'Infantry', file: 'docs/site/units/infantry.md', types: ['infantry'], pool: ['infantry'], poolLabel: 'infantry',
+        intro: "Infantry are the cheapest troops in the game, trained at the **Barracks**. They're the backbone of an early army, the only units that can capture buildings, and the best tool for picking off specialists, but every tank in the game is built to roll over them.",
+    },
+    {
+        title: 'Vehicles', file: 'docs/site/units/vehicles.md', types: ['vehicle'], pool: ['vehicle', 'air'], poolLabel: 'vehicles and aircraft',
+        intro: 'Vehicles are built at the **War Factory**. They range from fast raiders and transports through main battle tanks to long-range siege guns, plus the support vehicles (Harvester, MCV, Induction Rig) your economy and expansion depend on.',
+    },
+    {
+        title: 'Aircraft', file: 'docs/site/units/aircraft.md', types: ['air'], pool: ['vehicle', 'air'], poolLabel: 'vehicles and aircraft',
+        intro: 'Aircraft are produced and rearmed at the **Air-Force Command**. They ignore terrain and are immune to most ground weapons, but only a handful of units and the SAM Site can shoot them down.',
+    },
+];
 
 // ---- buildings page ------------------------------------------------------------------------
 
@@ -461,6 +527,6 @@ ${sections}
 `;
 }
 
-writeFileSync('docs/site/units/infantry.md', infantryPage());
+for (const spec of UNIT_PAGES) writeFileSync(spec.file, unitPage(spec));
 writeFileSync('docs/site/buildings/index.md', buildingsPage());
-console.log('wrote docs/site/units/infantry.md and docs/site/buildings/index.md');
+console.log('wrote unit pages and docs/site/buildings/index.md');
